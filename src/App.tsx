@@ -14,6 +14,7 @@ import ProfileSettings from "./pages/ProfileSettings";
 import Templates from "./pages/Templates";
 import PagesGallery from "./pages/PagesGallery";
 import PageView from "./pages/PageView";
+import PagePreview from "./pages/PagePreview";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
           <Route path="/templates" element={<Templates />} />
           <Route path="/pages" element={<PagesGallery />} />
           <Route path="/pages/:id" element={<PageView />} />
+          <Route path="/pages/preview" element={<PagePreview />} />
           <Route path="/leads" element={<LeadsTemplate />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
