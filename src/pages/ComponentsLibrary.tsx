@@ -26,11 +26,30 @@ import {
   Pencil,
   Table,
   Type,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 
 const ComponentsLibrary = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedComponent, setSelectedComponent] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+  } | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const componentCategories = [
     {
@@ -161,6 +180,257 @@ const ComponentsLibrary = () => {
     ),
   })).filter((category) => category.components.length > 0);
 
+  const handlePreview = (component: any, categoryId: string) => {
+    setSelectedComponent({
+      ...component,
+      category: categoryId
+    });
+    setIsPreviewOpen(true);
+  };
+
+  const renderComponentPreview = () => {
+    if (!selectedComponent) return null;
+
+    switch (selectedComponent.id) {
+      case "card":
+        return (
+          <Card className="w-full max-w-md mx-auto">
+            <CardHeader>
+              <CardTitle>Card Title</CardTitle>
+              <CardDescription>Card description goes here</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p>This is the main content of the card.</p>
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              <Button variant="outline">Cancel</Button>
+              <Button>Submit</Button>
+            </CardFooter>
+          </Card>
+        );
+      case "table":
+        return (
+          <div className="border rounded-md w-full overflow-hidden">
+            <div className="bg-muted py-2 px-4 font-medium flex">
+              <div className="w-1/3">Name</div>
+              <div className="w-1/3">Email</div>
+              <div className="w-1/3">Status</div>
+            </div>
+            <div className="divide-y">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex py-2 px-4">
+                  <div className="w-1/3">John Doe</div>
+                  <div className="w-1/3">john@example.com</div>
+                  <div className="w-1/3"><Badge>Active</Badge></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case "list":
+        return (
+          <div className="border rounded-md w-full overflow-hidden divide-y">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center p-4">
+                <div className="mr-4">
+                  <Checkbox id={`item-${i}`} />
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor={`item-${i}`}>List item {i}</Label>
+                  <p className="text-sm text-muted-foreground">Description for item {i}</p>
+                </div>
+                <Button variant="ghost" size="sm">View</Button>
+              </div>
+            ))}
+          </div>
+        );
+      case "text-input":
+        return (
+          <div className="space-y-4 w-full max-w-sm mx-auto">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input id="name" placeholder="Enter your name" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" placeholder="Enter your email" />
+            </div>
+          </div>
+        );
+      case "datepicker":
+        return (
+          <div className="w-full max-w-sm mx-auto space-y-2">
+            <Label>Select a date</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-start text-left">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  <span>Pick a date</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <CalendarComponent mode="single" />
+              </PopoverContent>
+            </Popover>
+          </div>
+        );
+      case "form":
+        return (
+          <div className="space-y-4 w-full max-w-md mx-auto">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input id="name" placeholder="Enter your name" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" placeholder="Enter your email" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="message">Message</Label>
+              <Textarea id="message" placeholder="Type your message here" />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox id="terms" />
+              <Label htmlFor="terms">Accept terms and conditions</Label>
+            </div>
+            <Button className="w-full">Submit</Button>
+          </div>
+        );
+      case "alert":
+        return (
+          <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium">Warning alert</p>
+                <p className="text-sm mt-1">This is an example warning alert message.</p>
+              </div>
+            </div>
+          </div>
+        );
+      case "image":
+        return (
+          <div className="space-y-2 w-full max-w-md mx-auto">
+            <AspectRatio ratio={16 / 9} className="bg-muted rounded-md overflow-hidden">
+              <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
+                <ImageIcon className="h-10 w-10" />
+              </div>
+            </AspectRatio>
+            <p className="text-sm text-center text-muted-foreground">Image caption</p>
+          </div>
+        );
+      case "container":
+        return (
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 border-2 border-dashed border-muted-foreground/20 rounded-lg p-8 text-center">
+            <p className="text-muted-foreground">Container with responsive padding</p>
+          </div>
+        );
+      case "grid":
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="bg-muted rounded p-4 flex items-center justify-center">
+                <span className="text-muted-foreground">Grid Item {i}</span>
+              </div>
+            ))}
+          </div>
+        );
+      case "split":
+        return (
+          <div className="flex flex-col md:flex-row w-full border rounded-lg overflow-hidden">
+            <div className="flex-1 bg-muted p-4 flex items-center justify-center">
+              <span className="text-muted-foreground">Left Column</span>
+            </div>
+            <div className="flex-1 p-4 flex items-center justify-center">
+              <span className="text-muted-foreground">Right Column</span>
+            </div>
+          </div>
+        );
+      case "kanban":
+        return (
+          <div className="flex space-x-4 overflow-auto pb-4 w-full">
+            {["To Do", "In Progress", "Done"].map((column) => (
+              <div key={column} className="flex-shrink-0 w-72 bg-muted rounded-md p-2">
+                <h3 className="font-medium px-2 py-1">{column}</h3>
+                <div className="space-y-2 mt-2">
+                  {[1, 2, 3].map((item) => (
+                    <div key={item} className="bg-background p-2 rounded border">
+                      <p className="text-sm">Task {item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      case "calendar":
+        return (
+          <div className="border rounded-md p-4 w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-medium">April 2025</h3>
+              <div className="flex space-x-1">
+                <Button variant="outline" size="sm">
+                  <Calendar className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {["M", "T", "W", "T", "F", "S", "S"].map((day) => (
+                <div key={day} className="text-center text-sm text-muted-foreground py-1">
+                  {day}
+                </div>
+              ))}
+              {Array.from({ length: 30 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "text-center py-1 text-sm rounded-md",
+                    i === 9 && "bg-primary text-primary-foreground"
+                  )}
+                >
+                  {i + 1}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case "text":
+        return (
+          <div className="space-y-4 w-full max-w-md mx-auto">
+            <h1 className="text-3xl font-bold">Heading 1</h1>
+            <h2 className="text-2xl font-bold">Heading 2</h2>
+            <h3 className="text-xl font-bold">Heading 3</h3>
+            <p className="text-base">
+              This is a paragraph of text. It demonstrates how text will appear in your application.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              This is smaller, muted text often used for descriptions or secondary information.
+            </p>
+          </div>
+        );
+      case "avatar":
+        return (
+          <div className="flex flex-col items-center space-y-4 w-full max-w-xs mx-auto">
+            <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center text-xl font-semibold">
+              JD
+            </div>
+            <div className="text-center">
+              <h3 className="font-medium">John Doe</h3>
+              <p className="text-sm text-muted-foreground">john@example.com</p>
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex items-center justify-center p-8 text-muted-foreground">
+            Preview not available for this component
+          </div>
+        );
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
@@ -205,27 +475,39 @@ const ComponentsLibrary = () => {
               value={category.id}
               className="mt-6 space-y-4"
             >
-              <div className="component-grid">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {(searchQuery ? filteredCategories.find(c => c.id === category.id)?.components : category.components)?.map((component) => (
                   <Card
                     key={component.id}
-                    className="border border-border hover:border-primary/50 transition-colors draggable-component"
+                    className="border border-border hover:border-primary/50 transition-colors"
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
-                        <div className="p-2 rounded-md bg-crm-light dark:bg-crm-dark">
-                          <component.icon className="h-5 w-5 text-crm-primary" />
+                        <div className="p-2 rounded-md bg-muted">
+                          <component.icon className="h-5 w-5 text-primary" />
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <span className="sr-only">Drag to add to page</span>
-                          <Grid className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <span className="sr-only">Component info</span>
+                              <Grid className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Drag to add to page
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       <CardTitle className="text-lg mt-2">{component.name}</CardTitle>
                       <CardDescription>{component.description}</CardDescription>
                     </CardHeader>
                     <CardFooter className="pt-2">
-                      <Button variant="outline" size="sm" className="w-full">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => handlePreview(component, category.id)}
+                      >
                         Preview
                       </Button>
                     </CardFooter>
@@ -241,6 +523,25 @@ const ComponentsLibrary = () => {
           ))}
         </Tabs>
       </div>
+
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle>{selectedComponent?.name}</DialogTitle>
+              <DialogClose asChild>
+                <Button variant="ghost" size="icon">
+                  <X className="h-4 w-4" />
+                </Button>
+              </DialogClose>
+            </div>
+            <DialogDescription>{selectedComponent?.description}</DialogDescription>
+          </DialogHeader>
+          <div className="p-6 border rounded-md bg-background">
+            {renderComponentPreview()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
