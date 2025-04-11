@@ -145,17 +145,13 @@ const PagesGallery = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link to={`/builder/edit/${page.id}`}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit
-                        </Link>
+                      <DropdownMenuItem>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to={`/pages/${page.id}`}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Preview
-                        </Link>
+                      <DropdownMenuItem>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview
                       </DropdownMenuItem>
                       <DropdownMenuItem>
                         <File className="mr-2 h-4 w-4" />
