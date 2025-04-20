@@ -40,3 +40,51 @@
 .read-the-docs {
   color: #888;
 }
+
+/* DnD-related styles */
+/* Override any z-index issues with dnd-kit */
+.dnd-kit-overlay {
+  z-index: 9999 !important;
+  cursor: grabbing;
+}
+
+/* Make the draggable preview look nice */
+.dnd-kit-overlay > div {
+  transform-origin: 0 0;
+  pointer-events: none;
+  width: 150px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1), 0 3px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Override opacity for dragging item */
+[data-dragging="true"],
+[data-dragging] {
+  opacity: 0.3;
+}
+
+/* Highlight droppable areas */
+[data-droppable="true"] {
+  transition: background-color 0.2s ease;
+}
+
+[data-droppable="true"][data-over="true"],
+[data-droppable="true"]:has([data-over="true"]) {
+  background-color: rgba(var(--primary), 0.05) !important;
+  border-color: hsl(var(--primary)) !important;
+}
+
+/* Ensure the dnd-kit drag overlay is on top of everything */
+.dnd-kit-draggable-overlay {
+  z-index: 9999;
+}
+
+/* Add styling to highlight droppable areas when something is being dragged */
+.drop-target-highlight {
+  border-color: theme('colors.primary.DEFAULT') !important;
+  background-color: rgba(var(--primary), 0.05);
+}
+
+/* Avoid overflow restrictions that might clip draggable items */
+.overflow-fix {
+  overflow: visible !important;
+}

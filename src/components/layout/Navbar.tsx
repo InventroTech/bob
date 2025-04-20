@@ -71,7 +71,7 @@ const Navbar = () => {
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
-                <Link to="/settings/profile" className="flex w-full">
+                <Link to="/profile" className="flex w-full">
                   <User className="mr-2 h-4 w-4" />
                   <span>Profile</span>
                 </Link>

@@ -23,6 +23,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { Table } from "lucide-react";
 
 const sidebarItems = [
   {
@@ -41,14 +42,14 @@ const sidebarItems = [
     icon: Layout,
   },
   {
+    title: "Tables",
+    path: "/tables",
+    icon: Table,
+  },
+  {
     title: "Templates",
     path: "/templates",
     icon: BookOpen,
-  },
-  {
-    title: "Leads",
-    path: "/leads",
-    icon: Users,
   }
 ];
 

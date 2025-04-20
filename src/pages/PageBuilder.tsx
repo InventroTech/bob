@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,206 +20,526 @@ import {
   Save,
   Settings,
   Trash2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Link } from "react-router-dom";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverEvent,
+  useDroppable,
+  DragMoveEvent,
+  DragOverlay,
+  pointerWithin,
+  rectIntersection,
+  closestCenter,
+} from "@dnd-kit/core";
+import { DraggableSidebarItem } from "@/components/page-builder/DraggableSidebarItem";
+import {
+  ContainerComponent,
+  SplitViewComponent,
+  FormComponent,
+  TableComponent,
+  TextComponent,
+  ButtonComponent,
+  ImageComponent,
+} from "@/components/page-builder";
+import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
+import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import type { Json } from '@/types/supabase';
+import { useTenant } from '@/hooks/useTenant';
+
+// Define a type for the components we'll render on the canvas
+export interface CanvasComponentData {
+  id: string;               // Unique instance ID
+  type: string;             // e.g., 'container', 'text', 'button'
+  props: Record<string, any>; // Component-specific props (e.g., tableId)
+}
+
+// Map component types to actual components
+export const componentMap: Record<string, React.FC<any>> = {
+  container: ContainerComponent,
+  split: SplitViewComponent,
+  form: FormComponent,
+  table: TableComponent,
+  text: TextComponent,
+  button: ButtonComponent,
+  image: ImageComponent,
+};
 
 const PageBuilder = () => {
+  const { pageId } = useParams<{ pageId: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { tenantId } = useTenant();
+  const [isSaving, setIsSaving] = useState(false);
   const [pageName, setPageName] = useState("Untitled Page");
   const [activeTab, setActiveTab] = useState("components");
+  const [canvasComponents, setCanvasComponents] = useState<CanvasComponentData[]>([]);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [activeComponent, setActiveComponent] = useState<string | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [collections, setCollections] = useState<{ id: string; name: string }[]>([]);
+
+  // Update sensors with less restrictive configuration
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // No activation constraint - so it starts dragging immediately
+    }),
+    useSensor(KeyboardSensor)
+  );
+
+  // Setup droppable canvas area
+  const { setNodeRef: setCanvasRef, isOver } = useDroppable({
+    id: 'canvas-drop-area',
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image'] }
+  });
+
+  // At the top of the PageBuilder component, after your state declarations
+  const canvasRef = useRef(null);
+
+  // Add these effects
+  useEffect(() => {
+    // Log the droppable area dimensions for debugging
+    const element = canvasRef.current;
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      console.log("Canvas Drop Area Dimensions:", {
+        top: rect.top,
+        left: rect.left,
+        bottom: rect.bottom,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    // If editing an existing page, fetch its data
+    const fetchPageData = async () => {
+      if (pageId && pageId !== 'new') {
+        console.log(`Fetching data for page ID: ${pageId}`);
+        try {
+          const { data, error } = await supabase
+            .from('pages')
+            .select('name, config')
+            .eq('id', pageId)
+            .single();
+
+          if (error) throw error;
+
+          if (data) {
+            console.log("Fetched page data:", data);
+            setPageName(data.name || 'Untitled Page');
+            setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
+          } else {
+            console.warn(`Page with ID ${pageId} not found.`);
+            toast.error("Page not found.");
+            navigate('/'); // Redirect if page not found
+          }
+        } catch (error: any) {
+          console.error("Error fetching page data:", error);
+          toast.error(`Error loading page: ${error.message}`);
+          navigate('/'); // Redirect on error
+        }
+      }
+    };
+
+    fetchPageData();
+  }, [pageId, navigate]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    supabase.from('custom_tables').select('id, name').eq('tenant_id', tenantId).then(({ data }) => {
+      if (data) setCollections(data);
+    });
+  }, [tenantId]);
+
+  // Handler for when a drag operation starts
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    console.log("Drag start:", active.id);
+    setActiveDragId(String(active.id));
+    setActiveComponent(String(active.id));
+  };
+
+  // New handler for when a drag operation moves over a droppable
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event;
+    console.log("Dragging over:", over?.id);
+  };
+
+  // New handler for when a drag operation moves
+  const handleDragMove = (event: DragMoveEvent) => {
+    // This is helpful for debugging
+    console.log("Drag move delta:", event.delta);
+  };
+
+  // Modify the handleDragEnd function with manual drop detection
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    setActiveComponent(null);
+
+    console.log("Drag End Event: ", event);
+    console.log("Dragged Item ID (active):", active.id);
+    console.log("Dropped On Area ID (over):", over?.id);
+    console.log("Over data:", over?.data?.current);
+
+    // Manual drop detection if dnd-kit's detection fails
+    const manualDetection = () => {
+      // Get the canvas element's boundaries
+      const element = canvasRef.current;
+      if (!element) return false;
+      
+      const rect = element.getBoundingClientRect();
+      
+      // Get the pointer position from the event
+      const { clientX, clientY } = event.activatorEvent as PointerEvent;
+      
+      console.log("Drop Position:", { clientX, clientY });
+      console.log("Canvas Boundaries:", { 
+        top: rect.top, 
+        right: rect.right, 
+        bottom: rect.bottom, 
+        left: rect.left 
+      });
+      
+      // SOLUTION: Instead of strict position checking, determine if this was a dragging action 
+      // from the sidebar toward the canvas area
+      const deltaX = event.delta.x;
+      const deltaY = event.delta.y;
+      
+      console.log("Drag delta:", { deltaX, deltaY });
+      
+      // If dragged significantly rightward (from sidebar toward canvas)
+      // AND cursor is within reasonable vertical range of the canvas
+      const isDraggingTowardCanvas = deltaX > 100; // Dragged right significantly
+      const isWithinVerticalRange = clientY >= rect.top - 50 && clientY <= rect.bottom + 50;
+      
+      const isLikelyIntendedForCanvas = isDraggingTowardCanvas && isWithinVerticalRange;
+      
+      console.log("Drag intent analysis:", { 
+        isDraggingTowardCanvas, 
+        isWithinVerticalRange,
+        isLikelyIntendedForCanvas
+      });
+      
+      return isLikelyIntendedForCanvas;
+    };
+
+    // Check if dropped over the canvas OR manually detected
+    if ((over && over.id === 'canvas-drop-area') || (!over && manualDetection())) {
+      const componentType = String(active.id);
+
+      // Check if it's a valid component type we can render
+      if (componentMap[componentType]) {
+        const newComponent: CanvasComponentData = {
+          id: `${componentType}-${Date.now()}`, // Simple unique ID for now
+          type: componentType,
+          props: {},
+        };
+
+        console.log("Adding component to canvas: ", newComponent);
+        // Add the new component to the canvas state
+        setCanvasComponents((prev) => [...prev, newComponent]);
+      } else {
+        console.warn(`Unknown component type dropped: ${componentType}`);
+      }
+    } 
+    // ADD THIS SECTION to handle drops onto existing components
+    else if (over && typeof over.id === 'string' && over.id.includes('-')) {
+      // This is likely a component ID (they have format like "container-1234567890")
+      const componentType = String(active.id);
+      if (!componentMap[componentType]) {
+        console.warn(`Unknown component type dropped: ${componentType}`);
+        return;
+      }
+
+      const newComponent: CanvasComponentData = {
+        id: `${componentType}-${Date.now()}`,
+        type: componentType,
+        props: {},
+      };
+
+      // Find the index of the component we dropped on
+      const targetId = over.id as string;
+      const targetIndex = canvasComponents.findIndex(comp => comp.id === targetId);
+      
+      if (targetIndex !== -1) {
+        console.log(`Inserting new component at index ${targetIndex}`);
+        // Insert the new component at this index
+        setCanvasComponents(prev => {
+          const newList = [...prev];
+          newList.splice(targetIndex, 0, newComponent);
+          return newList;
+        });
+      } else {
+        console.warn(`Target component with ID ${targetId} not found`);
+        // Fallback: Add to end
+        setCanvasComponents(prev => [...prev, newComponent]);
+      }
+    }
+    else {
+      console.log("Dropped outside canvas.");
+    }
+  };
+
+  // Function to get the overlay component when dragging
+  const getDragOverlay = () => {
+    if (!activeComponent) return null;
+    
+    return (
+      // Render a very simple div for the overlay
+      <div className="p-2 bg-primary text-primary-foreground rounded shadow-lg">
+        Dragging: {activeComponent}
+      </div>
+    );
+  };
+
+  // Function to handle component deletion
+  const handleDeleteComponent = (idToDelete: string) => {
+    console.log(`Attempting to delete component: ${idToDelete}`);
+    setCanvasComponents((prev) =>
+      prev.filter(component => component.id !== idToDelete)
+    );
+  };
+
+  const handleSavePage = async () => {
+    if (!user || !tenantId) {
+      toast.error("You must be logged in to save.");
+      return;
+    }
+    if (!pageName.trim()) {
+      toast.error("Page name cannot be empty.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const pageData = {
+        user_id: user.id,
+        tenant_id: tenantId,
+        name: pageName.trim(),
+        config: canvasComponents as unknown as Json,
+        updated_at: new Date().toISOString(),
+      };
+
+      let response;
+      if (pageId && pageId !== 'new') {
+        // Update existing page
+        console.log(`Updating page ID: ${pageId}`, pageData);
+        response = await supabase
+          .from('pages')
+          .update(pageData)
+          .eq('id', pageId);
+      } else {
+        // Insert new page
+        console.log("Inserting new page:", pageData);
+        response = await supabase
+          .from('pages')
+          .insert([pageData])
+          .select('id')
+          .single();
+      }
+
+      console.log("Save response:", response);
+      if (response.error) throw response.error;
+
+      toast.success("Page saved successfully!");
+
+      // If it was a new page, navigate to the edit URL with the new ID
+      if (!(pageId && pageId !== 'new') && response.data?.id) {
+          navigate(`/builder/${response.data.id}`, { replace: true });
+      }
+
+    } catch (error: any) {
+      console.error("Error saving page:", error);
+      toast.error(`Error saving page: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Property editor logic
+  const selectedComponent = canvasComponents.find(c => c.id === selectedComponentId);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Builder Header */}
-      <header className="border-b px-6 py-3 bg-background z-10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link to="/">
-                <ArrowLeft className="h-5 w-5" />
-                <span className="sr-only">Back to Dashboard</span>
-              </Link>
-            </Button>
-            <div className="flex items-center gap-3">
+    <DndContext 
+      sensors={sensors} 
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
+      collisionDetection={rectIntersection}
+      accessibility={{ 
+        announcements: { 
+          onDragStart: () => `Dragging component`,
+          onDragOver: () => `Over droppable area`,
+          onDragEnd: () => `Drag operation complete`,
+          onDragCancel: () => `Drag operation cancelled`
+        } 
+      }}
+    >
+      <div className="min-h-screen flex flex-col">
+        {/* Builder Header (includes page name input) */}
+        <header className="border-b px-6 py-3 bg-background z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <Input
                 value={pageName}
                 onChange={(e) => setPageName(e.target.value)}
-                className="h-9 w-[300px] font-medium"
+                placeholder="Page Name"
+                className="w-1/3"
               />
+              <Button variant="outline" size="sm"> {/* Preview functionality TBD */}
+                <Eye className="mr-2 h-4 w-4" />
+                Preview
+              </Button>
+              <Button size="sm" onClick={handleSavePage} disabled={isSaving}>
+                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <Eye className="mr-2 h-4 w-4" />
-              Preview
-            </Button>
-            <Button size="sm">
-              <Save className="mr-2 h-4 w-4" />
-              Save
-            </Button>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Builder Content */}
-      <div className="flex-1 flex">
-        {/* Left Sidebar - Components & Settings */}
-        <div className="w-[300px] border-r flex flex-col">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <div className="border-b">
-              <TabsList className="w-full rounded-none h-12 bg-transparent">
-                <TabsTrigger className="flex-1 rounded-none data-[state=active]:bg-transparent border-b-2 border-transparent data-[state=active]:border-primary" value="components">
-                  <Grid3X3 className="mr-2 h-4 w-4" />
-                  Components
-                </TabsTrigger>
-                <TabsTrigger className="flex-1 rounded-none data-[state=active]:bg-transparent border-b-2 border-transparent data-[state=active]:border-primary" value="layers">
-                  <Layers className="mr-2 h-4 w-4" />
-                  Layers
-                </TabsTrigger>
-                <TabsTrigger className="flex-1 rounded-none data-[state=active]:bg-transparent border-b-2 border-transparent data-[state=active]:border-primary" value="settings">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </TabsTrigger>
-              </TabsList>
+        {/* Builder Content (Sidebar + Canvas) - Now wrapped */}
+        <div className="flex-1 flex">
+          {/* Left Sidebar - Components & Settings */}
+          <div className="w-[300px] border-r flex flex-col">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <div className="border-b">
+                <TabsList className="w-full rounded-none h-12 bg-transparent">
+                   {/* ... existing TabsTrigger ... */}
+                </TabsList>
+              </div>
+
+              <ScrollArea className="flex-1">
+                <TabsContent value="components" className="m-0 p-0 h-full">
+                  <div className="p-4 space-y-4">
+                    {/* Layout Components */}
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Layout Components</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DraggableSidebarItem
+                          id="container"
+                          label="Container"
+                          icon={<Layout className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="split"
+                          label="Split View"
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Data Components */}
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Data Components</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DraggableSidebarItem
+                          id="form"
+                          label="Form"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="table"
+                          label="Table"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Basic Components */}
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Basic Components</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DraggableSidebarItem
+                          id="text"
+                          label="Text"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="button"
+                          label="Button"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="image"
+                          label="Image"
+                          icon={<ImageIcon className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="layers" className="m-0 p-4 h-full">
+                  {/* ... existing Layers content ... */}
+                </TabsContent>
+
+                <TabsContent value="settings" className="m-0 p-4 h-full">
+                 {/* ... existing Settings content ... */}
+                </TabsContent>
+              </ScrollArea>
+            </Tabs>
+          </div>
+
+          {/* Main Canvas - Apply useDroppable ref DIRECTLY to this container */}
+          <div
+            ref={(node) => {
+              // Apply both refs to the same element
+              setCanvasRef(node);
+              canvasRef.current = node;
+            }}
+            className={`flex-1 bg-muted/30 overflow-visible p-8 border-2 ${
+              isOver ? 'border-primary border-dashed' : 'border-dashed'
+            } flex-1 flex flex-col bg-background shadow-sm ${
+              activeDragId ? 'ring-2 ring-primary/20' : ''
+            }`}
+            data-droppable="true"
+            id="canvas-drop-area"
+            style={{ minHeight: 'calc(100vh - 150px)' }}
+          >
+            {/* Optional Header inside the droppable area */}
+            <div className="text-center text-muted-foreground text-sm p-2 border-b bg-muted/40 mb-4">
+              Drop Zone Canvas {isOver ? "(Item Hovering)" : ""}
             </div>
 
-            <ScrollArea className="flex-1">
-              <TabsContent value="components" className="m-0 p-0 h-full">
-                <div className="p-4 space-y-4">
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Layout Components</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Card className="draggable-component cursor-grab border-dashed">
-                        <CardContent className="p-3 flex flex-col items-center justify-center text-center">
-                          <Layout className="h-8 w-8 mb-1 text-primary" />
-                          <p className="text-sm font-medium">Container</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="draggable-component cursor-grab border-dashed">
-                        <CardContent className="p-3 flex flex-col items-center justify-center text-center">
-                          <AlignCenter className="h-8 w-8 mb-1 text-primary" />
-                          <p className="text-sm font-medium">Split View</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Data Components</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Card className="draggable-component cursor-grab border-dashed">
-                        <CardContent className="p-3 flex flex-col items-center justify-center text-center">
-                          <Layers className="h-8 w-8 mb-1 text-primary" />
-                          <p className="text-sm font-medium">Form</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="draggable-component cursor-grab border-dashed">
-                        <CardContent className="p-3 flex flex-col items-center justify-center text-center">
-                          <Layers className="h-8 w-8 mb-1 text-primary" />
-                          <p className="text-sm font-medium">Table</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Basic Components</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Card className="draggable-component cursor-grab border-dashed">
-                        <CardContent className="p-3 flex flex-col items-center justify-center text-center">
-                          <Layers className="h-8 w-8 mb-1 text-primary" />
-                          <p className="text-sm font-medium">Text</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="draggable-component cursor-grab border-dashed">
-                        <CardContent className="p-3 flex flex-col items-center justify-center text-center">
-                          <Layers className="h-8 w-8 mb-1 text-primary" />
-                          <p className="text-sm font-medium">Button</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="layers" className="m-0 p-4 h-full">
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">Drag to reorder layers</p>
-                  <div className="space-y-2">
-                    {["Container", "Header", "Form", "Button Group"].map((layer, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between p-2 bg-background border rounded-md"
-                      >
-                        <div className="flex items-center gap-2">
-                          <ChevronRight className="h-4 w-4" />
-                          <span>{layer}</span>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="settings" className="m-0 p-4 h-full">
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium mb-2">Page Settings</h3>
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <Label htmlFor="page-title">Page Title</Label>
-                        <Input id="page-title" value={pageName} onChange={(e) => setPageName(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="page-slug">URL Slug</Label>
-                        <Input id="page-slug" value={pageName.toLowerCase().replace(/\s+/g, '-')} readOnly />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="page-visibility">Public Page</Label>
-                        <Switch id="page-visibility" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <h3 className="text-sm font-medium mb-2">Component Settings</h3>
-                    <p className="text-sm text-muted-foreground">Select a component to edit its properties</p>
-                  </div>
-                </div>
-              </TabsContent>
-            </ScrollArea>
-          </Tabs>
-        </div>
-
-        {/* Main Canvas */}
-        <div className="flex-1 bg-muted/30 overflow-auto">
-          <div className="min-h-full p-8 flex flex-col items-center justify-center">
-            <Card className="w-full max-w-4xl border-2 border-dashed">
-              <CardHeader className="border-b bg-muted/40">
-                <CardTitle className="text-center text-muted-foreground">
-                  Drop components here to build your page
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-8">
-                <div className="drop-target flex flex-col items-center justify-center p-8 text-center">
-                  <Grid3X3 className="h-12 w-12 mb-4 text-muted-foreground" />
-                  <p className="text-lg font-medium text-muted-foreground">
-                    Drag components from the sidebar
+            {/* Content area within the droppable div */}
+            <div
+              className={`flex-1 flex flex-col gap-4 ${
+                isOver ? 'bg-primary/5 transition-colors duration-150' : ''
+              }`}
+            >
+              {/* Render dropped components OR placeholder */}
+              {canvasComponents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center text-muted-foreground flex-1">
+                  <Grid3X3 className="h-12 w-12 mb-4" />
+                  <p className="text-lg font-medium">
+                    Drop components here
                   </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Or select a template to get started quickly
+                  <p className="text-sm mt-1">
+                    Drag from the sidebar onto this area
                   </p>
                   <div className="mt-6">
                     <Button variant="outline">
@@ -227,17 +547,62 @@ const PageBuilder = () => {
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-              <CardFooter className="border-t bg-muted/40 flex justify-center">
-                <p className="text-sm text-muted-foreground">
-                  Page footer area
-                </p>
-              </CardFooter>
-            </Card>
+              ) : (
+                // Render the actual components from state, wrapped in DroppableCanvasItem
+                canvasComponents.map((component) => {
+                  const ComponentToRender = componentMap[component.type];
+                  if (!ComponentToRender) return null;
+                  return (
+                    <DroppableCanvasItem
+                      key={component.id}
+                      id={component.id}
+                      onDelete={handleDeleteComponent}
+                      onSelect={setSelectedComponentId}
+                    >
+                      <ComponentToRender {...component.props} />
+                    </DroppableCanvasItem>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      
+      {/* Add the DragOverlay to show a floating preview when dragging */}
+      <DragOverlay style={{ pointerEvents: 'none' }}>
+        {activeComponent ? getDragOverlay() : null}
+      </DragOverlay>
+
+      {/* Property Editor Side Panel */}
+      {selectedComponentId && (
+        <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50">
+          <h3 className="text-lg font-semibold mb-2">Component Properties</h3>
+          {selectedComponent?.type === 'table' && (
+            <div className="mb-4">
+              <label className="block text-xs font-semibold mb-1">Collection</label>
+              <select
+                className="w-full border rounded px-2 py-1"
+                value={selectedComponent.props.tableId || ''}
+                onChange={e => {
+                  const newTableId = e.target.value;
+                  setCanvasComponents(prev => prev.map(c =>
+                    c.id === selectedComponentId ? { ...c, props: { ...c.props, tableId: newTableId } } : c
+                  ));
+                }}
+              >
+                <option value="">Select collection</option>
+                {collections.map(col => (
+                  <option key={col.id} value={col.id}>{col.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* TODO: Add more property editors for other component types */}
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => setSelectedComponentId(null)}>Close</Button>
+        </aside>
+      )}
+    </DndContext>
   );
 };
 

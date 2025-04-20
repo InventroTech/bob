@@ -1,9 +1,8 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ComponentsLibrary from "./pages/ComponentsLibrary";
@@ -13,33 +12,62 @@ import LeadsTemplate from "./pages/LeadsTemplate";
 import ProfileSettings from "./pages/ProfileSettings";
 import Templates from "./pages/Templates";
 import PagesGallery from "./pages/PagesGallery";
-
+import Dashboard from './pages/Dashboard'
+import ProfilePage from './pages/ProfilePage'
+import AuthPage from './pages/AuthPage'
+import ProtectedRoute from './hooks/ProtectedRoute'
+import MyPages from './pages/MyPages'
+import TablesPage from './pages/TablesPage'
+import TableDetailsPage from './pages/TableDetailsPage'
+import CustomAppAuthPage from './pages/CustomAppAuthPage';
+import ProtectedAppRoute from './hooks/ProtectedAppRoute';
+import CustomAppLayout from './layout/CustomAppLayout';
+import CustomAppDashboard from './pages/CustomAppDashboard';
+import CustomAppPage from './pages/CustomAppPage';
+import CustomAppProfilePage from './pages/CustomAppProfilePage';
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <BrowserRouter>
+    <Router>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/components" element={<ComponentsLibrary />} />
-          <Route path="/builder/new" element={<PageBuilder />} />
-          <Route path="/builder/edit/:id" element={<PageBuilder />} />
-          <Route path="/builder/templates/:template" element={<PageBuilder />} />
-          <Route path="/task-template" element={<TaskTemplate />} />
-          <Route path="/leads-template" element={<LeadsTemplate />} />
-          <Route path="/settings" element={<ProfileSettings />} />
-          <Route path="/settings/profile" element={<ProfileSettings />} />
-          <Route path="/templates" element={<Templates />} />
-          <Route path="/pages" element={<PagesGallery />} />
-          <Route path="/leads" element={<LeadsTemplate />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          {/* Public Route - Login/Signup */}
+          <Route path="/auth" element={<AuthPage />} />
+
+          {/* Protected Routes - Require Login */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/pages" element={<MyPages />} />
+            <Route path="/builder/new" element={<PageBuilder />} />
+            <Route path="/builder/:pageId" element={<PageBuilder />} />
+            <Route path="/components" element={<ComponentsLibrary />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/settings" element={<ProfileSettings />} />
+            <Route path="/templates" element={<Templates />} />
+            <Route path="/task-template" element={<TaskTemplate />} />
+            <Route path="/profile-settings" element={<ProfileSettings />} />
+            <Route path="/tables" element={<TablesPage />} />
+            <Route path="/tables/:tableName" element={<TableDetailsPage />} />
+          </Route>
+
+          {/* Custom App Routes */}
+          <Route path="/app/:tenantSlug/login" element={<CustomAppAuthPage />} />
+          <Route path="/app/:tenantSlug" element={<ProtectedAppRoute />}>  
+            <Route element={<CustomAppLayout />}>  
+              <Route index element={<CustomAppDashboard />} />
+              <Route path="pages/:pageId" element={<CustomAppPage />} />
+              <Route path="profile" element={<CustomAppProfilePage />} />
+            </Route>
+          </Route>
+
+          {/* Add a catch-all or 404 route if needed */}
+          {/* <Route path="*" element={<NotFoundPage />} /> */}
         </Routes>
       </TooltipProvider>
-    </BrowserRouter>
+    </Router>
   </QueryClientProvider>
 );
 

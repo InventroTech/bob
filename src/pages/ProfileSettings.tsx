@@ -1,5 +1,4 @@
-
-import React from "react";
+import React, { useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,10 +14,31 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Camera, Mail, User } from "lucide-react";
+import { Camera, Mail, User, Database } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { setupDatabase } from "@/lib/supabaseSetup";
+import { toast } from "sonner";
 
 const ProfileSettings = () => {
+  const [isSettingUp, setIsSettingUp] = useState(false);
+
+  const handleDatabaseSetup = async () => {
+    setIsSettingUp(true);
+    toast.info("Attempting database setup... Check console for details.");
+    try {
+      const success = await setupDatabase();
+      if (success) {
+        toast.success("Database setup script finished (check console for specifics).");
+      } else {
+        toast.error("Database setup script failed. Check console and run SQL manually.");
+      }
+    } catch (error: any) {
+      toast.error(`Error during setup: ${error.message}`);
+    } finally {
+      setIsSettingUp(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
@@ -48,6 +68,12 @@ const ProfileSettings = () => {
               className="rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3 border-b-2 border-transparent data-[state=active]:border-primary"
             >
               Appearance
+            </TabsTrigger>
+            <TabsTrigger
+              value="admin"
+              className="rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3 border-b-2 border-transparent data-[state=active]:border-primary"
+            >
+              Admin
             </TabsTrigger>
           </TabsList>
           <TabsContent value="profile" className="pt-6">
@@ -297,6 +323,34 @@ const ProfileSettings = () => {
                 <Button variant="outline">Reset to Defaults</Button>
                 <Button>Save Preferences</Button>
               </CardFooter>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="admin" className="pt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Actions</CardTitle>
+                <CardDescription>
+                  Perform administrative setup tasks.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-destructive mb-4">
+                  Warning: Running setup actions might modify your database schema.
+                  Ensure you have backups or understand the implications.
+                </p>
+                <Button 
+                  onClick={handleDatabaseSetup} 
+                  disabled={isSettingUp}
+                >
+                  <Database className="mr-2 h-4 w-4" />
+                  {isSettingUp ? 'Setting Up Database...' : 'Run Initial DB Setup'}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Attempts to create the 'pages' table and necessary RLS policies.
+                  This may fail due to permissions. Check console output.
+                </p>
+              </CardContent>
             </Card>
           </TabsContent>
         </Tabs>

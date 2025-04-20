@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,16 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import {
   AlertTriangle,
   AlignCenter,
@@ -28,9 +37,55 @@ import {
   Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ContainerComponent,
+  SplitViewComponent,
+  FormComponent,
+  TableComponent,
+  TextComponent,
+  ButtonComponent,
+  ImageComponent,
+} from "@/components/page-builder"; // Import placeholder components
+
+// Map component IDs to actual components
+const componentMap: Record<string, React.FC<any>> = {
+  container: ContainerComponent,
+  split: SplitViewComponent,
+  // card: CardComponent, // Assuming Card is a layout variation or uses Container
+  // grid: GridComponent, // Assuming Grid is a layout variation or uses Container
+  table: TableComponent,
+  // list: ListComponent, // Placeholder, implement if needed
+  // kanban: KanbanComponent, // Placeholder, implement if needed
+  // calendar: CalendarComponent, // Placeholder, implement if needed
+  "text-input": (props: any) => <Input {...props} placeholder="Text Input" />, // Use ShadCN Input for preview
+  form: FormComponent,
+  // datepicker: DatePickerComponent, // Placeholder, implement if needed
+  alert: (props: any) => (
+    <div className="border border-dashed border-red-400 p-4">
+      <p className="text-xs text-red-500 mb-1">Alert</p>
+      <div className="flex items-center gap-2 bg-yellow-100 p-2 rounded border border-yellow-300 text-yellow-800">
+        <AlertTriangle className="h-5 w-5" />
+        <span>Alert Message Placeholder</span>
+      </div>
+    </div>
+  ), // Placeholder preview for Alert
+  text: TextComponent,
+  image: ImageComponent,
+  // avatar: AvatarComponent, // Placeholder, implement if needed
+  button: ButtonComponent, // Need to map button id if different
+};
+
+// Define the structure for a component definition
+interface ComponentDefinition {
+  id: string;
+  name: string;
+  icon: React.ElementType;
+  description: string;
+}
 
 const ComponentsLibrary = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [previewComponent, setPreviewComponent] = useState<ComponentDefinition | null>(null);
 
   const componentCategories = [
     {
@@ -151,6 +206,19 @@ const ComponentsLibrary = () => {
         },
       ],
     },
+    {
+      id: "action", // Add an Action category if needed, or put Button here
+      name: "Action",
+      icon: Grid, // Example icon
+      components: [
+        {
+          id: "button",
+          name: "Button",
+          icon: Grid, // Placeholder icon, replace if needed
+          description: "Trigger actions or navigation",
+        },
+      ]
+    }
   ];
 
   const filteredCategories = componentCategories.map((category) => ({
@@ -225,7 +293,12 @@ const ComponentsLibrary = () => {
                       <CardDescription>{component.description}</CardDescription>
                     </CardHeader>
                     <CardFooter className="pt-2">
-                      <Button variant="outline" size="sm" className="w-full">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setPreviewComponent(component)}
+                      >
                         Preview
                       </Button>
                     </CardFooter>
@@ -241,6 +314,33 @@ const ComponentsLibrary = () => {
           ))}
         </Tabs>
       </div>
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewComponent} onOpenChange={(open) => !open && setPreviewComponent(null)}>
+        <DialogContent className="sm:max-w-[625px]">
+          <DialogHeader>
+            <DialogTitle>{previewComponent?.name} Preview</DialogTitle>
+            <DialogDescription>
+              This is a basic preview of the {previewComponent?.name} component.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {previewComponent && componentMap[previewComponent.id] ? (
+              React.createElement(componentMap[previewComponent.id])
+            ) : (
+              <p className="text-muted-foreground text-center">Preview not available for this component yet.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </DashboardLayout>
   );
 };
