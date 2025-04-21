@@ -25,6 +25,7 @@ import CustomAppLayout from './layout/CustomAppLayout';
 import CustomAppDashboard from './pages/CustomAppDashboard';
 import CustomAppPage from './pages/CustomAppPage';
 import CustomAppProfilePage from './pages/CustomAppProfilePage';
+import InviteUsersPage from './pages/InviteUsersPage';
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -41,6 +42,7 @@ const App = () => (
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/pages" element={<MyPages />} />
+            <Route path="/team/invite" element={<InviteUsersPage />} />
             <Route path="/builder/new" element={<PageBuilder />} />
             <Route path="/builder/:pageId" element={<PageBuilder />} />
             <Route path="/components" element={<ComponentsLibrary />} />

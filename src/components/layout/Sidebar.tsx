@@ -1,4 +1,3 @@
-
 import React from "react";
 import { NavLink } from "react-router-dom";
 import { 
@@ -40,6 +39,11 @@ const sidebarItems = [
     title: "My Pages",
     path: "/pages",
     icon: Layout,
+  },
+  {
+    title: "Team",
+    path: "/team/invite",
+    icon: Users,
   },
   {
     title: "Tables",
