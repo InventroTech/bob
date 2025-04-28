@@ -35,6 +35,7 @@ import {
   Pencil,
   Table,
   Type,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -46,11 +47,14 @@ import {
   ButtonComponent,
   ImageComponent,
 } from "@/components/page-builder"; // Import placeholder components
+import LeadCardTemplate from "@/builder/templates/lead-card";
+import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
 
 // Map component IDs to actual components
 const componentMap: Record<string, React.FC<any>> = {
   container: ContainerComponent,
   split: SplitViewComponent,
+  leadCard: LeadCardComponent,
   // card: CardComponent, // Assuming Card is a layout variation or uses Container
   // grid: GridComponent, // Assuming Grid is a layout variation or uses Container
   table: TableComponent,
@@ -117,6 +121,12 @@ const ComponentsLibrary = () => {
           icon: Grid,
           description: "A responsive grid system for organizing content",
         },
+        {
+          id: "leadCard",
+          name: "Lead Card",
+          icon: User,
+          description: "A card for displaying lead information",
+        }
       ],
     },
     {

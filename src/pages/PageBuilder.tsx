@@ -21,6 +21,7 @@ import {
   Settings,
   Trash2,
   Image as ImageIcon,
+  User,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -60,6 +61,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
 
 // Define a type for the components we'll render on the canvas
 export interface CanvasComponentData {
@@ -77,6 +79,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   text: TextComponent,
   button: ButtonComponent,
   image: ImageComponent,
+  leadCard: LeadCardComponent,
 };
 
 const PageBuilder = () => {
@@ -104,7 +107,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -444,6 +447,11 @@ const PageBuilder = () => {
                           id="split"
                           label="Split View"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="leadCard"
+                          label="Lead Card"
+                          icon={<User className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>

@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Link } from "react-router-dom";
-import { List, Eye, Copy, Grid, User, Calendar, CheckSquare } from "lucide-react";
+import { List, Eye, Copy, Grid, User, Calendar, CheckSquare, AppWindow } from "lucide-react";
 
 const Templates = () => {
   const templates = [
@@ -54,6 +54,14 @@ const Templates = () => {
       icon: Calendar,
       color: "bg-red-50 text-red-600 dark:bg-red-900 dark:text-red-300",
       path: "/",
+    },
+    {
+      id: "lead-card",
+      title: "Lead Card",
+      description: "Leads are displayed in a card format with a detailed view of the lead.",
+      icon: AppWindow,
+      color: "bg-green-50 text-green-600 dark:bg-green-900 dark:text-green-300",
+      path: "/builder/templates/lead-card",
     },
   ];
 
