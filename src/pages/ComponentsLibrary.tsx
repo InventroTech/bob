@@ -51,12 +51,16 @@ import {
 import LeadCardTemplate from "@/builder/templates/lead-card";
 import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
 import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
+import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
+import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
 // Map component IDs to actual components
 const componentMap: Record<string, React.FC<any>> = {
   container: ContainerComponent,
   split: SplitViewComponent,
   leadCard: LeadCardComponent,
   dataCard: DataCardComponent,
+  leadTable: LeadTableComponent,
+  collapseCard: CollapseCard,
   // card: CardComponent, // Assuming Card is a layout variation or uses Container
   // grid: GridComponent, // Assuming Grid is a layout variation or uses Container
   table: TableComponent,
