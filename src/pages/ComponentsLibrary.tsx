@@ -25,6 +25,7 @@ import {
   AlertTriangle,
   AlignCenter,
   Calendar,
+  ChevronDown,
   Grid,
   Image as ImageIcon,
   Layout,
@@ -49,12 +50,13 @@ import {
 } from "@/components/page-builder"; // Import placeholder components
 import LeadCardTemplate from "@/builder/templates/lead-card";
 import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
-
+import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
 // Map component IDs to actual components
 const componentMap: Record<string, React.FC<any>> = {
   container: ContainerComponent,
   split: SplitViewComponent,
   leadCard: LeadCardComponent,
+  dataCard: DataCardComponent,
   // card: CardComponent, // Assuming Card is a layout variation or uses Container
   // grid: GridComponent, // Assuming Grid is a layout variation or uses Container
   table: TableComponent,
@@ -158,6 +160,18 @@ const ComponentsLibrary = () => {
           icon: Calendar,
           description: "Display events or tasks in a calendar format",
         },
+        {
+          id: "dataCard",
+          name: "Data Card",
+          icon: Table,
+          description: "A card for displaying data",
+        },
+        {
+          id: "leadTable",
+          name: "Lead Table",
+          icon: Table,
+          description: "A table for displaying lead information",
+        }
       ],
     },
     {
@@ -214,6 +228,12 @@ const ComponentsLibrary = () => {
           icon: ImageIcon,
           description: "Display user images or initials in a circular format",
         },
+        {
+          id: "collapseCard",
+          name: "Collapse Card",
+          icon: ChevronDown,
+          description: "A collapsible card with a header and content",
+        }
       ],
     },
     {

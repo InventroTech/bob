@@ -49,7 +49,7 @@ const attributes = {
 
 export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ children }) => {
   return (
-    <div className='flex flex-col gap-2 w-[70%] p-4' >
+    <div className='flex flex-col gap-2 w-[100%] p-4' >
     <div className='full-box  m-auto  top-12 left-12 rounded-sm p-2 flex  bg-gray-100 text-black w-full'>
         <div className="profile flex items-center p-4  gap-4 w-[50%] h-[100%]">
             <div className="image ">
