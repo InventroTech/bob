@@ -610,7 +610,7 @@ const PageBuilder = () => {
       {selectedComponentId && (
         <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50">
           <h3 className="text-lg font-semibold mb-2">Component Properties</h3>
-          {selectedComponent?.type === 'table' && (
+          {/* {selectedComponent?.type === 'table' && (
             <div className="mb-4">
               <label className="block text-xs font-semibold mb-1">Collection</label>
               <select
@@ -629,7 +629,7 @@ const PageBuilder = () => {
                 ))}
               </select>
             </div>
-          )}
+          )} */}
           {/* TODO: Add more property editors for other component types */}
           <Button variant="outline" size="sm" className="mt-4" onClick={() => setSelectedComponentId(null)}>Close</Button>
         </aside>
