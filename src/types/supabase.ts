@@ -215,6 +215,49 @@ export type Database = {
         }
         Relationships: []
       }
+      card_sets: {
+        Row: {
+          id: string
+          name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          created_at?: string
+        }
+      }
+      cards: {
+        Row: {
+          id: string
+          card_set_id: string
+          title: string
+          description: string
+          number: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          card_set_id: string
+          title: string
+          description: string
+          number: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          card_set_id?: string
+          title?: string
+          description?: string
+          number?: number
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

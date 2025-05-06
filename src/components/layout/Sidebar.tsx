@@ -7,7 +7,7 @@ import {
   Layout, 
   PanelLeft, 
   Settings, 
-  Users 
+  Users,
 } from "lucide-react";
 import {
   Sidebar as SidebarComponent,
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { Table } from "lucide-react";
+import { Card } from "../ui/card";
 
 const sidebarItems = [
   {
@@ -48,6 +49,11 @@ const sidebarItems = [
   {
     title: "Tables",
     path: "/tables",
+    icon: Table,
+  },
+  {
+    title: "Cards",
+    path: "/cards",
     icon: Table,
   },
   {

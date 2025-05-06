@@ -65,8 +65,9 @@ import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
-import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
-import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
+  import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
+  import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
+import { CardComponent } from "@/layout/CardEditLayout";
 // Define a type for the components we'll render on the canvas
 export interface CanvasComponentData {
   id: string;               // Unique instance ID
@@ -610,7 +611,7 @@ const PageBuilder = () => {
       {selectedComponentId && (
         <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50">
           <h3 className="text-lg font-semibold mb-2">Component Properties</h3>
-          {/* {selectedComponent?.type === 'table' && (
+          {selectedComponent?.type === 'table' && (
             <div className="mb-4">
               <label className="block text-xs font-semibold mb-1">Collection</label>
               <select
@@ -629,7 +630,8 @@ const PageBuilder = () => {
                 ))}
               </select>
             </div>
-          )} */}
+          )}
+          {/* <CardComponent/> */}
           {/* TODO: Add more property editors for other component types */}
           <Button variant="outline" size="sm" className="mt-4" onClick={() => setSelectedComponentId(null)}>Close</Button>
         </aside>

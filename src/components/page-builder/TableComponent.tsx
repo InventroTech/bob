@@ -18,6 +18,7 @@ export const TableComponent: React.FC<TableComponentProps> = ({ tableId }) => {
       supabase.from('custom_columns').select('*').eq('table_id', tableId).order('ordinal_position', { ascending: true }),
       supabase.from('custom_rows').select('*').eq('table_id', tableId).order('created_at', { ascending: true })
     ]).then(([colRes, rowRes]) => {
+      console.log("columns Krover",colRes.data);
       setColumns(colRes.data || []);
       setRows(rowRes.data || []);
       setLoading(false);

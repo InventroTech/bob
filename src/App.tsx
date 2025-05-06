@@ -27,6 +27,7 @@ import CustomAppPage from './pages/CustomAppPage';
 import CustomAppProfilePage from './pages/CustomAppProfilePage';
 import InviteUsersPage from './pages/InviteUsersPage';
 import LeadCardTemplate from "./builder/templates/lead-card";
+import { CardComponent } from "./layout/CardEditLayout";
 const queryClient = new QueryClient();
 const attributes = {
   name: "Mamata Banerjee",
@@ -92,6 +93,7 @@ const App = () => (
             <Route path="/task-template" element={<TaskTemplate />} />
             <Route path="/profile-settings" element={<ProfileSettings />} />
             <Route path="/tables" element={<TablesPage />} />
+            <Route path="/cards" element={<CardComponent />} />
             <Route path="/tables/:tableName" element={<TableDetailsPage />} />
             <Route path="/builder/templates/lead-card" element={<LeadCardTemplate attributes={attributes} />} />
           </Route>
