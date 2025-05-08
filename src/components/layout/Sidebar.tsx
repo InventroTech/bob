@@ -52,6 +52,11 @@ const sidebarItems = [
     icon: Table,
   },
   {
+    title: "Leads",
+    path: "/leads",
+    icon: Table,
+  },
+  {
     title: "Cards",
     path: "/cards",
     icon: Table,
