@@ -92,7 +92,7 @@ const CustomAppLayout: React.FC = () => {
             {/* Account Section */}
             <div className="flex items-center gap-4">
               <Bell size={24} className="text-black cursor-pointer" />
-              <ShortProfileCard attributes={details}/>
+              <ShortProfileCard image={details.image} name={details.name} address={details.address}/>
             </div>
           </div>
         </div>

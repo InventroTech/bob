@@ -6,7 +6,7 @@ export default function StatusCard({text,color,type}) {
   return (
     <Stack spacing={1} sx={{ alignItems: 'center' }}>
       <Stack direction="row" spacing={1}>
-        {type==="chip" ? <Chip label={text} color={color} variant="outlined" style={{backgroundColor:color,padding:'0px'}} className='p-0'/> : <Chip label={text} color={color} />}
+       <Chip label={text} color={color} variant="outlined" style={{backgroundColor:color,padding:'0px'}} className='p-0'/> 
       </Stack>
     </Stack>
   );
