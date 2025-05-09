@@ -5,49 +5,11 @@ import React, { ReactNode } from 'react';
 
 interface LeadCardComponentProps {
   children?: ReactNode;
+  attributes: any;
 }
-const attributes = {
-    name: "Mamata Banerjee",
-    age: "50",
-    phone: "+91 9876543210",
-    email: "pisimoni@tmc.chor",
-    party: "TMC",
-    partyColor: "green",
-    textColor: "black",
-    flag:"https://5.imimg.com/data5/SELLER/Default/2023/3/294646333/KS/CI/NV/14541723/tmc-indian-national-flag.jpg",
-    address: "Kalighat, Kolkata",
-    tag: "Lead",
-    image: "https://www.hindustantimes.com/ht-img/img/2025/04/04/550x309/Mamata_Banerjee_1740645038692_1743754103685.jpg",
-    infoData:[
-      {
-        id:1,
-        title: "Last Connected",
-        description: "10 days ago",
-      }
-    ],
-    taskData:{
-        title: "Task Details",
-        tasks:[
-          {
-            id:1,
-            title: "Veiw Poster Layout",
-            description: "",
-          },
-          {
-            id:2,
-            title: "Package to pitch",
-            description: ": Monthly",
-          },
-        ],
-        description:"Prospect showed interest in trail activation."
-      
-      },
-      notesData:{
-        title: "Additional Notes",
-      }
-  }
 
-export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ children }) => {
+
+export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [] }) => {
   return (
     <div className='flex flex-col gap-2 w-[100%] p-4' >
     <div className='full-box  m-auto  top-12 left-12 rounded-sm p-2 flex  bg-gray-100 text-black w-full'>

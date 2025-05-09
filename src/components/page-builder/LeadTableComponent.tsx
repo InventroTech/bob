@@ -5,8 +5,7 @@ import { supabase } from '@/lib/supabase';
 import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
 import { LeadFormComponent } from './LeadsTableForm';
-import { Trash2 } from 'lucide-react'; // Using lucide icons (or you can use any icon library)
-
+import { Trash2 } from 'lucide-react'; 
 interface Column {
   header: string;
   accessor: string;
@@ -177,6 +176,7 @@ export const LeadTableComponent: React.FC = () => {
           </button>
         </div>
       )}
+     
     </div>
   );
 };

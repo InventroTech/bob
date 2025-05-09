@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import DashboardLayout from '../layout/DashboardLayout';
 import { LeadTableComponent } from './LeadTableComponent';
-
+import { LeadCarousel } from '../ui/leadCarousel';
 export const LeadFormComponent = () => {
   const [formData, setFormData] = useState({
     name: '',
@@ -57,8 +57,8 @@ export const LeadFormComponent = () => {
   };
 
   return (
-    <>
     <DashboardLayout>
+   
     <form onSubmit={handleSubmit} className="space-y-4">
     {Object.entries(formData).map(([key, value]) => (
   <div key={key}>
@@ -83,10 +83,12 @@ export const LeadFormComponent = () => {
       </button>
 
       {message && <p className="mt-2 text-sm">{message}</p>}
+      
     </form>
+    <LeadCarousel/>
 
     <LeadTableComponent/>
     
+    
   </DashboardLayout>
-  </>   
 )}
