@@ -615,8 +615,8 @@ const PageBuilder = () => {
         {activeComponent ? getDragOverlay() : null}
       </DragOverlay>
 
-      {/* Property Editor Side Panel */}
-      {selectedComponentId && (
+      {/*
+       {selectedComponentId && (
         <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50">
           <h3 className="text-lg font-semibold mb-2">Component Properties</h3>
           {selectedComponent?.type === 'table' && (
@@ -639,11 +639,10 @@ const PageBuilder = () => {
               </select>
             </div>
           )}
-          {/* <CardComponent/> */}
-          {/* TODO: Add more property editors for other component types */}
           <Button variant="outline" size="sm" className="mt-4" onClick={() => setSelectedComponentId(null)}>Close</Button>
         </aside>
-      )}
+      )} 
+      */}
     </DndContext>
   );
 };

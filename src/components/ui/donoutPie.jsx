@@ -1,52 +1,48 @@
 'use client'
 import React, { useState, useEffect } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
+
 const DonutPie = ({ attributes = [] }) => {
   const [mounted, setMounted] = useState(false);
 
   const seriesData = attributes.length > 0 ? attributes : [
-    { id: 0, value: 10, label: 'series A' },
-    { id: 1, value: 15, label: 'series B' },
-    { id: 2, value: 20, label: 'series C' },
+    { id: 0, value: 10, label: 'Series A' },
+    { id: 1, value: 15, label: 'Series B' },
+    { id: 2, value: 20, label: 'Series C' },
   ];
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted) return null; // Don't render initially
+  if (!mounted) return null;
 
   return (
-    <div className='bg-white rounded-lg  flex items-center justify-center m-auto' style={{ width: '100px', height: '100px' ,paddingBottom: '0px' }}>
+    <div
+      className="bg-white rounded-lg flex items-center justify-center m-auto"
+      style={{ width: '100px', height: '100px' }}
+    >
       <PieChart
+        width={100}
+        height={100}
         series={[
           {
             data: seriesData,
-            innerRadius: 17,
-            outerRadius: 37,
+            innerRadius: 20,
+            outerRadius: 40,
             paddingAngle: 1,
             cornerRadius: 2,
-            startAngle: 0,
-            endAngle: 360,
-            cx: 40,
-            cy: 40,
-            label: {
-              show: false,
-              position: 'outside',
-              fontSize: 12,
-              fontWeight: 'bold',
-              color: 'black',
-            },
-          }
+            highlightScope: { faded: 'global', highlighted: 'item' },
+            faded: { additionalRadius: -5, color: 'gray' },
+            // 👇 no permanent labels
+            label: { visible: false },
+          },
         ]}
-        legend={{
-          position: 'right',
-          hidden: true,
-        }}
+        // 👇 hide the legend
         
       />
     </div>
   );
-}
+};
 
 export default DonutPie;

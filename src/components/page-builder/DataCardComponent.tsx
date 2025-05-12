@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import DonutPie from '../ui/donoutPie';
-import { supabase } from '@/lib/supabase';
 
 interface DonutData {
   id: number;
@@ -17,41 +16,45 @@ interface Card {
   number: number;
 }
 
-interface DataCardComponentProps {
-  cardSetId: string;
-}
-
-export const DataCardComponent: React.FC<DataCardComponentProps> = ({ cardSetId }) => {
+export const DataCardComponent: React.FC = () => {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchCards = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('cards')
-        .select('*')
-        .eq('card_set_id', cardSetId);
+    // Demo JSON data
+    const demoCards: Card[] = [
+      {
+        id: '1',
+        title: 'Voters Reached',
+        description: 'Total number of people contacted',
+        number: 64,
+      },
+      {
+        id: '2',
+        title: 'Meetings Scheduled',
+        description: 'Confirmed meetings with leads',
+        number: 32,
+      },
+      {
+        id: '3',
+        title: 'Pending Follow-ups',
+        description: 'Leads to follow up with',
+        number: 45,
+      },
+    ];
 
-      if (error) {
-        console.error('Error fetching cards:', error.message);
-      } else {
-        setCards(data || []);
-      }
-      setLoading(false);
-    };
-
-    fetchCards();
-  }, [cardSetId]);
+    setCards(demoCards);
+    setLoading(false);
+  }, []);
 
   if (loading) return <p>Loading cards...</p>;
 
   return (
     <div className="cardlist grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-6 w-full">
-      {cards.map((card, index) => {
+      {cards.map((card) => {
         const donutData: DonutData[] = [
-          { id: 0, value: card.number, label: card.title },
-          { id: 1, value: 100 - card.number, label: 'Other' }, // simple dummy contrast
+          { id: 0, value: card.number, label: 'Remaining' },
+          { id: 1, value: 100 - card.number, label: 'Completed' },
         ];
 
         return (

@@ -5,9 +5,13 @@ import React, { ReactNode } from 'react';
 import Dropdown from '../ui/dropdown';
 
 interface LeadCardComponentProps {
-  children?: ReactNode;
   attributes: any;
+  status: string;
+  setStatus: (val: string) => void;
+  notes: string;
+  setNotes: (val: string) => void;
 }
+
 const demoMenuItems = [
   'Connected',
   'Not Connected',
@@ -15,7 +19,7 @@ const demoMenuItems = [
   'Meeting Scheduled',
 ];
 
-export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [] }) => {
+export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [], status, setStatus, notes, setNotes }) => {
   return (
     <div className='flex flex-col gap-2 w-[100%] p-4' >
     <div className='full-box  m-auto  top-12 left-12 rounded-sm p-2 flex  bg-gray-100 text-black w-full'>
@@ -60,8 +64,9 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     </div>
     <InfoCards attributes={attributes.infoData} />
     <TaskCard attributes={attributes.taskData} />
-    <Notes attributes={attributes.notesData} />
-    <Dropdown title="Status" menu={demoMenuItems} />
+    <Notes notes={notes} setNotes={setNotes} />
+    <Dropdown title="Status" menu={demoMenuItems} selected={status} onSelect={setStatus} />
+
     </div>
   );
 }; 

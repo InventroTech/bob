@@ -1,15 +1,23 @@
-'use client'
-import React from 'react'
+'use client';
+import React from 'react';
 
-const Notes = ({attributes}) => {
-  return (
-    <div>
-      <div className='flex flex-col gap-2'>
-        <h1 className='text-md '>{attributes.title}</h1>
-        <input type="text" placeholder='Write a note...' className='w-full p-2 rounded-md border border-gray-300 h-20 items-start' />
-      </div>
-    </div>
-  )
+interface NotesProps {
+  notes: string;
+  setNotes: (val: string) => void;
 }
 
-export default Notes
+const Notes = ({ notes, setNotes }: NotesProps) => {
+  return (
+    <div className="flex flex-col gap-2">
+      <h1 className="text-md font-semibold">Notes</h1>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Write a note..."
+        className="w-full p-2 rounded-md border border-gray-300 h-24"
+      />
+    </div>
+  );
+};
+
+export default Notes;
