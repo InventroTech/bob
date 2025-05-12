@@ -68,6 +68,8 @@ import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
 import { CardComponent } from "@/layout/CardEditLayout";
+import { LeadCarousel } from "@/components/ui/leadCarousel";
+import { Carousel } from "@/components/ui/carousel";
 // Define a type for the components we'll render on the canvas
 export interface CanvasComponentData {
   id: string;               // Unique instance ID
@@ -87,7 +89,8 @@ export const componentMap: Record<string, React.FC<any>> = {
   leadCard: LeadCardComponent,
   dataCard:DataCardComponent,
   leadTable: LeadTableComponent,
-  collapseCard: CollapseCard
+  collapseCard: CollapseCard,
+  leadCarousel: LeadCarousel
 };
 
 const PageBuilder = () => {
@@ -115,7 +118,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -465,6 +468,11 @@ const PageBuilder = () => {
                           id="collapseCard"
                           label="Collapse Card"
                           icon={<ChevronDown className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="leadCarousel"
+                          label="Lead Carousel"
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
                         
                       </div>

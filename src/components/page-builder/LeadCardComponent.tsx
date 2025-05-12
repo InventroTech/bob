@@ -2,12 +2,18 @@ import InfoCards from '@/builder/templates/lead-card/infoCard';
 import Notes from '@/builder/templates/lead-card/notes';
 import TaskCard from '@/builder/templates/lead-card/taskCard';
 import React, { ReactNode } from 'react';
+import Dropdown from '../ui/dropdown';
 
 interface LeadCardComponentProps {
   children?: ReactNode;
   attributes: any;
 }
-
+const demoMenuItems = [
+  'Connected',
+  'Not Connected',
+  'Reach Out Later',
+  'Meeting Scheduled',
+];
 
 export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [] }) => {
   return (
@@ -55,6 +61,7 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     <InfoCards attributes={attributes.infoData} />
     <TaskCard attributes={attributes.taskData} />
     <Notes attributes={attributes.notesData} />
+    <Dropdown title="Status" menu={demoMenuItems} />
     </div>
   );
 }; 

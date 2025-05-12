@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { LeadCardComponent } from "../page-builder/LeadCardComponent";
-
+interface LeadCarouselComponentProps {
+  children: React.ReactNode;
+}
 const attributes = [
   {
     name: "Mahesh",
@@ -293,7 +295,7 @@ const attributes = [
   },
 ];
 
-export function LeadCarousel() {
+export const LeadCarousel: React.FC<LeadCarouselComponentProps> = ({ children }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const nextSlide = () => {
@@ -305,16 +307,21 @@ export function LeadCarousel() {
   };
 
   return (
-    <div className="relative w-full h-[700px]">
+    <div className="relative w-[100%] h-[100%]">
       <div className="relative h-full overflow-hidden rounded-xl">
         {/* Add transition classes */}
-        <div className="transition-all duration-500 ease-in-out opacity-100">
+        <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white">
           <LeadCardComponent attributes={attributes[currentIndex]} />
+          <div className="buttons m-auto mr-0 flex gap-4 p-4">
+            <button onClick={prevSlide} className="bg-gray-200 text-black px-4 py-2 rounded-md ">Previous</button>
+            <button onClick={nextSlide} className="bg-[#7F56D9] text-white px-4 py-2 rounded-md ">Save & Continue</button>  
+        </div>
         </div>
       </div>
+      
 
       {/* Navigation buttons */}
-      <button
+      {/* <button
         onClick={prevSlide}
         className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"
       >
@@ -325,7 +332,7 @@ export function LeadCarousel() {
         className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"
       >
         →
-      </button>
+      </button> */}
     </div>
   );
 }
