@@ -16,9 +16,9 @@ const columns: Column[] = [
   { header: 'Name', accessor: 'name', type: 'text' },
   { header: 'Party', accessor: 'party', type: 'text' },
   { header: 'Last Connected', accessor: 'lastconnected', type: 'text' },
-  { header: 'Information', accessor: 'information', type: 'text' },
-  { header: 'Lead Status', accessor: 'leadstatus', type: 'chip' },
-  { header: 'Phone Number', accessor: 'phonenumber', type: 'text' }
+  { header: 'Information', accessor: 'info', type: 'text' },
+  { header: 'Lead Status', accessor: 'status', type: 'chip' },
+  { header: 'Phone Number', accessor: 'phone', type: 'text' }
 ];
 
 export const LeadTableComponent: React.FC = () => {
@@ -27,10 +27,10 @@ export const LeadTableComponent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
-
+  const userType = localStorage.getItem('userType');
   useEffect(() => {
     const fetchLeads = async () => {
-      const { data, error } = await supabase.from('leads').select('*');
+      const { data, error } = await supabase.from('leads_table').select('*');
       if (error) {
         console.error('Error fetching leads:', error);
       } else {
@@ -113,8 +113,8 @@ export const LeadTableComponent: React.FC = () => {
                   <td key={col.accessor} className="py-3 px-6 text-left align-middle">
                     {col.accessor === 'party' ? (
                       <StatusCard text={row.party} color={row.partycolor} type={col.type} />
-                    ) : col.accessor === 'leadstatus' ? (
-                      <StatusCard text={row.leadstatus} color={row.partycolor} type={col.type} />
+                    ) : col.accessor === 'status' ? (
+                      <StatusCard text={row.status} color={row.statuscolor} type={col.type} />
                     ) : col.accessor === 'name' ? (
                       <ShortProfileCard
                         image={row.image}
@@ -127,13 +127,14 @@ export const LeadTableComponent: React.FC = () => {
                   </td>
                 ))}
                 <td className="py-3 px-6 text-left align-middle">
-                  <button
+                  {userType === "admin" && <button
+
                     onClick={() => handleDelete(row.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800"
                     title="Delete"
                   >
                     <Trash2 size={18} />
-                  </button>
+                  </button>}
                 </td>
               </tr>
             ))}
