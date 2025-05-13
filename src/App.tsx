@@ -103,7 +103,7 @@ const App = () => (
           {/* Custom App Routes */}
           <Route path="/app/:tenantSlug/login" element={<CustomAppAuthPage />} />
           <Route path="/app/:tenantSlug" element={<ProtectedAppRoute />}>  
-            <Route element={<CustomAppLayout />}>  
+            <Route element={<CustomAppLayout />}> 
               <Route index element={<CustomAppDashboard />} />
               <Route path="pages/:pageId" element={<CustomAppPage />} />
               <Route path="profile" element={<CustomAppProfilePage />} />

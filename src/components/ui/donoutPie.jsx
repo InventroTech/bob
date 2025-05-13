@@ -10,7 +10,11 @@ const DonutPie = ({ attributes = [] }) => {
     { id: 1, value: 15, label: 'Series B' },
     { id: 2, value: 20, label: 'Series C' },
   ];
-
+  const sizing = {
+    width: 200,
+    height: 200,
+    hideLegend: true,
+  };
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -23,8 +27,7 @@ const DonutPie = ({ attributes = [] }) => {
       style={{ width: '100px', height: '100px' }}
     >
       <PieChart
-        width={100}
-        height={100}
+        
         series={[
           {
             data: seriesData,
@@ -38,7 +41,7 @@ const DonutPie = ({ attributes = [] }) => {
             label: { visible: false },
           },
         ]}
-        // 👇 hide the legend
+        {...sizing}
         
       />
     </div>
