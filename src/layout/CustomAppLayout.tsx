@@ -26,25 +26,33 @@ const CustomAppLayout: React.FC = () => {
   // Step 1: Get current user and their role
   useEffect(() => {
     const fetchUserRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !tenantId) return;
-      console.log("Fetching user role for user:", user);
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    
+      if (sessionError || !sessionData.session) {
+        console.error('No session found:', sessionError);
+        return;
+      }
+    
+      const user = sessionData.session.user;
+    
+      if (!user?.email || !tenantId) return;
+    
       const { data, error } = await supabase
         .from('users')
         .select('role_id')
         .eq('email', user.email)
         .eq('tenant_id', tenantId)
         .single();
-
+    
       if (error) {
         console.error('Failed to fetch user role:', error);
         toast.error('Could not load user role');
         return;
       }
-
+    
       setUserRoleId(data?.role_id || null);
     };
-
+    
     fetchUserRole();
   }, [tenantId]);
 
