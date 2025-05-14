@@ -12,29 +12,66 @@ interface PageRecord {
   id: string;
   name: string;
   updated_at: string;
+  role_id: string;
+}
+
+interface Role {
+  id: string;
+  name: string;
 }
 
 const MyPages = () => {
   const { user } = useAuth();
-  const [pages, setPages] = useState<PageRecord[]>([]);
+  const [pagesByRole, setPagesByRole] = useState<Record<string, PageRecord[]>>({});
+  const [rolesMap, setRolesMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tenantSlug, setTenantSlug] = useState<string | null>(null);
 
-  const fetchPages = async () => {
+  const fetchPagesAndRoles = async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase
+      // Fetch all roles
+      const { data: rolesData, error: rolesError } = await supabase
+        .from('roles')
+        .select('id, name');
+
+      if (rolesError) throw rolesError;
+
+      const rolesLookup: Record<string, string> = {};
+      (rolesData || []).forEach((role) => {
+        rolesLookup[role.id] = role.name;
+      });
+      console.log("rolesLookup", rolesLookup);
+      setRolesMap(rolesLookup);
+
+      // Fetch pages
+      const { data: pagesData, error: pagesError } = await supabase
         .from('pages')
-        .select('id, name, updated_at')
+        .select('id, name, updated_at, role')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false });
-      if (error) throw error;
-      setPages(data || []);
+
+      if (pagesError) throw pagesError;
+
+      // Group pages by role name
+      const grouped: Record<string, PageRecord[]> = {};
+      (pagesData || []).forEach((page) => {
+        const roleName = rolesLookup[page.role] || 'Unassigned';
+        if (!grouped[roleName]) grouped[roleName] = [];
+        grouped[roleName].push({
+          id: page.id,
+          name: page.name,
+          updated_at: page.updated_at,
+          role_id: page.role
+        });
+      });
+
+      setPagesByRole(grouped);
     } catch (err: any) {
-      console.error('Error fetching pages:', err);
+      console.error('Error loading pages:', err);
       setError(err.message || 'Failed to load pages.');
       toast.error(`Error loading pages: ${err.message}`);
     } finally {
@@ -42,7 +79,7 @@ const MyPages = () => {
     }
   };
 
-  // Fetch tenant slug for custom-app URL
+  // Fetch tenant slug
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -62,7 +99,7 @@ const MyPages = () => {
   }, [user]);
 
   useEffect(() => {
-    fetchPages();
+    fetchPagesAndRoles();
   }, [user]);
 
   const handleDeletePage = async (pageId: string) => {
@@ -73,7 +110,7 @@ const MyPages = () => {
       toast.error('Failed to delete page.');
     } else {
       toast.success('Page deleted.');
-      fetchPages();
+      fetchPagesAndRoles();
     }
   };
 
@@ -94,12 +131,20 @@ const MyPages = () => {
             <p className="text-sm text-muted-foreground">Your custom-app URL:</p>
             <div className="flex items-center gap-2">
               <code className="font-mono text-primary">{`${window.location.origin}/app/${tenantSlug}`}</code>
-              <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/app/${tenantSlug}`); toast.success('Copied!'); }}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/app/${tenantSlug}`);
+                  toast.success('Copied!');
+                }}
+              >
                 Copy
               </Button>
             </div>
           </div>
         )}
+
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">My Pages</h1>
           <Button asChild>
@@ -113,34 +158,45 @@ const MyPages = () => {
           <p className="text-red-600">Error loading pages: {error}</p>
         )}
 
-        {pages.length === 0 && !error ? (
+        {Object.keys(pagesByRole).length === 0 && !error ? (
           <p className="text-muted-foreground">You haven't created any pages yet.</p>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {pages.map((page) => (
-              <Card key={page.id}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-primary" />
-                    {page.name}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Last updated: {new Date(page.updated_at).toLocaleDateString()}
-                </CardContent>
-                <CardFooter className="flex justify-between">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to={`/builder/${page.id}`}>Edit Page</Link>
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDeletePage(page.id)}>Delete</Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+          Object.entries(pagesByRole).map(([roleName, pages]) => (
+            <div key={roleName}>
+              <h2 className="text-xl font-bold mt-6 mb-2">{roleName} Pages :-</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {pages.map((page) => (
+                  <Card key={page.id}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        {page.name}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      Last updated: {new Date(page.updated_at).toLocaleDateString()}
+                    </CardContent>
+                    <CardFooter className="flex justify-between">
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to={`/builder/${page.id}`}>Edit Page</Link>
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeletePage(page.id)}
+                      >
+                        Delete
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))
         )}
       </div>
     </DashboardLayout>
   );
 };
 
-export default MyPages; 
+export default MyPages;
