@@ -29,6 +29,7 @@ import InviteUsersPage from './pages/InviteUsersPage';
 import LeadCardTemplate from "./builder/templates/lead-card";
 import { CardComponent } from "./layout/CardEditLayout";
 import { LeadFormComponent } from "./components/page-builder/LeadsTableForm";
+import AddUserPage from "./pages/AddUserPage";
 const queryClient = new QueryClient();
 const attributes = {
   name: "Mamata Banerjee",
@@ -98,6 +99,7 @@ const App = () => (
             <Route path="/cards" element={<CardComponent />} />
             <Route path="/tables/:tableName" element={<TableDetailsPage />} />
             <Route path="/builder/templates/lead-card" element={<LeadCardTemplate attributes={attributes} />} />
+            <Route path="/add-user" element={<AddUserPage />} />
           </Route>
 
           {/* Custom App Routes */}

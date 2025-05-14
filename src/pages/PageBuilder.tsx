@@ -70,6 +70,7 @@ import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
 import { CardComponent } from "@/layout/CardEditLayout";
 import { LeadCarousel } from "@/components/ui/leadCarousel";
 import { Carousel } from "@/components/ui/carousel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 // Define a type for the components we'll render on the canvas
 export interface CanvasComponentData {
   id: string;               // Unique instance ID
@@ -106,8 +107,10 @@ const PageBuilder = () => {
   const [activeComponent, setActiveComponent] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [collections, setCollections] = useState<{ id: string; name: string }[]>([]);
-
+  const [selectedRole, setSelectedRole] = useState<string>("");
   // Update sensors with less restrictive configuration
+  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
+  
   const sensors = useSensors(
     useSensor(PointerSensor, {
       // No activation constraint - so it starts dragging immediately
@@ -149,7 +152,7 @@ const PageBuilder = () => {
         try {
           const { data, error } = await supabase
             .from('pages')
-            .select('name, config')
+            .select('name, config, role')
             .eq('id', pageId)
             .single();
 
@@ -159,6 +162,7 @@ const PageBuilder = () => {
             console.log("Fetched page data:", data);
             setPageName(data.name || 'Untitled Page');
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
+            if (data.role) setSelectedRole(data.role);
           } else {
             console.warn(`Page with ID ${pageId} not found.`);
             toast.error("Page not found.");
@@ -180,6 +184,27 @@ const PageBuilder = () => {
     supabase.from('custom_tables').select('id, name').eq('tenant_id', tenantId).then(({ data }) => {
       if (data) setCollections(data);
     });
+  }, [tenantId]);
+
+  // Add useEffect to fetch roles based on tenant_id
+  useEffect(() => {
+    const fetchRoles = async () => {
+      if (!tenantId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('roles')
+          .select('id, name')
+          .eq('tenant_id', tenantId);
+        console.log("Roles:", data);
+        if (error) throw error;
+        if (data) setRoles(data);
+      } catch (err) {
+        console.error('Error fetching roles:', err);
+      }
+    };
+    
+    fetchRoles();
   }, [tenantId]);
 
   // Handler for when a drag operation starts
@@ -350,6 +375,7 @@ const PageBuilder = () => {
         name: pageName.trim(),
         config: canvasComponents as unknown as Json,
         updated_at: new Date().toISOString(),
+        role: selectedRole || null,
       };
 
       let response;
@@ -423,6 +449,19 @@ const PageBuilder = () => {
                 <Eye className="mr-2 h-4 w-4" />
                 Preview
               </Button>
+              <select
+                id="role"
+                className="w-full border px-3 py-2 rounded text-sm"
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+              >
+                <option value="">-- Select Role --</option>
+          {roles.map((role) => (
+            <option key={role.id} value={role.id}>
+              {role.name}
+            </option>
+          ))}
+        </select>
               <Button size="sm" onClick={handleSavePage} disabled={isSaving}>
                 <Save className="mr-2 h-4 w-4" />
                 {isSaving ? 'Saving...' : 'Save'}

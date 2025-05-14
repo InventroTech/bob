@@ -8,6 +8,7 @@ import {
   PanelLeft, 
   Settings, 
   Users,
+  UserPlus,
 } from "lucide-react";
 import {
   Sidebar as SidebarComponent,
@@ -65,7 +66,12 @@ const sidebarItems = [
     title: "Templates",
     path: "/templates",
     icon: BookOpen,
-  }
+  },
+  {
+    title: "Add User",
+    path: "/add-user",
+    icon: UserPlus,
+  },
 ];
 
 const Sidebar = () => {
