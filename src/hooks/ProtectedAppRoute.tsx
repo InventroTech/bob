@@ -1,54 +1,106 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate, Outlet, useParams } from 'react-router-dom';
+import { useNavigate, Navigate, Outlet, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useTenant } from '@/hooks/useTenant';
 import { supabase } from '@/lib/supabase';
 
 const ProtectedAppRoute: React.FC = () => {
   const { session, loading: authLoading } = useAuth();
-  const { tenantId, role } = useTenant();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const navigate = useNavigate(); // Used for programmatic navigation
 
   useEffect(() => {
-    // Only run check when we have slug, tenantId, and role
-    if (!tenantSlug || tenantId === null || role === null) {
-      return;
-    }
     const checkAccess = async () => {
-      const { data, error } = await supabase
+      if (!session?.user?.email || !tenantSlug) return;
+
+      // 1. Get tenant by slug
+      const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
         .select('id')
         .eq('slug', tenantSlug)
         .single();
-      if (error || !data) {
+
+      console.log("tenant", tenant);
+
+      if (tenantError || !tenant) {
+        console.error("Tenant fetch failed", tenantError);
         setAllowed(false);
+        return;
+      }
+
+      // 2. Get user role_id using email and tenant ID
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('role_id') // Fetch role_id
+        .eq('email', session.user.email)
+        .eq('tenant_id', tenant.id)
+        .single();
+
+      console.log("user", user);
+
+      if (userError || !user) {
+        console.error("User fetch failed", userError);
+        setAllowed(false);
+        return;
+      }
+
+      // 3. Get the roles for the tenant and check if the user's role_id is valid for the tenant
+      const { data: roles, error: rolesError } = await supabase
+        .from('roles') // Assuming the roles are in the 'roles' table
+        .select('id')
+        .eq('tenant_id', tenant.id);
+
+      console.log("roles", roles);
+
+      if (rolesError || !roles) {
+        console.error("Roles fetch failed", rolesError);
+        setAllowed(false);
+        return;
+      }
+
+      // 4. Check if the user's role_id exists in the roles array for the tenant
+      const isValidRole = roles.some(role => role.id === user.role_id);
+
+      if (isValidRole) {
+        setAllowed(true);
       } else {
-        const isMember = data.id === tenantId && ['owner', 'app_user'].includes(role);
-        setAllowed(isMember);
+        setAllowed(false);
       }
     };
-    checkAccess();
-  }, [tenantSlug, tenantId, role]);
 
-  // Auth in progress
-  if (authLoading) {
-    return <div>Checking authentication...</div>;
-  }
-  // Not logged in
-  if (!session) {
-    return <Navigate to={`/app/${tenantSlug}/login`} replace />;
-  }
-  // Tenant info loading
-  if (role === null || allowed === null) {
+    if (!authLoading && !session) {
+      console.log("Session is null, redirecting to login...");
+      navigate(`/app/${tenantSlug}/login`, { replace: true });
+      return;
+    }
+
+    checkAccess();
+  }, [session, tenantSlug, authLoading, navigate]);
+
+  console.log("allowed", allowed);
+  console.log("authLoading", authLoading);
+  console.log("session", session);
+
+  if (authLoading || allowed === null) {
+    console.log("Waiting for auth or access check...");
     return <div>Checking access...</div>;
   }
-  // Not authorized
-  if (!allowed) {
-    return <Navigate to={`/app/${tenantSlug}/login`} replace />;
+
+  // If session is not available, redirect to login
+  if (!session) {
+    console.log("No session, redirecting to login...");
+    navigate(`/app/${tenantSlug}/login`, { replace: true });
+    return null; // Ensure nothing is rendered after navigating
   }
-  // Authorized
+
+  // If access is not allowed, redirect to login
+  if (!allowed) {
+    console.log("Access denied, redirecting to login...");
+    navigate(`/app/${tenantSlug}/login`, { replace: true });
+    return null; // Ensure nothing is rendered after navigating
+  }
+
   return <Outlet />;
 };
 
-export default ProtectedAppRoute; 
+export default ProtectedAppRoute;

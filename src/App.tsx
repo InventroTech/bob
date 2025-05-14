@@ -30,6 +30,7 @@ import LeadCardTemplate from "./builder/templates/lead-card";
 import { CardComponent } from "./layout/CardEditLayout";
 import { LeadFormComponent } from "./components/page-builder/LeadsTableForm";
 import AddUserPage from "./pages/AddUserPage";
+import AuthCallbackPage from "./pages/AuthCallBackPage";
 const queryClient = new QueryClient();
 const attributes = {
   name: "Mamata Banerjee",
@@ -104,6 +105,8 @@ const App = () => (
 
           {/* Custom App Routes */}
           <Route path="/app/:tenantSlug/login" element={<CustomAppAuthPage />} />
+          <Route path="/app/:tenantSlug/auth/callback" element={<AuthCallbackPage />} />
+
           <Route path="/app/:tenantSlug" element={<ProtectedAppRoute />}>  
             <Route element={<CustomAppLayout />}> 
               <Route index element={<CustomAppDashboard />} />

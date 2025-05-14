@@ -25,26 +25,39 @@ const CustomAppAuthPage: React.FC = () => {
     e.preventDefault();
     setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+  
     if (error) {
       setError(error.message);
       return;
     }
+  
+    // Get user and save email to localStorage
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) {
+      localStorage.setItem('user_email', user.email);
+    }
+  
     toast.success('Login successful! Redirecting…');
   };
+  
 
   const handleGoogleLogin = async () => {
     setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/app/${tenantSlug}`
+        redirectTo: `${window.location.origin}/app/${tenantSlug}/auth/callback`
       }
     });
+  
     if (error) {
       setError(error.message);
       return;
     }
+  
+    // Email will be fetched and stored in callback page
   };
+  
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">

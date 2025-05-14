@@ -7,12 +7,13 @@ import { componentMap } from '@/pages/PageBuilder';
 
 const CustomAppPage: React.FC = () => {
   const { tenantSlug, pageId } = useParams<{ tenantSlug: string; pageId: string }>();
-  const { tenantId } = useTenant();
+  
   const [page, setPage] = useState<{ name: string; config: any } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const tenantId = localStorage.getItem('tenant_id');
     if (!tenantId || !pageId) return;
     setLoading(true);
     supabase
@@ -30,7 +31,7 @@ const CustomAppPage: React.FC = () => {
         }
         setLoading(false);
       });
-  }, [pageId, tenantId]);
+  }, [pageId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;

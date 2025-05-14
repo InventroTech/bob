@@ -18,14 +18,23 @@ const details = {
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
-  const { tenantId } = useTenant();
+  // const { tenantId } = useTenant();
 
   const [pages, setPages] = useState<{ id: string; name: string }[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
-
+  const [tenantId, setTenantId] = useState<string | null>(null);
   // Step 1: Get current user and their role
   useEffect(() => {
     const fetchUserRole = async () => {
+      console.log("fetching user role")
+      
+      const email = localStorage.getItem('user_email');
+      if (!email) {
+        console.warn('Email or tenant ID missing.');
+        return;
+      }
+      
+      
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     
       if (sessionError || !sessionData.session) {
@@ -33,17 +42,24 @@ const CustomAppLayout: React.FC = () => {
         return;
       }
     
-      const user = sessionData.session.user;
-    
-      if (!user?.email || !tenantId) return;
+      if (!email) return;
+      const { data: tenantData, error: tenantError } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('email', email)
+        .single();
+      
+        console.log("tenantData", tenantData)
+        setTenantId(tenantData?.tenant_id || null);
+        localStorage.setItem('tenant_id', tenantData?.tenant_id || null);
     
       const { data, error } = await supabase
         .from('users')
         .select('role_id')
-        .eq('email', user.email)
-        .eq('tenant_id', tenantId)
+        .eq('email', email)
         .single();
     
+      console.log("data", data)
       if (error) {
         console.error('Failed to fetch user role:', error);
         toast.error('Could not load user role');
@@ -54,25 +70,28 @@ const CustomAppLayout: React.FC = () => {
     };
     
     fetchUserRole();
-  }, [tenantId]);
+  });
 
   // Step 2: Fetch pages that match the user's role
   useEffect(() => {
     const fetchPages = async () => {
       if (!tenantId || !userRoleId) return;
 
-      const { data, error } = await supabase
+      const { data : pagesData, error } = await supabase 
         .from('pages')
-        .select('id, name, role')
+        .select('id, name')
         .eq('tenant_id', tenantId)
-        .eq('role', userRoleId) // only fetch pages for user's role
+        .eq('role', userRoleId)
         .order('updated_at', { ascending: false });
+      console.log("tenantId", tenantId)
+      console.log("userRoleId", userRoleId)
+      console.log("pages data", pagesData)
 
       if (error) {
         toast.error('Failed to load pages');
         console.error('Pages fetch error:', error);
       } else {
-        setPages(data || []);
+        setPages(pagesData || []);
       }
     };
 
