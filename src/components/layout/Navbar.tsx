@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Bell, PlusCircle, Settings, User } from "lucide-react";
 import {
@@ -14,7 +13,25 @@ import { Link } from "react-router-dom";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-const Navbar = () => {
+interface UserInfo {
+  name: string;
+  email: string;
+  image?: string;
+}
+
+interface NavbarProps {
+  user?: UserInfo;
+}
+
+const Navbar = ({ user }: NavbarProps) => {
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+    : 'U';
+
   return (
     <header className="border-b px-6 py-3">
       <div className="flex items-center justify-between">
@@ -62,13 +79,18 @@ const Navbar = () => {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative rounded-full h-8 w-8 p-0" size="icon">
                 <Avatar>
-                  <AvatarImage src="" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarImage src={user?.image} />
+                  <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user?.name}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                </div>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <Link to="/profile" className="flex w-full">
