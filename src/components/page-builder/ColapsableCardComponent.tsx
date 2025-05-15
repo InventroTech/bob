@@ -2,7 +2,7 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import React, { ReactNode, useState } from 'react'; 
 import { LeadTableComponent } from './LeadTableComponent';
-
+import { LeadRecomendationTable } from './LeadRecomendationTable';
 interface CollapseCardProps {
   children?: ReactNode;
 }
@@ -27,7 +27,7 @@ export const CollapseCard: React.FC<CollapseCardProps> = ({ children }) => {
       </div>
       {isOpen && (
         <div className="content pt-4">
-          <LeadTableComponent />
+          <LeadRecomendationTable />
         </div>
       )}
     </div>

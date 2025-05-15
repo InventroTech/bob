@@ -4,45 +4,50 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
-import { LeadFormComponent } from './LeadsTableForm';
+
 import { Trash2 } from 'lucide-react'; 
-import { PrajaTable } from '../ui/prajaTable';
 interface Column {
   header: string;
   accessor: string;
   type: 'text' | 'chip';
 }
 
-const columns: Column[] = [
-  { header: 'Name', accessor: 'name', type: 'text' },
-  { header: 'Party', accessor: 'party', type: 'text' },
-  { header: 'Last Connected', accessor: 'lastconnected', type: 'text' },
-  { header: 'Information', accessor: 'info', type: 'text' },
-  { header: 'Lead Status', accessor: 'status', type: 'chip' },
-  { header: 'Phone Number', accessor: 'phone', type: 'text' }
-];
+interface PrajaTableProps {
+  columns: Column[];
+  data: any[];
+  title: string;
+}
 
-export const LeadTableComponent: React.FC = () => {
-  const [data, setData] = useState<any[]>([]);
+// const columns: Column[] = [
+//   { header: 'Name', accessor: 'name', type: 'text' },
+//   { header: 'Party', accessor: 'party', type: 'text' },
+//   { header: 'Last Connected', accessor: 'lastconnected', type: 'text' },
+//   { header: 'Information', accessor: 'info', type: 'text' },
+//   { header: 'Lead Status', accessor: 'status', type: 'chip' },
+//   { header: 'Phone Number', accessor: 'phone', type: 'text' }
+// ];
+
+export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) => {
+  //const [data, setData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
   const userType = localStorage.getItem('userType');
-  useEffect(() => {
-    const fetchLeads = async () => {
-      const { data, error } = await supabase.from('leads_table').select('*');
-      if (error) {
-        console.error('Error fetching leads:', error);
-      } else {
-        setData(data || []);
-        console.log("Table Data", data);
-      }
-      setLoading(false);
-    };
+//   useEffect(() => {
+//     const fetchLeads = async () => {
+//       const { data, error } = await supabase.from('leads_table').select('*');
+//       if (error) {
+//         console.error('Error fetching leads:', error);
+//       } else {
+//         setData(data || []);
+//         console.log("Table Data", data);
+//       }
+//       setLoading(false);
+//     };
 
-    fetchLeads();
-  }, []);
+//     fetchLeads();
+//   }, []);
 
   const handleDelete = async (id: number) => {
     const confirm = window.confirm('Are you sure you want to delete this lead?');
@@ -54,7 +59,8 @@ export const LeadTableComponent: React.FC = () => {
       console.error('Error deleting lead:', error.message);
       alert('Failed to delete the lead.');
     } else {
-      setData(prev => prev.filter(lead => lead.id !== id));
+      // Notify parent component about deletion
+      console.log('Lead deleted successfully');
     }
   };
 
@@ -78,15 +84,14 @@ export const LeadTableComponent: React.FC = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
-  if (loading) return <p className="text-gray-600 p-4">Loading...</p>;
+  
 
   return (
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      <PrajaTable columns={columns} data={data} title="All Leads" />
       
-{/* 
+
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">Leads Table</h2>
+        <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
         <input
           type="text"
           placeholder="Search..."
@@ -178,7 +183,7 @@ export const LeadTableComponent: React.FC = () => {
             Next
           </button>
         </div>
-      )} */}
+      )}
      
     </div>
   );

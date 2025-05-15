@@ -1,7 +1,11 @@
 'use client'
 import React from 'react'
 
-const InfoCards = ({attributes}) => {
+const InfoCards = ({attributes = []}) => {
+  if (!attributes || !Array.isArray(attributes)) {
+    return null;
+  }
+
   return (
     <div className='flex flex-col gap-4 w-full  rounded-sm '>
       {attributes.map((attribute) => (
