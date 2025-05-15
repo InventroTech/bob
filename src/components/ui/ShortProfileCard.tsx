@@ -1,13 +1,29 @@
 'use client'
 import React from 'react'
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-const ShortProfileCard = ({image,name,address}:{image:any,name:any,address:any}) => {
+interface ShortProfileCardProps {
+  image: string;
+  name: string;
+  address: string;
+}
+
+const ShortProfileCard = ({ image, name, address }: ShortProfileCardProps) => {
+  const initials = name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase();
+
   return (
-    <div className='flex flex-row gap-2'>
-      <img src={image} alt={name} className='w-10 h-10 rounded-full' />
+    <div className='flex flex-row gap-2 items-center'>
+      <Avatar className="h-10 w-10">
+        <AvatarImage src={image} alt={name} />
+        <AvatarFallback>{initials}</AvatarFallback>
+      </Avatar>
       <div className='flex flex-col'>
-        <h1 className='text-lg font-bold'>{name}</h1>
-        <p className='text-sm text-gray-500'>{address}</p>
+        <h1 className='text-sm font-semibold'>{name}</h1>
+        <p className='text-xs text-gray-500'>{address}</p>
       </div>
     </div>
   )

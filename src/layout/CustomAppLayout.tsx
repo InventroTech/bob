@@ -5,35 +5,34 @@ import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Bell } from 'lucide-react';
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
-
-const details = {
-  id: "I001",
-  name: "Manisharan",
-  address: "Bangalore",
-  phone: "+91 9876543210",
-  email: "manisharan@gmail.com",
-  image: "https://images.assettype.com/nationalherald/2024-08-12/hrgiqut5/STOCK_PTI7_12_2023_0412.jpg"
-};
+import { useAuth } from '@/hooks/useAuth';
 
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
-  // const { tenantId } = useTenant();
-
+  const { user } = useAuth();
   const [pages, setPages] = useState<{ id: string; name: string }[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
+
+  // Debug user data
+  useEffect(() => {
+    if (user) {
+      console.log('User data:', user);
+      console.log('User metadata:', user.user_metadata);
+      console.log('Avatar URL:', user.user_metadata?.picture);
+    }
+  }, [user]);
+
   // Step 1: Get current user and their role
   useEffect(() => {
     const fetchUserRole = async () => {
       console.log("fetching user role")
       
-      const email = localStorage.getItem('user_email');
-      if (!email) {
-        console.warn('Email or tenant ID missing.');
+      if (!user?.email) {
+        console.warn('Email missing.');
         return;
       }
-      
       
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     
@@ -42,21 +41,20 @@ const CustomAppLayout: React.FC = () => {
         return;
       }
     
-      if (!email) return;
       const { data: tenantData, error: tenantError } = await supabase
         .from('users')
         .select('tenant_id')
-        .eq('email', email)
+        .eq('email', user.email)
         .single();
       
-        console.log("tenantData", tenantData)
-        setTenantId(tenantData?.tenant_id || null);
-        localStorage.setItem('tenant_id', tenantData?.tenant_id || null);
+      console.log("tenantData", tenantData)
+      setTenantId(tenantData?.tenant_id || null);
+      localStorage.setItem('tenant_id', tenantData?.tenant_id || null);
     
       const { data, error } = await supabase
         .from('users')
         .select('role_id')
-        .eq('email', email)
+        .eq('email', user.email)
         .single();
     
       console.log("data", data)
@@ -70,7 +68,7 @@ const CustomAppLayout: React.FC = () => {
     };
     
     fetchUserRole();
-  });
+  }, [user]);
 
   // Step 2: Fetch pages that match the user's role
   useEffect(() => {
@@ -145,7 +143,11 @@ const CustomAppLayout: React.FC = () => {
           {/* User Section */}
           <div className="flex items-center gap-4">
             <Bell size={24} className="text-black cursor-pointer" />
-            <ShortProfileCard image={details.image} name={details.name} address={details.address} />
+            <ShortProfileCard 
+              image={user?.user_metadata?.picture || user?.user_metadata?.avatar_url || ''} 
+              name={user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'} 
+              address={user?.email || ''} 
+            />
           </div>
         </div>
       </div>
