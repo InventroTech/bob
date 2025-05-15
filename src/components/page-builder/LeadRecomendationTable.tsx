@@ -22,7 +22,7 @@ const columns: Column[] = [
   { header: 'Phone Number', accessor: 'phone', type: 'text' }
 ];
 
-export const LeadTableComponent: React.FC = () => {
+export const LeadRecomendationTable: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -82,7 +82,7 @@ export const LeadTableComponent: React.FC = () => {
 
   return (
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      <PrajaTable columns={columns} data={data} title="All Leads" />
+      <PrajaTable columns={columns} data={data} title="Recomonded Leads"/>
       
 {/* 
       <div className="flex justify-between items-center mb-4">

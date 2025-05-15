@@ -71,6 +71,8 @@ import { CardComponent } from "@/layout/CardEditLayout";
 import { LeadCarousel } from "@/components/ui/leadCarousel";
 import { Carousel } from "@/components/ui/carousel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
+import { ProgressBar } from "@/components/ui/progressBar";
 // Define a type for the components we'll render on the canvas
 export interface CanvasComponentData {
   id: string;               // Unique instance ID
@@ -91,7 +93,9 @@ export const componentMap: Record<string, React.FC<any>> = {
   dataCard:DataCardComponent,
   leadTable: LeadTableComponent,
   collapseCard: CollapseCard,
-  leadCarousel: LeadCarousel
+  leadCarousel: LeadCarousel,
+  oeLeadsTable: OeLeadsTable,
+  progressBar: ProgressBar,
 };
 
 const PageBuilder = () => {
@@ -121,7 +125,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -513,6 +517,11 @@ const PageBuilder = () => {
                           label="Lead Carousel"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
+                        <DraggableSidebarItem
+                          id="progressBar"
+                          label="Progress Bar"
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                        />
                         
                       </div>
                     </div>
@@ -541,6 +550,11 @@ const PageBuilder = () => {
                         <DraggableSidebarItem
                           id="leadTable"
                           label="Lead Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="oeLeadsTable"
+                          label="OE Leads Table"
                           icon={<Table className="h-8 w-8 mb-1 text-primary" />}
                         />
                         
