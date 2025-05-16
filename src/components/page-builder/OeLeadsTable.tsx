@@ -38,7 +38,7 @@ export const OeLeadsTable: React.FC = () => {
     //     setData(data || []);
     //     console.log("Table Data", data);
     //   }
-    const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-OE?email=ritam@thepyro.ai', {
+    const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-OE?email=' + localStorage.getItem('user_email') || '', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
