@@ -23,37 +23,43 @@ export const DataCardComponent: React.FC = () => {
   useEffect(() => {
     fetchCards();
   }, []);
-
+  const userEmail = localStorage.getItem('user_email') || '';
   const fetchCards = async () => {
-    const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads', {
+    const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads?email=' + userEmail, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        email: userEmail,
       },
     });
 
     const data = await response1.json();
-    setConvertedLeadCardData(data);
+    setConvertedLeadCardData(Array.isArray(data) ? data : [data]);
     console.log("Converted Lead Card Data", data);
 
-    const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads', {
+    const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads?email=' + userEmail, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        email: userEmail,
       },
     });
 
     const data2 = await response2.json();
-    setPendingLeadCardData(data2);
+    setPendingLeadCardData(Array.isArray(data2) ? data2 : [data2]);
     console.log("Pending Lead Card Data", data2);
     
-    // Use the raw data directly instead of state variables
-    setCards([data, data2]);
-    console.log("Cards", [data, data2]);
+    // Ensure both data and data2 are arrays before combining
+    const combinedData = [
+      ...(Array.isArray(data) ? data : [data]),
+      ...(Array.isArray(data2) ? data2 : [data2])
+    ];
+    setCards(combinedData);
+    console.log("Cards", combinedData);
   };
 
   

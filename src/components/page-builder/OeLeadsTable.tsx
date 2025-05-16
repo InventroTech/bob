@@ -31,13 +31,24 @@ export const OeLeadsTable: React.FC = () => {
   const userType = localStorage.getItem('userType');
   useEffect(() => {
     const fetchLeads = async () => {
-      const { data, error } = await supabase.from('leads_table').select('*');
-      if (error) {
-        console.error('Error fetching leads:', error);
-      } else {
-        setData(data || []);
-        console.log("Table Data", data);
-      }
+    //   const { data, error } = await supabase.from('leads_table').select('*');
+    //   if (error) {
+    //     console.error('Error fetching leads:', error);
+    //   } else {
+    //     setData(data || []);
+    //     console.log("Table Data", data);
+    //   }
+    const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-OE?email=ritam@thepyro.ai', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      });   
+      const data = await response.json();
+      setData(data.leads);
+      console.log("Table Data", data.leads);
       setLoading(false);
     };
 

@@ -31,13 +31,26 @@ export const LeadTableComponent: React.FC = () => {
   const userType = localStorage.getItem('userType');
   useEffect(() => {
     const fetchLeads = async () => {
-      const { data, error } = await supabase.from('leads_table').select('*');
-      if (error) {
-        console.error('Error fetching leads:', error);
-      } else {
-        setData(data || []);
-        console.log("Table Data", data);
-      }
+      // const { data, error } = await supabase.from('leads_table').select('*');
+      // if (error) {
+      //   console.error('Error fetching leads:', error);
+      // } else {
+      //   setData(data || []);
+      //   console.log("Table Data", data);
+      // }
+      const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM?email=' + localStorage.getItem('user_email') || ' ', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      });
+      const responseData = await response.json();
+      // Ensure data is always an array
+      setData(Array.isArray(responseData.leads) ? responseData.leads : [responseData.leads]);
+      console.log("Table Data", responseData.leads);
+      
       setLoading(false);
     };
 
