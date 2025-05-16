@@ -28,16 +28,27 @@ export const LeadRecomendationTable: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
-  const userType = localStorage.getItem('userType');
+  const userEmail = localStorage.getItem('user_email') || '';
   useEffect(() => {
     const fetchLeads = async () => {
-      const { data, error } = await supabase.from('leads_table').select('*');
-      if (error) {
-        console.error('Error fetching leads:', error);
-      } else {
-        setData(data || []);
-        console.log("Table Data", data);
-      }
+    //   const { data, error } = await supabase.from('leads_table').select('*');
+    //   if (error) {
+    //     console.error('Error fetching leads:', error);
+    //   } else {
+    //     setData(data || []);
+    //     console.log("Table Data", data);
+    //   }
+      const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM?email=' + userEmail, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY
+        },
+      });   
+      const data = await response.json();
+      setData(data.leads);
+      console.log("Table Data", data);
       setLoading(false);
     };
 
