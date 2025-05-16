@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { LeadCardComponent } from "../page-builder/LeadCardComponent";
-import axios from "axios"; // assuming axios for API call
 import { supabase } from "@/lib/supabase";
 
 export const LeadCarousel = () => {
@@ -47,28 +46,32 @@ export const LeadCarousel = () => {
   };
 
   const handleSubmit = async () => {
-    const payload = {
-      id: currentLead.id,
-      notes,
-      status,
-    };
     try {
-      const res = await fetch('/lead/edit', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-  
-      if (res.ok) {
-        console.log('Lead updated');
-        nextSlide();
-      } else {
-        console.error('Update failed');
+      const { data: result, error } = await supabase
+        .from('leads_table')
+        .update({
+          notes: notes,
+          status: status
+        })
+        .eq('id', currentLead.id)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
       }
+
+      // Update the local leads array to reflect the changes
+      setLeads(leads.map(lead => 
+        lead.id === currentLead.id 
+          ? { ...lead, notes: notes, status: status }
+          : lead
+      ));
+
+      console.log('Lead updated successfully');
+      nextSlide();
     } catch (err) {
-      console.error('Network error', err);
+      console.error('Error:', err);
     }
   };
 
