@@ -11,43 +11,52 @@ interface DonutData {
   label: string;
 }
 
-interface Card {
-  id: string;
-  title: string;
-  description: string;
-  number: number;
-}
+
 
 const FIXED_CARD_SET_ID = '1cbaa75b-3917-4669-b9a4-5f5a17fd3eae';
 
 export const DataCardComponent: React.FC = () => {
-  const [cards, setCards] = useState<Card[]>([]);
+  const [cards, setCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [convertedLeadCardData, setConvertedLeadCardData] = useState<any[]>([]);
+  const [pendingLeadCardData, setPendingLeadCardData] = useState<any[]>([]);
   useEffect(() => {
     fetchCards();
   }, []);
 
   const fetchCards = async () => {
-    setLoading(true);
+    const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+    });
 
-    const { data, error } = await supabase
-      .from('cards')
-      .select('*')
-      .eq('card_set_id', FIXED_CARD_SET_ID)
-      .order('created_at', { ascending: false });
+    const data = await response1.json();
+    setConvertedLeadCardData(data);
+    console.log("Converted Lead Card Data", data);
 
-    if (error) {
-      toast.error('Failed to load cards');
-      console.error(error);
-    } else {
-      setCards(data || []);
-    }
+    const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+    });
 
-    setLoading(false);
+    const data2 = await response2.json();
+    setPendingLeadCardData(data2);
+    console.log("Pending Lead Card Data", data2);
+    
+    // Use the raw data directly instead of state variables
+    setCards([data, data2]);
+    console.log("Cards", [data, data2]);
   };
 
-  if (loading) return <p>Loading cards...</p>;
+  
 
   return (
     <div className="space-y-6">
@@ -70,13 +79,13 @@ export const DataCardComponent: React.FC = () => {
               </div>
               <div className="flex">
                 <div className="flex flex-col gap-6 flex-1 justify-end m-auto">
-                  <div className="text-2xl font-bold">{card.number}</div>
+                  <div className="text-[30px] font-bold">{card.number}</div>
                   <p className="text-sm text-gray-500 justify-end">
                     {card.description}
                   </p>
                 </div>
                 <div className="pie flex gap-6 m-auto mr-0">
-                  <DonutPie attributes={donutData} />
+                  <DonutPie attributes={card.pieData} />
                 </div>
               </div>
             </div>
