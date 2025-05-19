@@ -5,7 +5,6 @@ import React, { ReactNode, useEffect, useState } from 'react';
 import Dropdown from '../ui/dropdown';
 import Requirements from '../ui/Requirements';
 import FileUploadForm from '../ui/FileUploadForm';
-
 interface LeadCardComponentProps {
   attributes: any;
   status: string;
@@ -33,6 +32,7 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
   // }
   useEffect(() => {
     console.log("Attributes", attributes);
+    setNotes(attributes.notes);
     setStatus(attributes.status);
     //fetchRole()
   }, [attributes]);
@@ -81,7 +81,7 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     <InfoCards attributes={attributes.infoData} />
     <TaskCard attributes={attributes.taskData} />
     {<Requirements attributes={attributes.notes} />}
-    { <Notes notes={attributes.notes} setNotes={setNotes} />}
+    { <Notes notes={notes} setNotes={setNotes} />}
     <FileUploadForm leadId={attributes.id} leadName={attributes.name} />
     <Dropdown title="Status" menu={demoMenuItems} selected={status} onSelect={setStatus} />
     
