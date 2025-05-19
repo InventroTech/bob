@@ -15,30 +15,27 @@ interface LeadCardComponentProps {
 }
 
 const demoMenuItems = [
-  'Connected',
-  'Not Connected',
-  'Reach Out Later',
-  'Meeting Scheduled',
+  'Fresh_lead',
+  'Pending_layout_collection',
+  'Pending_layout_setup',
+  'Pending_feedback_collection',
+  'Trial_subscribed',
+  'Inactive',
 ];
 
 export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [], status, setStatus, notes, setNotes }) => {
   const [role, setRole] = useState<string>('');
-  const fetchRole = async () => {
-    const userEmail=localStorage.getItem('user_email') || 'demo.rm@gmail.com';
-    const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/get-role?email=${userEmail}`);
-    const data = await response.json();
-    setRole(data.role);
-  }
+  // const fetchRole = async () => {
+  //   const userEmail=localStorage.getItem('user_email') || 'demo.rm@gmail.com';
+  //   const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/get-role?email=${userEmail}`);
+  //   const data = await response.json();
+  //   setRole(data.role);
+  // }
   useEffect(() => {
     console.log("Attributes", attributes);
-    if (attributes?.status) {
-      setStatus(attributes.status);
-    }
-    if (attributes?.notes) {
-      setNotes(attributes.notes);
-    }
-    fetchRole();
-  }, [attributes, setStatus, setNotes]);
+    setStatus(attributes.status);
+    fetchRole()
+  }, [attributes]);
   return (
     <div className='flex flex-col gap-2 w-[100%] p-4' >
     <div className='full-box  m-auto  top-12 left-12 rounded-sm p-2 flex  bg-gray-100 text-black w-full'>
@@ -85,10 +82,7 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     <TaskCard attributes={attributes.taskData} />
     {<Requirements attributes={attributes.notes} />}
     { <Notes notes={attributes.notes} setNotes={setNotes} />}
-    <FileUploadForm 
-      leadId={attributes.id?.toString() || ''} 
-      leadName={attributes.name || ''} 
-    />
+    <FileUploadForm />
     <Dropdown title="Status" menu={demoMenuItems} selected={status} onSelect={setStatus} />
     
     </div>
