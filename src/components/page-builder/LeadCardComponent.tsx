@@ -14,24 +14,27 @@ interface LeadCardComponentProps {
 }
 
 const demoMenuItems = [
-  'Connected',
-  'Not Connected',
-  'Reach Out Later',
-  'Meeting Scheduled',
+  'Fresh_lead',
+  'Pending_layout_collection',
+  'Pending_layout_setup',
+  'Pending_feedback_collection',
+  'Trial_subscribed',
+  'Inactive',
 ];
 
 export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [], status, setStatus, notes, setNotes }) => {
   const [role, setRole] = useState<string>('');
-  const fetchRole = async () => {
-    const userEmail=localStorage.getItem('user_email') || 'demo.rm@gmail.com';
-    const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/get-role?email=${userEmail}`);
-    const data = await response.json();
-    setRole(data.role);
-  }
+  // const fetchRole = async () => {
+  //   const userEmail=localStorage.getItem('user_email') || 'demo.rm@gmail.com';
+  //   const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/get-role?email=${userEmail}`);
+  //   const data = await response.json();
+  //   setRole(data.role);
+  // }
   useEffect(() => {
     console.log("Attributes", attributes);
+    setNotes(attributes.notes);
     setStatus(attributes.status);
-    fetchRole()
+    //fetchRole()
   }, [attributes]);
   return (
     <div className='flex flex-col gap-2 w-[100%] p-4' >
@@ -78,7 +81,7 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     <InfoCards attributes={attributes.infoData} />
     <TaskCard attributes={attributes.taskData} />
     {<Requirements attributes={attributes.notes} />}
-    { <Notes notes={attributes.notes} setNotes={setNotes} />}
+    { <Notes notes={notes} setNotes={setNotes} />}
     <FileUploadForm />
     <Dropdown title="Status" menu={demoMenuItems} selected={status} onSelect={setStatus} />
     
