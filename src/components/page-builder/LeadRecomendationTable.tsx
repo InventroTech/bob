@@ -28,7 +28,7 @@ export const LeadRecomendationTable: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
-  const userEmail = localStorage.getItem('user_email') || '';
+  const userEmail = localStorage.getItem('user_email') || 'demo.rm@gmail.com';
   useEffect(() => {
     const fetchLeads = async () => {
     //   const { data, error } = await supabase.from('leads_table').select('*');
@@ -38,7 +38,7 @@ export const LeadRecomendationTable: React.FC = () => {
     //     setData(data || []);
     //     console.log("Table Data", data);
     //   }
-      const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM?email=' + userEmail, {
+      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/recommended-lead-of-RM?email=${userEmail}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

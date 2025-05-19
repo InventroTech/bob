@@ -31,14 +31,8 @@ export const OeLeadsTable: React.FC = () => {
   const userType = localStorage.getItem('userType');
   useEffect(() => {
     const fetchLeads = async () => {
-    //   const { data, error } = await supabase.from('leads_table').select('*');
-    //   if (error) {
-    //     console.error('Error fetching leads:', error);
-    //   } else {
-    //     setData(data || []);
-    //     console.log("Table Data", data);
-    //   }
-    const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-OE?email=' + localStorage.getItem('user_email') || '', {
+      const userEmail = localStorage.getItem('user_email') || 'demo.oe@gmail.com';
+      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/recommended-lead-of-OE?email=${userEmail}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -47,7 +41,7 @@ export const OeLeadsTable: React.FC = () => {
         },
       });   
       const data = await response.json();
-      setData(data.leads);
+      setData(data.leads || []);
       console.log("Table Data", data.leads);
       setLoading(false);
     };
