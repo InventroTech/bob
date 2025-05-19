@@ -48,6 +48,11 @@ export const LeadCarousel = () => {
 
   const handleSubmit = async () => {
     try {
+      if (!currentLead?.id) {
+        console.error('No lead ID available');
+        return;
+      }
+
       const { data: result, error } = await supabase
         .from('leads_table')
         .update({
@@ -59,7 +64,9 @@ export const LeadCarousel = () => {
         .single();
 
       if (error) {
-        throw error;
+        console.error('Error updating lead:', error);
+        alert('Failed to save changes. Please try again.');
+        return;
       }
 
       // Update the local leads array to reflect the changes
@@ -73,6 +80,7 @@ export const LeadCarousel = () => {
       nextSlide();
     } catch (err) {
       console.error('Error:', err);
+      alert('An unexpected error occurred. Please try again.');
     }
   };
 

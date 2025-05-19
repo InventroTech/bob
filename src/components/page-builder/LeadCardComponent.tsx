@@ -5,6 +5,7 @@ import React, { ReactNode, useEffect, useState } from 'react';
 import Dropdown from '../ui/dropdown';
 import Requirements from '../ui/Requirements';
 import FileUploadForm from '../ui/FileUploadForm';
+
 interface LeadCardComponentProps {
   attributes: any;
   status: string;
@@ -30,9 +31,14 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
   }
   useEffect(() => {
     console.log("Attributes", attributes);
-    setStatus(attributes.status);
-    fetchRole()
-  }, [attributes]);
+    if (attributes?.status) {
+      setStatus(attributes.status);
+    }
+    if (attributes?.notes) {
+      setNotes(attributes.notes);
+    }
+    fetchRole();
+  }, [attributes, setStatus, setNotes]);
   return (
     <div className='flex flex-col gap-2 w-[100%] p-4' >
     <div className='full-box  m-auto  top-12 left-12 rounded-sm p-2 flex  bg-gray-100 text-black w-full'>
@@ -79,7 +85,10 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     <TaskCard attributes={attributes.taskData} />
     {<Requirements attributes={attributes.notes} />}
     { <Notes notes={attributes.notes} setNotes={setNotes} />}
-    <FileUploadForm />
+    <FileUploadForm 
+      leadId={attributes.id?.toString() || ''} 
+      leadName={attributes.name || ''} 
+    />
     <Dropdown title="Status" menu={demoMenuItems} selected={status} onSelect={setStatus} />
     
     </div>
