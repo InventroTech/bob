@@ -20,6 +20,7 @@ export const LeadCarousel = () => {
           return;
         }
         setLeads(data);
+        console.log("Leads", data);
       } catch (err) {
         console.error('Error:', err);
       } finally {

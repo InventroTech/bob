@@ -1,9 +1,10 @@
 import InfoCards from '@/builder/templates/lead-card/infoCard';
 import Notes from '@/builder/templates/lead-card/notes';
 import TaskCard from '@/builder/templates/lead-card/taskCard';
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useEffect, useState } from 'react';
 import Dropdown from '../ui/dropdown';
-
+import Requirements from '../ui/Requirements';
+import FileUploadForm from '../ui/FileUploadForm';
 interface LeadCardComponentProps {
   attributes: any;
   status: string;
@@ -20,6 +21,18 @@ const demoMenuItems = [
 ];
 
 export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [], status, setStatus, notes, setNotes }) => {
+  const [role, setRole] = useState<string>('');
+  const fetchRole = async () => {
+    const userEmail=localStorage.getItem('user_email') || 'demo.rm@gmail.com';
+    const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/get-role?email=${userEmail}`);
+    const data = await response.json();
+    setRole(data.role);
+  }
+  useEffect(() => {
+    console.log("Attributes", attributes);
+    setStatus(attributes.status);
+    fetchRole()
+  }, [attributes]);
   return (
     <div className='flex flex-col gap-2 w-[100%] p-4' >
     <div className='full-box  m-auto  top-12 left-12 rounded-sm p-2 flex  bg-gray-100 text-black w-full'>
@@ -64,9 +77,11 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     </div>
     <InfoCards attributes={attributes.infoData} />
     <TaskCard attributes={attributes.taskData} />
-    <Notes notes={notes} setNotes={setNotes} />
+    {<Requirements attributes={attributes.notes} />}
+    { <Notes notes={attributes.notes} setNotes={setNotes} />}
+    <FileUploadForm />
     <Dropdown title="Status" menu={demoMenuItems} selected={status} onSelect={setStatus} />
-
+    
     </div>
   );
 }; 

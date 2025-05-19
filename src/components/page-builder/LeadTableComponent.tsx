@@ -31,14 +31,8 @@ export const LeadTableComponent: React.FC = () => {
   const userType = localStorage.getItem('userType');
   useEffect(() => {
     const fetchLeads = async () => {
-      // const { data, error } = await supabase.from('leads_table').select('*');
-      // if (error) {
-      //   console.error('Error fetching leads:', error);
-      // } else {
-      //   setData(data || []);
-      //   console.log("Table Data", data);
-      // }
-      const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM?email=' + localStorage.getItem('user_email') || ' ', {
+      const userEmail = localStorage.getItem('user_email') || 'demo.rm@gmail.com';
+      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM?email=${userEmail}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -46,12 +40,26 @@ export const LeadTableComponent: React.FC = () => {
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
       });
-      const responseData = await response.json();
-      // Ensure data is always an array
-      setData(Array.isArray(responseData.leads) ? responseData.leads : [responseData.leads]);
-      console.log("Table Data", responseData.leads);
       
-      setLoading(false);
+      if (!response.ok) {
+        console.error('Failed to fetch leads:', response.status);
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const responseData = await response.json();
+        // Ensure data is always an array and handle potential undefined leads
+        const leads = responseData?.leads || [];
+        setData(Array.isArray(leads) ? leads : []);
+        console.log("Table Data", leads);
+      } catch (error) {
+        console.error('Error parsing response:', error);
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchLeads();
