@@ -14,7 +14,7 @@ const CustomAppLayout: React.FC = () => {
   const [pages, setPages] = useState<{ id: string; name: string }[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
-
+  const [logoutOpen, setLogoutOpen] = useState(false);
   // Debug user data
   useEffect(() => {
     if (user) {
@@ -141,13 +141,27 @@ const CustomAppLayout: React.FC = () => {
           </div>
 
           {/* User Section */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 relative">
             <Bell size={24} className="text-black cursor-pointer" />
-            <ShortProfileCard 
-              image={user?.user_metadata?.picture || user?.user_metadata?.avatar_url || ''} 
-              name={user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'} 
-              address={user?.email || ''} 
-            />
+            <div className="relative flex flex-row gap-2">
+              <button onClick={() => setLogoutOpen(!logoutOpen)}>
+                <ShortProfileCard 
+                  image={user?.user_metadata?.picture || user?.user_metadata?.avatar_url || ''} 
+                  name={user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'} 
+                  address={user?.email || ''} 
+                />
+              </button>
+              {logoutOpen && (
+                <div className="">
+                  <button 
+                    className='text-white bg-red-500 rounded-md px-4 py-2 hover:bg-red-600 transition-colors'
+                    onClick={handleLogout}
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
