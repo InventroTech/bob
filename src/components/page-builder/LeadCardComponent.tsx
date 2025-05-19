@@ -34,7 +34,7 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
   useEffect(() => {
     console.log("Attributes", attributes);
     setStatus(attributes.status);
-    fetchRole()
+    //fetchRole()
   }, [attributes]);
   return (
     <div className='flex flex-col gap-2 w-[100%] p-4' >
@@ -82,7 +82,7 @@ export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes
     <TaskCard attributes={attributes.taskData} />
     {<Requirements attributes={attributes.notes} />}
     { <Notes notes={attributes.notes} setNotes={setNotes} />}
-    <FileUploadForm />
+    <FileUploadForm leadId={attributes.id} leadName={attributes.name} />
     <Dropdown title="Status" menu={demoMenuItems} selected={status} onSelect={setStatus} />
     
     </div>
