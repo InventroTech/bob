@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 interface DropdownProps {
   title: string;
-  menu: string[];
+  menu: any[];
   selected: string;
   onSelect: (value: string) => void;
 }
@@ -12,7 +12,7 @@ const Dropdown: React.FC<DropdownProps> = ({ title, menu, selected, onSelect }) 
 
   const toggleDropdown = () => setIsOpen(!isOpen);
 
-  const handleSelect = (status: string) => {
+  const handleSelect = (status: any) => {
     onSelect(status); // Call parent
     setIsOpen(false);
   };
@@ -51,9 +51,10 @@ const Dropdown: React.FC<DropdownProps> = ({ title, menu, selected, onSelect }) 
               <li
                 key={index}
                 className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                onClick={() => handleSelect(item)}
+                onClick={() => handleSelect(item.value)}
               >
-                {item}
+                <div>{item.value}</div>
+                
               </li>
             ))}
           </ul>
