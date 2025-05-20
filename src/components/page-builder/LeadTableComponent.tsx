@@ -7,7 +7,6 @@ import ShortProfileCard from '../ui/ShortProfileCard';
 import { LeadFormComponent } from './LeadsTableForm';
 import { Trash2 } from 'lucide-react'; 
 import { PrajaTable } from '../ui/prajaTable';
-import { useAuth } from '@/hooks/useAuth';
 interface Column {
   header: string;
   accessor: string;
@@ -32,18 +31,14 @@ export const LeadTableComponent: React.FC = () => {
   const userType = localStorage.getItem('userType');
   useEffect(() => {
     const fetchLeads = async () => {
-      const { session } = useAuth();
-      const authToken = session?.access_token;
-      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM`, {
+      const userEmail = localStorage.getItem('user_email') || 'demo.rm@gmail.com';
+      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM?email=${userEmail}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
-        body: JSON.stringify({
-          authToken: authToken
-        })
       });
       
       if (!response.ok) {
