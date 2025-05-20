@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import DonutPie from '../ui/donoutPie';
 import { toast } from 'sonner';
-
+import { useAuth } from '@/hooks/useAuth';
 interface DonutData {
   id: number;
   value: number;
@@ -22,31 +22,37 @@ export const DataCardComponent: React.FC = () => {
   const [pendingLeadCardData, setPendingLeadCardData] = useState<any[]>([]);
   useEffect(() => {
     fetchCards();
-  }, []);
-  const userEmail = localStorage.getItem('user_email') || '';
+      }, []);
+
   const fetchCards = async () => {
-    const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads?email=' + userEmail, {
+    const { session } = useAuth();
+    const authToken = session?.access_token;
+    const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        email: userEmail,
       },
+      body: JSON.stringify({
+        authToken: authToken
+      })
     });
 
     const data = await response1.json();
     setConvertedLeadCardData(Array.isArray(data) ? data : [data]);
     console.log("Converted Lead Card Data", data);
 
-    const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads?email=' + userEmail, {
+    const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        email: userEmail,
       },
+      body: JSON.stringify({
+        authToken: authToken
+      })
     });
 
     const data2 = await response2.json();
