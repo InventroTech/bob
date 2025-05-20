@@ -6,6 +6,7 @@ import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
 
 import { Trash2 } from 'lucide-react'; 
+import { demoMenuItems } from '../page-builder/LeadCardComponent';
 interface Column {
   header: string;
   accessor: string;
@@ -84,7 +85,10 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
-  
+  const findColor = (status: string) => {
+    const statusData = demoMenuItems.find((item) => item.value === status);
+    return statusData ? statusData.color : 'bg-gray-500';
+  };    
 
   return (
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
@@ -121,7 +125,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
                     {col.accessor === 'party' ? (
                       <StatusCard text={row.party} color={row.partycolor} type={col.type} />
                     ) : col.accessor === 'status' ? (
-                      <StatusCard text={row.status} color={row.statuscolor} type={col.type} />
+                      <StatusCard text={row.status} color={findColor(row.status)} type={col.type} />
                     ) : col.accessor === 'name' ? (
                       <ShortProfileCard
                         image={row.image}

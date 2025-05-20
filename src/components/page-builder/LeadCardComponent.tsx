@@ -13,13 +13,37 @@ interface LeadCardComponentProps {
   setNotes: (val: string) => void;
 }
 
-const demoMenuItems = [
-  'Fresh_lead',
-  'Pending_layout_collection',
-  'Pending_layout_setup',
-  'Pending_feedback_collection',
-  'Trial_subscribed',
-  'Inactive',
+export const demoMenuItems = [
+  {
+    id: 1,
+    color: 'bg-green-500',
+    value: 'Fresh_lead'
+  },
+  {
+    id: 2,
+    color: 'bg-yellow-500',
+    value: 'Pending_layout_collection'
+  },
+  {
+    id: 3,
+    color: 'bg-blue-500',
+    value: 'Pending_layout_setup'
+  },
+  {
+    id: 4,
+    color: 'bg-purple-500',
+    value: 'Pending_feedback_collection'
+  },
+  {
+    id: 5,
+    color: 'bg-red-500',
+    value: 'Trial_subscribed'
+  },
+  {
+    id: 6,
+    color: 'bg-gray-500',
+    value: 'Inactive'
+  },
 ];
 
 export const LeadCardComponent: React.FC<LeadCardComponentProps> = ({ attributes = [], status, setStatus, notes, setNotes }) => {

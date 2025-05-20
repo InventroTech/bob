@@ -90,7 +90,7 @@ export const LeadRecomendationTable: React.FC = () => {
   };
 
   if (loading) return <p className="text-gray-600 p-4">Loading...</p>;
-
+  
   return (
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
       <PrajaTable columns={columns} data={data} title="Recomonded Leads"/>
