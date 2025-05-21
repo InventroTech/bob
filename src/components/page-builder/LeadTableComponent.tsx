@@ -8,11 +8,14 @@ import { LeadFormComponent } from './LeadsTableForm';
 import { Trash2 } from 'lucide-react'; 
 import { PrajaTable } from '../ui/prajaTable';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
+
 interface Column {
   header: string;
   accessor: string;
   type: 'text' | 'chip';
 }
+
 
 const columns: Column[] = [
   { header: 'Name', accessor: 'name', type: 'text' },
@@ -23,6 +26,75 @@ const columns: Column[] = [
   { header: 'Phone Number', accessor: 'phone', type: 'text' }
 ];
 
+// Demo data for fallback
+const DEMO_LEADS = [
+  {
+    id: 1,
+    name: "Rahul Verma",
+    party: "BJP",
+    partycolor: "blue",
+    lastconnected: "2024-03-15",
+    info: "Interested in party membership",
+    status: "Active",
+    statuscolor: "green",
+    phone: "+91 9876543210",
+    image: "https://ui-avatars.com/api/?name=Rahul+Verma",
+    address: "Delhi"
+  },
+  {
+    id: 2,
+    name: "Priya Singh",
+    party: "Congress",
+    partycolor: "red",
+    lastconnected: "2024-03-14",
+    info: "Looking for local party events",
+    status: "Pending",
+    statuscolor: "yellow",
+    phone: "+91 8765432109",
+    image: "https://ui-avatars.com/api/?name=Priya+Singh",
+    address: "Mumbai"
+  },
+  {
+    id: 3,
+    name: "Amit Kumar",
+    party: "AAP",
+    partycolor: "green",
+    lastconnected: "2024-03-13",
+    info: "Wants to volunteer",
+    status: "Active",
+    statuscolor: "green",
+    phone: "+91 7654321098",
+    image: "https://ui-avatars.com/api/?name=Amit+Kumar",
+    address: "Bangalore"
+  },
+  {
+    id: 4,
+    name: "Sneha Patel",
+    party: "BJP",
+    partycolor: "blue",
+    lastconnected: "2024-03-12",
+    info: "Interested in youth wing",
+    status: "Inactive",
+    statuscolor: "gray",
+    phone: "+91 6543210987",
+    image: "https://ui-avatars.com/api/?name=Sneha+Patel",
+    address: "Chennai"
+  },
+  {
+    id: 5,
+    name: "Rajesh Sharma",
+    party: "Congress",
+    partycolor: "red",
+    lastconnected: "2024-03-11",
+    info: "Wants to join party",
+    status: "Active",
+    statuscolor: "green",
+    phone: "+91 5432109876",
+    image: "https://ui-avatars.com/api/?name=Rajesh+Sharma",
+    address: "Kolkata"
+  }
+];
+
 export const LeadTableComponent: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,38 +102,42 @@ export const LeadTableComponent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
   const userType = localStorage.getItem('userType');
+
   useEffect(() => {
     const fetchLeads = async () => {
-      const { session } = useAuth();
-      const authToken = session?.access_token;
-      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          authToken: authToken
-        })
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to fetch leads:', response.status);
-        setData([]);
-        setLoading(false);
-        return;
-      }
-
       try {
+        setLoading(true);
+        const { session } = useAuth();
+        const authToken = session?.access_token;
+
+        const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            authToken: authToken
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch leads: ${response.status}`);
+        }
+
         const responseData = await response.json();
-        // Ensure data is always an array and handle potential undefined leads
         const leads = responseData?.leads || [];
-        setData(Array.isArray(leads) ? leads : []);
-        console.log("Table Data", leads);
+        
+        if (!Array.isArray(leads)) {
+          throw new Error('Invalid data format received');
+        }
+
+        setData(leads);
       } catch (error) {
-        console.error('Error parsing response:', error);
-        setData([]);
+        console.error('Error fetching leads:', error);
+        toast.error('Failed to fetch leads data, using demo data');
+        setData(DEMO_LEADS);
       } finally {
         setLoading(false);
       }
@@ -71,16 +147,21 @@ export const LeadTableComponent: React.FC = () => {
   }, []);
 
   const handleDelete = async (id: number) => {
-    const confirm = window.confirm('Are you sure you want to delete this lead?');
-    if (!confirm) return;
+    try {
+      const confirm = window.confirm('Are you sure you want to delete this lead?');
+      if (!confirm) return;
 
-    const { error } = await supabase.from('leads').delete().eq('id', id);
+      const { error } = await supabase.from('leads').delete().eq('id', id);
 
-    if (error) {
-      console.error('Error deleting lead:', error.message);
-      alert('Failed to delete the lead.');
-    } else {
+      if (error) {
+        throw error;
+      }
+
       setData(prev => prev.filter(lead => lead.id !== id));
+      toast.success('Lead deleted successfully');
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+      toast.error('Failed to delete the lead');
     }
   };
 
@@ -104,108 +185,23 @@ export const LeadTableComponent: React.FC = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
-  if (loading) return <p className="text-gray-600 p-4">Loading...</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-gray-600">Loading leads data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      <PrajaTable columns={columns} data={data} title="All Leads" />
-      
-{/* 
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">Leads Table</h2>
-        <input
-          type="text"
-          placeholder="Search..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div className="table border-2 border-gray-200 rounded-lg overflow-hidden w-full">
-        <table className="min-w-full bg-white">
-          <thead>
-            <tr className="bg-gray-100 text-gray-500 font-normal border-b border-gray-200 text-sm rounded-lg">
-              {columns.map((col) => (
-                <th key={col.accessor} className="py-3 px-6 text-left align-middle">
-                  {col.header}
-                </th>
-              ))}
-              <th className="text-left"></th>
-            </tr>
-          </thead>
-          <tbody className="text-gray-600 text-sm">
-            {paginatedData.map((row, rowIndex) => (
-              <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50 group">
-                {columns.map((col) => (
-                  <td key={col.accessor} className="py-3 px-6 text-left align-middle">
-                    {col.accessor === 'party' ? (
-                      <StatusCard text={row.party} color={row.partycolor} type={col.type} />
-                    ) : col.accessor === 'status' ? (
-                      <StatusCard text={row.status} color={row.statuscolor} type={col.type} />
-                    ) : col.accessor === 'name' ? (
-                      <ShortProfileCard
-                        image={row.image}
-                        name={row.name}
-                        address={row.address}
-                      />
-                    ) : (
-                      row[col.accessor]
-                    )}
-                  </td>
-                ))}
-                <td className="py-3 px-6 text-left align-middle">
-                  {userType === "admin" && <button
-
-                    onClick={() => handleDelete(row.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800"
-                    title="Delete"
-                  >
-                    <Trash2 size={18} />
-                  </button>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {filteredData.length === 0 && (
-        <div className="mt-4 text-gray-600 text-center">
-          No results found for "{searchTerm}"
+      {data.length === 0 ? (
+        <div className="text-center p-4 text-gray-600">
+          No leads data available
         </div>
+      ) : (
+        <PrajaTable columns={columns} data={data} title="All Leads" />
       )}
-
-      {filteredData.length > 0 && (
-        <div className="flex justify-between items-center mt-4">
-          <button
-            onClick={handlePrevious}
-            disabled={currentPage === 1}
-            className={`px-4 py-2 border rounded-md ${
-              currentPage === 1
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Previous
-          </button>
-          <span className="text-gray-600">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            onClick={handleNext}
-            disabled={currentPage === totalPages}
-            className={`px-4 py-2 border rounded-md ${
-              currentPage === totalPages
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Next
-          </button>
-        </div>
-      )} */}
-     
     </div>
   );
 };

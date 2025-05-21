@@ -110,42 +110,47 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
           <thead>
             <tr className="bg-gray-100 text-gray-500 font-normal border-b border-gray-200 text-sm rounded-lg">
               {columns.map((col) => (
-                <th key={col.accessor} className="py-3 px-6 text-left align-middle">
+                <th key={col.accessor} className="py-3 px-6 text-left">
                   {col.header}
                 </th>
               ))}
-              <th className="text-left"></th>
+              <th className="text-left w-12"></th>
             </tr>
           </thead>
           <tbody className="text-gray-600 text-sm">
             {paginatedData.map((row, rowIndex) => (
               <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50 group">
                 {columns.map((col) => (
-                  <td key={col.accessor} className="py-3 px-6 text-left align-middle">
-                    {col.accessor === 'party' ? (
-                      <StatusCard text={row.party} color={row.partycolor} type={col.type} />
-                    ) : col.accessor === 'status' ? (
-                      <StatusCard text={row.status} color={findColor(row.status)} type={col.type} />
-                    ) : col.accessor === 'name' ? (
-                      <ShortProfileCard
-                        image={row.image}
-                        name={row.name}
-                        address={row.address}
-                      />
-                    ) : (
-                      row[col.accessor]
-                    )}
+                  <td key={col.accessor} className="py-3 px-6 text-left">
+                    <div className="flex items-center">
+                      {col.accessor === 'party' ? (
+                        <StatusCard text={row.party} color={row.partycolor} type={col.type} />
+                      ) : col.accessor === 'status' ? (
+                        <StatusCard text={row.status} color={findColor(row.status)} type={col.type} />
+                      ) : col.accessor === 'name' ? (
+                        <div className="flex items-center">
+                          <ShortProfileCard
+                            image={row.image}
+                            name={row.name}
+                            address={row.address}
+                          />
+                        </div>
+                      ) : (
+                        <span className="align-middle">{row[col.accessor]}</span>
+                      )}
+                    </div>
                   </td>
                 ))}
-                <td className="py-3 px-6 text-left align-middle">
-                  {userType === "admin" && <button
-
-                    onClick={() => handleDelete(row.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800"
-                    title="Delete"
-                  >
-                    <Trash2 size={18} />
-                  </button>}
+                <td className="py-3 px-6 text-left w-12">
+                  {userType === "admin" && (
+                    <button
+                      onClick={() => handleDelete(row.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800"
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
