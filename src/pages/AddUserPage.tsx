@@ -1,5 +1,7 @@
+// src/pages/AddUserPage.tsx
+
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase'; // Your Supabase client
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,216 +15,153 @@ interface Role {
 }
 
 const AddUserPage = () => {
-  const { user } = useAuth();
-  const [companyId, setCompanyId] = useState<string | null>(null);
+  const { user: adminUser } = useAuth(); // The currently logged-in admin
+  const [companyId, setCompanyId] = useState<string | null>(null); // This is your tenant_id
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
-  const [newRoleName, setNewRoleName] = useState('');
-  const [formData, setFormData] = useState({ name: '', email: '' });
+  // Add password to formData state
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [loading, setLoading] = useState(false);
 
-  // Fetch tenant (company) ID
+  // Fetch tenant (company) ID - (Assuming this logic is correct for your setup)
   useEffect(() => {
     const fetchTenant = async () => {
-      if (!user) return;
-
-      let { data, error } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('id', user.id)
+      if (!adminUser) return;
+      // This logic to get companyId might need to be adapted based on your actual tenant setup
+      // For example, if tenantId is stored in adminUser's profile or app_metadata
+      const { data, error } = await supabase
+        .from('tenant_users') // Assuming admin is in tenant_users table
+        .select('tenant_id')
+        .eq('user_id', adminUser.id) // Use adminUser.id
         .single();
-
       if (error || !data) {
-        const emailResponse = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('name', user.email)
-          .single();
-
-        data = { id: emailResponse.data?.id };
-        error = emailResponse.error;
-
-        if (error || !data) {
-          console.error("Error fetching tenant:", error);
-          toast.error('Failed to fetch tenant. Please contact support.');
-          return;
-        }
+        console.error("Error fetching admin's tenant or admin not in tenant_users:", error);
+        toast.error('Could not determine your tenant ID.');
+        return;
       }
-
-      setCompanyId(data.id);
+      setCompanyId(data.tenant_id);
     };
-
     fetchTenant();
-  }, [user]);
+  }, [adminUser]);
 
-  // Fetch roles
+  // Fetch roles based on companyId (tenant_id)
   useEffect(() => {
     const fetchRoles = async () => {
       if (!companyId) return;
-
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from('roles')
         .select('id, name')
         .eq('tenant_id', companyId);
-
       if (error) {
-        if (error.message?.includes('tenant_id') || error.message?.includes('column')) {
-          const response = await supabase.from('roles').select('id, name');
-          data = response.data;
-          error = response.error;
-        }
-
-        if (error) {
-          console.error('Error fetching roles:', error);
-          toast.error('Failed to fetch roles');
-          return;
-        }
+        toast.error('Failed to fetch roles');
+      } else {
+        setRoles(data || []);
       }
-
-      setRoles(data || []);
     };
-
     fetchRoles();
   }, [companyId]);
 
-  // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // Add new role
-  const handleAddRole = async () => {
-    if (!newRoleName) return toast.error('Role name is required');
-    if (!companyId) return toast.error('Company ID not found');
-
-    const { data, error } = await supabase
-      .from('roles')
-      .insert([{ name: newRoleName, tenant_id: companyId }])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error adding role:', error);
-      toast.error(`Error adding role: ${error.message}`);
-    } else {
-      toast.success('Role added');
-      setNewRoleName('');
-      setSelectedRoleId(data.id);
-      // refresh role list
-      const updated = await supabase
-        .from('roles')
-        .select('id, name')
-        .eq('tenant_id', companyId);
-      setRoles(updated.data || []);
-    }
-  };
-
-  // Add new user (this now targets the "users" table)
   const handleAddUser = async () => {
-    if (!formData.name || !formData.email || !selectedRoleId || !companyId) {
-      toast.error('All fields are required');
+    setLoading(true);
+    if (!formData.name || !formData.email || !formData.password || !selectedRoleId || !companyId) {
+      toast.error('Name, Email, Password, Role, and Company ID are required');
+      setLoading(false);
       return;
+    }
+    if (formData.password.length < 6) {
+        toast.error('Password must be at least 6 characters long.');
+        setLoading(false);
+        return;
     }
 
     try {
-      const { data, error } = await supabase
-        .rpc('create_user_with_auth', {
-          p_name: formData.name,
-          p_email: formData.email,
-          p_tenant_id: companyId,
-          p_role_id: selectedRoleId
-        });
+      console.log("Sending to Edge Function:", {
+        email: formData.email,
+        password: formData.password, // Will be sent to Edge Function
+        name: formData.name,
+        tenant_id: companyId,
+        role_id: selectedRoleId,
+      });
 
-      if (error) {
-        console.error("Error creating user:", error);
-        toast.error(`Error creating user: ${error.message}`);
-        return;
+      // Call your Supabase Edge Function
+      const { data: functionResponse, error: functionError } = await supabase.functions.invoke('send-password-reset', {
+        body: {
+          email: formData.email,
+          password: formData.password,
+          name: formData.name,
+          tenant_id: companyId,
+          role_id: selectedRoleId,
+        },
+      });
+
+      if (functionError) {
+        throw new Error(`Edge Function error: ${functionError.message}`);
       }
 
-      if (!data.success) {
-        toast.error(`Error creating user: ${data.error}`);
-        return;
+      // The Edge Function itself might return an error in its body if something went wrong server-side
+      if (functionResponse && functionResponse.error) {
+        throw new Error(`Server-side error: ${functionResponse.error}`);
       }
 
-      // Show success message with temporary password
-      toast.success(
-        <div>
-          <p>User added successfully!</p>
-          <p>Temporary password: {data.user.temp_password}</p>
-          <p>Please share this password with the user.</p>
-        </div>
-      );
-
-      setFormData({ name: '', email: '' });
+      toast.success('User added successfully!');
+      setFormData({ name: '', email: '', password: '' }); // Clear form
       setSelectedRoleId('');
     } catch (error: any) {
-      console.error("Unexpected error:", error);
-      toast.error(`Unexpected error: ${error.message}`);
+      console.error("Error adding user:", error);
+      toast.error(`Error adding user: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <DashboardLayout>
       <div className="p-6 max-w-xl mx-auto space-y-6">
-        <h1 className="text-2xl font-semibold">Add User</h1>
+        <h1 className="text-2xl font-semibold">Add New User</h1>
 
-      <div className="space-y-2">
-        <Label htmlFor="name">Full Name</Label>
-        <Input
-          id="name"
-          name="name"
-          placeholder="Enter full name"
-          value={formData.name}
-          onChange={handleChange}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          name="email"
-          placeholder="user@example.com"
-          value={formData.email}
-          onChange={handleChange}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="role">Select Role</Label>
-        <select
-          id="role"
-          className="w-full border rounded px-3 py-2"
-          value={selectedRoleId}
-          onChange={(e) => setSelectedRoleId(e.target.value)}
-        >
-          <option value="">-- Select Role --</option>
-          {roles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="newRole">Add New Role</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="newRole"
-            placeholder="e.g. Admin"
-            value={newRoleName}
-            onChange={(e) => setNewRoleName(e.target.value)}
-          />
-          <Button type="button" onClick={handleAddRole}>
-            Add Role
-          </Button>
+        <div className="space-y-2">
+          <Label htmlFor="name">Full Name</Label>
+          <Input id="name" name="name" placeholder="Enter full name" value={formData.name} onChange={handleChange} required />
         </div>
-      </div>
 
-      <Button className="w-full" onClick={handleAddUser}>
-        Add User
-      </Button>
-    </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" placeholder="user@example.com" value={formData.email} onChange={handleChange} required />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password">Initial Password</Label>
+          <Input id="password" name="password" type="password" placeholder="Min. 6 characters" value={formData.password} onChange={handleChange} required />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="role">Select Role</Label>
+          <select
+            id="role"
+            className="w-full border rounded px-3 py-2 bg-background text-foreground" // Added bg and text for theme
+            value={selectedRoleId}
+            onChange={(e) => setSelectedRoleId(e.target.value)}
+            required
+          >
+            <option value="">-- Select Role --</option>
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Removed "Add New Role" section for simplicity, assuming roles are pre-defined */}
+
+        <Button className="w-full" onClick={handleAddUser} disabled={loading || !companyId}>
+          {loading ? 'Adding User...' : (companyId ? 'Add User' : 'Loading tenant info...')}
+        </Button>
+      </div>
     </DashboardLayout>
   );
 };
