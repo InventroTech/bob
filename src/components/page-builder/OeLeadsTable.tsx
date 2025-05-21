@@ -8,6 +8,8 @@ import ShortProfileCard from '../ui/ShortProfileCard';
 import { LeadFormComponent } from './LeadsTableForm';
 import { Trash2 } from 'lucide-react'; 
 import { PrajaTable } from '../ui/prajaTable';
+import { toast } from 'sonner';
+
 interface Column {
   header: string;
   accessor: string;
@@ -23,6 +25,55 @@ const columns: Column[] = [
   { header: 'Phone Number', accessor: 'phone', type: 'text' }
 ];
 
+// Demo data for fallback
+const DEMO_LEADS = [
+  {
+    id: 1,
+    name: "John Doe",
+    party: "BJP",
+    lastconnected: "2024-03-15",
+    info: "Interested in party membership",
+    status: "Active",
+    phone: "+91 9876543210"
+  },
+  {
+    id: 2,
+    name: "Jane Smith",
+    party: "Congress",
+    lastconnected: "2024-03-14",
+    info: "Looking for local party events",
+    status: "Pending",
+    phone: "+91 8765432109"
+  },
+  {
+    id: 3,
+    name: "Rajesh Kumar",
+    party: "AAP",
+    lastconnected: "2024-03-13",
+    info: "Wants to volunteer",
+    status: "Active",
+    phone: "+91 7654321098"
+  },
+  {
+    id: 4,
+    name: "Priya Sharma",
+    party: "BJP",
+    lastconnected: "2024-03-12",
+    info: "Interested in youth wing",
+    status: "Inactive",
+    phone: "+91 6543210987"
+  },
+  {
+    id: 5,
+    name: "Amit Patel",
+    party: "Congress",
+    lastconnected: "2024-03-11",
+    info: "Wants to join party",
+    status: "Active",
+    phone: "+91 5432109876"
+  }
+];
+
 export const OeLeadsTable: React.FC = () => {
   const { session } = useAuth();
   const [data, setData] = useState<any[]>([]);
@@ -33,38 +84,60 @@ export const OeLeadsTable: React.FC = () => {
   const userType = localStorage.getItem('userType');
   useEffect(() => {
     const fetchLeads = async () => {
-      const authToken = session?.access_token;
-      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/recommended-lead-of-OE`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          authToken: authToken
-        })
-      });   
-      const data = await response.json();
-      setData(data.leads || []);
-      console.log("Table Data", data.leads);
-      setLoading(false);
+      try {
+        setLoading(true);
+        const authToken = session?.access_token;
+        
+        const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/recommended-lead-of-OE`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            authToken: authToken
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch leads data');
+        }
+
+        const data = await response.json();
+        if (data.leads && Array.isArray(data.leads)) {
+          setData(data.leads);
+        } else {
+          throw new Error('Invalid data format received');
+        }
+      } catch (error) {
+        console.error('Error fetching leads:', error);
+        toast.error('Failed to fetch leads data, using demo data');
+        setData(DEMO_LEADS);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchLeads();
-  }, []);
+  }, [session]);
 
   const handleDelete = async (id: number) => {
-    const confirm = window.confirm('Are you sure you want to delete this lead?');
-    if (!confirm) return;
+    try {
+      const confirm = window.confirm('Are you sure you want to delete this lead?');
+      if (!confirm) return;
 
-    const { error } = await supabase.from('leads').delete().eq('id', id);
+      const { error } = await supabase.from('leads').delete().eq('id', id);
 
-    if (error) {
-      console.error('Error deleting lead:', error.message);
-      alert('Failed to delete the lead.');
-    } else {
+      if (error) {
+        throw error;
+      }
+
       setData(prev => prev.filter(lead => lead.id !== id));
+      toast.success('Lead deleted successfully');
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+      toast.error('Failed to delete the lead');
     }
   };
 
@@ -88,11 +161,23 @@ export const OeLeadsTable: React.FC = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
-  if (loading) return <p className="text-gray-600 p-4">Loading...</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-gray-600">Loading leads data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      <PrajaTable columns={columns} data={data} title="Potential Leads"/>
+      {data.length === 0 ? (
+        <div className="text-center p-4 text-gray-600">
+          No leads data available
+        </div>
+      ) : (
+        <PrajaTable columns={columns} data={data} title="Potential Leads"/>
+      )}
     </div>
   );
 };

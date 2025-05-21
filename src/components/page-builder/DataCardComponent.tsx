@@ -5,13 +5,36 @@ import { supabase } from '@/lib/supabase';
 import DonutPie from '../ui/donoutPie';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+
 interface DonutData {
   id: number;
   value: number;
   label: string;
 }
 
-
+// Demo data for fallback
+const DEMO_DATA = [
+  {
+    id: 1,
+    title: "Converted Leads",
+    number: 75,
+    description: "Total converted leads this month",
+    pieData: [
+      { id: 0, value: 75, label: 'Remaining' },
+      { id: 1, value: 25, label: 'Completed' }
+    ]
+  },
+  {
+    id: 2,
+    title: "Pending Leads",
+    number: 45,
+    description: "Leads in pipeline",
+    pieData: [
+      { id: 0, value: 45, label: 'Remaining' },
+      { id: 1, value: 55, label: 'Completed' }
+    ]
+  }
+];
 
 const FIXED_CARD_SET_ID = '1cbaa75b-3917-4669-b9a4-5f5a17fd3eae';
 
@@ -20,55 +43,81 @@ export const DataCardComponent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [convertedLeadCardData, setConvertedLeadCardData] = useState<any[]>([]);
   const [pendingLeadCardData, setPendingLeadCardData] = useState<any[]>([]);
+
   useEffect(() => {
     fetchCards();
-      }, []);
+  }, []);
 
   const fetchCards = async () => {
-    const { session } = useAuth();
-    const authToken = session?.access_token;
-    const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({
-        authToken: authToken
-      })
-    });
+    try {
+      const { session } = useAuth();
+      const authToken = session?.access_token;
+      
+      let convertedData = [];
+      let pendingData = [];
 
-    const data = await response1.json();
-    setConvertedLeadCardData(Array.isArray(data) ? data : [data]);
-    console.log("Converted Lead Card Data", data);
+      try {
+        const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            authToken: authToken
+          })
+        });
 
-    const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({
-        authToken: authToken
-      })
-    });
+        if (!response1.ok) {
+          throw new Error('Failed to fetch converted leads');
+        }
 
-    const data2 = await response2.json();
-    setPendingLeadCardData(Array.isArray(data2) ? data2 : [data2]);
-    console.log("Pending Lead Card Data", data2);
-    
-    // Ensure both data and data2 are arrays before combining
-    const combinedData = [
-      ...(Array.isArray(data) ? data : [data]),
-      ...(Array.isArray(data2) ? data2 : [data2])
-    ];
-    setCards(combinedData);
-    console.log("Cards", combinedData);
+        const data = await response1.json();
+        convertedData = Array.isArray(data) ? data : [data];
+        setConvertedLeadCardData(convertedData);
+      } catch (error) {
+        console.error('Error fetching converted leads:', error);
+        toast.error('Failed to fetch converted leads data');
+        convertedData = [DEMO_DATA[0]]; // Use first demo card
+      }
+
+      try {
+        const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            authToken: authToken
+          })
+        });
+
+        if (!response2.ok) {
+          throw new Error('Failed to fetch pending leads');
+        }
+
+        const data2 = await response2.json();
+        pendingData = Array.isArray(data2) ? data2 : [data2];
+        setPendingLeadCardData(pendingData);
+      } catch (error) {
+        console.error('Error fetching pending leads:', error);
+        toast.error('Failed to fetch pending leads data');
+        pendingData = [DEMO_DATA[1]]; // Use second demo card
+      }
+
+      const combinedData = [...convertedData, ...pendingData];
+      setCards(combinedData);
+    } catch (error) {
+      console.error('Error in fetchCards:', error);
+      toast.error('Failed to fetch card data, using demo data');
+      setCards(DEMO_DATA);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  
 
   return (
     <div className="space-y-6">
