@@ -123,23 +123,40 @@ const AddUserPage = () => {
       return;
     }
 
-    const { error } = await supabase.from('users').insert([
-      {
-        name: formData.name,
-        email: formData.email,
-        tenant_id: companyId,
-        role_id: selectedRoleId,
-        created_at: new Date().toISOString(),
-      },
-    ]);
+    try {
+      const { data, error } = await supabase
+        .rpc('create_user_with_auth', {
+          p_name: formData.name,
+          p_email: formData.email,
+          p_tenant_id: companyId,
+          p_role_id: selectedRoleId
+        });
 
-    if (error) {
-      console.error("Error adding user:", error);
-      toast.error(`Error adding user: ${error.message}`);
-    } else {
-      toast.success('User added successfully');
+      if (error) {
+        console.error("Error creating user:", error);
+        toast.error(`Error creating user: ${error.message}`);
+        return;
+      }
+
+      if (!data.success) {
+        toast.error(`Error creating user: ${data.error}`);
+        return;
+      }
+
+      // Show success message with temporary password
+      toast.success(
+        <div>
+          <p>User added successfully!</p>
+          <p>Temporary password: {data.user.temp_password}</p>
+          <p>Please share this password with the user.</p>
+        </div>
+      );
+
       setFormData({ name: '', email: '' });
       setSelectedRoleId('');
+    } catch (error: any) {
+      console.error("Unexpected error:", error);
+      toast.error(`Unexpected error: ${error.message}`);
     }
   };
 
