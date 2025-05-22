@@ -98,7 +98,29 @@ const DEMO_TICKETS: Ticket[] = [
   }
 ];
 
-export const TicketCarousel: React.FC = () => {
+interface ComponentConfig {
+  apiEndpoint?: string;      // Custom API endpoint
+  columns?: Array<{         // For tables
+    key: string;
+    label: string;
+    type: 'text' | 'chip' | 'date' | 'number';
+  }>;
+  title?: string;           // Component title
+  description?: string;     // Component description
+  refreshInterval?: number; // Auto-refresh interval
+  showFilters?: boolean;    // Show/hide filters
+  customFields?: Record<string, any>; // For future extensibility
+}
+
+interface TicketCarouselProps {
+  config?: {
+    apiEndpoint?: string;
+    title?: string;
+    showFilters?: boolean;
+  };
+}
+
+export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -113,8 +135,10 @@ export const TicketCarousel: React.FC = () => {
 
       try {
         setLoading(true);
+        // Use configured endpoint if available, otherwise use default
+        const endpoint = config?.apiEndpoint || 'tickets';
         const { data, error } = await supabase
-          .from('tickets')
+          .from(endpoint)
           .select('*')
           .eq('tenant_id', tenantId)
           .order('created_at', { ascending: false });
@@ -124,7 +148,6 @@ export const TicketCarousel: React.FC = () => {
         }
 
         if (data) {
-          // Transform status to only "Completed" or "Pending"
           const transformedData = data.map(ticket => ({
             ...ticket,
             status: ticket.status === "Completed" ? "Completed" : "Pending"
@@ -149,7 +172,7 @@ export const TicketCarousel: React.FC = () => {
     };
 
     fetchTickets();
-  }, [user, tenantId]);
+  }, [user, tenantId, config?.apiEndpoint]);
 
   const currentTicket = tickets[currentIndex];
 
@@ -229,21 +252,26 @@ export const TicketCarousel: React.FC = () => {
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-2xl font-semibold text-primary">
-                {currentTicket.first_name} {currentTicket.last_name}
+                {config?.title || 'Tickets'}
               </h2>
+              <p className="text-sm text-muted-foreground">
+                {currentTicket.first_name} {currentTicket.last_name}
+              </p>
               <p className="text-sm text-muted-foreground">{currentTicket.id}</p>
             </div>
-            <div className="flex items-center gap-4">
-              <Select value={status} onValueChange={(value: "Completed" | "Pending") => setStatus(value)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Completed">Completed</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {config?.showFilters !== false && (
+              <div className="flex items-center gap-4">
+                <Select value={status} onValueChange={(value: "Completed" | "Pending") => setStatus(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Ticket Details */}

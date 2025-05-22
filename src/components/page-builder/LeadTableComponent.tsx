@@ -95,22 +95,43 @@ const DEMO_LEADS = [
   }
 ];
 
-export const LeadTableComponent: React.FC = () => {
+interface LeadTableProps {
+  config?: {
+    apiEndpoint?: string;
+    columns?: Array<{
+      key: string;
+      label: string;
+      type: 'text' | 'chip' | 'date' | 'number';
+    }>;
+    title?: string;
+  };
+}
+
+export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const [data, setData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
-  const userType = localStorage.getItem('userType');
+  const { session } = useAuth();
+
+  // Use configured columns or fallback to default
+  const tableColumns: Column[] = config?.columns?.map(col => ({
+    header: col.label,
+    accessor: col.key,
+    type: col.type === 'chip' ? 'chip' : 'text'
+  })) || columns;
 
   useEffect(() => {
     const fetchLeads = async () => {
       try {
         setLoading(true);
-        const { session } = useAuth();
         const authToken = session?.access_token;
 
-        const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM`, {
+        // Use configured endpoint or fallback to default
+        const endpoint = config?.apiEndpoint || 'https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM';
+        
+        const response = await fetch(endpoint, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -144,7 +165,7 @@ export const LeadTableComponent: React.FC = () => {
     };
 
     fetchLeads();
-  }, []);
+  }, [session, config?.apiEndpoint]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -166,7 +187,7 @@ export const LeadTableComponent: React.FC = () => {
   };
 
   const filteredData = data.filter((row) =>
-    columns.some((col) =>
+    tableColumns.some((col) =>
       String(row[col.accessor] || '')
         .toLowerCase()
         .includes(searchTerm.toLowerCase())
@@ -200,7 +221,11 @@ export const LeadTableComponent: React.FC = () => {
           No leads data available
         </div>
       ) : (
-        <PrajaTable columns={columns} data={data} title="All Leads" />
+        <PrajaTable 
+          columns={tableColumns} 
+          data={data} 
+          title={config?.title || "All Leads"}
+        />
       )}
     </div>
   );
