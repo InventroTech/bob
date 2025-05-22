@@ -45,7 +45,6 @@ const AddUserPage = () => {
   const [formData, setFormData] = useState({ name: '', email: '' });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch tenant (company) ID
   useEffect(() => {
     const fetchTenant = async () => {
       if (!user) return;
@@ -79,7 +78,6 @@ const AddUserPage = () => {
     fetchTenant();
   }, [user]);
 
-  // Fetch roles
   useEffect(() => {
     const fetchRoles = async () => {
       if (!companyId) return;
@@ -90,11 +88,9 @@ const AddUserPage = () => {
         .eq('tenant_id', companyId);
 
       if (error) {
-        if (error.message?.includes('tenant_id') || error.message?.includes('column')) {
-          const response = await supabase.from('roles').select('id, name');
-          data = response.data;
-          error = response.error;
-        }
+        const response = await supabase.from('roles').select('id, name');
+        data = response.data;
+        error = response.error;
 
         if (error) {
           console.error('Error fetching roles:', error);
@@ -109,7 +105,6 @@ const AddUserPage = () => {
     fetchRoles();
   }, [companyId]);
 
-  // Fetch users
   useEffect(() => {
     const fetchUsers = async () => {
       if (!companyId) return;
@@ -134,7 +129,6 @@ const AddUserPage = () => {
 
         if (error) throw error;
 
-        // Transform the data to include role name
         const transformedUsers: User[] = ((data as unknown) as DatabaseUser[]).map(user => ({
           id: user.id,
           name: user.name,
@@ -156,12 +150,10 @@ const AddUserPage = () => {
     fetchUsers();
   }, [companyId]);
 
-  // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // Add new role
   const handleAddRole = async () => {
     if (!newRoleName) return toast.error('Role name is required');
     if (!companyId) return toast.error('Company ID not found');
@@ -179,7 +171,6 @@ const AddUserPage = () => {
       toast.success('Role added');
       setNewRoleName('');
       setSelectedRoleId(data.id);
-      // refresh role list
       const updated = await supabase
         .from('roles')
         .select('id, name')
@@ -188,7 +179,6 @@ const AddUserPage = () => {
     }
   };
 
-  // Add new user (this now targets the "users" table)
   const handleAddUser = async () => {
     if (!formData.name || !formData.email || !selectedRoleId || !companyId) {
       toast.error('All fields are required');
@@ -196,24 +186,37 @@ const AddUserPage = () => {
     }
 
     try {
-      const { error } = await supabase.from('users').insert([
-        {
-          name: formData.name,
-          email: formData.email,
-          tenant_id: companyId,
-          role_id: selectedRoleId,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      const { data, error } = await supabase
+        .rpc('create_user_with_auth', {
+          p_name: formData.name,
+          p_email: formData.email,
+          p_tenant_id: companyId,
+          p_role_id: selectedRoleId
+        });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error creating user:", error);
+        toast.error(`Error creating user: ${error.message}`);
+        return;
+      }
 
-      toast.success('User added successfully');
+      if (!data.success) {
+        toast.error(`Error creating user: ${data.error}`);
+        return;
+      }
+
+      toast.success(
+        <div>
+          <p>User added successfully!</p>
+          <p>Temporary password: {data.user.temp_password}</p>
+          <p>Please share this password with the user.</p>
+        </div>
+      );
+
       setFormData({ name: '', email: '' });
       setSelectedRoleId('');
 
-      // Refresh the user list
-      const { data, error: fetchError } = await supabase
+      const { data: updatedData, error: fetchError } = await supabase
         .from('users')
         .select(`
           id,
@@ -231,7 +234,7 @@ const AddUserPage = () => {
 
       if (fetchError) throw fetchError;
 
-      const transformedUsers: User[] = ((data as unknown) as DatabaseUser[]).map(user => ({
+      const transformedUsers: User[] = ((updatedData as unknown) as DatabaseUser[]).map(user => ({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -242,8 +245,8 @@ const AddUserPage = () => {
 
       setUsers(transformedUsers);
     } catch (error: any) {
-      console.error("Error adding user:", error);
-      toast.error(`Error adding user: ${error.message}`);
+      console.error("Unexpected error:", error);
+      toast.error(`Unexpected error: ${error.message}`);
     }
   };
 
@@ -312,7 +315,6 @@ const AddUserPage = () => {
           </Button>
         </div>
 
-        {/* User List Section */}
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-4">Users List</h2>
           {isLoading ? (

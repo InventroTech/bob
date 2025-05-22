@@ -58,7 +58,6 @@ const CustomAppAuthPage: React.FC = () => {
     // Email will be fetched and stored in callback page
   };
   
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
       <form onSubmit={handleLogin} className="space-y-4 p-6 bg-white rounded shadow w-full max-w-sm">
