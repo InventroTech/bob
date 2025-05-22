@@ -74,21 +74,43 @@ const DEMO_LEADS = [
   }
 ];
 
-export const OeLeadsTable: React.FC = () => {
-  const { session } = useAuth();
+interface OeLeadsTableProps {
+  config?: {
+    apiEndpoint?: string;
+    columns?: Array<{
+      key: string;
+      label: string;
+      type: 'text' | 'chip' | 'date' | 'number';
+    }>;
+    title?: string;
+  };
+}
+
+export const OeLeadsTable: React.FC<OeLeadsTableProps> = ({ config }) => {
   const [data, setData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
-  const userType = localStorage.getItem('userType');
+  const { session } = useAuth();
+
+  // Use configured columns or fallback to default
+  const tableColumns: Column[] = config?.columns?.map(col => ({
+    header: col.label,
+    accessor: col.key,
+    type: col.type === 'chip' ? 'chip' : 'text'
+  })) || columns;
+
   useEffect(() => {
     const fetchLeads = async () => {
       try {
         setLoading(true);
         const authToken = session?.access_token;
+
+        // Use configured endpoint or fallback to default
+        const endpoint = config?.apiEndpoint || 'https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/recommended-lead-of-OE';
         
-        const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/recommended-lead-of-OE`, {
+        const response = await fetch(endpoint, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -120,7 +142,7 @@ export const OeLeadsTable: React.FC = () => {
     };
 
     fetchLeads();
-  }, [session]);
+  }, [session, config?.apiEndpoint]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -142,7 +164,7 @@ export const OeLeadsTable: React.FC = () => {
   };
 
   const filteredData = data.filter((row) =>
-    columns.some((col) =>
+    tableColumns.some((col) =>
       String(row[col.accessor] || '')
         .toLowerCase()
         .includes(searchTerm.toLowerCase())
@@ -176,7 +198,11 @@ export const OeLeadsTable: React.FC = () => {
           No leads data available
         </div>
       ) : (
-        <PrajaTable columns={columns} data={data} title="Potential Leads"/>
+        <PrajaTable 
+          columns={tableColumns} 
+          data={data} 
+          title={config?.title || "Potential Leads"}
+        />
       )}
     </div>
   );

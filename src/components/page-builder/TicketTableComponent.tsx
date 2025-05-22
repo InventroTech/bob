@@ -79,10 +79,36 @@ const columns: Column[] = [
   { header: 'Created At', accessor: 'created_at', type: 'text' }
 ];
 
-export const TicketTableComponent: React.FC = () => {
+interface TicketTableProps {
+  config?: {
+    apiEndpoint?: string;
+    columns?: Array<{
+      key: string;
+      label: string;
+      type: 'text' | 'chip' | 'date' | 'number';
+    }>;
+    title?: string;
+  };
+}
+
+interface PrajaTableProps {
+  columns: Column[];
+  data: any[];
+  title: string;
+  showFilters?: boolean;
+}
+
+export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { session } = useAuth();
+
+  // Use configured columns or fallback to default
+  const tableColumns: Column[] = config?.columns?.map(col => ({
+    header: col.label,
+    accessor: col.key,
+    type: col.type === 'chip' ? 'chip' : 'text'
+  })) || columns;
 
   useEffect(() => {
     const fetchTickets = async () => {
@@ -90,7 +116,10 @@ export const TicketTableComponent: React.FC = () => {
         setLoading(true);
         const authToken = session?.access_token;
 
-        const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/tickets', {
+        // Use configured endpoint or fallback to default
+        const endpoint = config?.apiEndpoint || 'https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/tickets';
+        
+        const response = await fetch(endpoint, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -157,7 +186,7 @@ export const TicketTableComponent: React.FC = () => {
     };
 
     fetchTickets();
-  }, [session]);
+  }, [session, config?.apiEndpoint]);
 
   if (loading) {
     return (
@@ -175,9 +204,9 @@ export const TicketTableComponent: React.FC = () => {
         </div>
       ) : (
         <PrajaTable 
-          columns={columns} 
+          columns={tableColumns} 
           data={data} 
-          title="Support Tickets"
+          title={config?.title || "Support Tickets"}
         />
       )}
     </div>
