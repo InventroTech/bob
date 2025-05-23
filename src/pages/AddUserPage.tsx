@@ -15,7 +15,7 @@ interface Role {
 }
 
 interface User {
-  id: string;
+  uid: string;
   name: string;
   email: string;
   role_id: string;
@@ -24,7 +24,7 @@ interface User {
 }
 
 interface DatabaseUser {
-  id: string;
+  uid: string;
   name: string;
   email: string;
   role_id: string;
@@ -114,7 +114,7 @@ const AddUserPage = () => {
         const { data, error } = await supabase
           .from('users')
           .select(`
-            id,
+            uid,
             name,
             email,
             role_id,
@@ -130,7 +130,7 @@ const AddUserPage = () => {
         if (error) throw error;
 
         const transformedUsers: User[] = ((data as unknown) as DatabaseUser[]).map(user => ({
-          id: user.id,
+          uid: user.uid,
           name: user.name,
           email: user.email,
           role_id: user.role_id,
@@ -187,7 +187,7 @@ const AddUserPage = () => {
 
     try {
       const { data, error } = await supabase
-        .rpc('create_user_with_auth', {
+        .rpc('create_user', {
           p_name: formData.name,
           p_email: formData.email,
           p_tenant_id: companyId,
@@ -205,13 +205,7 @@ const AddUserPage = () => {
         return;
       }
 
-      toast.success(
-        <div>
-          <p>User added successfully!</p>
-          <p>Temporary password: {data.user.temp_password}</p>
-          <p>Please share this password with the user.</p>
-        </div>
-      );
+      toast.success('User added successfully! They will be able to log in once they set up their account.');
 
       setFormData({ name: '', email: '' });
       setSelectedRoleId('');
@@ -219,7 +213,7 @@ const AddUserPage = () => {
       const { data: updatedData, error: fetchError } = await supabase
         .from('users')
         .select(`
-          id,
+          uid,
           name,
           email,
           role_id,
@@ -235,7 +229,7 @@ const AddUserPage = () => {
       if (fetchError) throw fetchError;
 
       const transformedUsers: User[] = ((updatedData as unknown) as DatabaseUser[]).map(user => ({
-        id: user.id,
+        uid: user.uid,
         name: user.name,
         email: user.email,
         role_id: user.role_id,
@@ -338,7 +332,7 @@ const AddUserPage = () => {
                 </TableHeader>
                 <TableBody>
                   {users.map((user) => (
-                    <TableRow key={user.id}>
+                    <TableRow key={user.uid}>
                       <TableCell className="font-medium">{user.name}</TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>{user.role?.name || 'No Role'}</TableCell>
