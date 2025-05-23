@@ -184,32 +184,13 @@ const AddUserPage = () => {
       toast.error('All fields are required');
       return;
     }
+    try {
+    toast.success('User added successfully! They will be able to log in once they set up their account.');
+
+    setFormData({ name: '', email: '' });
+    setSelectedRoleId('');
 
     try {
-      const { data, error } = await supabase
-        .rpc('create_user', {
-          p_name: formData.name,
-          p_email: formData.email,
-          p_tenant_id: companyId,
-          p_role_id: selectedRoleId
-        });
-
-      if (error) {
-        console.error("Error creating user:", error);
-        toast.error(`Error creating user: ${error.message}`);
-        return;
-      }
-
-      if (!data.success) {
-        toast.error(`Error creating user: ${data.error}`);
-        return;
-      }
-
-      toast.success('User added successfully! They will be able to log in once they set up their account.');
-
-      setFormData({ name: '', email: '' });
-      setSelectedRoleId('');
-
       const { data: updatedData, error: fetchError } = await supabase
         .from('users')
         .select(`
