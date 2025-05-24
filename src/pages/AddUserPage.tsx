@@ -184,6 +184,7 @@ const AddUserPage = () => {
       toast.error('All fields are required');
       return;
     }
+
     try {
       // create a new user
       const { data, error } = await supabase.from('users').insert([{ 
@@ -192,12 +193,29 @@ const AddUserPage = () => {
         role_id: selectedRoleId, 
         tenant_id: companyId 
       }]).select().single();
+
+      if (error) throw error;
+
+      // Call the edge function to link the user
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/link-user`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to link user');
+      }
+
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
-    setFormData({ name: '', email: '' });
-    setSelectedRoleId('');
+      setFormData({ name: '', email: '' });
+      setSelectedRoleId('');
 
-    try {
       const { data: updatedData, error: fetchError } = await supabase
         .from('users')
         .select(`
@@ -223,18 +241,14 @@ const AddUserPage = () => {
         role_id: user.role_id,
         created_at: user.created_at,
         role: user.roles || undefined
-      }))
+      }));
 
       setUsers(transformedUsers);
     } catch (error: any) {
       console.error("Unexpected error:", error);
       toast.error(`Unexpected error: ${error.message}`);
     }
-  } catch (error: any) {
-    console.error("Unexpected error:", error);
-    toast.error(`Unexpected error: ${error.message}`);
-  }
-  }
+  };
 
   return (
     <DashboardLayout>
