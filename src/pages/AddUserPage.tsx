@@ -185,7 +185,14 @@ const AddUserPage = () => {
       return;
     }
     try {
-    toast.success('User added successfully! They will be able to log in once they set up their account.');
+      // create a new user
+      const { data, error } = await supabase.from('users').insert([{ 
+        name: formData.name, 
+        email: formData.email, 
+        role_id: selectedRoleId, 
+        tenant_id: companyId 
+      }]).select().single();
+      toast.success('User added successfully! They will be able to log in once they set up their account.');
 
     setFormData({ name: '', email: '' });
     setSelectedRoleId('');
@@ -216,14 +223,18 @@ const AddUserPage = () => {
         role_id: user.role_id,
         created_at: user.created_at,
         role: user.roles || undefined
-      }));
+      }))
 
       setUsers(transformedUsers);
     } catch (error: any) {
       console.error("Unexpected error:", error);
       toast.error(`Unexpected error: ${error.message}`);
     }
-  };
+  } catch (error: any) {
+    console.error("Unexpected error:", error);
+    toast.error(`Unexpected error: ${error.message}`);
+  }
+  }
 
   return (
     <DashboardLayout>
