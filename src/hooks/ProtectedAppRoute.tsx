@@ -69,6 +69,18 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
+        // Link the user's UID from auth.users to our users table
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ uid: session.user.id })
+          .eq('email', session.user.email)
+          .eq('tenant_id', tenant.id);
+
+        if (updateError) {
+          console.error('Failed to link user UID:', updateError);
+          // Don't block access if linking fails
+        }
+
         // 3. Get the roles for the tenant
         const { data: roles, error: rolesError } = await supabase
           .from('roles')
