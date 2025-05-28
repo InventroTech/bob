@@ -1,0 +1,1 @@
+export const API_URI= "https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1";

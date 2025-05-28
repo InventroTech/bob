@@ -9,6 +9,7 @@ import { Trash2 } from 'lucide-react';
 import { PrajaTable } from '../ui/prajaTable';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { API_URI } from '@/const';
 
 interface Column {
   header: string;
@@ -129,18 +130,15 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         const authToken = session?.access_token;
 
         // Use configured endpoint or fallback to default
-        const endpoint = config?.apiEndpoint || 'https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/lead-list-of-RM';
+        const endpoint = config?.apiEndpoint || '/api/leads';
+        const apiUrl = `${API_URI}${endpoint}`;
         
-        const response = await fetch(endpoint, {
+        const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            authToken: authToken
-          })
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
+          }
         });
 
         if (!response.ok) {
