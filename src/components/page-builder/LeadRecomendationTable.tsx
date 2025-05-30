@@ -6,8 +6,11 @@ import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
 import { LeadFormComponent } from './LeadsTableForm';
 import { Trash2 } from 'lucide-react'; 
-import { PrajaTable } from '../ui/prajaTable';
+import { PrajaTable } from '@/components/ui/prajaTable';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
+import { API_URI } from '@/const';
+
 interface Column {
   header: string;
   accessor: string;
@@ -31,34 +34,43 @@ export const LeadRecomendationTable: React.FC = () => {
   const entriesPerPage = 15;
   const { session } = useAuth();
   const authToken = session?.access_token;
+
   useEffect(() => {
     const fetchLeads = async () => {
-    //   const { data, error } = await supabase.from('leads_table').select('*');
-    //   if (error) {
-    //     console.error('Error fetching leads:', error);
-    //   } else {
-    //     setData(data || []);
-    //     console.log("Table Data", data);
-    //   }
-      const response = await fetch(`https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/recommended-lead-of-RM`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({
-          authToken: authToken
-        })
-      });   
-      const data = await response.json();
-      setData(data.leads);
-      console.log("Table Data", data);
-      setLoading(false);
+      try {
+        setLoading(true);
+        const endpoint = '/api/recommended-leads';
+        const apiUrl = `${API_URI}${endpoint}`;
+        
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch recommended leads');
+        }
+
+        const data = await response.json();
+        if (data.leads && Array.isArray(data.leads)) {
+          setData(data.leads);
+        } else {
+          throw new Error('Invalid data format received');
+        }
+      } catch (error) {
+        console.error('Error fetching leads:', error);
+        toast.error('Failed to fetch recommended leads data');
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchLeads();
-  }, []);
+  }, [authToken]);
 
   const handleDelete = async (id: number) => {
     const confirm = window.confirm('Are you sure you want to delete this lead?');

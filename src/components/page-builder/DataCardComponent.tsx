@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase';
 import DonutPie from '../ui/donoutPie';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { Card } from '@/components/ui/card';
+import { API_URI } from '@/const';
 
 interface DonutData {
   id: number;
@@ -57,16 +59,15 @@ export const DataCardComponent: React.FC = () => {
       let pendingData = [];
 
       try {
-        const response1 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/converted-leads', {
+        const endpoint = '/api/converted-leads';
+        const apiUrl = `${API_URI}${endpoint}`;
+        
+        const response1 = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            authToken: authToken
-          })
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
+          }
         });
 
         if (!response1.ok) {
@@ -83,16 +84,15 @@ export const DataCardComponent: React.FC = () => {
       }
 
       try {
-        const response2 = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/pending-leads', {
+        const endpoint = '/api/pending-leads';
+        const apiUrl = `${API_URI}${endpoint}`;
+        
+        const response2 = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            authToken: authToken
-          })
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
+          }
         });
 
         if (!response2.ok) {

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, User, Tag, ChevronDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { API_URI } from '@/const';
 
 interface Ticket {
   id: string;
@@ -136,19 +137,28 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
       try {
         setLoading(true);
         // Use configured endpoint if available, otherwise use default
-        const endpoint = config?.apiEndpoint || 'tickets';
-        const { data, error } = await supabase
-          .from(endpoint)
-          .select('*')
-          .eq('tenant_id', tenantId)
-          .order('created_at', { ascending: false });
+        const endpoint = config?.apiEndpoint || '/api/tickets';
+        const apiUrl = `${API_URI}${endpoint}`;
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        const response = await fetch(`${apiUrl}?tenantId=${tenantId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : ''
+          }
+        });
 
-        if (error) {
-          throw error;
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
+        const data = await response.json();
+
         if (data) {
-          const transformedData = data.map(ticket => ({
+          const transformedData = data.map((ticket: any) => ({
             ...ticket,
             status: ticket.status === "Completed" ? "Completed" : "Pending"
           }));
@@ -199,18 +209,26 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         return;
       }
 
-      const { error } = await supabase
-        .from('tickets')
-        .update({
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const endpoint = config?.apiEndpoint || '/api/tickets';
+      const apiUrl = `${API_URI}${endpoint}`;
+      
+      const response = await fetch(`${apiUrl}/${currentTicket.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
           notes: notes,
           status: status
         })
-        .eq('id', currentTicket.id);
+      });
 
-      if (error) {
-        console.error('Error updating ticket:', error);
-        toast.error('Failed to save changes. Please try again.');
-        return;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       // Update the local tickets array
