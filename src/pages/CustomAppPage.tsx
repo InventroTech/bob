@@ -45,7 +45,7 @@ const CustomAppPage: React.FC = () => {
           ? (page.config as any[]).map((component) => {
               const Renderer = componentMap[component.type];
               return Renderer ? (
-                <Renderer key={component.id} {...component.props} />
+                <Renderer key={component.id} {...component.props} config={component.config} />
               ) : null;
             })
           : null}

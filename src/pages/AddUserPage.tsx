@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
+import { API_URI } from '@/const';
+import { Trash2 } from 'lucide-react';
 
 interface Role {
   id: string;
@@ -105,48 +107,51 @@ const AddUserPage = () => {
     fetchRoles();
   }, [companyId]);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      if (!companyId) return;
-      setIsLoading(true);
+  const fetchUsers = async () => {
+    if (!companyId) return;
+    setIsLoading(true);
 
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select(`
-            uid,
-            name,
-            email,
-            role_id,
-            created_at,
-            roles (
-              id,
-              name
-            )
-          `)
-          .eq('tenant_id', companyId)
-          .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          uid,
+          name,
+          email,
+          role_id,
+          created_at,
+          roles (
+            id,
+            name
+          )
+        `)
+        .eq('tenant_id', companyId)
+        .order('created_at', { ascending: false });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        const transformedUsers: User[] = ((data as unknown) as DatabaseUser[]).map(user => ({
-          uid: user.uid,
-          name: user.name,
-          email: user.email,
-          role_id: user.role_id,
-          created_at: user.created_at,
+      // Filter out null uids and transform the data
+      const transformedUsers: User[] = ((data as unknown) as DatabaseUser[])
+        .filter(user => user.uid !== null && user.uid !== undefined)
+        .map((user, index) => ({
+          uid: user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
+          name: user.name || 'Unnamed User',
+          email: user.email || 'No Email',
+          role_id: user.role_id || '',
+          created_at: user.created_at || new Date().toISOString(),
           role: user.roles || undefined
         }));
 
-        setUsers(transformedUsers);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-        toast.error('Failed to fetch users');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      setUsers(transformedUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast.error('Failed to fetch users');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchUsers();
   }, [companyId]);
 
@@ -217,14 +222,14 @@ const AddUserPage = () => {
       if (fetchError) throw fetchError;
 
       const transformedUsers: User[] = ((updatedData as unknown) as DatabaseUser[]).map(user => ({
-        uid: user.uid,
-        name: user.name,
-        email: user.email,
-        role_id: user.role_id,
-        created_at: user.created_at,
+        uid: user.uid || Math.random().toString(36).substring(2, 15),
+        name: user.name || 'Unnamed User',
+        email: user.email || 'No Email',
+        role_id: user.role_id || '',
+        created_at: user.created_at || new Date().toISOString(),
         role: user.roles || undefined
       }))
-
+      console.log("transformedUsers", transformedUsers);
       setUsers(transformedUsers);
     } catch (error: any) {
       console.error("Unexpected error:", error);
@@ -235,6 +240,40 @@ const AddUserPage = () => {
     toast.error(`Unexpected error: ${error.message}`);
   }
   }
+
+  const handleDeleteUser = async (email: string, userId: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) {
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`${API_URI}/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          email
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to delete user');
+      }
+
+      // Refresh the users list after successful deletion
+      await fetchUsers();
+      toast.success('User deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast.error(error.message || 'Failed to delete user');
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -320,19 +359,32 @@ const AddUserPage = () => {
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Created At</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.uid}>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>{user.role?.name || 'No Role'}</TableCell>
-                      <TableCell>
-                        {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {users
+                    .filter(user => user.uid && user.email) // Only show users with both uid and email
+                    .map((user, index) => (
+                      <TableRow key={`${user.uid}-${index}`}>
+                        <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.role?.name || 'No Role'}</TableCell>
+                        <TableCell>
+                          {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleDeleteUser(user.email, user.uid)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                 </TableBody>
               </Table>
             </div>
