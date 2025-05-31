@@ -139,11 +139,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         // Use configured endpoint if available, otherwise use default
         const endpoint = config?.apiEndpoint || '/api/tickets';
         const apiUrl = `${API_URI}${endpoint}`;
+        console.log("apiUrl_ticket carousel",apiUrl);
         
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         
-        const response = await fetch(`${apiUrl}?tenantId=${tenantId}`, {
+        const response = await fetch(`${apiUrl}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -156,17 +157,23 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         }
 
         const data = await response.json();
-
-        if (data) {
-          const transformedData = data.map((ticket: any) => ({
-            ...ticket,
-            status: ticket.status === "Completed" ? "Completed" : "Pending"
-          }));
-          setTickets(transformedData);
-          if (transformedData.length > 0) {
-            setStatus(transformedData[0].status);
-            setNotes(transformedData[0].notes || "");
+        
+        // Expect the API to return an array of tickets directly
+        if (Array.isArray(data)) {
+          setTickets(data);
+          if (data.length > 0) {
+            setStatus(data[0].status);
+            setNotes(data[0].notes || "");
           }
+        } else if (data.tickets && Array.isArray(data.tickets)) {
+          // Fallback for API that returns { tickets: [] }
+          setTickets(data.tickets);
+          if (data.tickets.length > 0) {
+            setStatus(data.tickets[0].status);
+            setNotes(data.tickets[0].notes || "");
+          }
+        } else {
+          throw new Error('Invalid data format received');
         }
       } catch (error) {
         console.error('Error fetching tickets:', error);
