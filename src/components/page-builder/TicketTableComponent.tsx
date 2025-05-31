@@ -74,8 +74,8 @@ const DEMO_TICKETS = [
 
 const columns: Column[] = [
   { header: 'Ticket ID', accessor: 'id', type: 'text' },
-  { header: 'Name', accessor: 'full_name', type: 'text' },
-  { header: 'Ticket Type', accessor: 'actual_ticket_type', type: 'chip' },
+  { header: 'Name', accessor: 'first_name', type: 'text' },
+  { header: 'Ticket Type', accessor: 'ticket_type', type: 'chip' },
   { header: 'Status', accessor: 'status', type: 'chip' },
   { header: 'Created At', accessor: 'created_at', type: 'text' }
 ];
@@ -104,7 +104,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [loading, setLoading] = useState(true);
   const { session } = useAuth();
 
-  // Use configured columns or fallback to default
   const tableColumns: Column[] = config?.columns?.map(col => ({
     header: col.label,
     accessor: col.key,
@@ -117,10 +116,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         setLoading(true);
         const authToken = session?.access_token;
 
-        // Use configured endpoint or fallback to default
         const endpoint = config?.apiEndpoint || '/api/tickets';
         const apiUrl = `${API_URI}${endpoint}`;
-        console.log("apiUrl_ticket table",apiUrl);
         
         const response = await fetch(apiUrl, {
           method: 'GET',
@@ -134,51 +131,44 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           throw new Error(`Failed to fetch tickets: ${response.status}`);
         }
 
-        const responseData = await response.json();
-        const tickets = responseData?.tickets || [];
+        // Clone the response before reading it
+        const responseClone = response.clone();
+        const responseData = await responseClone.json();
 
-        if (!Array.isArray(tickets)) {
+        // Handle different response formats
+        let tickets = [];
+        if (Array.isArray(responseData)) {
+          tickets = responseData;
+        } else if (responseData.tickets && Array.isArray(responseData.tickets)) {
+          tickets = responseData.tickets;
+        } else if (responseData.data && Array.isArray(responseData.data)) {
+          tickets = responseData.data;
+        } else {
           throw new Error('Invalid data format received');
         }
 
-        // Transform the data to include full_name and format dates
+        // Transform the data
         const transformedData = tickets.map(ticket => ({
           ...ticket,
-          full_name: `${ticket.first_name} ${ticket.last_name}`.trim(),
-          created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
+          created_at: ticket.created_at ? new Date(ticket.created_at).toLocaleString('en-IN', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit'
-          }),
-          actual_ticket_type: Array.isArray(ticket.actual_ticket_type) 
-            ? ticket.actual_ticket_type[0] 
-            : ticket.actual_ticket_type
+          }) : 'N/A',
+          // Ensure ticket_type is a string
+          ticket_type: Array.isArray(ticket.ticket_type) 
+            ? ticket.ticket_type[0] 
+            : ticket.ticket_type || 'N/A',
+          // Ensure status is a valid value
+          status: ticket.status || 'Pending'
         }));
 
         setData(transformedData);
       } catch (error) {
-        console.error('Error fetching tickets:', error);
-        toast.error('Failed to fetch tickets data, using demo data');
-        
-        // Transform demo data similarly
-        const transformedDemoData = DEMO_TICKETS.map(ticket => ({
-          ...ticket,
-          full_name: `${ticket.first_name} ${ticket.last_name}`.trim(),
-          created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          actual_ticket_type: Array.isArray(ticket.actual_ticket_type) 
-            ? ticket.actual_ticket_type[0] 
-            : ticket.actual_ticket_type
-        }));
-        
-        setData(transformedDemoData);
+        toast.error('Failed to load tickets');
+        setData([]);
       } finally {
         setLoading(false);
       }

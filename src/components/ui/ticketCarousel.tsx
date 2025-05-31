@@ -132,23 +132,23 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
 
   useEffect(() => {
     const fetchTickets = async () => {
-      if (!user || !tenantId) return;
-
       try {
         setLoading(true);
-        // Use configured endpoint if available, otherwise use default
         const endpoint = config?.apiEndpoint || '/api/tickets';
         const apiUrl = `${API_URI}${endpoint}`;
-        console.log("apiUrl_ticket carousel",apiUrl);
         
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         
+        if (!token) {
+          throw new Error('Authentication required');
+        }
+
         const response = await fetch(`${apiUrl}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': token ? `Bearer ${token}` : ''
+            'Authorization': `Bearer ${token}`
           }
         });
 
@@ -158,7 +158,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
 
         const data = await response.json();
         
-        // Expect the API to return an array of tickets directly
         if (Array.isArray(data)) {
           setTickets(data);
           if (data.length > 0) {
@@ -166,7 +165,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
             setNotes(data[0].notes || "");
           }
         } else if (data.tickets && Array.isArray(data.tickets)) {
-          // Fallback for API that returns { tickets: [] }
           setTickets(data.tickets);
           if (data.tickets.length > 0) {
             setStatus(data.tickets[0].status);
@@ -176,7 +174,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
           throw new Error('Invalid data format received');
         }
       } catch (error) {
-        console.error('Error fetching tickets:', error);
         toast.error('Failed to load tickets. Using demo data.');
         setTickets(DEMO_TICKETS);
         if (DEMO_TICKETS.length > 0) {
@@ -189,7 +186,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
     };
 
     fetchTickets();
-  }, [user, tenantId, config?.apiEndpoint]);
+  }, [user?.id, tenantId, config?.apiEndpoint]);
 
   const currentTicket = tickets[currentIndex];
 
@@ -212,7 +209,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
   const handleSubmit = async () => {
     try {
       if (!currentTicket?.id) {
-        console.error('No ticket ID available');
+        toast.error('No ticket ID available');
         return;
       }
 
@@ -238,7 +235,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Update the local tickets array
       setTickets(tickets.map(ticket => 
         ticket.id === currentTicket.id 
           ? { ...ticket, notes: notes, status: status }
@@ -248,7 +244,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
       toast.success('Ticket updated successfully');
       nextSlide();
     } catch (err) {
-      console.error('Error:', err);
       toast.error('An unexpected error occurred. Please try again.');
     }
   };

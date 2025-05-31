@@ -59,50 +59,46 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
   const { session } = useAuth();
 
   useEffect(() => {
-    const fetchCards = async () => {
+    const fetchCardData = async () => {
       try {
         setLoading(true);
-        const authToken = session?.access_token;
-
-        // Use configured endpoint or fallback to default
         const endpoint = config?.apiEndpoint || '/api/card-stats';
         const apiUrl = `${API_URI}${endpoint}`;
-        console.log("apiUrl_data_card", apiUrl);
         
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
+            'Authorization': token ? `Bearer ${token}` : ''
           }
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch card data');
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
         
-        // Expect the API to return an array of card data
         if (Array.isArray(data)) {
           setCards(data);
         } else if (data.cards && Array.isArray(data.cards)) {
-          // Fallback for API that returns { cards: [] }
           setCards(data.cards);
         } else {
           throw new Error('Invalid data format received');
         }
       } catch (error) {
-        console.error('Error fetching card data:', error);
-        toast.error('Failed to fetch card data, using demo data');
+        toast.error('Failed to load card data. Using demo data.');
         setCards(DEMO_DATA);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCards();
-  }, [session, config?.apiEndpoint]);
+    fetchCardData();
+  }, [config?.apiEndpoint]);
 
   if (loading) {
     return (
@@ -114,7 +110,7 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
 
   return (
     <div className="space-y-6">
-      <div className="text-xl font-bold">{config?.title || "My Cards"}</div>
+      
 
       <div className="cardlist grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-6 w-full">
         {cards.map((card) => (
