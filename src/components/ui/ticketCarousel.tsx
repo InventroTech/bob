@@ -11,91 +11,103 @@ import { Textarea } from "@/components/ui/textarea";
 import { API_URI } from '@/const';
 
 interface Ticket {
-  id: string;
+  id: number;
+  created_at: string;
+  tenant_id: string;
   first_name: string;
   last_name: string;
   phone_number: string;
   email_id: string;
+  praja_user_id: string;
   ticket_type: string;
-  actual_ticket_type: string[];
-  created_at: string;
   assigned_to: string;
   status: "Completed" | "Pending";
-  description: string;
-  notes?: string;
+  Description: string;
+  snooze_until: string | null;
+  retry_count: number;
 }
 
 // Demo data for fallback
 const DEMO_TICKETS: Ticket[] = [
   {
-    id: "TICK-001",
+    id: 1,
+    created_at: "2024-03-15T10:30:00Z",
+    tenant_id: "",
     first_name: "John",
     last_name: "Doe",
     phone_number: "+91 98765 43210",
     email_id: "john.doe@example.com",
+    praja_user_id: "",
     ticket_type: "Support",
-    actual_ticket_type: ["Technical", "Hardware"],
-    created_at: "2024-03-15T10:30:00Z",
     assigned_to: "Support Team",
     status: "Pending",
-    description: "Issue with login functionality",
-    notes: "Customer reported login issues on mobile app"
+    Description: "Issue with login functionality",
+    snooze_until: null,
+    retry_count: 0
   },
   {
-    id: "TICK-002",
+    id: 2,
+    created_at: "2024-03-14T15:45:00Z",
+    tenant_id: "",
     first_name: "Jane",
     last_name: "Smith",
     phone_number: "+91 87654 32109",
     email_id: "jane.smith@example.com",
+    praja_user_id: "",
     ticket_type: "Billing",
-    actual_ticket_type: ["Payment", "Invoice"],
-    created_at: "2024-03-14T15:45:00Z",
     assigned_to: "Billing Team",
     status: "Completed",
-    description: "Payment gateway integration issue",
-    notes: "Resolved payment processing error"
+    Description: "Payment gateway integration issue",
+    snooze_until: null,
+    retry_count: 0
   },
   {
-    id: "TICK-003",
+    id: 3,
+    created_at: "2024-03-13T09:15:00Z",
+    tenant_id: "",
     first_name: "Mike",
     last_name: "Johnson",
     phone_number: "+91 76543 21098",
     email_id: "mike.j@example.com",
+    praja_user_id: "",
     ticket_type: "Feature Request",
-    actual_ticket_type: ["Enhancement", "UI"],
-    created_at: "2024-03-13T09:15:00Z",
     assigned_to: "Product Team",
     status: "Pending",
-    description: "Request for new dashboard features",
-    notes: "Customer wants additional analytics features"
+    Description: "Request for new dashboard features",
+    snooze_until: null,
+    retry_count: 0
   },
   {
-    id: "TICK-004",
+    id: 4,
+    created_at: "2024-03-12T11:20:00Z",
+    tenant_id: "",
     first_name: "Sarah",
     last_name: "Williams",
     phone_number: "+91 98765 12340",
     email_id: "sarah.w@example.com",
+    praja_user_id: "",
     ticket_type: "Support",
-    actual_ticket_type: ["Software", "Bug"],
-    created_at: "2024-03-12T11:20:00Z",
     assigned_to: "Development Team",
     status: "Pending",
-    description: "Application crashes on startup",
-    notes: "Issue occurs only on Windows 11"
+    Description: "Application crashes on startup",
+    snooze_until: null,
+    retry_count: 0
   },
   {
-    id: "TICK-005",
+    id: 5,
+    created_at: "2024-03-11T14:30:00Z",
+    tenant_id: "",
     first_name: "David",
     last_name: "Brown",
     phone_number: "+91 87654 56789",
     email_id: "david.b@example.com",
+    praja_user_id: "",
     ticket_type: "Feature Request",
-    actual_ticket_type: ["Enhancement", "API"],
-    created_at: "2024-03-11T14:30:00Z",
     assigned_to: "API Team",
     status: "Completed",
-    description: "Need additional API endpoints",
-    notes: "Implemented new endpoints for data export"
+    Description: "Need additional API endpoints",
+    snooze_until: null,
+    retry_count: 0
   }
 ];
 
@@ -129,6 +141,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
   const [status, setStatus] = useState<"Completed" | "Pending">("Pending");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     const fetchTickets = async () => {
@@ -161,14 +174,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         if (Array.isArray(data)) {
           setTickets(data);
           if (data.length > 0) {
-            setStatus(data[0].status);
-            setNotes(data[0].notes || "");
-          }
-        } else if (data.tickets && Array.isArray(data.tickets)) {
-          setTickets(data.tickets);
-          if (data.tickets.length > 0) {
-            setStatus(data.tickets[0].status);
-            setNotes(data.tickets[0].notes || "");
+            setStatus(data[0].status as "Completed" | "Pending");
+            setNotes(data[0].Description || "");
           }
         } else {
           throw new Error('Invalid data format received');
@@ -178,7 +185,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         setTickets(DEMO_TICKETS);
         if (DEMO_TICKETS.length > 0) {
           setStatus(DEMO_TICKETS[0].status);
-          setNotes(DEMO_TICKETS[0].notes || "");
+          setNotes(DEMO_TICKETS[0].Description || "");
         }
       } finally {
         setLoading(false);
@@ -188,13 +195,29 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
     fetchTickets();
   }, [user?.id, tenantId, config?.apiEndpoint]);
 
-  const currentTicket = tickets[currentIndex];
+  // Get current ticket with fallback
+  const currentTicket = tickets[currentIndex] || {
+    id: 0,
+    created_at: new Date().toISOString(),
+    tenant_id: "",
+    first_name: "",
+    last_name: "",
+    phone_number: "",
+    email_id: "",
+    praja_user_id: "",
+    ticket_type: "",
+    assigned_to: "",
+    status: "Pending",
+    Description: "",
+    snooze_until: null,
+    retry_count: 0
+  };
 
   const nextSlide = async () => {
     setCurrentIndex((prev) => (prev + 1) % tickets.length);
     if (tickets[(currentIndex + 1) % tickets.length]) {
       setStatus(tickets[(currentIndex + 1) % tickets.length].status);
-      setNotes(tickets[(currentIndex + 1) % tickets.length].notes || "");
+      setNotes(tickets[(currentIndex + 1) % tickets.length].Description || "");
     }
   };
 
@@ -202,7 +225,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
     setCurrentIndex((prevIndex) => (prevIndex - 1 + tickets.length) % tickets.length);
     if (tickets[(currentIndex - 1 + tickets.length) % tickets.length]) {
       setStatus(tickets[(currentIndex - 1 + tickets.length) % tickets.length].status);
-      setNotes(tickets[(currentIndex - 1 + tickets.length) % tickets.length].notes || "");
+      setNotes(tickets[(currentIndex - 1 + tickets.length) % tickets.length].Description || "");
     }
   };
 
@@ -213,38 +236,99 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const endpoint = config?.apiEndpoint || '/api/tickets';
-      const apiUrl = `${API_URI}${endpoint}`;
-      
-      const response = await fetch(`${apiUrl}/${currentTicket.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({
-          notes: notes,
-          status: status
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!tenantId) {
+        toast.error('Tenant ID is required');
+        return;
       }
 
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+
+      console.log('Attempting to update ticket:', {
+        id: currentTicket.id,
+        tenant_id: tenantId,
+        status,
+        notes
+      });
+
+      // First verify the ticket exists
+      const { data: existingTicket, error: fetchError } = await supabase
+        .from('support_ticket')
+        .select('*')
+        .eq('id', currentTicket.id)
+        .eq('tenant_id', tenantId)
+        .single();
+
+      if (fetchError) {
+        console.error('Fetch error:', fetchError);
+        throw new Error(`Failed to verify ticket: ${fetchError.message}`);
+      }
+
+      if (!existingTicket) {
+        throw new Error(`Ticket not found with ID: ${currentTicket.id}`);
+      }
+
+      console.log('Found existing ticket:', existingTicket);
+
+      // Perform the update
+      const { data: updatedTicket, error: updateError } = await supabase
+        .from('support_ticket')
+        .update({
+          status: status,
+          Description: notes,
+          ...(status === "Completed" && { completed_at: new Date().toISOString() })
+        })
+        .eq('id', currentTicket.id)
+        .eq('tenant_id', tenantId)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Update error details:', {
+          error: updateError,
+          ticketId: currentTicket.id,
+          tenantId: tenantId,
+          status,
+          notes
+        });
+        throw new Error(`Failed to update ticket: ${updateError.message}`);
+      }
+
+      if (!updatedTicket) {
+        throw new Error('No data returned after update');
+      }
+
+      console.log('Successfully updated ticket:', updatedTicket);
+
+      // Update the local state
       setTickets(tickets.map(ticket => 
         ticket.id === currentTicket.id 
-          ? { ...ticket, notes: notes, status: status }
+          ? { 
+              ...ticket, 
+              status: status, 
+              Description: notes
+            }
           : ticket
       ));
 
       toast.success('Ticket updated successfully');
       nextSlide();
-    } catch (err) {
-      toast.error('An unexpected error occurred. Please try again.');
+    } catch (err: any) {
+      console.error('Update error:', {
+        error: err,
+        message: err.message,
+        ticketId: currentTicket?.id,
+        tenantId,
+        status,
+        notes
+      });
+      toast.error(err.message || 'Failed to update ticket. Please try again.');
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -256,13 +340,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
     );
   }
 
-  if (tickets.length === 0) {
+  if (!tickets.length) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
         No tickets found
       </div>
     );
   }
+
+  // Get formatted date with fallback
+  const formattedDate = currentTicket.created_at 
+    ? new Date(currentTicket.created_at).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })
+    : 'N/A';
 
   return (
     <div className="relative w-full h-full">
@@ -277,21 +370,23 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
               <p className="text-sm text-muted-foreground">
                 {currentTicket.first_name} {currentTicket.last_name}
               </p>
-              <p className="text-sm text-muted-foreground">{currentTicket.id}</p>
+              <p className="text-sm text-muted-foreground">PRAJA ID: {currentTicket.praja_user_id || 'N/A'}</p>
             </div>
-            {config?.showFilters !== false && (
-              <div className="flex items-center gap-4">
-                <Select value={status} onValueChange={(value: "Completed" | "Pending") => setStatus(value)}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Completed">Completed</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="flex items-center gap-4">
+              <Select 
+                value={status} 
+                onValueChange={(value: "Completed" | "Pending") => setStatus(value)}
+                disabled={updating}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Ticket Details */}
@@ -299,28 +394,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
             <div className="space-y-3">
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                 <Tag className="h-4 w-4 mr-2 text-primary" />
-                <span className="font-medium">{currentTicket.actual_ticket_type[0]}</span>
+                <span className="font-medium">{currentTicket.ticket_type || 'N/A'}</span>
               </div>
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                 <User className="h-4 w-4 mr-2 text-primary" />
-                <span className="font-medium">{currentTicket.assigned_to}</span>
+                <span className="font-medium">{currentTicket.assigned_to || 'Unassigned'}</span>
               </div>
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                 <Calendar className="h-4 w-4 mr-2 text-primary" />
-                <span className="font-medium">
-                  {new Date(currentTicket.created_at).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                  })}
-                </span>
+                <span className="font-medium">{formattedDate}</span>
               </div>
             </div>
             <div className="space-y-3">
               <div className="bg-muted/50 p-3 rounded-md">
                 <p className="text-sm font-medium mb-1">Contact Information</p>
-                <p className="text-sm text-muted-foreground">{currentTicket.phone_number}</p>
-                <p className="text-sm text-muted-foreground">{currentTicket.email_id}</p>
+                <p className="text-sm text-muted-foreground">{currentTicket.phone_number || 'N/A'}</p>
+                <p className="text-sm text-muted-foreground">{currentTicket.email_id || 'N/A'}</p>
               </div>
             </div>
           </div>
@@ -328,7 +417,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
           {/* Description */}
           <div className="bg-muted/30 p-4 rounded-md">
             <p className="text-sm font-medium mb-2">Description</p>
-            <p className="text-sm text-muted-foreground">{currentTicket.description}</p>
+            <p className="text-sm text-muted-foreground">{currentTicket.Description || 'No description available'}</p>
           </div>
 
           {/* Notes Section */}
@@ -339,6 +428,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add notes about this ticket..."
               className="min-h-[100px]"
+              disabled={updating}
             />
           </div>
         </div>
@@ -347,15 +437,24 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
           <button
             onClick={prevSlide}
-            className="bg-gray-200 text-black px-6 py-2 rounded-md hover:bg-gray-300 transition-colors"
+            className="bg-gray-200 text-black px-6 py-2 rounded-md hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={updating}
           >
             Previous
           </button>
           <button
             onClick={handleSubmit}
-            className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors"
+            className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            disabled={updating}
           >
-            Save & Continue
+            {updating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Updating...
+              </>
+            ) : (
+              'Save & Continue'
+            )}
           </button>
         </div>
       </div>
