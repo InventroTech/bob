@@ -236,11 +236,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         return;
       }
 
-      if (!tenantId) {
-        toast.error('Tenant ID is required');
-        return;
-      }
-
       setUpdating(true);
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -248,31 +243,23 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         throw new Error('Authentication required');
       }
 
-      console.log('Attempting to update ticket:', {
-        id: currentTicket.id,
-        tenant_id: tenantId,
-        status,
-        notes
-      });
-
       // First verify the ticket exists
-      const { data: existingTicket, error: fetchError } = await supabase
+      const { data: existingTickets, error: fetchError } = await supabase
         .from('support_ticket')
         .select('*')
-        .eq('id', currentTicket.id)
-        .eq('tenant_id', tenantId)
-        .single();
+        .eq('id', currentTicket.id);
 
       if (fetchError) {
         console.error('Fetch error:', fetchError);
         throw new Error(`Failed to verify ticket: ${fetchError.message}`);
       }
 
-      if (!existingTicket) {
+      if (!existingTickets || existingTickets.length === 0) {
         throw new Error(`Ticket not found with ID: ${currentTicket.id}`);
       }
 
-      console.log('Found existing ticket:', existingTicket);
+      // Use the first ticket if multiple exist
+      const existingTicket = existingTickets[0];
 
       // Perform the update
       const { data: updatedTicket, error: updateError } = await supabase
@@ -283,15 +270,13 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
           ...(status === "Completed" && { completed_at: new Date().toISOString() })
         })
         .eq('id', currentTicket.id)
-        .eq('tenant_id', tenantId)
         .select()
-        .single();
+        .maybeSingle();
 
       if (updateError) {
         console.error('Update error details:', {
           error: updateError,
           ticketId: currentTicket.id,
-          tenantId: tenantId,
           status,
           notes
         });
@@ -301,8 +286,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
       if (!updatedTicket) {
         throw new Error('No data returned after update');
       }
-
-      console.log('Successfully updated ticket:', updatedTicket);
 
       // Update the local state
       setTickets(tickets.map(ticket => 
@@ -322,7 +305,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         error: err,
         message: err.message,
         ticketId: currentTicket?.id,
-        tenantId,
         status,
         notes
       });
