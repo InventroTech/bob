@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -127,6 +127,268 @@ interface ColumnConfig {
   label: string;
   type: 'text' | 'chip' | 'date' | 'number';
 }
+
+// Move ConfigurationPanel outside the main component
+interface ConfigurationPanelProps {
+  selectedComponent: CanvasComponentData;
+  setCanvasComponents: React.Dispatch<React.SetStateAction<CanvasComponentData[]>>;
+  onClose: () => void;
+}
+
+const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedComponent, setCanvasComponents, onClose }) => {
+  const { id: selectedComponentId, config: initialConfig = {}, type: selectedComponentType } = selectedComponent;
+  const initialColumns = initialConfig.columns || [];
+
+  type LocalConfigType = {
+    apiEndpoint: string;
+    title: string;
+    description: string;
+    refreshInterval: number;
+    showFilters: boolean;
+  };
+
+  // Local state for all input fields
+  const [localConfig, setLocalConfig] = useState<LocalConfigType>({
+    apiEndpoint: initialConfig.apiEndpoint || '',
+    title: initialConfig.title || '',
+    description: initialConfig.description || '',
+    refreshInterval: initialConfig.refreshInterval || 0,
+    showFilters: initialConfig.showFilters || false,
+  });
+
+  // Separate state for columns
+  const [localColumns, setLocalColumns] = useState<ColumnConfig[]>(initialColumns);
+  const [numColumns, setNumColumns] = useState<number>(initialColumns.length);
+
+  // Debounced update to parent state
+  const debouncedUpdate = useCallback(
+    (updates: Partial<ComponentConfig>) => {
+      const updateFn = (prev: CanvasComponentData[]) => prev.map(comp => 
+        comp.id === selectedComponentId 
+          ? { 
+              ...comp, 
+              config: { 
+                ...(comp.config || {}), 
+                ...updates 
+              } 
+            }
+          : comp
+      );
+      setCanvasComponents(updateFn);
+    },
+    [selectedComponentId, setCanvasComponents]
+  );
+
+  const debouncedUpdateWithDelay = useMemo(
+    () => debounce(debouncedUpdate, 500),
+    [debouncedUpdate]
+  );
+
+  // Handle local input changes
+  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean) => {
+    setLocalConfig(prev => ({ ...prev, [field]: value }));
+    debouncedUpdateWithDelay({ [field]: value });
+  }, [debouncedUpdateWithDelay]);
+
+  // Handle column count change
+  const handleColumnCountChange = useCallback((count: number) => {
+    setNumColumns(count);
+    if (count < localColumns.length) {
+      // Remove extra columns
+      const newConfigs = localColumns.slice(0, count);
+      setLocalColumns(newConfigs);
+      debouncedUpdateWithDelay({ columns: newConfigs });
+    } else if (count > localColumns.length) {
+      // Add new empty columns
+      const newConfigs = [
+        ...localColumns,
+        ...Array(count - localColumns.length).fill({ key: '', label: '', type: 'text' })
+      ];
+      setLocalColumns(newConfigs);
+      debouncedUpdateWithDelay({ columns: newConfigs });
+    }
+  }, [localColumns, debouncedUpdateWithDelay]);
+
+  // Handle individual column field changes
+  const handleColumnFieldChange = useCallback((index: number, field: keyof ColumnConfig, value: string) => {
+    const newColumns = [...localColumns];
+    newColumns[index] = { ...newColumns[index], [field]: value };
+    setLocalColumns(newColumns);
+    debouncedUpdateWithDelay({ columns: newColumns });
+  }, [localColumns, debouncedUpdateWithDelay]);
+
+  const renderConfigFields = () => {
+    switch (selectedComponentType) {
+      case 'dataCard':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>API Endpoint</Label>
+              <Input
+                value={localConfig.apiEndpoint}
+                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
+                placeholder="/api/cards"
+              />
+            </div>
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={localConfig.title}
+                onChange={(e) => handleInputChange('title', e.target.value)}
+                placeholder="Card Title"
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                value={localConfig.description}
+                onChange={(e) => handleInputChange('description', e.target.value)}
+                placeholder="Card Description"
+              />
+            </div>
+            <div>
+              <Label>Refresh Interval (seconds)</Label>
+              <Input
+                type="number"
+                value={localConfig.refreshInterval}
+                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
+                placeholder="0 for no refresh"
+              />
+            </div>
+          </div>
+        );
+
+      case 'ticketTable':
+      case 'leadTable':
+      case 'oeLeadsTable':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>API Endpoint</Label>
+              <Input
+                value={localConfig.apiEndpoint}
+                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
+                placeholder="/api/tickets"
+              />
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <Label>Number of Columns</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={numColumns}
+                  onChange={(e) => handleColumnCountChange(parseInt(e.target.value) || 0)}
+                  className="w-24"
+                />
+              </div>
+
+              {Array.from({ length: numColumns }).map((_, index) => {
+                const column = localColumns[index] || { key: '', label: '', type: 'text' };
+                return (
+                  <div key={index} className="space-y-2 p-4 border rounded-lg">
+                    <h4 className="font-medium">Column {index + 1}</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Column Name</Label>
+                        <Input
+                          value={column.label}
+                          onChange={(e) => handleColumnFieldChange(index, 'label', e.target.value)}
+                          placeholder="Display Name"
+                        />
+                      </div>
+                      <div>
+                        <Label>Accessor Key</Label>
+                        <Input
+                          value={column.key}
+                          onChange={(e) => handleColumnFieldChange(index, 'key', e.target.value)}
+                          placeholder="data_key"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Label>Column Type</Label>
+                        <Select
+                          value={column.type}
+                          onValueChange={(value: 'text' | 'chip' | 'date' | 'number') => 
+                            handleColumnFieldChange(index, 'type', value)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="chip">Chip/Badge</SelectItem>
+                            <SelectItem value="date">Date</SelectItem>
+                            <SelectItem value="number">Number</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={localConfig.showFilters}
+                onCheckedChange={(checked) => handleInputChange('showFilters', checked)}
+              />
+              <Label>Show Filters</Label>
+            </div>
+          </div>
+        );
+
+      case 'ticketCarousel':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>API Endpoint</Label>
+              <Input
+                value={localConfig.apiEndpoint}
+                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
+                placeholder="/api/tickets/carousel"
+              />
+            </div>
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={localConfig.title}
+                onChange={(e) => handleInputChange('title', e.target.value)}
+                placeholder="Carousel Title"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                checked={localConfig.showFilters}
+                onCheckedChange={(checked) => handleInputChange('showFilters', checked)}
+              />
+              <Label>Show Status Filter</Label>
+            </div>
+          </div>
+        );
+
+      default:
+        return <div>No configuration available for this component type.</div>;
+    }
+  };
+
+  return (
+    <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">Component Configuration</h3>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      <Separator className="mb-4" />
+      {renderConfigFields()}
+    </aside>
+  );
+};
 
 const PageBuilder = () => {
   const { pageId } = useParams<{ pageId: string }>();
@@ -454,260 +716,6 @@ const PageBuilder = () => {
   // Property editor logic
   const selectedComponent = canvasComponents.find(c => c.id === selectedComponentId);
 
-  // Update the ConfigurationPanel component
-  const ConfigurationPanel = () => {
-    if (!selectedComponent) return null;
-
-    // Initialize with empty config if it doesn't exist
-    const initialConfig = selectedComponent.config || {};
-    const initialColumns = initialConfig.columns || [];
-
-    // Define the type for local config
-    type LocalConfigType = {
-      apiEndpoint: string;
-      title: string;
-      description: string;
-      refreshInterval: number;
-      showFilters: boolean;
-    };
-
-    // Local state for all input fields
-    const [localConfig, setLocalConfig] = useState<LocalConfigType>({
-      apiEndpoint: initialConfig.apiEndpoint || '',
-      title: initialConfig.title || '',
-      description: initialConfig.description || '',
-      refreshInterval: initialConfig.refreshInterval || 0,
-      showFilters: initialConfig.showFilters || false,
-    });
-
-    // Separate state for columns
-    const [localColumns, setLocalColumns] = useState<ColumnConfig[]>(initialColumns);
-    const [numColumns, setNumColumns] = useState<number>(initialColumns.length);
-
-    // Debounced update to parent state
-    const debouncedUpdate = useCallback(
-      debounce((updates: Partial<ComponentConfig>) => {
-        setCanvasComponents(prev => prev.map(comp => 
-          comp.id === selectedComponentId 
-            ? { 
-                ...comp, 
-                config: { 
-                  ...(comp.config || {}), 
-                  ...updates 
-                } 
-              }
-            : comp
-        ));
-      }, 500),
-      [selectedComponentId]
-    );
-
-    // Handle local input changes
-    const handleInputChange = (field: keyof LocalConfigType, value: any) => {
-      setLocalConfig(prev => ({ ...prev, [field]: value }));
-      debouncedUpdate({ [field]: value });
-    };
-
-    // Handle column count change
-    const handleColumnCountChange = (count: number) => {
-      setNumColumns(count);
-      if (count < localColumns.length) {
-        // Remove extra columns
-        const newConfigs = localColumns.slice(0, count);
-        setLocalColumns(newConfigs);
-        debouncedUpdate({ columns: newConfigs });
-      } else if (count > localColumns.length) {
-        // Add new empty columns
-        const newConfigs = [
-          ...localColumns,
-          ...Array(count - localColumns.length).fill({ key: '', label: '', type: 'text' })
-        ];
-        setLocalColumns(newConfigs);
-        debouncedUpdate({ columns: newConfigs });
-      }
-    };
-
-    // Handle individual column field changes
-    const handleColumnFieldChange = (index: number, field: keyof ColumnConfig, value: string) => {
-      const newColumns = [...localColumns];
-      newColumns[index] = { ...newColumns[index], [field]: value };
-      setLocalColumns(newColumns);
-      debouncedUpdate({ columns: newColumns });
-    };
-
-    const renderConfigFields = () => {
-      switch (selectedComponent.type) {
-        case 'dataCard':
-          return (
-            <div className="space-y-4">
-              <div>
-                <Label>API Endpoint</Label>
-                <Input
-                  value={localConfig.apiEndpoint}
-                  onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                  placeholder="/api/cards"
-                />
-              </div>
-              <div>
-                <Label>Title</Label>
-                <Input
-                  value={localConfig.title}
-                  onChange={(e) => handleInputChange('title', e.target.value)}
-                  placeholder="Card Title"
-                />
-              </div>
-              <div>
-                <Label>Description</Label>
-                <Textarea
-                  value={localConfig.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  placeholder="Card Description"
-                />
-              </div>
-              <div>
-                <Label>Refresh Interval (seconds)</Label>
-                <Input
-                  type="number"
-                  value={localConfig.refreshInterval}
-                  onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
-                  placeholder="0 for no refresh"
-                />
-              </div>
-            </div>
-          );
-
-        case 'ticketTable':
-        case 'leadTable':
-        case 'oeLeadsTable':
-          return (
-            <div className="space-y-4">
-              <div>
-                <Label>API Endpoint</Label>
-                <Input
-                  value={localConfig.apiEndpoint}
-                  onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                  placeholder="/api/tickets"
-                />
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label>Number of Columns</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={numColumns}
-                    onChange={(e) => handleColumnCountChange(parseInt(e.target.value) || 0)}
-                    className="w-24"
-                  />
-                </div>
-
-                {Array.from({ length: numColumns }).map((_, index) => {
-                  const column = localColumns[index] || { key: '', label: '', type: 'text' };
-                  return (
-                    <div key={index} className="space-y-2 p-4 border rounded-lg">
-                      <h4 className="font-medium">Column {index + 1}</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Column Name</Label>
-                          <Input
-                            value={column.label}
-                            onChange={(e) => handleColumnFieldChange(index, 'label', e.target.value)}
-                            placeholder="Display Name"
-                          />
-                        </div>
-                        <div>
-                          <Label>Accessor Key</Label>
-                          <Input
-                            value={column.key}
-                            onChange={(e) => handleColumnFieldChange(index, 'key', e.target.value)}
-                            placeholder="data_key"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <Label>Column Type</Label>
-                          <Select
-                            value={column.type}
-                            onValueChange={(value: 'text' | 'chip' | 'date' | 'number') => 
-                              handleColumnFieldChange(index, 'type', value)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="text">Text</SelectItem>
-                              <SelectItem value="chip">Chip/Badge</SelectItem>
-                              <SelectItem value="date">Date</SelectItem>
-                              <SelectItem value="number">Number</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={localConfig.showFilters}
-                  onCheckedChange={(checked) => handleInputChange('showFilters', checked)}
-                />
-                <Label>Show Filters</Label>
-              </div>
-            </div>
-          );
-
-        case 'ticketCarousel':
-          return (
-            <div className="space-y-4">
-              <div>
-                <Label>API Endpoint</Label>
-                <Input
-                  value={localConfig.apiEndpoint}
-                  onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                  placeholder="/api/tickets/carousel"
-                />
-              </div>
-              <div>
-                <Label>Title</Label>
-                <Input
-                  value={localConfig.title}
-                  onChange={(e) => handleInputChange('title', e.target.value)}
-                  placeholder="Carousel Title"
-                />
-              </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={localConfig.showFilters}
-                  onCheckedChange={(checked) => handleInputChange('showFilters', checked)}
-                />
-                <Label>Show Status Filter</Label>
-              </div>
-            </div>
-          );
-
-        default:
-          return <div>No configuration available for this component type.</div>;
-      }
-    };
-
-    return (
-      <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Component Configuration</h3>
-          <Button variant="ghost" size="sm" onClick={() => setSelectedComponentId(null)}>
-            Close
-          </Button>
-        </div>
-        <Separator className="mb-4" />
-        {renderConfigFields()}
-      </aside>
-    );
-  };
-
   return (
     <DndContext 
       sensors={sensors} 
@@ -965,7 +973,13 @@ const PageBuilder = () => {
       </DragOverlay>
 
       {/* Add the configuration panel */}
-      {selectedComponentId && <ConfigurationPanel />}
+      {selectedComponentId && (
+        <ConfigurationPanel
+          selectedComponent={canvasComponents.find(c => c.id === selectedComponentId) || {} as CanvasComponentData}
+          setCanvasComponents={setCanvasComponents}
+          onClose={() => setSelectedComponentId(null)}
+        />
+      )}
     </DndContext>
   );
 };
