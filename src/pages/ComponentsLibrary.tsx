@@ -48,7 +48,7 @@ import {
   ButtonComponent,
   ImageComponent,
 } from "@/components/page-builder"; // Import placeholder components
-import LeadCardTemplate from "@/builder/templates/lead-card";
+import LeadCardTemplate from "@/components/ui/leadCardTemplate";
 import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
 import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
 import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";

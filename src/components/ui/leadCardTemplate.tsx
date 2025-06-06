@@ -49,7 +49,7 @@ const LeadCardTemplate = ({attributes}: {attributes: any}) => {
     </div>
     <InfoCards attributes={attributes.infoData} />
     <TaskCard attributes={attributes.taskData} />
-    <Notes attributes={attributes.notesData} />
+    <Notes notes={attributes.notes} setNotes={() => {}} />
     </div>
   )
 }

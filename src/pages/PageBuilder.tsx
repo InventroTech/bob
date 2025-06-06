@@ -74,7 +74,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
 import { ProgressBar } from "@/components/ui/progressBar";
 import { TicketTableComponent } from "@/components/page-builder/TicketTableComponent";
-import { TicketCarousel } from "@/components/ui/ticketCarousel";
+import { TicketCarousel } from "@/components/page-builder/ticketCarousel";
 import { Textarea } from "@/components/ui/textarea";
 import { debounce } from 'lodash';
 

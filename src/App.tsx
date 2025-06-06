@@ -26,52 +26,12 @@ import CustomAppDashboard from './pages/CustomAppDashboard';
 import CustomAppPage from './pages/CustomAppPage';
 import CustomAppProfilePage from './pages/CustomAppProfilePage';
 import InviteUsersPage from './pages/InviteUsersPage';
-import LeadCardTemplate from "./builder/templates/lead-card";
+import LeadCardTemplate from "./components/ui/leadCardTemplate";
 import { CardComponent } from "./layout/CardEditLayout";
 import { LeadFormComponent } from "./components/page-builder/LeadsTableForm";
 import AddUserPage from "./pages/AddUserPage";
 import AuthCallbackPage from "./pages/AuthCallBackPage";
 const queryClient = new QueryClient();
-const attributes = {
-  name: "Mamata Banerjee",
-  age: "50",
-  phone: "+91 9876543210",
-  email: "pisimoni@tmc.chor",
-  party: "TMC",
-  partyColor: "green",
-  textColor: "black",
-  flag:"https://5.imimg.com/data5/SELLER/Default/2023/3/294646333/KS/CI/NV/14541723/tmc-indian-national-flag.jpg",
-  address: "Kalighat, Kolkata",
-  tag: "Lead",
-  image: "https://www.hindustantimes.com/ht-img/img/2025/04/04/550x309/Mamata_Banerjee_1740645038692_1743754103685.jpg",
-  infoData:[
-    {
-      id:1,
-      title: "Last Connected",
-      description: "10 days ago",
-    }
-  ],
-  taskData:{
-      title: "Task Details",
-      tasks:[
-        {
-          id:1,
-          title: "Veiw Poster Layout",
-          description: "",
-        },
-        {
-          id:2,
-          title: "Package to pitch",
-          description: ": Monthly",
-        },
-      ],
-      description:"Prospect showed interest in trail activation."
-    
-    },
-    notesData:{
-      title: "Additional Notes",
-    }
-}
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <Router>
@@ -99,7 +59,7 @@ const App = () => (
             <Route path="/leads" element={<LeadFormComponent />} />
             <Route path="/cards" element={<CardComponent />} />
             <Route path="/tables/:tableName" element={<TableDetailsPage />} />
-            <Route path="/builder/templates/lead-card" element={<LeadCardTemplate attributes={attributes} />} />
+            <Route path="/builder/templates/lead-card" element={<LeadCardTemplate attributes={{}} />} />
             <Route path="/add-user" element={<AddUserPage />} />
           </Route>
 

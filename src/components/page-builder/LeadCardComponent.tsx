@@ -1,6 +1,6 @@
-import InfoCards from '@/builder/templates/lead-card/infoCard';
-import Notes from '@/builder/templates/lead-card/notes';
-import TaskCard from '@/builder/templates/lead-card/taskCard';
+import InfoCards from '@/components/ui/infoCard';
+import Notes from '@/components/ui/notes';
+import TaskCard from '@/components/ui/taskCard';
 import React, { ReactNode, useEffect, useState } from 'react';
 import Dropdown from '../ui/dropdown';
 import Requirements from '../ui/Requirements';
