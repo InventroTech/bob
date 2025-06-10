@@ -5,12 +5,36 @@ import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
 import { API_URI } from '@/const';
+import { Badge } from '@/components/ui/badge';
 
 interface Column {
   header: string;
   accessor: string;
   type: 'text' | 'chip';
 }
+
+// Status color mapping
+const getStatusColor = (status: string) => {
+  const statusLower = status.toLowerCase();
+  switch (statusLower) {
+    case 'open':
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    case 'in progress':
+    case 'wip':
+      return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'resolved':
+    case 'completed':
+      return 'bg-green-100 text-green-800 border-green-200';
+    case 'closed':
+      return 'bg-gray-100 text-gray-800 border-gray-200';
+    case 'cancelled':
+    case 'failed':
+      return 'bg-red-100 text-red-800 border-red-200';
+    default:
+      return 'bg-gray-100 text-gray-800 border-gray-200';
+  }
+};
 
 // Demo data for fallback
 const DEMO_TICKETS = [
@@ -24,8 +48,9 @@ const DEMO_TICKETS = [
     ticket_type: "Support",
     actual_ticket_type: ["Billing_cancellation"],
     created_at: "2024-03-15T10:30:00",
-    assigned_to: "CSE",
-    status: "Pending",
+    assigned_to: "CSE001",
+    resolution_status: "Open",
+    reason: "Need help with billing cancellation",
     Description: "Need help with billing cancellation"
   },
   {
@@ -38,8 +63,9 @@ const DEMO_TICKETS = [
     ticket_type: "Support",
     actual_ticket_type: ["poster_update"],
     created_at: "2024-03-15T11:45:00",
-    assigned_to: "CSE",
-    status: "In Progress",
+    assigned_to: "CSE002",
+    resolution_status: "In Progress",
+    reason: "Update poster design",
     Description: "Update poster design"
   },
   {
@@ -52,8 +78,9 @@ const DEMO_TICKETS = [
     ticket_type: "Support",
     actual_ticket_type: ["badge_requested"],
     created_at: "2024-03-15T09:15:00",
-    assigned_to: "CSE",
-    status: "Completed",
+    assigned_to: "CSE003",
+    resolution_status: "Resolved",
+    reason: "Request for new badge",
     Description: "Request for new badge"
   },
   {
@@ -66,18 +93,19 @@ const DEMO_TICKETS = [
     ticket_type: "Support",
     actual_ticket_type: ["Others"],
     created_at: "2024-03-15T14:20:00",
-    assigned_to: "CSE",
-    status: "Open",
+    assigned_to: "CSE004",
+    resolution_status: "Pending",
+    reason: "General inquiry about services",
     Description: "General inquiry about services"
   }
 ];
 
 const columns: Column[] = [
-  { header: 'Ticket ID', accessor: 'id', type: 'text' },
-  { header: 'Name', accessor: 'first_name', type: 'text' },
-  { header: 'Ticket Type', accessor: 'ticket_type', type: 'chip' },
-  { header: 'Status', accessor: 'status', type: 'chip' },
-  { header: 'Created At', accessor: 'created_at', type: 'text' }
+  { header: 'Name', accessor: 'name', type: 'text' },
+  { header: 'Created At', accessor: 'created_at', type: 'text' },
+  { header: 'Assigned To', accessor: 'cse_name', type: 'text' },
+  { header: 'Reason', accessor: 'reason', type: 'text' },
+  { header: 'Resolution Status', accessor: 'resolution_status', type: 'chip' }
 ];
 
 interface TicketTableProps {
@@ -147,9 +175,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           throw new Error('Invalid data format received');
         }
 
-        // Transform the data
+        // Transform the data with the new attributes
         const transformedData = tickets.map(ticket => ({
           ...ticket,
+          // Format created_at
           created_at: ticket.created_at ? new Date(ticket.created_at).toLocaleString('en-IN', {
             year: 'numeric',
             month: 'short',
@@ -157,18 +186,58 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             hour: '2-digit',
             minute: '2-digit'
           }) : 'N/A',
-          // Ensure ticket_type is a string
-          ticket_type: Array.isArray(ticket.ticket_type) 
-            ? ticket.ticket_type[0] 
-            : ticket.ticket_type || 'N/A',
-          // Ensure status is a valid value
-          status: ticket.status || 'Pending'
+          // Use cse_name for assigned to
+          cse_name: ticket.cse_name || ticket.assigned_to || 'Unassigned',
+          // Combine first_name and last_name for name
+          name: ticket.first_name && ticket.last_name 
+            ? `${ticket.first_name} ${ticket.last_name}`
+            : ticket.name || 'N/A',
+          // Use reason field
+          reason: ticket.reason || ticket.Description || 'No reason provided',
+          // Use resolution_status with proper formatting
+          resolution_status: ticket.resolution_status || ticket.status || 'Open'
         }));
 
-        setData(transformedData);
+        // If no data found, use demo data
+        if (transformedData.length === 0) {
+          console.log('No tickets found, using demo data');
+          const demoData = DEMO_TICKETS.map(ticket => ({
+            ...ticket,
+            created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            cse_name: ticket.assigned_to || 'Unassigned',
+            name: `${ticket.first_name} ${ticket.last_name}`,
+            reason: ticket.reason || ticket.Description || 'No reason provided',
+            resolution_status: ticket.resolution_status || 'Open'
+          }));
+          setData(demoData);
+        } else {
+          setData(transformedData);
+        }
       } catch (error) {
-        toast.error('Failed to load tickets');
-        setData([]);
+        console.error('Error fetching tickets:', error);
+        toast.error('Failed to load tickets. Using demo data.');
+        // Use demo data with the new structure
+        const demoData = DEMO_TICKETS.map(ticket => ({
+          ...ticket,
+          created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          cse_name: ticket.assigned_to || 'Unassigned',
+          name: `${ticket.first_name} ${ticket.last_name}`,
+          reason: ticket.reason || ticket.Description || 'No reason provided',
+          resolution_status: ticket.resolution_status || 'Open'
+        }));
+        setData(demoData);
       } finally {
         setLoading(false);
       }

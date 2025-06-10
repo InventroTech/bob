@@ -24,6 +24,7 @@ import {
   User,
   Table,
   ChevronDown,
+  LogOut,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -77,6 +78,7 @@ import { TicketTableComponent } from "@/components/page-builder/TicketTableCompo
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
 import { Textarea } from "@/components/ui/textarea";
 import { debounce } from 'lodash';
+import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLogoutComponent";
 
 // Add configuration types
 interface ComponentConfig {
@@ -119,6 +121,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   progressBar: ProgressBar,
   ticketTable: TicketTableComponent,
   ticketCarousel: TicketCarousel,
+  temporaryLogout: TemporaryLogoutComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -418,7 +421,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','temporaryLogout'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -822,7 +825,11 @@ const PageBuilder = () => {
                           label="Progress Bar"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
-                        
+                        <DraggableSidebarItem
+                          id="temporaryLogout"
+                          label="Temporary Logout"
+                          icon={<LogOut className="h-8 w-8 mb-1 text-red-500" />}
+                        />
                       </div>
                     </div>
 

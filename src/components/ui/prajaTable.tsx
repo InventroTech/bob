@@ -4,9 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
-
+import { Badge } from '@/components/ui/badge';
 import { Trash2 } from 'lucide-react'; 
 import { demoMenuItems } from '../page-builder/LeadCardComponent';
+
 interface Column {
   header: string;
   accessor: string;
@@ -19,36 +20,35 @@ interface PrajaTableProps {
   title: string;
 }
 
-// const columns: Column[] = [
-//   { header: 'Name', accessor: 'name', type: 'text' },
-//   { header: 'Party', accessor: 'party', type: 'text' },
-//   { header: 'Last Connected', accessor: 'lastconnected', type: 'text' },
-//   { header: 'Information', accessor: 'info', type: 'text' },
-//   { header: 'Lead Status', accessor: 'status', type: 'chip' },
-//   { header: 'Phone Number', accessor: 'phone', type: 'text' }
-// ];
+// Status color mapping for tickets
+const getStatusColor = (status: string) => {
+  const statusLower = status.toLowerCase();
+  switch (statusLower) {
+    case 'open':
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    case 'in progress':
+    case 'wip':
+      return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'resolved':
+    case 'completed':
+      return 'bg-green-100 text-green-800 border-green-200';
+    case 'closed':
+      return 'bg-gray-100 text-gray-800 border-gray-200';
+    case 'cancelled':
+    case 'failed':
+      return 'bg-red-100 text-red-800 border-red-200';
+    default:
+      return 'bg-gray-100 text-gray-800 border-gray-200';
+  }
+};
 
 export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) => {
-  //const [data, setData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
   const userType = localStorage.getItem('userType');
-//   useEffect(() => {
-//     const fetchLeads = async () => {
-//       const { data, error } = await supabase.from('leads_table').select('*');
-//       if (error) {
-//         console.error('Error fetching leads:', error);
-//       } else {
-//         setData(data || []);
-//         console.log("Table Data", data);
-//       }
-//       setLoading(false);
-//     };
-
-//     fetchLeads();
-//   }, []);
 
   const handleDelete = async (id: number) => {
     const confirm = window.confirm('Are you sure you want to delete this lead?');
@@ -90,10 +90,50 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
     return statusData ? statusData.color : 'bg-gray-500';
   };    
 
+  const renderCell = (col: Column, row: any) => {
+    if (col.type === 'chip') {
+      if (col.accessor === 'resolution_status') {
+        return (
+          <Badge 
+            variant="outline" 
+            className={`${getStatusColor(row[col.accessor])} text-xs font-medium px-2 py-1`}
+          >
+            {row[col.accessor]}
+          </Badge>
+        );
+      } else if (col.accessor === 'status') {
+        return (
+          <StatusCard text={row.status} color={findColor(row.status)} type={col.type} />
+        );
+      } else {
+        return (
+          <Badge 
+            variant="outline" 
+            className="bg-gray-100 text-gray-800 border-gray-200 text-xs font-medium px-2 py-1"
+          >
+            {row[col.accessor]}
+          </Badge>
+        );
+      }
+    } else if (col.accessor === 'party') {
+      return <StatusCard text={row.party} color={row.partycolor} type={col.type} />;
+    } else if (col.accessor === 'name') {
+      return (
+        <div className="flex items-center">
+          <ShortProfileCard
+            image={row.image}
+            name={row.name}
+            address={row.address}
+          />
+        </div>
+      );
+    } else {
+      return <span className="align-middle">{row[col.accessor]}</span>;
+    }
+  };
+
   return (
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      
-
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
         <input
@@ -123,21 +163,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
                 {columns.map((col) => (
                   <td key={col.accessor} className="py-3 px-6 text-left">
                     <div className="flex items-center">
-                      {col.accessor === 'party' ? (
-                        <StatusCard text={row.party} color={row.partycolor} type={col.type} />
-                      ) : col.accessor === 'status' ? (
-                        <StatusCard text={row.status} color={findColor(row.status)} type={col.type} />
-                      ) : col.accessor === 'name' ? (
-                        <div className="flex items-center">
-                          <ShortProfileCard
-                            image={row.image}
-                            name={row.name}
-                            address={row.address}
-                          />
-                        </div>
-                      ) : (
-                        <span className="align-middle">{row[col.accessor]}</span>
-                      )}
+                      {renderCell(col, row)}
                     </div>
                   </td>
                 ))}
@@ -193,7 +219,6 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
           </button>
         </div>
       )}
-     
     </div>
   );
 };
