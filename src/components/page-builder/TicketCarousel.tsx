@@ -526,13 +526,13 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
 
         {/* Navigation Buttons */}
         <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
-          <button
+          {/* <button
             onClick={prevSlide}
             className="bg-gray-200 text-black px-6 py-2 rounded-md hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={updating}
           >
             Previous
-          </button>
+          </button> */}
           <button
             onClick={handleSubmit}
             className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
