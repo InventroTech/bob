@@ -269,17 +269,20 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         throw new Error('Authentication required');
       }
 
+      const currentTime = new Date().toISOString();
+
       const { data: updatedTicket, error: updateError } = await supabase
         .from('support_ticket')
         .update({
           resolution_status: resolutionStatus,
           cse_remarks: cseRemarks,
           cse_name: user?.email || 'Unknown CSE',
-          cse_called_date: new Date().toISOString(),
+          cse_called_date: currentTime,
           call_status: callStatus,
           call_duration: callDuration,
           resolution_time: resolutionTime || null,
-          call_attempts: currentTicket.call_attempts + 1
+          call_attempts: currentTicket.call_attempts + 1,
+          completed_at: currentTime
         })
         .eq('id', currentTicket.id)
         .select()
@@ -295,11 +298,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
               resolution_status: resolutionStatus,
               cse_remarks: cseRemarks,
               cse_name: user?.email || 'Unknown CSE',
-              cse_called_date: new Date().toISOString(),
+              cse_called_date: currentTime,
               call_status: callStatus,
               call_duration: callDuration,
               resolution_time: resolutionTime || null,
-              call_attempts: ticket.call_attempts + 1
+              call_attempts: ticket.call_attempts + 1,
+              completed_at: currentTime
             }
           : ticket
       ));
