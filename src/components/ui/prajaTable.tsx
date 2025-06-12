@@ -18,6 +18,7 @@ interface PrajaTableProps {
   columns: Column[];
   data: any[];
   title: string;
+  onRowClick?: (row: any) => void;
 }
 
 // Status color mapping for tickets
@@ -38,12 +39,16 @@ const getStatusColor = (status: string) => {
     case 'cancelled':
     case 'failed':
       return 'bg-red-100 text-red-800 border-red-200';
+    case 'paid':
+      return 'bg-green-100 text-green-800 border-green-200';
+    case 'not paid':
+      return 'bg-red-100 text-red-800 border-red-200';
     default:
       return 'bg-gray-100 text-gray-800 border-gray-200';
   }
 };
 
-export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) => {
+export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -92,7 +97,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
 
   const renderCell = (col: Column, row: any) => {
     if (col.type === 'chip') {
-      if (col.accessor === 'resolution_status') {
+      if (col.accessor === 'resolution_status' || col.accessor === 'subscription_status') {
         return (
           <Badge 
             variant="outline" 
@@ -159,7 +164,13 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
           </thead>
           <tbody className="text-gray-600 text-sm">
             {paginatedData.map((row, rowIndex) => (
-              <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50 group">
+              <tr 
+                key={rowIndex} 
+                className={`border-b border-gray-200 hover:bg-gray-50 group ${
+                  onRowClick ? 'cursor-pointer' : ''
+                }`}
+                onClick={() => onRowClick && onRowClick(row)}
+              >
                 {columns.map((col) => (
                   <td key={col.accessor} className="py-3 px-6 text-left">
                     <div className="flex items-center">
@@ -170,7 +181,10 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title}) =>
                 <td className="py-3 px-6 text-left w-12">
                   {userType === "admin" && (
                     <button
-                      onClick={() => handleDelete(row.id)}
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent row click when clicking delete
+                        handleDelete(row.id);
+                      }}
                       className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800"
                       title="Delete"
                     >

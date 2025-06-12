@@ -43,9 +43,9 @@ export const LeadRecomendationTable: React.FC = () => {
         const apiUrl = `${API_URI}${endpoint}`;
         
         const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
             'Authorization': authToken ? `Bearer ${authToken}` : ''
           }
         });
@@ -54,9 +54,9 @@ export const LeadRecomendationTable: React.FC = () => {
           throw new Error('Failed to fetch recommended leads');
         }
 
-        const data = await response.json();
+      const data = await response.json();
         if (data.leads && Array.isArray(data.leads)) {
-          setData(data.leads);
+      setData(data.leads);
         } else {
           throw new Error('Invalid data format received');
         }
@@ -65,7 +65,7 @@ export const LeadRecomendationTable: React.FC = () => {
         toast.error('Failed to fetch recommended leads data');
         setData([]);
       } finally {
-        setLoading(false);
+      setLoading(false);
       }
     };
 

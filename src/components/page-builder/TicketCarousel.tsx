@@ -26,7 +26,7 @@ interface Ticket {
   poster: string;
   tenant_id: string;
   layout_status: string;
-  resolution_status: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible";
+  resolution_status: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested";
   resolution_time: string | null;
   cse_name: string;
   cse_remarks: string;
@@ -34,6 +34,7 @@ interface Ticket {
   call_status: "Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service";
   call_duration: string;
   call_attempts: number;
+  rm_name: string;
 }
 
 // Demo data for fallback
@@ -60,7 +61,8 @@ const DEMO_TICKETS: Ticket[] = [
     cse_called_date: null,
     call_status: "Call Waiting",
     call_duration: "0s",
-    call_attempts: 0
+    call_attempts: 0,
+    rm_name: "John Doe"
   },
   {
     id: 2,
@@ -84,7 +86,8 @@ const DEMO_TICKETS: Ticket[] = [
     cse_called_date: new Date().toISOString(),
     call_status: "Connected",
     call_duration: "5m",
-    call_attempts: 1
+    call_attempts: 1,
+    rm_name: "Jane Smith"
   },
   {
     id: 3,
@@ -108,7 +111,8 @@ const DEMO_TICKETS: Ticket[] = [
     cse_called_date: null,
     call_status: "Not Reachable",
     call_duration: "0s",
-    call_attempts: 0
+    call_attempts: 0,
+    rm_name: "Alice Johnson"
   }
 ];
 
@@ -131,15 +135,18 @@ interface TicketCarouselProps {
     apiEndpoint?: string;
     title?: string;
     showFilters?: boolean;
+    readOnly?: boolean;
   };
+  initialTicket?: any;
+  onUpdate?: (updatedTicket: any) => void;
 }
 
-export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
+export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialTicket, onUpdate }) => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [resolutionStatus, setResolutionStatus] = useState<"Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible">("Pending");
+  const [resolutionStatus, setResolutionStatus] = useState<"Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested">("Pending");
   const [callStatus, setCallStatus] = useState<"Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service">("Call Waiting");
   const [cseRemarks, setCseRemarks] = useState("");
   const [callDuration, setCallDuration] = useState("");
@@ -147,63 +154,78 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
+  // If initialTicket is provided, use it instead of fetching
+  const isReadOnly = config?.readOnly || false;
+
   useEffect(() => {
-    const fetchTickets = async () => {
-      try {
-        setLoading(true);
-        const endpoint = config?.apiEndpoint || '/api/tickets';
-        const apiUrl = `${API_URI}${endpoint}`;
-        
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        
-        if (!token) {
-          throw new Error('Authentication required');
-        }
-
-        const response = await fetch(`${apiUrl}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+    if (initialTicket) {
+      // Use the provided ticket data
+      setTickets([initialTicket]);
+      setResolutionStatus(initialTicket.resolution_status || "Pending");
+      setCseRemarks(initialTicket.cse_remarks || "");
+      setCallStatus(initialTicket.call_status || "Call Waiting");
+      setCallDuration(initialTicket.call_duration || "");
+      setResolutionTime(initialTicket.resolution_time || "");
+      setLoading(false);
+    } else {
+      // Fetch tickets as before
+      const fetchTickets = async () => {
+        try {
+          setLoading(true);
+          const endpoint = config?.apiEndpoint || '/api/tickets';
+          const apiUrl = `${API_URI}${endpoint}`;
+          
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          
+          if (!token) {
+            throw new Error('Authentication required');
           }
-        });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+          const response = await fetch(`${apiUrl}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
 
-        const data = await response.json();
-        
-        if (Array.isArray(data)) {
-          setTickets(data);
-          if (data.length > 0) {
-            setResolutionStatus(data[0].resolution_status);
-            setCseRemarks(data[0].cse_remarks || "");
-            setCallStatus(data[0].call_status);
-            setCallDuration(data[0].call_duration);
-            setResolutionTime(data[0].resolution_time || "");
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
-        } else {
-          throw new Error('Invalid data format received');
-        }
-      } catch (error) {
-        toast.error('Failed to load tickets. Using demo data.');
-        setTickets(DEMO_TICKETS);
-        if (DEMO_TICKETS.length > 0) {
-          setResolutionStatus(DEMO_TICKETS[0].resolution_status);
-          setCseRemarks(DEMO_TICKETS[0].cse_remarks || "");
-          setCallStatus(DEMO_TICKETS[0].call_status);
-          setCallDuration(DEMO_TICKETS[0].call_duration);
-          setResolutionTime(DEMO_TICKETS[0].resolution_time || "");
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    fetchTickets();
-  }, [user?.id, tenantId, config?.apiEndpoint]);
+          const data = await response.json();
+          
+          if (Array.isArray(data)) {
+            setTickets(data);
+            if (data.length > 0) {
+              setResolutionStatus(data[0].resolution_status);
+              setCseRemarks(data[0].cse_remarks || "");
+              setCallStatus(data[0].call_status);
+              setCallDuration(data[0].call_duration);
+              setResolutionTime(data[0].resolution_time || "");
+            }
+          } else {
+            throw new Error('Invalid data format received');
+          }
+        } catch (error) {
+          toast.error('Failed to load tickets. Using demo data.');
+          setTickets(DEMO_TICKETS);
+          if (DEMO_TICKETS.length > 0) {
+            setResolutionStatus(DEMO_TICKETS[0].resolution_status);
+            setCseRemarks(DEMO_TICKETS[0].cse_remarks || "");
+            setCallStatus(DEMO_TICKETS[0].call_status);
+            setCallDuration(DEMO_TICKETS[0].call_duration);
+            setResolutionTime(DEMO_TICKETS[0].resolution_time || "");
+          }
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchTickets();
+    }
+  }, [user?.id, tenantId, config?.apiEndpoint, initialTicket]);
 
   // Get current ticket with fallback
   const currentTicket = tickets[currentIndex] || {
@@ -228,7 +250,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
     cse_called_date: null,
     call_status: "Pending",
     call_duration: "0s",
-    call_attempts: 0
+    call_attempts: 0,
+    rm_name: ""
   };
 
   const nextSlide = async () => {
@@ -262,6 +285,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
         return;
       }
 
+      if (isReadOnly) {
+        toast.error('This ticket is read-only');
+        return;
+      }
+
       setUpdating(true);
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -291,25 +319,34 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
       if (updateError) throw updateError;
 
       // Update local state
+      const updatedTicketData = {
+        ...currentTicket,
+        resolution_status: resolutionStatus,
+        cse_remarks: cseRemarks,
+        cse_name: user?.email || 'Unknown CSE',
+        cse_called_date: currentTime,
+        call_status: callStatus,
+        call_duration: callDuration,
+        resolution_time: resolutionTime || null,
+        call_attempts: currentTicket.call_attempts + 1,
+        completed_at: currentTime
+      };
+
       setTickets(tickets.map(ticket => 
-        ticket.id === currentTicket.id 
-          ? { 
-              ...ticket, 
-              resolution_status: resolutionStatus,
-              cse_remarks: cseRemarks,
-              cse_name: user?.email || 'Unknown CSE',
-              cse_called_date: currentTime,
-              call_status: callStatus,
-              call_duration: callDuration,
-              resolution_time: resolutionTime || null,
-              call_attempts: ticket.call_attempts + 1,
-              completed_at: currentTime
-            }
-          : ticket
+        ticket.id === currentTicket.id ? updatedTicketData : ticket
       ));
 
+      // Call the onUpdate callback if provided
+      if (onUpdate) {
+        onUpdate(updatedTicketData);
+      }
+
       toast.success('Ticket updated successfully');
-      nextSlide();
+      
+      // Only navigate to next slide if not in modal mode
+      if (!initialTicket) {
+        nextSlide();
+      }
     } catch (err: any) {
       console.error('Update error:', err);
       toast.error(err.message || 'Failed to update ticket. Please try again.');
@@ -369,8 +406,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
             <div className="flex items-center gap-4">
               <Select 
                 value={resolutionStatus} 
-                onValueChange={(value: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible") => setResolutionStatus(value)}
-                disabled={updating}
+                onValueChange={(value: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested") => setResolutionStatus(value)}
+                disabled={updating || isReadOnly}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Select status" />
@@ -382,6 +419,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
                   <SelectItem value="Already Resolved">Already Resolved</SelectItem>
                   <SelectItem value="No Issue">No Issue</SelectItem>
                   <SelectItem value="Not Possible">Not Possible</SelectItem>
+                  <SelectItem value="Feature Requested">Feature Requested</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -397,6 +435,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
                   <p className="text-xs text-muted-foreground">ID: {currentTicket.user_id}</p>
                 </div>
               </div>
+              {currentTicket.rm_name && (
+                <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
+                  <User className="h-4 w-4 mr-2 text-primary" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">RM Name</p>
+                    <p className="font-medium">{currentTicket.rm_name}</p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                 <Phone className="h-4 w-4 mr-2 text-primary" />
                 <span className="font-medium">{currentTicket.phone}</span>
@@ -428,7 +475,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
                     <Select 
                       value={callStatus} 
                       onValueChange={(value: "Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service") => setCallStatus(value)}
-                      disabled={updating}
+                      disabled={updating || isReadOnly}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select call status" />
@@ -450,9 +497,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
                     <Input
                       type="text"
                       value={callDuration}
-                      onChange={(e) => setCallDuration(e.target.value)}
-                      placeholder="e.g., 5m, 10m, 1h"
-                      disabled={updating}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Allow partial input while typing, but ensure it follows the pattern
+                        if (value === '' || /^\d{0,2}(:\d{0,2})?$/.test(value)) {
+                          setCallDuration(value);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const value = e.target.value;
+                        // Ensure proper format on blur - if not valid, clear it
+                        if (value && !/^\d{1,2}:\d{2}$/.test(value)) {
+                          setCallDuration('');
+                        }
+                      }}
+                      placeholder="e.g., 1:23, 23:45"
+                      disabled={updating || isReadOnly}
                       className="w-full"
                     />
                   </div>
@@ -462,9 +522,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
                     <Input
                       type="text"
                       value={resolutionTime}
-                      onChange={(e) => setResolutionTime(e.target.value)}
-                      placeholder="Enter resolution time"
-                      disabled={updating}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Allow partial input while typing, but ensure it follows the pattern
+                        if (value === '' || /^\d{0,2}(:\d{0,2})?$/.test(value)) {
+                          setResolutionTime(value);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const value = e.target.value;
+                        // Ensure proper format on blur - if not valid, clear it
+                        if (value && !/^\d{1,2}:\d{2}$/.test(value)) {
+                          setResolutionTime('');
+                        }
+                      }}
+                      placeholder="e.g., 1:23, 23:45"
+                      disabled={updating || isReadOnly}
                       className="w-full"
                     />
                   </div>
@@ -522,7 +595,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
                 onChange={(e) => setCseRemarks(e.target.value)}
                 placeholder="Add your remarks about this ticket..."
                 className="min-h-[100px]"
-                disabled={updating}
+                disabled={updating || isReadOnly}
               />
             </div>
           </div>
@@ -540,13 +613,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config }) => {
           <button
             onClick={handleSubmit}
             className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={updating}
+            disabled={updating || isReadOnly}
           >
             {updating ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 Updating...
               </>
+            ) : isReadOnly ? (
+              'Close'
             ) : (
               'Save & Continue'
             )}
