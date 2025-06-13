@@ -298,6 +298,25 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       }
 
       const currentTime = new Date().toISOString();
+      
+      // Calculate snooze_until based on call status and attempts
+      let snoozeUntil = null;
+      const isCallNotConnected = callStatus === "Call Not Answering";
+      
+      if (isCallNotConnected) {
+        const currentDate = new Date();
+        
+        // First attempt - snooze for 1 hour
+        if (currentTicket.call_attempts === 0) {
+          currentDate.setHours(currentDate.getHours() + 1);
+          snoozeUntil = currentDate.toISOString();
+        } 
+        // Subsequent attempts - snooze for 10 days
+        else {
+          currentDate.setDate(currentDate.getDate() + 10);
+          snoozeUntil = currentDate.toISOString();
+        }
+      }
 
       const { data: updatedTicket, error: updateError } = await supabase
         .from('support_ticket')
@@ -310,7 +329,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
           call_duration: callDuration,
           resolution_time: resolutionTime || null,
           call_attempts: currentTicket.call_attempts + 1,
-          completed_at: currentTime
+          completed_at: currentTime,
+          snooze_until: snoozeUntil
         })
         .eq('id', currentTicket.id)
         .select()
@@ -329,7 +349,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         call_duration: callDuration,
         resolution_time: resolutionTime || null,
         call_attempts: currentTicket.call_attempts + 1,
-        completed_at: currentTime
+        completed_at: currentTime,
+        snooze_until: snoozeUntil
       };
 
       setTickets(tickets.map(ticket => 
