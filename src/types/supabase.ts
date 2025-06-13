@@ -258,6 +258,96 @@ export type Database = {
           created_at?: string
         }
       }
+      support_ticket: {
+        Row: {
+          id: number
+          ticket_date: string
+          user_id: string | null
+          name: string | null
+          phone: string | null
+          source: string | null
+          subscription_status: string | null
+          atleast_paid_once: boolean
+          reason: string | null
+          other_reasons: Json
+          badge: string | null
+          poster: string | null
+          tenant_id: string | null
+          layout_status: string | null
+          resolution_status: string
+          resolution_time: string | null
+          cse_name: string | null
+          cse_remarks: string | null
+          cse_called_date: string | null
+          call_status: string
+          call_duration: string
+          call_attempts: number
+          rm_name: string | null
+          completed_at: string | null
+          snooze_until: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          ticket_date?: string
+          user_id?: string | null
+          name?: string | null
+          phone?: string | null
+          source?: string | null
+          subscription_status?: string | null
+          atleast_paid_once?: boolean
+          reason?: string | null
+          other_reasons?: Json
+          badge?: string | null
+          poster?: string | null
+          tenant_id?: string | null
+          layout_status?: string | null
+          resolution_status?: string
+          resolution_time?: string | null
+          cse_name?: string | null
+          cse_remarks?: string | null
+          cse_called_date?: string | null
+          call_status?: string
+          call_duration?: string
+          call_attempts?: number
+          rm_name?: string | null
+          completed_at?: string | null
+          snooze_until?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          ticket_date?: string
+          user_id?: string | null
+          name?: string | null
+          phone?: string | null
+          source?: string | null
+          subscription_status?: string | null
+          atleast_paid_once?: boolean
+          reason?: string | null
+          other_reasons?: Json
+          badge?: string | null
+          poster?: string | null
+          tenant_id?: string | null
+          layout_status?: string | null
+          resolution_status?: string
+          resolution_time?: string | null
+          cse_name?: string | null
+          cse_remarks?: string | null
+          cse_called_date?: string | null
+          call_status?: string
+          call_duration?: string
+          call_attempts?: number
+          rm_name?: string | null
+          completed_at?: string | null
+          snooze_until?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

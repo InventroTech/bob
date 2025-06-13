@@ -10,6 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { API_URI } from '@/const';
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Ticket {
   id: number;
@@ -21,7 +24,7 @@ interface Ticket {
   subscription_status: string;
   atleast_paid_once: boolean;
   reason: string;
-  other_reasons: string;
+  other_reasons: string[] | string;
   badge: string;
   poster: string;
   tenant_id: string;
@@ -37,6 +40,25 @@ interface Ticket {
   rm_name: string;
 }
 
+// Predefined other reasons options
+const OTHER_REASONS_OPTIONS = [
+  "Technical Issue",
+  "Billing Problem",
+  "Account Access",
+  "Feature Request",
+  "Bug Report",
+  "Performance Issue",
+  "Security Concern",
+  "Data Issue",
+  "Integration Problem",
+  "User Training",
+  "Documentation Request",
+  "Service Outage",
+  "Configuration Issue",
+  "Compatibility Problem",
+  "Other"
+];
+
 // Demo data for fallback
 const DEMO_TICKETS: Ticket[] = [
   {
@@ -49,7 +71,7 @@ const DEMO_TICKETS: Ticket[] = [
     subscription_status: "Premium",
     atleast_paid_once: true,
     reason: "User is unable to log in after the recent password reset.",
-    other_reasons: "Receiving 'Invalid Credentials' message despite using the new password.",
+    other_reasons: ["Technical Issue", "Account Access"],
     badge: "Gold Tier",
     poster: "N/A",
     tenant_id: "demo-tenant",
@@ -74,7 +96,7 @@ const DEMO_TICKETS: Ticket[] = [
     subscription_status: "Basic",
     atleast_paid_once: true,
     reason: "Unable to access premium features after subscription renewal.",
-    other_reasons: "Payment was successful but features are still locked.",
+    other_reasons: ["Billing Problem", "Feature Request"],
     badge: "Silver Tier",
     poster: "N/A",
     tenant_id: "demo-tenant",
@@ -99,7 +121,7 @@ const DEMO_TICKETS: Ticket[] = [
     subscription_status: "Premium",
     atleast_paid_once: false,
     reason: "Request for custom dashboard layout.",
-    other_reasons: "Need specific widgets and data visualization options.",
+    other_reasons: ["Feature Request", "User Training"],
     badge: "Bronze Tier",
     poster: "N/A",
     tenant_id: "demo-tenant",
@@ -144,32 +166,48 @@ interface TicketCarouselProps {
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialTicket, onUpdate }) => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentTicket, setCurrentTicket] = useState<any>(null);
   const [resolutionStatus, setResolutionStatus] = useState<"Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested">("Pending");
   const [callStatus, setCallStatus] = useState<"Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service">("Call Waiting");
   const [cseRemarks, setCseRemarks] = useState("");
   const [callDuration, setCallDuration] = useState("");
   const [resolutionTime, setResolutionTime] = useState("");
+  const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
   // If initialTicket is provided, use it instead of fetching
   const isReadOnly = config?.readOnly || false;
 
+  // Helper function to convert other_reasons to array
+  const parseOtherReasons = (otherReasons: any): string[] => {
+    if (!otherReasons) return [];
+    if (Array.isArray(otherReasons)) return otherReasons;
+    if (typeof otherReasons === 'string') {
+      // Try to parse as JSON, fallback to comma-separated
+      try {
+        return JSON.parse(otherReasons);
+      } catch {
+        return otherReasons.split(',').map((r: string) => r.trim()).filter(Boolean);
+      }
+    }
+    return [];
+  };
+
   useEffect(() => {
     if (initialTicket) {
       // Use the provided ticket data
-      setTickets([initialTicket]);
+      setCurrentTicket(initialTicket);
       setResolutionStatus(initialTicket.resolution_status || "Pending");
       setCseRemarks(initialTicket.cse_remarks || "");
       setCallStatus(initialTicket.call_status || "Call Waiting");
       setCallDuration(initialTicket.call_duration || "");
       setResolutionTime(initialTicket.resolution_time || "");
+      setSelectedOtherReasons(parseOtherReasons(initialTicket.other_reasons));
       setLoading(false);
     } else {
-      // Fetch tickets as before
-      const fetchTickets = async () => {
+      // Fetch single ticket
+      const fetchTicket = async () => {
         try {
           setLoading(true);
           const endpoint = config?.apiEndpoint || '/api/tickets';
@@ -194,87 +232,45 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
             throw new Error(`HTTP error! status: ${response.status}`);
           }
 
-          const data = await response.json();
+          const ticketData = await response.json();
           
-          if (Array.isArray(data)) {
-            setTickets(data);
-            if (data.length > 0) {
-              setResolutionStatus(data[0].resolution_status);
-              setCseRemarks(data[0].cse_remarks || "");
-              setCallStatus(data[0].call_status);
-              setCallDuration(data[0].call_duration);
-              setResolutionTime(data[0].resolution_time || "");
-            }
+          // Handle the single ticket response
+          if (ticketData && typeof ticketData === 'object') {
+            setCurrentTicket(ticketData);
+            setResolutionStatus(ticketData.resolution_status || "Pending");
+            setCseRemarks(ticketData.cse_remarks || "");
+            setCallStatus(ticketData.call_status || "Call Waiting");
+            setCallDuration(ticketData.call_duration || "");
+            setResolutionTime(ticketData.resolution_time || "");
+            setSelectedOtherReasons(parseOtherReasons(ticketData.other_reasons));
           } else {
-            throw new Error('Invalid data format received');
+            throw new Error('Invalid ticket data received');
           }
         } catch (error) {
-          toast.error('Failed to load tickets. Using demo data.');
-          setTickets(DEMO_TICKETS);
-          if (DEMO_TICKETS.length > 0) {
-            setResolutionStatus(DEMO_TICKETS[0].resolution_status);
-            setCseRemarks(DEMO_TICKETS[0].cse_remarks || "");
-            setCallStatus(DEMO_TICKETS[0].call_status);
-            setCallDuration(DEMO_TICKETS[0].call_duration);
-            setResolutionTime(DEMO_TICKETS[0].resolution_time || "");
-          }
+          toast.error('Failed to load ticket. Using demo data.');
+          // Use first demo ticket as fallback
+          const demoTicket = DEMO_TICKETS[0];
+          setCurrentTicket(demoTicket);
+          setResolutionStatus(demoTicket.resolution_status);
+          setCseRemarks(demoTicket.cse_remarks || "");
+          setCallStatus(demoTicket.call_status);
+          setCallDuration(demoTicket.call_duration);
+          setResolutionTime(demoTicket.resolution_time || "");
+          setSelectedOtherReasons(parseOtherReasons(demoTicket.other_reasons));
         } finally {
           setLoading(false);
         }
       };
 
-      fetchTickets();
+      fetchTicket();
     }
   }, [user?.id, tenantId, config?.apiEndpoint, initialTicket]);
 
-  // Get current ticket with fallback
-  const currentTicket = tickets[currentIndex] || {
-    id: 0,
-    ticket_date: new Date().toISOString(),
-    user_id: "",
-    name: "",
-    phone: "",
-    source: "",
-    subscription_status: "",
-    atleast_paid_once: false,
-    reason: "",
-    other_reasons: "",
-    badge: "",
-    poster: "N/A",
-    tenant_id: "",
-    layout_status: "Standard View",
-    resolution_status: "Open",
-    resolution_time: null,
-    cse_name: "",
-    cse_remarks: "",
-    cse_called_date: null,
-    call_status: "Pending",
-    call_duration: "0s",
-    call_attempts: 0,
-    rm_name: ""
-  };
-
-  const nextSlide = async () => {
-    setCurrentIndex((prev) => (prev + 1) % tickets.length);
-    if (tickets[(currentIndex + 1) % tickets.length]) {
-      const nextTicket = tickets[(currentIndex + 1) % tickets.length];
-      setResolutionStatus(nextTicket.resolution_status);
-      setCseRemarks(nextTicket.cse_remarks || "");
-      setCallStatus(nextTicket.call_status);
-      setCallDuration(nextTicket.call_duration);
-      setResolutionTime(nextTicket.resolution_time || "");
-    }
-  };
-
-  const prevSlide = () => {
-    setCurrentIndex((prevIndex) => (prevIndex - 1 + tickets.length) % tickets.length);
-    if (tickets[(currentIndex - 1 + tickets.length) % tickets.length]) {
-      const prevTicket = tickets[(currentIndex - 1 + tickets.length) % tickets.length];
-      setResolutionStatus(prevTicket.resolution_status);
-      setCseRemarks(prevTicket.cse_remarks || "");
-      setCallStatus(prevTicket.call_status);
-      setCallDuration(prevTicket.call_duration);
-      setResolutionTime(prevTicket.resolution_time || "");
+  const handleOtherReasonChange = (reason: string, checked: boolean) => {
+    if (checked) {
+      setSelectedOtherReasons(prev => [...prev, reason]);
+    } else {
+      setSelectedOtherReasons(prev => prev.filter(r => r !== reason));
     }
   };
 
@@ -318,6 +314,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         }
       }
 
+      // Step 1: Update ticket data from frontend side using Supabase
       const { data: updatedTicket, error: updateError } = await supabase
         .from('support_ticket')
         .update({
@@ -330,7 +327,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
           resolution_time: resolutionTime || null,
           call_attempts: currentTicket.call_attempts + 1,
           completed_at: currentTime,
-          snooze_until: snoozeUntil
+          snooze_until: snoozeUntil,
+          other_reasons: selectedOtherReasons
         })
         .eq('id', currentTicket.id)
         .select()
@@ -338,7 +336,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
       if (updateError) throw updateError;
 
-      // Update local state
+      // Update local state with the updated ticket
       const updatedTicketData = {
         ...currentTicket,
         resolution_status: resolutionStatus,
@@ -350,24 +348,58 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         resolution_time: resolutionTime || null,
         call_attempts: currentTicket.call_attempts + 1,
         completed_at: currentTime,
-        snooze_until: snoozeUntil
+        snooze_until: snoozeUntil,
+        other_reasons: selectedOtherReasons
       };
 
-      setTickets(tickets.map(ticket => 
-        ticket.id === currentTicket.id ? updatedTicketData : ticket
-      ));
+      setCurrentTicket(updatedTicketData);
+      toast.success('Ticket saved successfully');
 
       // Call the onUpdate callback if provided
       if (onUpdate) {
         onUpdate(updatedTicketData);
       }
 
-      toast.success('Ticket updated successfully');
-      
-      // Only navigate to next slide if not in modal mode
-      if (!initialTicket) {
-        nextSlide();
+      // Step 2: Get the next ticket using the API from config
+      try {
+        const endpoint = config?.apiEndpoint || '/api/tickets';
+        const apiUrl = `${API_URI}${endpoint}`;
+        
+        const nextTicketResponse = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+
+        if (nextTicketResponse.ok) {
+          const nextTicketData = await nextTicketResponse.json();
+          
+          if (nextTicketData && typeof nextTicketData === 'object') {
+            // Update with the next ticket
+            setCurrentTicket(nextTicketData);
+            setResolutionStatus(nextTicketData.resolution_status || "Pending");
+            setCseRemarks(nextTicketData.cse_remarks || "");
+            setCallStatus(nextTicketData.call_status || "Call Waiting");
+            setCallDuration(nextTicketData.call_duration || "");
+            setResolutionTime(nextTicketData.resolution_time || "");
+            setSelectedOtherReasons(parseOtherReasons(nextTicketData.other_reasons));
+            toast.success('Next ticket loaded');
+          } else {
+            toast.info('No more tickets available');
+            // Handle no more tickets - you can implement logic here
+          }
+        } else {
+          const errorText = await nextTicketResponse.text();
+          console.error('Failed to fetch next ticket:', nextTicketResponse.status, errorText);
+          toast.error(`Failed to get next ticket: ${nextTicketResponse.status} - ${errorText || 'Unknown error'}`);
+        }
+      } catch (nextTicketError) {
+        console.error('Error fetching next ticket:', nextTicketError);
+        toast.error('Failed to load next ticket');
       }
+      
     } catch (err: any) {
       console.error('Update error:', err);
       toast.error(err.message || 'Failed to update ticket. Please try again.');
@@ -384,16 +416,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     );
   }
 
-  if (!tickets.length) {
+  if (!currentTicket) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        No tickets found
+        No ticket found
       </div>
     );
   }
 
   // Get formatted date with fallback
-  const formattedDate = currentTicket.ticket_date 
+  const formattedDate = currentTicket?.ticket_date 
     ? new Date(currentTicket.ticket_date).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
@@ -413,14 +445,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
               </h2>
               <div className="flex items-center gap-2 mt-1">
                 <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                  {currentTicket.badge}
+                  {currentTicket?.badge || 'N/A'}
                 </Badge>
                 <Badge variant="outline" className={`
-                  ${currentTicket.subscription_status === 'Premium' ? 'bg-purple-50 text-purple-700 border-purple-200' : 
-                    currentTicket.subscription_status === 'Basic' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                  ${currentTicket?.subscription_status === 'Premium' ? 'bg-purple-50 text-purple-700 border-purple-200' : 
+                    currentTicket?.subscription_status === 'Basic' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
                     'bg-gray-50 text-gray-700 border-gray-200'}
                 `}>
-                  {currentTicket.subscription_status}
+                  {currentTicket?.subscription_status || 'N/A'}
                 </Badge>
               </div>
             </div>
@@ -452,11 +484,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                 <User className="h-4 w-4 mr-2 text-primary" />
                 <div>
-                  <p className="font-medium">{currentTicket.name}</p>
-                  <p className="text-xs text-muted-foreground">ID: {currentTicket.user_id}</p>
+                  <p className="font-medium">{currentTicket?.name || 'N/A'}</p>
+                  <p className="text-xs text-muted-foreground">ID: {currentTicket?.user_id || 'N/A'}</p>
                 </div>
               </div>
-              {currentTicket.rm_name && (
+              {currentTicket?.rm_name && (
                 <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                   <User className="h-4 w-4 mr-2 text-primary" />
                   <div>
@@ -467,20 +499,20 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
               )}
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                 <Phone className="h-4 w-4 mr-2 text-primary" />
-                <span className="font-medium">{currentTicket.phone}</span>
+                <span className="font-medium">{currentTicket?.phone || 'N/A'}</span>
               </div>
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
                 <Tag className="h-4 w-4 mr-2 text-primary" />
-                <span className="font-medium">{currentTicket.source}</span>
+                <span className="font-medium">{currentTicket?.source || 'N/A'}</span>
               </div>
               <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
-                {currentTicket.atleast_paid_once ? (
+                {currentTicket?.atleast_paid_once ? (
                   <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
                 ) : (
                   <XCircle className="h-4 w-4 mr-2 text-red-500" />
                 )}
                 <span className="font-medium">
-                  Payment Status (Atleast once): {currentTicket.atleast_paid_once ? "Paid" : "Never Paid"}
+                  Payment Status (Atleast once): {currentTicket?.atleast_paid_once ? "Paid" : "Never Paid"}
                 </span>
               </div>
             </div>
@@ -565,9 +597,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
                   <div className="pt-2 border-t">
                     <p className="text-sm">
-                      Attempts: <span className="font-medium">{currentTicket.call_attempts}</span>
+                      Attempts: <span className="font-medium">{currentTicket?.call_attempts || 0}</span>
                     </p>
-                    {currentTicket.cse_called_date && (
+                    {currentTicket?.cse_called_date && (
                       <p className="text-sm mt-1">
                         Last Call: <span className="font-medium">
                           {new Date(currentTicket.cse_called_date).toLocaleString()}
@@ -591,17 +623,82 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Primary Reason</p>
                   <p className="text-sm bg-muted/50 p-3 rounded-md">
-                    {currentTicket.reason || 'No reason provided'}
+                    {currentTicket?.reason || 'No reason provided'}
                   </p>
                 </div>
-                {currentTicket.other_reasons && (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Other Reasons</p>
-                    <p className="text-sm bg-muted/50 p-3 rounded-md">
-                      {currentTicket.other_reasons}
-                    </p>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Other Reasons</p>
+                  <div className="space-y-3">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-between"
+                          disabled={updating || isReadOnly}
+                        >
+                          <span>
+                            {selectedOtherReasons.length > 0 
+                              ? `${selectedOtherReasons.length} reason(s) selected`
+                              : 'Select other reasons'
+                            }
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-4" align="start">
+                        <div className="space-y-3">
+                          <h4 className="font-medium text-sm">Select Other Reasons</h4>
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {OTHER_REASONS_OPTIONS.map((reason) => (
+                              <div key={reason} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`reason-${reason}`}
+                                  checked={selectedOtherReasons.includes(reason)}
+                                  onCheckedChange={(checked) => handleOtherReasonChange(reason, checked as boolean)}
+                                  disabled={updating || isReadOnly}
+                                />
+                                <label
+                                  htmlFor={`reason-${reason}`}
+                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                >
+                                  {reason}
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                          {selectedOtherReasons.length > 0 && (
+                            <div className="pt-2 border-t">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedOtherReasons([])}
+                                disabled={updating || isReadOnly}
+                                className="text-xs"
+                              >
+                                Clear All
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    
+                    {/* Display selected reasons as badges */}
+                    {selectedOtherReasons.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedOtherReasons.map((reason) => (
+                          <Badge 
+                            key={reason} 
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {reason}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
@@ -624,13 +721,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
         {/* Navigation Buttons */}
         <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
-          {/* <button
-            onClick={prevSlide}
-            className="bg-gray-200 text-black px-6 py-2 rounded-md hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating}
-          >
-            Previous
-          </button> */}
           <button
             onClick={handleSubmit}
             className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
