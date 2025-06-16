@@ -138,19 +138,20 @@ const DEMO_TICKETS: Ticket[] = [
   }
 ];
 
-interface ComponentConfig {
-  apiEndpoint?: string;      // Custom API endpoint
-  columns?: Array<{         // For tables
-    key: string;
-    label: string;
-    type: 'text' | 'chip' | 'date' | 'number';
-  }>;
-  title?: string;           // Component title
-  description?: string;     // Component description
-  refreshInterval?: number; // Auto-refresh interval
-  showFilters?: boolean;    // Show/hide filters
-  customFields?: Record<string, any>; // For future extensibility
-}
+// Helper function to convert other_reasons to array
+const parseOtherReasons = (otherReasons: any): string[] => {
+  if (!otherReasons) return [];
+  if (Array.isArray(otherReasons)) return otherReasons;
+  if (typeof otherReasons === 'string') {
+    // Try to parse as JSON, fallback to comma-separated
+    try {
+      return JSON.parse(otherReasons);
+    } catch {
+      return otherReasons.split(',').map((r: string) => r.trim()).filter(Boolean);
+    }
+  }
+  return [];
+};
 
 interface TicketCarouselProps {
   config?: {
@@ -166,37 +167,71 @@ interface TicketCarouselProps {
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialTicket, onUpdate }) => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
-  const [currentTicket, setCurrentTicket] = useState<any>(null);
-  const [resolutionStatus, setResolutionStatus] = useState<"Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested">("Pending");
-  const [callStatus, setCallStatus] = useState<"Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service">("Call Waiting");
-  const [cseRemarks, setCseRemarks] = useState("");
-  const [callDuration, setCallDuration] = useState("");
-  const [resolutionTime, setResolutionTime] = useState("");
-  const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [currentTicket, setCurrentTicket] = useState<any>(initialTicket || DEMO_TICKETS[0]);
+  const [isDemoTicket, setIsDemoTicket] = useState(!initialTicket);
+  const [resolutionStatus, setResolutionStatus] = useState<"Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested">(initialTicket?.resolution_status || "Pending");
+  const [callStatus, setCallStatus] = useState<"Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service">(initialTicket?.call_status || "Call Waiting");
+  const [cseRemarks, setCseRemarks] = useState(initialTicket?.cse_remarks || "");
+  const [callDuration, setCallDuration] = useState(initialTicket?.call_duration || "");
+  const [resolutionTime, setResolutionTime] = useState(initialTicket?.resolution_time || "");
+  const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>(parseOtherReasons(initialTicket?.other_reasons));
+  const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
 
   // If initialTicket is provided, use it instead of fetching
   const isReadOnly = config?.readOnly || false;
 
-  // Helper function to convert other_reasons to array
-  const parseOtherReasons = (otherReasons: any): string[] => {
-    if (!otherReasons) return [];
-    if (Array.isArray(otherReasons)) return otherReasons;
-    if (typeof otherReasons === 'string') {
-      // Try to parse as JSON, fallback to comma-separated
-      try {
-        return JSON.parse(otherReasons);
-      } catch {
-        return otherReasons.split(',').map((r: string) => r.trim()).filter(Boolean);
+  const fetchTicket = async () => {
+    try {
+      setLoading(true);
+      const endpoint = config?.apiEndpoint || '/api/tickets';
+      const apiUrl = `${API_URI}${endpoint}`;
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        throw new Error('Authentication required');
       }
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const ticketData = await response.json();
+      
+      if (ticketData && typeof ticketData === 'object') {
+        setCurrentTicket(ticketData);
+        setResolutionStatus(ticketData.resolution_status || "Pending");
+        setCseRemarks(ticketData.cse_remarks || "");
+        setCallStatus(ticketData.call_status || "Call Waiting");
+        setCallDuration(ticketData.call_duration || "");
+        setResolutionTime(ticketData.resolution_time || "");
+        setSelectedOtherReasons(parseOtherReasons(ticketData.other_reasons));
+        setIsDemoTicket(false);
+        toast.success('Ticket loaded successfully');
+      } else {
+        throw new Error('Invalid ticket data received');
+      }
+    } catch (error: any) {
+      console.error('Error fetching ticket:', error);
+      toast.error(error.message || 'Failed to fetch ticket');
+    } finally {
+      setLoading(false);
     }
-    return [];
   };
 
+  // Update state when initialTicket changes
   useEffect(() => {
     if (initialTicket) {
-      // Use the provided ticket data
       setCurrentTicket(initialTicket);
       setResolutionStatus(initialTicket.resolution_status || "Pending");
       setCseRemarks(initialTicket.cse_remarks || "");
@@ -204,67 +239,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       setCallDuration(initialTicket.call_duration || "");
       setResolutionTime(initialTicket.resolution_time || "");
       setSelectedOtherReasons(parseOtherReasons(initialTicket.other_reasons));
-      setLoading(false);
-    } else {
-      // Fetch single ticket
-      const fetchTicket = async () => {
-        try {
-          setLoading(true);
-          const endpoint = config?.apiEndpoint || '/api/tickets';
-          const apiUrl = `${API_URI}${endpoint}`;
-          
-          const { data: { session } } = await supabase.auth.getSession();
-          const token = session?.access_token;
-          
-          if (!token) {
-            throw new Error('Authentication required');
-          }
-
-          const response = await fetch(`${apiUrl}`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const ticketData = await response.json();
-          
-          // Handle the single ticket response
-          if (ticketData && typeof ticketData === 'object') {
-            setCurrentTicket(ticketData);
-            setResolutionStatus(ticketData.resolution_status || "Pending");
-            setCseRemarks(ticketData.cse_remarks || "");
-            setCallStatus(ticketData.call_status || "Call Waiting");
-            setCallDuration(ticketData.call_duration || "");
-            setResolutionTime(ticketData.resolution_time || "");
-            setSelectedOtherReasons(parseOtherReasons(ticketData.other_reasons));
-          } else {
-            throw new Error('Invalid ticket data received');
-          }
-        } catch (error) {
-          toast.error('Failed to load ticket. Using demo data.');
-          // Use first demo ticket as fallback
-          const demoTicket = DEMO_TICKETS[0];
-          setCurrentTicket(demoTicket);
-          setResolutionStatus(demoTicket.resolution_status);
-          setCseRemarks(demoTicket.cse_remarks || "");
-          setCallStatus(demoTicket.call_status);
-          setCallDuration(demoTicket.call_duration);
-          setResolutionTime(demoTicket.resolution_time || "");
-          setSelectedOtherReasons(parseOtherReasons(demoTicket.other_reasons));
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      fetchTicket();
+      setIsDemoTicket(false);
     }
-  }, [user?.id, tenantId, config?.apiEndpoint, initialTicket]);
+  }, [initialTicket]);
 
   const handleOtherReasonChange = (reason: string, checked: boolean) => {
     if (checked) {
@@ -360,45 +337,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         onUpdate(updatedTicketData);
       }
 
-      // Step 2: Get the next ticket using the API from config
-      try {
-        const endpoint = config?.apiEndpoint || '/api/tickets';
-        const apiUrl = `${API_URI}${endpoint}`;
-        
-        const nextTicketResponse = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
-          }
-        });
-
-        if (nextTicketResponse.ok) {
-          const nextTicketData = await nextTicketResponse.json();
-          
-          if (nextTicketData && typeof nextTicketData === 'object') {
-            // Update with the next ticket
-            setCurrentTicket(nextTicketData);
-            setResolutionStatus(nextTicketData.resolution_status || "Pending");
-            setCseRemarks(nextTicketData.cse_remarks || "");
-            setCallStatus(nextTicketData.call_status || "Call Waiting");
-            setCallDuration(nextTicketData.call_duration || "");
-            setResolutionTime(nextTicketData.resolution_time || "");
-            setSelectedOtherReasons(parseOtherReasons(nextTicketData.other_reasons));
-            toast.success('Next ticket loaded');
-          } else {
-            toast.info('No more tickets available');
-            // Handle no more tickets - you can implement logic here
-          }
-        } else {
-          const errorText = await nextTicketResponse.text();
-          console.error('Failed to fetch next ticket:', nextTicketResponse.status, errorText);
-          toast.error(`Failed to get next ticket: ${nextTicketResponse.status} - ${errorText || 'Unknown error'}`);
-        }
-      } catch (nextTicketError) {
-        console.error('Error fetching next ticket:', nextTicketError);
-        toast.error('Failed to load next ticket');
-      }
+      // Fetch next ticket
+      await fetchTicket();
       
     } catch (err: any) {
       console.error('Update error:', err);
@@ -418,8 +358,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
   if (!currentTicket) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        No ticket found
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
+        <p>No ticket available</p>
+        <Button onClick={fetchTicket} disabled={loading}>
+          Get First Ticket
+        </Button>
       </div>
     );
   }
@@ -436,6 +379,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   return (
     <div className="relative w-full h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
+        {isDemoTicket && (
+          <div className="absolute top-0 left-0 right-0 bg-yellow-100 text-yellow-800 text-center py-1 text-sm font-medium rounded-t-xl border-b">
+            Demo Ticket - Click "Get First Ticket" to start working on real tickets
+          </div>
+        )}
         <div className="space-y-6">
           {/* Header Section */}
           <div className="flex justify-between items-start">
@@ -454,27 +402,45 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                 `}>
                   {currentTicket?.subscription_status || 'N/A'}
                 </Badge>
+                {isDemoTicket && (
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                    Demo
+                  </Badge>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Select 
-                value={resolutionStatus} 
-                onValueChange={(value: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested") => setResolutionStatus(value)}
-                disabled={updating || isReadOnly}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Resolved">Resolved</SelectItem>
-                  <SelectItem value="WIP">Work in Progress</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Already Resolved">Already Resolved</SelectItem>
-                  <SelectItem value="No Issue">No Issue</SelectItem>
-                  <SelectItem value="Not Possible">Not Possible</SelectItem>
-                  <SelectItem value="Feature Requested">Feature Requested</SelectItem>
-                </SelectContent>
-              </Select>
+              {isDemoTicket ? (
+                <Button onClick={fetchTicket} disabled={loading}>
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Loading...
+                    </>
+                  ) : (
+                    'Get First Ticket'
+                  )}
+                </Button>
+              ) : (
+                <Select 
+                  value={resolutionStatus} 
+                  onValueChange={(value: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested") => setResolutionStatus(value)}
+                  disabled={updating || isReadOnly}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Resolved">Resolved</SelectItem>
+                    <SelectItem value="WIP">Work in Progress</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Already Resolved">Already Resolved</SelectItem>
+                    <SelectItem value="No Issue">No Issue</SelectItem>
+                    <SelectItem value="Not Possible">Not Possible</SelectItem>
+                    <SelectItem value="Feature Requested">Feature Requested</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
 
@@ -721,22 +687,35 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
         {/* Navigation Buttons */}
         <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
-          <button
-            onClick={handleSubmit}
-            className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={updating || isReadOnly}
-          >
-            {updating ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                Updating...
-              </>
-            ) : isReadOnly ? (
-              'Close'
-            ) : (
-              'Save & Continue'
-            )}
-          </button>
+          {isDemoTicket ? (
+            <Button onClick={fetchTicket} disabled={loading}>
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Loading...
+                </>
+              ) : (
+                'Get First Ticket'
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              disabled={updating || isReadOnly}
+            >
+              {updating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Updating...
+                </>
+              ) : isReadOnly ? (
+                'Close'
+              ) : (
+                'Save & Continue'
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </div>
