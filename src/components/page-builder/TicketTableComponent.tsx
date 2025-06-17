@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 interface Column {
   header: string;
   accessor: string;
-  type: 'text' | 'chip';
+  type: 'text' | 'chip' | 'link';
 }
 
 // Status color mapping
@@ -120,6 +120,7 @@ const DEMO_TICKETS = [
 const columns: Column[] = [
   { header: 'Name', accessor: 'name', type: 'text' },
   { header: 'Praja User Id', accessor: 'user_id', type: 'text' },
+  { header: 'Dashboard Link', accessor: 'praja_dashboard_user_link', type: 'link' },
   { header: 'Created At', accessor: 'created_at', type: 'text' },
   { header: 'Assigned To', accessor: 'cse_name', type: 'text' },
   { header: 'Reason', accessor: 'reason', type: 'text' },
@@ -133,7 +134,7 @@ interface TicketTableProps {
     columns?: Array<{
       key: string;
       label: string;
-      type: 'text' | 'chip' | 'date' | 'number';
+      type: 'text' | 'chip' | 'date' | 'number' | 'link';
     }>;
     title?: string;
   };
@@ -150,7 +151,7 @@ interface PrajaTableProps {
 export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => {
   const [data, setData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -161,7 +162,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const tableColumns: Column[] = config?.columns?.map(col => ({
     header: col.label,
     accessor: col.key,
-    type: col.type === 'chip' ? 'chip' : 'text'
+    type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
   })) || columns;
 
   // Get unique values for filters
@@ -219,66 +220,111 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     setIsTicketModalOpen(true);
   };
 
-  const handleTicketUpdate = async (updatedTicket: any) => {
-    try {
-      setLoading(true);
-      const authToken = session?.access_token;
-      if (!authToken) {
-        throw new Error('Authentication required');
-      }
+  const handleTicketUpdate = (updatedTicket: any) => {
+    // Update the local data with the updated ticket
+    const updatedData = data.map(ticket => 
+      ticket.id === updatedTicket.id ? updatedTicket : ticket
+    );
+    setData(updatedData);
+    setFilteredData(updatedData);
+    setIsTicketModalOpen(false);
+  };
 
-      // Fetch tickets after update
-      const endpoint = config?.apiEndpoint || '/api/tickets';
-      const apiUrl = `${API_URI}${endpoint}`;
-      
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
+  useEffect(() => {
+    const fetchTickets = async () => {
+      try {
+        setLoading(true);
+        const authToken = session?.access_token;
+
+        const endpoint = config?.apiEndpoint || '/api/tickets';
+        const apiUrl = `${API_URI}${endpoint}`;
+        
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch tickets: ${response.status}`);
         }
-      });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch tickets: ${response.status}`);
-      }
+        // Clone the response before reading it
+        const responseClone = response.clone();
+        const responseData = await responseClone.json();
 
-      const responseData = await response.json();
+        // Handle different response formats
+        let tickets = [];
+        if (Array.isArray(responseData)) {
+          tickets = responseData;
+        } else if (responseData.tickets && Array.isArray(responseData.tickets)) {
+          tickets = responseData.tickets;
+        } else if (responseData.data && Array.isArray(responseData.data)) {
+          tickets = responseData.data;
+        } else {
+          throw new Error('Invalid data format received');
+        }
 
-      // Handle different response formats
-      let tickets = [];
-      if (Array.isArray(responseData)) {
-        tickets = responseData;
-      } else if (responseData.tickets && Array.isArray(responseData.tickets)) {
-        tickets = responseData.tickets;
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        tickets = responseData.data;
-      } else {
-        throw new Error('Invalid data format received');
-      }
+        // Transform the data with the new attributes
+        const transformedData = tickets.map(ticket => ({
+          ...ticket,
+          // Format created_at
+          created_at: ticket.created_at ? new Date(ticket.created_at).toLocaleString('en-IN', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) : 'N/A',
+          // Use cse_name for assigned to
+          cse_name: ticket.cse_name || ticket.assigned_to || 'Unassigned',
+          // Combine first_name and last_name for name
+          name: ticket.first_name && ticket.last_name 
+            ? `${ticket.first_name} ${ticket.last_name}`
+            : ticket.name || 'N/A',
+          // Use reason field
+          reason: ticket.reason || ticket.Description || 'No reason provided',
+          // Use resolution_status with proper formatting
+          resolution_status: ticket.resolution_status || ticket.status || 'Open',
+          // Handle poster subscription status
+          poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
+          // Generate Praja dashboard user link
+          praja_dashboard_user_link: ticket.praja_user_id 
+            ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+            : ticket.praja_dashboard_user_link || 'N/A'
+        }));
 
-      // Transform the data
-      const transformedData = tickets.map(ticket => ({
-        ...ticket,
-        created_at: ticket.created_at ? new Date(ticket.created_at).toLocaleString('en-IN', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }) : 'N/A',
-        cse_name: ticket.cse_name || ticket.assigned_to || 'Unassigned',
-        name: ticket.first_name && ticket.last_name 
-          ? `${ticket.first_name} ${ticket.last_name}`
-          : ticket.name || 'N/A',
-        reason: ticket.reason || ticket.Description || 'No reason provided',
-        resolution_status: ticket.resolution_status || ticket.status || 'Open',
-        poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid'
-      }));
-
-      // Update the data
-      if (transformedData.length === 0) {
-        console.log('No tickets found, using demo data');
+        // If no data found, use demo data
+        if (transformedData.length === 0) {
+          console.log('No tickets found, using demo data');
+          const demoData = DEMO_TICKETS.map(ticket => ({
+            ...ticket,
+            created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            cse_name: ticket.assigned_to || 'Unassigned',
+            name: `${ticket.first_name} ${ticket.last_name}`,
+            reason: ticket.reason || ticket.Description || 'No reason provided',
+            resolution_status: ticket.resolution_status || 'Open',
+            poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
+            praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+          }));
+          setData(demoData);
+          setFilteredData(demoData);
+        } else {
+          setData(transformedData);
+          setFilteredData(transformedData);
+        }
+      } catch (error) {
+        console.error('Error fetching tickets:', error);
+        toast.error('Failed to load tickets. Using demo data.');
+        // Use demo data with the new structure
         const demoData = DEMO_TICKETS.map(ticket => ({
           ...ticket,
           created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
@@ -292,26 +338,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           name: `${ticket.first_name} ${ticket.last_name}`,
           reason: ticket.reason || ticket.Description || 'No reason provided',
           resolution_status: ticket.resolution_status || 'Open',
-          poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid'
+          poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
+          praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
         }));
         setData(demoData);
         setFilteredData(demoData);
-      } else {
-        setData(transformedData);
-        setFilteredData(transformedData);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      // Close the modal
-      setIsTicketModalOpen(false);
-      toast.success('Ticket updated and list refreshed');
-
-    } catch (error) {
-      console.error('Error handling ticket update:', error);
-      toast.error('Failed to update ticket list');
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchTickets();
+  }, [session, config?.apiEndpoint]);
 
   // Apply filters when filter values change
   useEffect(() => {
@@ -322,15 +360,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-gray-600">Loading tickets data...</div>
-      </div>
-    );
-  }
-
-  // If no data, show a message
-  if (data.length === 0) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-gray-600">Click on a ticket to start working</div>
       </div>
     );
   }

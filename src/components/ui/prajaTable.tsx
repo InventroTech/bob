@@ -11,7 +11,7 @@ import { demoMenuItems } from '../page-builder/LeadCardComponent';
 interface Column {
   header: string;
   accessor: string;
-  type: 'text' | 'chip';
+  type: 'text' | 'chip' | 'link';
 }
 
 interface PrajaTableProps {
@@ -119,6 +119,23 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
             {row[col.accessor]}
           </Badge>
         );
+      }
+    } else if (col.type === 'link') {
+      const linkValue = row[col.accessor];
+      if (linkValue && linkValue !== 'N/A') {
+        return (
+          <a 
+            href={linkValue} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 underline text-sm"
+            onClick={(e) => e.stopPropagation()} // Prevent row click when clicking link
+          >
+            View Dashboard
+          </a>
+        );
+      } else {
+        return <span className="text-gray-400 text-sm">N/A</span>;
       }
     } else if (col.accessor === 'party') {
       return <StatusCard text={row.party} color={row.partycolor} type={col.type} />;

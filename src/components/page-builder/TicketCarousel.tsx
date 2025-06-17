@@ -5,7 +5,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, User, Tag, ChevronDown, Phone, Star, Clock, MessageSquare, Award, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Calendar, User, Tag, ChevronDown, Phone, Star, Clock, MessageSquare, Award, CheckCircle2, XCircle, AlertCircle, PieChart, Coffee } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { API_URI } from '@/const';
@@ -164,11 +164,173 @@ interface TicketCarouselProps {
   onUpdate?: (updatedTicket: any) => void;
 }
 
+// Pending tickets data interface
+interface TicketStats {
+  total: number;
+  pending: number;
+  inProgress: number;
+  resolved: number;
+  notPossible: number;
+}
+
+// Simple pie chart component
+const PieChartComponent = ({ data }: { data: TicketStats }) => {
+  const total = data.total;
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center">
+        <div className="text-center text-gray-500">
+          <div className="text-2xl font-bold">0</div>
+          <div className="text-xs">No tickets</div>
+        </div>
+      </div>
+    );
+  }
+
+  const pendingPercent = (data.pending / total) * 100;
+  const inProgressPercent = (data.inProgress / total) * 100;
+  const resolvedPercent = (data.resolved / total) * 100;
+  const notPossiblePercent = (data.notPossible / total) * 100;
+
+  return (
+    <div className="flex items-center justify-center">
+      <div className="relative w-32 h-32">
+        <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
+          {/* Pending - Yellow */}
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth="8"
+            strokeDasharray={`${(pendingPercent / 100) * 251.2} 251.2`}
+            strokeDashoffset="0"
+          />
+          {/* In Progress - Blue */}
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth="8"
+            strokeDasharray={`${(inProgressPercent / 100) * 251.2} 251.2`}
+            strokeDashoffset={`-${(pendingPercent / 100) * 251.2}`}
+          />
+          {/* Resolved - Green */}
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="8"
+            strokeDasharray={`${(resolvedPercent / 100) * 251.2} 251.2`}
+            strokeDashoffset={`-${((pendingPercent + inProgressPercent) / 100) * 251.2}`}
+          />
+          {/* Not Possible - Red */}
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth="8"
+            strokeDasharray={`${(notPossiblePercent / 100) * 251.2} 251.2`}
+            strokeDashoffset={`-${((pendingPercent + inProgressPercent + resolvedPercent) / 100) * 251.2}`}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-800">{data.total}</div>
+            <div className="text-xs text-gray-600">Total</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Pending tickets card component
+const PendingTicketsCard = ({ onGetFirstTicket, loading, ticketStats }: { 
+  onGetFirstTicket: () => void, 
+  loading: boolean,
+  ticketStats: TicketStats
+}) => {
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-6">
+          <div className="text-center mb-6">
+            <div className="flex items-center justify-center mb-4">
+              <PieChart className="h-8 w-8 text-primary mr-2" />
+              <h2 className="text-2xl font-semibold text-gray-800">Pending Tickets</h2>
+            </div>
+            <p className="text-gray-600 mb-6">Click to start working on tickets</p>
+          </div>
+
+          <div className="mb-6">
+            <PieChartComponent data={ticketStats} />
+          </div>
+
+          <div className="space-y-3 mb-6">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
+                <span className="text-sm text-gray-700">Pending</span>
+              </div>
+              <span className="text-sm font-medium">{ticketStats.pending}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                <span className="text-sm text-gray-700">Others</span>
+              </div>
+              <span className="text-sm font-medium">{ticketStats.inProgress}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                <span className="text-sm text-gray-700">Resolved</span>
+              </div>
+              <span className="text-sm font-medium">{ticketStats.resolved}</span>
+            </div>
+            
+          </div>
+
+          <Button 
+            onClick={onGetFirstTicket} 
+            disabled={loading}
+            className="w-full"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Loading...
+              </>
+            ) : (
+              'Get Tickets'
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialTicket, onUpdate }) => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
-  const [currentTicket, setCurrentTicket] = useState<any>(initialTicket || DEMO_TICKETS[0]);
-  const [isDemoTicket, setIsDemoTicket] = useState(!initialTicket);
+  const [currentTicket, setCurrentTicket] = useState<any>(initialTicket || null);
+  const [showPendingCard, setShowPendingCard] = useState(!initialTicket);
+  const [ticketStats, setTicketStats] = useState<TicketStats>({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    resolved: 0,
+    notPossible: 0
+  });
   const [resolutionStatus, setResolutionStatus] = useState<"Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested">(initialTicket?.resolution_status || "Pending");
   const [callStatus, setCallStatus] = useState<"Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service">(initialTicket?.call_status || "Call Waiting");
   const [cseRemarks, setCseRemarks] = useState(initialTicket?.cse_remarks || "");
@@ -180,6 +342,74 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
   // If initialTicket is provided, use it instead of fetching
   const isReadOnly = config?.readOnly || false;
+
+  // Function to unassign current ticket
+  const unassignTicket = async (ticketId: number) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      await supabase
+        .from('support_ticket')
+        .update({
+          assigned_to: null,
+          cse_name: null
+        })
+        .eq('id', ticketId);
+
+      console.log('Ticket unassigned successfully');
+    } catch (error) {
+      console.error('Error unassigning ticket:', error);
+    }
+  };
+
+  // Function to fetch ticket statistics
+  const fetchTicketStats = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Fetch ticket statistics from the Edge Function
+      const response = await fetch('https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/get-ticket-status', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Transform the API response to match our TicketStats interface
+      const stats: TicketStats = {
+        total: data.total_tickets || 0,
+        pending: data.total_pending_tickets || 0,
+        inProgress: 0, // Not provided by API, will be calculated
+        resolved: data.total_completed_tickets || 0,
+        notPossible: 0 // Not provided by API, will be calculated
+      };
+
+      // Calculate inProgress and notPossible from the difference
+      const calculatedInProgress = Math.max(0, stats.total - stats.pending - stats.resolved);
+      stats.inProgress = calculatedInProgress;
+
+      setTicketStats(stats);
+    } catch (error) {
+      console.error('Error fetching ticket statistics:', error);
+      // Set default stats on error
+      setTicketStats({
+        total: 0,
+        pending: 0,
+        inProgress: 0,
+        resolved: 0,
+        notPossible: 0
+      });
+    }
+  };
 
   const fetchTicket = async () => {
     try {
@@ -216,7 +446,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         setCallDuration(ticketData.call_duration || "");
         setResolutionTime(ticketData.resolution_time || "");
         setSelectedOtherReasons(parseOtherReasons(ticketData.other_reasons));
-        setIsDemoTicket(false);
+        setShowPendingCard(false);
         toast.success('Ticket loaded successfully');
       } else {
         throw new Error('Invalid ticket data received');
@@ -229,6 +459,51 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     }
   };
 
+  const handleTakeBreak = async () => {
+    try {
+      // Unassign the current ticket if it exists
+      if (currentTicket?.id) {
+        await unassignTicket(currentTicket.id);
+        toast.info('Ticket unassigned. Taking a break.');
+      }
+      
+      setShowPendingCard(true);
+      setCurrentTicket(null);
+      
+      // Refresh ticket statistics
+      await fetchTicketStats();
+      
+      toast.info('Taking a break. Click "Get Tickets" when ready to continue.');
+    } catch (error) {
+      console.error('Error taking break:', error);
+      toast.error('Error taking break. Please try again.');
+    }
+  };
+
+  // Handle tab visibility change
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.hidden && currentTicket?.id) {
+        // User switched tabs or minimized window
+        await unassignTicket(currentTicket.id);
+        setShowPendingCard(true);
+        setCurrentTicket(null);
+        await fetchTicketStats();
+        toast.info('Ticket unassigned due to tab change. Click "Get Tickets" to continue.');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentTicket?.id]);
+
+  // Fetch ticket statistics on component mount
+  useEffect(() => {
+    fetchTicketStats();
+  }, []);
+
   // Update state when initialTicket changes
   useEffect(() => {
     if (initialTicket) {
@@ -239,7 +514,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       setCallDuration(initialTicket.call_duration || "");
       setResolutionTime(initialTicket.resolution_time || "");
       setSelectedOtherReasons(parseOtherReasons(initialTicket.other_reasons));
-      setIsDemoTicket(false);
+      setShowPendingCard(false);
     }
   }, [initialTicket]);
 
@@ -296,6 +571,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         .from('support_ticket')
         .update({
           resolution_status: resolutionStatus,
+          assigned_to: null,
           cse_remarks: cseRemarks,
           cse_name: user?.email || 'Unknown CSE',
           cse_called_date: currentTime,
@@ -356,12 +632,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     );
   }
 
+  if (showPendingCard) {
+    return <PendingTicketsCard onGetFirstTicket={fetchTicket} loading={loading} ticketStats={ticketStats} />;
+  }
+
   if (!currentTicket) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
         <p>No ticket available</p>
         <Button onClick={fetchTicket} disabled={loading}>
-          Get First Ticket
+          Get Tickets
         </Button>
       </div>
     );
@@ -379,11 +659,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   return (
     <div className="relative w-full h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
-        {isDemoTicket && (
-          <div className="absolute top-0 left-0 right-0 bg-yellow-100 text-yellow-800 text-center py-1 text-sm font-medium rounded-t-xl border-b">
-            Demo Ticket - Click "Get First Ticket" to start working on real tickets
-          </div>
-        )}
         <div className="space-y-6">
           {/* Header Section */}
           <div className="flex justify-between items-start">
@@ -402,45 +677,36 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                 `}>
                   {currentTicket?.subscription_status || 'N/A'}
                 </Badge>
-                {isDemoTicket && (
-                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                    Demo
-                  </Badge>
-                )}
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {isDemoTicket ? (
-                <Button onClick={fetchTicket} disabled={loading}>
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Loading...
-                    </>
-                  ) : (
-                    'Get First Ticket'
-                  )}
-                </Button>
-              ) : (
-                <Select 
-                  value={resolutionStatus} 
-                  onValueChange={(value: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested") => setResolutionStatus(value)}
-                  disabled={updating || isReadOnly}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Resolved">Resolved</SelectItem>
-                    <SelectItem value="WIP">Work in Progress</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Already Resolved">Already Resolved</SelectItem>
-                    <SelectItem value="No Issue">No Issue</SelectItem>
-                    <SelectItem value="Not Possible">Not Possible</SelectItem>
-                    <SelectItem value="Feature Requested">Feature Requested</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+              <Button
+                onClick={handleTakeBreak}
+                variant="outline"
+                className="flex items-center gap-2"
+                disabled={updating || isReadOnly}
+              >
+                <Coffee className="h-4 w-4" />
+                Take a Break
+              </Button>
+              <Select 
+                value={resolutionStatus} 
+                onValueChange={(value: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested") => setResolutionStatus(value)}
+                disabled={updating || isReadOnly}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Resolved">Resolved</SelectItem>
+                  <SelectItem value="WIP">Work in Progress</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Already Resolved">Already Resolved</SelectItem>
+                  <SelectItem value="No Issue">No Issue</SelectItem>
+                  <SelectItem value="Not Possible">Not Possible</SelectItem>
+                  <SelectItem value="Feature Requested">Feature Requested</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -687,35 +953,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
         {/* Navigation Buttons */}
         <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
-          {isDemoTicket ? (
-            <Button onClick={fetchTicket} disabled={loading}>
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Loading...
-                </>
-              ) : (
-                'Get First Ticket'
-              )}
-            </Button>
-          ) : (
-            <Button
-              onClick={handleSubmit}
-              className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              disabled={updating || isReadOnly}
-            >
-              {updating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Updating...
-                </>
-              ) : isReadOnly ? (
-                'Close'
-              ) : (
-                'Save & Continue'
-              )}
-            </Button>
-          )}
+          <Button
+            onClick={handleSubmit}
+            className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            disabled={updating || isReadOnly}
+          >
+            {updating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Updating...
+              </>
+            ) : isReadOnly ? (
+              'Close'
+            ) : (
+              'Save & Continue'
+            )}
+          </Button>
         </div>
       </div>
     </div>
