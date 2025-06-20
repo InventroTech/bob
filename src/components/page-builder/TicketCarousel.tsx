@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsCard";
 
 interface Ticket {
   id: number;
@@ -164,161 +165,6 @@ interface TicketCarouselProps {
   onUpdate?: (updatedTicket: any) => void;
 }
 
-// Pending tickets data interface
-interface TicketStats {
-  total: number;
-  pending: number;
-  inProgress: number;
-  resolved: number;
-  notPossible: number;
-}
-
-// Simple pie chart component
-const PieChartComponent = ({ data }: { data: TicketStats }) => {
-  const total = data.total;
-  if (total === 0) {
-    return (
-      <div className="flex items-center justify-center">
-        <div className="text-center text-gray-500">
-          <div className="text-2xl font-bold">0</div>
-          <div className="text-xs">No tickets</div>
-        </div>
-      </div>
-    );
-  }
-
-  const pendingPercent = (data.pending / total) * 100;
-  const inProgressPercent = (data.inProgress / total) * 100;
-  const resolvedPercent = (data.resolved / total) * 100;
-  const notPossiblePercent = (data.notPossible / total) * 100;
-
-  return (
-    <div className="flex items-center justify-center">
-      <div className="relative w-32 h-32">
-        <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
-          {/* Pending - Yellow */}
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            fill="none"
-            stroke="#fbbf24"
-            strokeWidth="8"
-            strokeDasharray={`${(pendingPercent / 100) * 251.2} 251.2`}
-            strokeDashoffset="0"
-          />
-          {/* In Progress - Blue */}
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            fill="none"
-            stroke="#3b82f6"
-            strokeWidth="8"
-            strokeDasharray={`${(inProgressPercent / 100) * 251.2} 251.2`}
-            strokeDashoffset={`-${(pendingPercent / 100) * 251.2}`}
-          />
-          {/* Resolved - Green */}
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            fill="none"
-            stroke="#10b981"
-            strokeWidth="8"
-            strokeDasharray={`${(resolvedPercent / 100) * 251.2} 251.2`}
-            strokeDashoffset={`-${((pendingPercent + inProgressPercent) / 100) * 251.2}`}
-          />
-          {/* Not Possible - Red */}
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            fill="none"
-            stroke="#ef4444"
-            strokeWidth="8"
-            strokeDasharray={`${(notPossiblePercent / 100) * 251.2} 251.2`}
-            strokeDashoffset={`-${((pendingPercent + inProgressPercent + resolvedPercent) / 100) * 251.2}`}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-gray-800">{data.total}</div>
-            <div className="text-xs text-gray-600">Total</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Pending tickets card component
-const PendingTicketsCard = ({ onGetFirstTicket, loading, ticketStats }: { 
-  onGetFirstTicket: () => void, 
-  loading: boolean,
-  ticketStats: TicketStats
-}) => {
-  return (
-    <div className="flex flex-col items-center justify-center h-full p-8">
-      <Card className="w-full max-w-md">
-        <CardContent className="p-6">
-          <div className="text-center mb-6">
-            <div className="flex items-center justify-center mb-4">
-              <PieChart className="h-8 w-8 text-primary mr-2" />
-              <h2 className="text-2xl font-semibold text-gray-800">Pending Tickets</h2>
-            </div>
-            <p className="text-gray-600 mb-6">Click to start working on tickets</p>
-          </div>
-
-          <div className="mb-6">
-            <PieChartComponent data={ticketStats} />
-          </div>
-
-          <div className="space-y-3 mb-6">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center">
-                <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
-                <span className="text-sm text-gray-700">Pending</span>
-              </div>
-              <span className="text-sm font-medium">{ticketStats.pending}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center">
-                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                <span className="text-sm text-gray-700">Others</span>
-              </div>
-              <span className="text-sm font-medium">{ticketStats.inProgress}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center">
-                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                <span className="text-sm text-gray-700">Resolved</span>
-              </div>
-              <span className="text-sm font-medium">{ticketStats.resolved}</span>
-            </div>
-            
-          </div>
-
-          <Button 
-            onClick={onGetFirstTicket} 
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Loading...
-              </>
-            ) : (
-              'Get Tickets'
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
-
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialTicket, onUpdate }) => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
@@ -331,17 +177,30 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     resolved: 0,
     notPossible: 0
   });
-  const [resolutionStatus, setResolutionStatus] = useState<"Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested">(initialTicket?.resolution_status || "Pending");
-  const [callStatus, setCallStatus] = useState<"Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service">(initialTicket?.call_status || "Call Waiting");
+  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolved">(initialTicket?.resolution_status === "Resolved" ? "Resolved" : initialTicket?.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
+  const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(initialTicket?.call_status === "Connected" ? "Connected" : "Not Connected");
   const [cseRemarks, setCseRemarks] = useState(initialTicket?.cse_remarks || "");
   const [callDuration, setCallDuration] = useState(initialTicket?.call_duration || "");
-  const [resolutionTime, setResolutionTime] = useState(initialTicket?.resolution_time || "");
   const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>(parseOtherReasons(initialTicket?.other_reasons));
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [ticketStartTime, setTicketStartTime] = useState<Date | null>(null);
 
   // If initialTicket is provided, use it instead of fetching
   const isReadOnly = config?.readOnly || false;
+
+  // Function to calculate resolution time
+  const calculateResolutionTime = (): string => {
+    if (!ticketStartTime) return "";
+    
+    const endTime = new Date();
+    const diffInSeconds = Math.floor((endTime.getTime() - ticketStartTime.getTime()) / 1000);
+    
+    const minutes = Math.floor(diffInSeconds / 60);
+    const seconds = diffInSeconds % 60;
+    
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   // Function to unassign current ticket
   const unassignTicket = async (ticketId: number) => {
@@ -440,14 +299,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       
       if (ticketData && typeof ticketData === 'object') {
         setCurrentTicket(ticketData);
-        setResolutionStatus(ticketData.resolution_status || "Pending");
+        setResolutionStatus(ticketData.resolution_status === "Resolved" ? "Resolved" : ticketData.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
         setCseRemarks(ticketData.cse_remarks || "");
-        setCallStatus(ticketData.call_status || "Call Waiting");
+        setCallStatus(ticketData.call_status === "Connected" ? "Connected" : "Not Connected");
         setCallDuration(ticketData.call_duration || "");
-        setResolutionTime(ticketData.resolution_time || "");
         setSelectedOtherReasons(parseOtherReasons(ticketData.other_reasons));
         setShowPendingCard(false);
-        toast.success('Ticket loaded successfully');
+        // Set the start time when ticket is fetched
+        setTicketStartTime(new Date());
       } else {
         throw new Error('Invalid ticket data received');
       }
@@ -461,10 +320,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
   const handleTakeBreak = async () => {
     try {
-      // Unassign the current ticket if it exists
-      if (currentTicket?.id) {
+      // Only unassign if the ticket is not in WIP status
+      if (currentTicket?.id && resolutionStatus !== "WIP") {
         await unassignTicket(currentTicket.id);
         toast.info('Ticket unassigned. Taking a break.');
+      } else if (resolutionStatus === "WIP") {
+        toast.info('Ticket is in progress. Taking a break without unassigning.');
       }
       
       setShowPendingCard(true);
@@ -484,12 +345,17 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.hidden && currentTicket?.id) {
-        // User switched tabs or minimized window
-        await unassignTicket(currentTicket.id);
+        // Only unassign if the ticket is not in WIP status
+        if (resolutionStatus !== "WIP") {
+          await unassignTicket(currentTicket.id);
+          toast.info('Ticket unassigned due to tab change. Click "Get Tickets" to continue.');
+        } else {
+          toast.info('Ticket is in progress. Tab change detected but ticket remains assigned.');
+        }
+        
         setShowPendingCard(true);
         setCurrentTicket(null);
         await fetchTicketStats();
-        toast.info('Ticket unassigned due to tab change. Click "Get Tickets" to continue.');
       }
     };
 
@@ -497,24 +363,37 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [currentTicket?.id]);
+  }, [currentTicket?.id, resolutionStatus]);
 
   // Fetch ticket statistics on component mount
   useEffect(() => {
     fetchTicketStats();
   }, []);
 
+  // Refresh ticket statistics every 30 seconds when showing pending card
+  useEffect(() => {
+    if (!showPendingCard) return; // Only refresh when showing pending card
+
+    const interval = setInterval(() => {
+      fetchTicketStats();
+      toast.info('Ticket statistics refreshed');
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [showPendingCard]);
+
   // Update state when initialTicket changes
   useEffect(() => {
     if (initialTicket) {
       setCurrentTicket(initialTicket);
-      setResolutionStatus(initialTicket.resolution_status || "Pending");
+      setResolutionStatus(initialTicket.resolution_status === "Resolved" ? "Resolved" : initialTicket.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
       setCseRemarks(initialTicket.cse_remarks || "");
-      setCallStatus(initialTicket.call_status || "Call Waiting");
+      setCallStatus(initialTicket.call_status === "Connected" ? "Connected" : "Not Connected");
       setCallDuration(initialTicket.call_duration || "");
-      setResolutionTime(initialTicket.resolution_time || "");
       setSelectedOtherReasons(parseOtherReasons(initialTicket.other_reasons));
       setShowPendingCard(false);
+      // Set the start time when initial ticket is provided
+      setTicketStartTime(new Date());
     }
   }, [initialTicket]);
 
@@ -547,9 +426,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
       const currentTime = new Date().toISOString();
       
+      // Calculate resolution time automatically
+      const calculatedResolutionTime = calculateResolutionTime();
+      
       // Calculate snooze_until based on call status and attempts
       let snoozeUntil = null;
-      const isCallNotConnected = callStatus === "Call Not Answering";
+      const isCallNotConnected = callStatus === "Not Connected";
       
       if (isCallNotConnected) {
         const currentDate = new Date();
@@ -566,18 +448,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         }
       }
 
+      // Determine assignment based on resolution status
+      const shouldAssign = resolutionStatus === "WIP";
+      const assignedTo = shouldAssign ? user?.id || 'Unknown CSE' : null;
+
       // Step 1: Update ticket data from frontend side using Supabase
       const { data: updatedTicket, error: updateError } = await supabase
         .from('support_ticket')
         .update({
           resolution_status: resolutionStatus,
-          assigned_to: null,
+          assigned_to: assignedTo,
           cse_remarks: cseRemarks,
           cse_name: user?.email || 'Unknown CSE',
           cse_called_date: currentTime,
           call_status: callStatus,
           call_duration: callDuration,
-          resolution_time: resolutionTime || null,
+          resolution_time: calculatedResolutionTime || null,
           call_attempts: currentTicket.call_attempts + 1,
           completed_at: currentTime,
           snooze_until: snoozeUntil,
@@ -593,12 +479,13 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       const updatedTicketData = {
         ...currentTicket,
         resolution_status: resolutionStatus,
+        assigned_to: assignedTo,
         cse_remarks: cseRemarks,
         cse_name: user?.email || 'Unknown CSE',
         cse_called_date: currentTime,
         call_status: callStatus,
         call_duration: callDuration,
-        resolution_time: resolutionTime || null,
+        resolution_time: calculatedResolutionTime || null,
         call_attempts: currentTicket.call_attempts + 1,
         completed_at: currentTime,
         snooze_until: snoozeUntil,
@@ -606,7 +493,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       };
 
       setCurrentTicket(updatedTicketData);
-      toast.success('Ticket saved successfully');
+      
+      if (shouldAssign) {
+        toast.success('Ticket assigned to you and saved successfully');
+      } else {
+        toast.success('Ticket saved successfully');
+      }
 
       // Call the onUpdate callback if provided
       if (onUpdate) {
@@ -691,20 +583,46 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
               </Button>
               <Select 
                 value={resolutionStatus} 
-                onValueChange={(value: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested") => setResolutionStatus(value)}
+                onValueChange={async (value: "WIP" | "Resolved" | "Can't Resolved") => {
+                  setResolutionStatus(value);
+                  
+                  // If WIP is selected, immediately assign the ticket to the CSE
+                  if (value === "WIP" && currentTicket?.id && !isReadOnly) {
+                    try {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (session) {
+                        await supabase
+                          .from('support_ticket')
+                          .update({
+                            assigned_to: user?.email || 'Unknown CSE',
+                            cse_name: user?.email || 'Unknown CSE'
+                          })
+                          .eq('id', currentTicket.id);
+                        
+                        // Update local state
+                        setCurrentTicket(prev => ({
+                          ...prev,
+                          assigned_to: user?.email || 'Unknown CSE',
+                          cse_name: user?.email || 'Unknown CSE'
+                        }));
+                        
+                        
+                      }
+                    } catch (error) {
+                      console.error('Error assigning ticket:', error);
+                      toast.error('Failed to assign ticket');
+                    }
+                  }
+                }}
                 disabled={updating || isReadOnly}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Resolved">Resolved</SelectItem>
                   <SelectItem value="WIP">Work in Progress</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Already Resolved">Already Resolved</SelectItem>
-                  <SelectItem value="No Issue">No Issue</SelectItem>
-                  <SelectItem value="Not Possible">Not Possible</SelectItem>
-                  <SelectItem value="Feature Requested">Feature Requested</SelectItem>
+                  <SelectItem value="Resolved">Resolved</SelectItem>
+                  <SelectItem value="Can't Resolved">Can't Resolved</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -759,7 +677,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                     <label className="text-xs text-muted-foreground">Call Status</label>
                     <Select 
                       value={callStatus} 
-                      onValueChange={(value: "Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service") => setCallStatus(value)}
+                      onValueChange={(value: "Connected" | "Not Connected") => setCallStatus(value)}
                       disabled={updating || isReadOnly}
                     >
                       <SelectTrigger className="w-full">
@@ -767,12 +685,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Connected">Connected</SelectItem>
-                        <SelectItem value="Call Not Answering">Call Not Answering</SelectItem>
-                        <SelectItem value="Call Waiting">Call Waiting</SelectItem>
-                        <SelectItem value="Call busy">Call Busy</SelectItem>
-                        <SelectItem value="Switch Off">Switch Off</SelectItem>
-                        <SelectItem value="Not Reachable">Not Reachable</SelectItem>
-                        <SelectItem value="Out Of Service">Out Of Service</SelectItem>
+                        <SelectItem value="Not Connected">Not Connected</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -804,27 +717,23 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Resolution Time</label>
-                    <Input
-                      type="text"
-                      value={resolutionTime}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Allow partial input while typing, but ensure it follows the pattern
-                        if (value === '' || /^\d{0,2}(:\d{0,2})?$/.test(value)) {
-                          setResolutionTime(value);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        const value = e.target.value;
-                        // Ensure proper format on blur - if not valid, clear it
-                        if (value && !/^\d{1,2}:\d{2}$/.test(value)) {
-                          setResolutionTime('');
-                        }
-                      }}
-                      placeholder="e.g., 1:23, 23:45"
-                      disabled={updating || isReadOnly}
-                      className="w-full"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="text"
+                        value={ticketStartTime ? calculateResolutionTime() : ""}
+                        placeholder="Auto-calculated"
+                        disabled={true}
+                        className="w-full bg-muted"
+                      />
+                      {ticketStartTime && (
+                        <Badge variant="secondary" className="text-xs">
+                          Auto
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Time from ticket appearance to resolution
+                    </p>
                   </div>
 
                   <div className="pt-2 border-t">
