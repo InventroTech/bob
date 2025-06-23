@@ -5,7 +5,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, User, Tag, ChevronDown, Phone, Star, Clock, MessageSquare, Award, CheckCircle2, XCircle, AlertCircle, PieChart, Coffee } from "lucide-react";
+import { Calendar, User, Tag, ChevronDown, Phone, Star, Clock, MessageSquare, Award, CheckCircle2, XCircle, AlertCircle, PieChart, Coffee, Waypoints } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { API_URI } from '@/const';
@@ -17,28 +17,32 @@ import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsC
 
 interface Ticket {
   id: number;
+  created_at: string;
   ticket_date: string;
   user_id: string;
   name: string;
   phone: string;
   source: string;
-  subscription_status: string;
-  atleast_paid_once: boolean;
+  subscription_status: string | null;
+  atleast_paid_once: boolean | null;
   reason: string;
-  other_reasons: string[] | string;
-  badge: string;
-  poster: string;
+  other_reasons: string[] | string | null;
+  badge: string | null;
+  poster: string | null;
   tenant_id: string;
+  assigned_to: string | null;
   layout_status: string;
   resolution_status: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested";
   resolution_time: string | null;
-  cse_name: string;
-  cse_remarks: string;
-  cse_called_date: string | null;
-  call_status: "Connected" | "Call Not Answering" | "Call Waiting" | "Call busy" | "Switch Off" | "Not Reachable" | "Out Of Service";
-  call_duration: string;
-  call_attempts: number;
-  rm_name: string;
+  cse_name: string | null;
+  cse_remarks: string | null;
+  call_status: string | null;
+  call_attempts: number | null;
+  rm_name: string | null;
+  completed_at: string | null;
+  snooze_until: string | null;
+  praja_dashboard_user_link: string | null;
+  display_pic_url: string | null;
 }
 
 // Predefined other reasons options
@@ -64,6 +68,7 @@ const OTHER_REASONS_OPTIONS = [
 const DEMO_TICKETS: Ticket[] = [
   {
     id: 1,
+    created_at: new Date().toISOString(),
     ticket_date: new Date().toISOString(),
     user_id: "PRAJA501",
     name: "Sameer Anand",
@@ -74,21 +79,25 @@ const DEMO_TICKETS: Ticket[] = [
     reason: "User is unable to log in after the recent password reset.",
     other_reasons: ["Technical Issue", "Account Access"],
     badge: "Gold Tier",
-    poster: "N/A",
+    poster: null,
     tenant_id: "demo-tenant",
+    assigned_to: null,
     layout_status: "Standard View",
     resolution_status: "Pending",
     resolution_time: null,
-    cse_name: "Auto-Generated",
-    cse_remarks: "Initial ticket created via API webhook.",
-    cse_called_date: null,
-    call_status: "Call Waiting",
-    call_duration: "0s",
-    call_attempts: 0,
-    rm_name: "John Doe"
+    cse_name: null,
+    cse_remarks: null,
+    call_status: null,
+    call_attempts: null,
+    rm_name: null,
+    completed_at: null,
+    snooze_until: null,
+    praja_dashboard_user_link: null,
+    display_pic_url: null
   },
   {
     id: 2,
+    created_at: new Date(Date.now() - 86400000).toISOString(),
     ticket_date: new Date(Date.now() - 86400000).toISOString(),
     user_id: "PRAJA502",
     name: "Priya Sharma",
@@ -99,21 +108,25 @@ const DEMO_TICKETS: Ticket[] = [
     reason: "Unable to access premium features after subscription renewal.",
     other_reasons: ["Billing Problem", "Feature Request"],
     badge: "Silver Tier",
-    poster: "N/A",
+    poster: null,
     tenant_id: "demo-tenant",
+    assigned_to: "demo-cse@example.com",
     layout_status: "Standard View",
     resolution_status: "WIP",
     resolution_time: null,
     cse_name: "Rahul Kumar",
     cse_remarks: "Investigating subscription status.",
-    cse_called_date: new Date().toISOString(),
     call_status: "Connected",
-    call_duration: "5m",
     call_attempts: 1,
-    rm_name: "Jane Smith"
+    rm_name: null,
+    completed_at: null,
+    snooze_until: null,
+    praja_dashboard_user_link: null,
+    display_pic_url: null
   },
   {
     id: 3,
+    created_at: new Date(Date.now() - 172800000).toISOString(),
     ticket_date: new Date(Date.now() - 172800000).toISOString(),
     user_id: "PRAJA503",
     name: "Amit Patel",
@@ -124,18 +137,21 @@ const DEMO_TICKETS: Ticket[] = [
     reason: "Request for custom dashboard layout.",
     other_reasons: ["Feature Request", "User Training"],
     badge: "Bronze Tier",
-    poster: "N/A",
+    poster: null,
     tenant_id: "demo-tenant",
+    assigned_to: null,
     layout_status: "Custom View",
     resolution_status: "Not Possible",
     resolution_time: null,
-    cse_name: "Auto-Generated",
-    cse_remarks: "Feature request logged for review.",
-    cse_called_date: null,
+    cse_name: null,
+    cse_remarks: null,
     call_status: "Not Reachable",
-    call_duration: "0s",
     call_attempts: 0,
-    rm_name: "Alice Johnson"
+    rm_name: null,
+    completed_at: null,
+    snooze_until: null,
+    praja_dashboard_user_link: null,
+    display_pic_url: null
   }
 ];
 
@@ -180,7 +196,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolved">(initialTicket?.resolution_status === "Resolved" ? "Resolved" : initialTicket?.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
   const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(initialTicket?.call_status === "Connected" ? "Connected" : "Not Connected");
   const [cseRemarks, setCseRemarks] = useState(initialTicket?.cse_remarks || "");
-  const [callDuration, setCallDuration] = useState(initialTicket?.call_duration || "");
   const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>(parseOtherReasons(initialTicket?.other_reasons));
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -302,7 +317,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         setResolutionStatus(ticketData.resolution_status === "Resolved" ? "Resolved" : ticketData.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
         setCseRemarks(ticketData.cse_remarks || "");
         setCallStatus(ticketData.call_status === "Connected" ? "Connected" : "Not Connected");
-        setCallDuration(ticketData.call_duration || "");
         setSelectedOtherReasons(parseOtherReasons(ticketData.other_reasons));
         setShowPendingCard(false);
         // Set the start time when ticket is fetched
@@ -389,7 +403,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       setResolutionStatus(initialTicket.resolution_status === "Resolved" ? "Resolved" : initialTicket.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
       setCseRemarks(initialTicket.cse_remarks || "");
       setCallStatus(initialTicket.call_status === "Connected" ? "Connected" : "Not Connected");
-      setCallDuration(initialTicket.call_duration || "");
       setSelectedOtherReasons(parseOtherReasons(initialTicket.other_reasons));
       setShowPendingCard(false);
       // Set the start time when initial ticket is provided
@@ -460,9 +473,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
           assigned_to: assignedTo,
           cse_remarks: cseRemarks,
           cse_name: user?.email || 'Unknown CSE',
-          cse_called_date: currentTime,
           call_status: callStatus,
-          call_duration: callDuration,
           resolution_time: calculatedResolutionTime || null,
           call_attempts: currentTicket.call_attempts + 1,
           completed_at: currentTime,
@@ -482,9 +493,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         assigned_to: assignedTo,
         cse_remarks: cseRemarks,
         cse_name: user?.email || 'Unknown CSE',
-        cse_called_date: currentTime,
         call_status: callStatus,
-        call_duration: callDuration,
         resolution_time: calculatedResolutionTime || null,
         call_attempts: currentTicket.call_attempts + 1,
         completed_at: currentTime,
@@ -494,12 +503,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
       setCurrentTicket(updatedTicketData);
       
-      if (shouldAssign) {
-        toast.success('Ticket assigned to you and saved successfully');
-      } else {
-        toast.success('Ticket saved successfully');
-      }
-
       // Call the onUpdate callback if provided
       if (onUpdate) {
         onUpdate(updatedTicketData);
@@ -550,35 +553,38 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
   return (
     <div className="relative w-full h-full">
-      <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
-        <div className="space-y-6">
+      <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
+        <div className="space-y-4">
           {/* Header Section */}
           <div className="flex justify-between items-start">
             <div>
-              <h2 className="text-2xl font-semibold text-primary">
+              <h2 className="text-xl font-semibold text-primary">
                 {config?.title || 'Support Tickets'}
               </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                  {currentTicket?.badge || 'N/A'}
-                </Badge>
-                <Badge variant="outline" className={`
-                  ${currentTicket?.subscription_status === 'Premium' ? 'bg-purple-50 text-purple-700 border-purple-200' : 
-                    currentTicket?.subscription_status === 'Basic' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
-                    'bg-gray-50 text-gray-700 border-gray-200'}
-                `}>
-                  {currentTicket?.subscription_status || 'N/A'}
-                </Badge>
+              <div className="flex items-center gap-4 mt-1">
+                {currentTicket?.badge && currentTicket.badge !== 'N/A' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Badge:</span>
+                    <span className="text-xs font-medium">{currentTicket.badge}</span>
+                  </div>
+                )}
+                {currentTicket?.subscription_status && currentTicket.subscription_status !== 'N/A' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Subscription:</span>
+                    <span className="text-xs font-medium">{currentTicket.subscription_status}</span>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <Button
                 onClick={handleTakeBreak}
                 variant="outline"
+                size="sm"
                 className="flex items-center gap-2"
                 disabled={updating || isReadOnly}
               >
-                <Coffee className="h-4 w-4" />
+                <Coffee className="h-3 w-3" />
                 Take a Break
               </Button>
               <Select 
@@ -594,7 +600,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                         await supabase
                           .from('support_ticket')
                           .update({
-                            assigned_to: user?.email || 'Unknown CSE',
+                            assigned_to: user?.id || 'Unknown CSE',
                             cse_name: user?.email || 'Unknown CSE'
                           })
                           .eq('id', currentTicket.id);
@@ -602,10 +608,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                         // Update local state
                         setCurrentTicket(prev => ({
                           ...prev,
-                          assigned_to: user?.email || 'Unknown CSE',
+                          assigned_to: user?.id || 'Unknown CSE',
                           cse_name: user?.email || 'Unknown CSE'
                         }));
-                        
                         
                       }
                     } catch (error) {
@@ -616,7 +621,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                 }}
                 disabled={updating || isReadOnly}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -630,246 +635,209 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
           {/* User Information */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
-                <User className="h-4 w-4 mr-2 text-primary" />
+            <div className="space-y-2">
+              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+                {currentTicket?.display_pic_url ? (
+                  <img 
+                    src={currentTicket.display_pic_url} 
+                    alt={`${currentTicket.name || 'User'} profile`}
+                    className="h-6 w-6 rounded-full mr-2 object-cover"
+                    onError={(e) => {
+                      // Fallback to User icon if image fails to load
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <User className={`h-3 w-3 mr-2 text-primary ${currentTicket?.display_pic_url ? 'hidden' : ''}`} />
                 <div>
-                  <p className="font-medium">{currentTicket?.name || 'N/A'}</p>
+                  <p className="font-medium text-sm">{currentTicket?.name || 'N/A'}</p>
                   <p className="text-xs text-muted-foreground">ID: {currentTicket?.user_id || 'N/A'}</p>
                 </div>
               </div>
               {currentTicket?.rm_name && (
-                <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
-                  <User className="h-4 w-4 mr-2 text-primary" />
+                <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+                  <User className="h-3 w-3 mr-2 text-primary" />
                   <div>
                     <p className="text-xs text-muted-foreground">RM Name</p>
-                    <p className="font-medium">{currentTicket.rm_name}</p>
+                    <p className="font-medium text-sm">{currentTicket.rm_name}</p>
                   </div>
                 </div>
               )}
-              <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
-                <Phone className="h-4 w-4 mr-2 text-primary" />
-                <span className="font-medium">{currentTicket?.phone || 'N/A'}</span>
+              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+                <Phone className="h-3 w-3 mr-2 text-primary" />
+                <span className="font-medium text-sm">{currentTicket?.phone || 'N/A'}</span>
               </div>
-              <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
-                <Tag className="h-4 w-4 mr-2 text-primary" />
-                <span className="font-medium">{currentTicket?.source || 'N/A'}</span>
+              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+                <Waypoints className="h-3 w-3 mr-2 text-primary" />
+                <span className="font-medium text-sm">{currentTicket?.source || 'N/A'}</span>
               </div>
-              <div className="flex items-center text-sm bg-muted/50 p-3 rounded-md">
+              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
                 {currentTicket?.atleast_paid_once ? (
-                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
+                  <CheckCircle2 className="h-3 w-3 mr-2 text-green-500" />
                 ) : (
-                  <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                  <XCircle className="h-3 w-3 mr-2 text-red-500" />
                 )}
-                <span className="font-medium">
+                <span className="font-medium text-sm">
                   Payment Status (Atleast once): {currentTicket?.atleast_paid_once ? "Paid" : "Never Paid"}
                 </span>
               </div>
+              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+                <Clock className="h-3 w-3 mr-2 text-primary" />
+                <span className="font-medium text-sm">
+                  Attempts: {currentTicket?.call_attempts || 0}
+                </span>
+              </div>
             </div>
+
+            {/* Issue Details */}
             <div className="space-y-3">
-              <div className="bg-muted/50 p-4 rounded-md space-y-4">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-medium">Call Information</p>
+              <div className="bg-muted/30 p-3 rounded-md">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="h-3 w-3 text-primary" />
+                  <p className="font-medium text-sm">Issue Details</p>
                 </div>
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">Call Status</label>
-                    <Select 
-                      value={callStatus} 
-                      onValueChange={(value: "Connected" | "Not Connected") => setCallStatus(value)}
-                      disabled={updating || isReadOnly}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select call status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Connected">Connected</SelectItem>
-                        <SelectItem value="Not Connected">Not Connected</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Primary Reason</p>
+                    <p className="text-sm bg-muted/50 p-2 rounded-md">
+                      {currentTicket?.reason || 'No reason provided'}
+                    </p>
                   </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">Call Duration</label>
-                    <Input
-                      type="text"
-                      value={callDuration}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Allow partial input while typing, but ensure it follows the pattern
-                        if (value === '' || /^\d{0,2}(:\d{0,2})?$/.test(value)) {
-                          setCallDuration(value);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        const value = e.target.value;
-                        // Ensure proper format on blur - if not valid, clear it
-                        if (value && !/^\d{1,2}:\d{2}$/.test(value)) {
-                          setCallDuration('');
-                        }
-                      }}
-                      placeholder="e.g., 1:23, 23:45"
-                      disabled={updating || isReadOnly}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">Resolution Time</label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="text"
-                        value={ticketStartTime ? calculateResolutionTime() : ""}
-                        placeholder="Auto-calculated"
-                        disabled={true}
-                        className="w-full bg-muted"
-                      />
-                      {ticketStartTime && (
-                        <Badge variant="secondary" className="text-xs">
-                          Auto
-                        </Badge>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Other Reasons</p>
+                    <div className="space-y-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="w-full justify-between"
+                            disabled={updating || isReadOnly}
+                          >
+                            <span className="text-sm">
+                              {selectedOtherReasons.length > 0 
+                                ? `${selectedOtherReasons.length} reason(s) selected`
+                                : 'Select other reasons'
+                              }
+                            </span>
+                            <ChevronDown className="h-3 w-3 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-4" align="start">
+                          <div className="space-y-3">
+                            <h4 className="font-medium text-sm">Select Other Reasons</h4>
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {OTHER_REASONS_OPTIONS.map((reason) => (
+                                <div key={reason} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`reason-${reason}`}
+                                    checked={selectedOtherReasons.includes(reason)}
+                                    onCheckedChange={(checked) => handleOtherReasonChange(reason, checked as boolean)}
+                                    disabled={updating || isReadOnly}
+                                  />
+                                  <label
+                                    htmlFor={`reason-${reason}`}
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                  >
+                                    {reason}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                            {selectedOtherReasons.length > 0 && (
+                              <div className="pt-2 border-t">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedOtherReasons([])}
+                                  disabled={updating || isReadOnly}
+                                  className="text-xs"
+                                >
+                                  Clear All
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      
+                      {/* Display selected reasons as badges */}
+                      {selectedOtherReasons.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedOtherReasons.map((reason) => (
+                            <Badge 
+                              key={reason} 
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {reason}
+                            </Badge>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Time from ticket appearance to resolution
-                    </p>
-                  </div>
-
-                  <div className="pt-2 border-t">
-                    <p className="text-sm">
-                      Attempts: <span className="font-medium">{currentTicket?.call_attempts || 0}</span>
-                    </p>
-                    {currentTicket?.cse_called_date && (
-                      <p className="text-sm mt-1">
-                        Last Call: <span className="font-medium">
-                          {new Date(currentTicket.cse_called_date).toLocaleString()}
-                        </span>
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Issue Details */}
-          <div className="space-y-4">
-            <div className="bg-muted/30 p-4 rounded-md">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="h-4 w-4 text-primary" />
-                <p className="font-medium">Issue Details</p>
+              {/* CSE Remarks */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Award className="h-3 w-3 text-primary" />
+                  CSE Remarks
+                </label>
+                <Textarea
+                  value={cseRemarks}
+                  onChange={(e) => setCseRemarks(e.target.value)}
+                  placeholder="Add your remarks about this ticket..."
+                  className="min-h-[80px]"
+                  disabled={updating || isReadOnly}
+                />
               </div>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Primary Reason</p>
-                  <p className="text-sm bg-muted/50 p-3 rounded-md">
-                    {currentTicket?.reason || 'No reason provided'}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Other Reasons</p>
-                  <div className="space-y-3">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-between"
-                          disabled={updating || isReadOnly}
-                        >
-                          <span>
-                            {selectedOtherReasons.length > 0 
-                              ? `${selectedOtherReasons.length} reason(s) selected`
-                              : 'Select other reasons'
-                            }
-                          </span>
-                          <ChevronDown className="h-4 w-4 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-80 p-4" align="start">
-                        <div className="space-y-3">
-                          <h4 className="font-medium text-sm">Select Other Reasons</h4>
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {OTHER_REASONS_OPTIONS.map((reason) => (
-                              <div key={reason} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`reason-${reason}`}
-                                  checked={selectedOtherReasons.includes(reason)}
-                                  onCheckedChange={(checked) => handleOtherReasonChange(reason, checked as boolean)}
-                                  disabled={updating || isReadOnly}
-                                />
-                                <label
-                                  htmlFor={`reason-${reason}`}
-                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                >
-                                  {reason}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                          {selectedOtherReasons.length > 0 && (
-                            <div className="pt-2 border-t">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedOtherReasons([])}
-                                disabled={updating || isReadOnly}
-                                className="text-xs"
-                              >
-                                Clear All
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                    
-                    {/* Display selected reasons as badges */}
-                    {selectedOtherReasons.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedOtherReasons.map((reason) => (
-                          <Badge 
-                            key={reason} 
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            {reason}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* CSE Remarks */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <Award className="h-4 w-4 text-primary" />
-                CSE Remarks
-              </label>
-              <Textarea
-                value={cseRemarks}
-                onChange={(e) => setCseRemarks(e.target.value)}
-                placeholder="Add your remarks about this ticket..."
-                className="min-h-[100px]"
-                disabled={updating || isReadOnly}
-              />
             </div>
           </div>
         </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-end gap-4 mt-6 pt-4 border-t">
+        <div className="flex justify-between items-center gap-3 mt-4 pt-3 border-t">
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setCallStatus("Connected")}
+              size="sm"
+              variant={callStatus === "Connected" ? "default" : "outline"}
+              className={`${
+                callStatus === "Connected" 
+                  ? "bg-green-600 hover:bg-green-700 text-white" 
+                  : "bg-white text-green-600 border-green-600 hover:bg-green-50"
+              } transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+              disabled={updating || isReadOnly}
+            >
+              Connected
+            </Button>
+            <Button
+              onClick={() => setCallStatus("Not Connected")}
+              size="sm"
+              variant={callStatus === "Not Connected" ? "default" : "outline"}
+              className={`${
+                callStatus === "Not Connected" 
+                  ? "bg-red-600 hover:bg-red-700 text-white" 
+                  : "bg-white text-red-600 border-red-600 hover:bg-red-50"
+              } transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+              disabled={updating || isReadOnly}
+            >
+              Not Connected
+            </Button>
+          </div>
           <Button
             onClick={handleSubmit}
-            className="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            size="sm"
+            className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             disabled={updating || isReadOnly}
           >
             {updating ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                 Updating...
               </>
             ) : isReadOnly ? (

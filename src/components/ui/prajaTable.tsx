@@ -143,7 +143,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
       return (
         <div className="flex items-center">
           <ShortProfileCard
-            image={row.image}
+            image={row.display_pic_url || row.image}
             name={row.name}
             address={row.address}
           />

@@ -45,6 +45,26 @@ const getStatusColor = (status: string) => {
   }
 };
 
+// Function to convert email to display name
+const getDisplayName = (email: string | null): string => {
+  if (!email) return 'Unassigned';
+  
+  // If it's already a name (not an email), return as is
+  if (!email.includes('@')) return email;
+  
+  // Extract name from email
+  const namePart = email.split('@')[0];
+  
+  // Convert to title case and replace dots/underscores with spaces
+  const displayName = namePart
+    .replace(/[._]/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+  
+  return displayName;
+};
+
 // Demo data for fallback
 const DEMO_TICKETS = [
   {
@@ -188,8 +208,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     // Filter by assigned to
     if (assignedToFilter !== 'all') {
       if (assignedToFilter === 'myself') {
+        const userDisplayName = getDisplayName(user?.email);
         filtered = filtered.filter(ticket => 
-          ticket.cse_name === user?.email || ticket.cse_name === user?.id
+          ticket.cse_name === userDisplayName || ticket.cse_name === user?.email || ticket.cse_name === user?.id
         );
       } else {
         filtered = filtered.filter(ticket => ticket.cse_name === assignedToFilter);
@@ -212,7 +233,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     
     // Check if the ticket is assigned to the current user
     const assignedTo = ticket.cse_name || ticket.assigned_to;
-    return assignedTo === user.email || assignedTo === user.id;
+    const userDisplayName = getDisplayName(user.email);
+    return assignedTo === userDisplayName || assignedTo === user.email || assignedTo === user.id;
   };
 
   const handleRowClick = (row: any) => {
@@ -278,8 +300,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             hour: '2-digit',
             minute: '2-digit'
           }) : 'N/A',
-          // Use cse_name for assigned to
-          cse_name: ticket.cse_name || ticket.assigned_to || 'Unassigned',
+          // Use cse_name for assigned to with display name
+          cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
           // Combine first_name and last_name for name
           name: ticket.first_name && ticket.last_name 
             ? `${ticket.first_name} ${ticket.last_name}`
@@ -293,7 +315,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           // Generate Praja dashboard user link
           praja_dashboard_user_link: ticket.praja_user_id 
             ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-            : ticket.praja_dashboard_user_link || 'N/A'
+            : ticket.praja_dashboard_user_link || 'N/A',
+          // Ensure display_pic_url is included
+          display_pic_url: ticket.display_pic_url || null
         }));
 
         // If no data found, use demo data
@@ -308,12 +332,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               hour: '2-digit',
               minute: '2-digit'
             }),
-            cse_name: ticket.assigned_to || 'Unassigned',
+            cse_name: getDisplayName(ticket.assigned_to),
             name: `${ticket.first_name} ${ticket.last_name}`,
             reason: ticket.reason || ticket.Description || 'No reason provided',
             resolution_status: ticket.resolution_status || 'Open',
             poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
-            praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+            praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`,
+            display_pic_url: null
           }));
           setData(demoData);
           setFilteredData(demoData);
@@ -334,12 +359,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             hour: '2-digit',
             minute: '2-digit'
           }),
-          cse_name: ticket.assigned_to || 'Unassigned',
+          cse_name: getDisplayName(ticket.assigned_to),
           name: `${ticket.first_name} ${ticket.last_name}`,
           reason: ticket.reason || ticket.Description || 'No reason provided',
           resolution_status: ticket.resolution_status || 'Open',
           poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
-          praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+          praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`,
+          display_pic_url: null
         }));
         setData(demoData);
         setFilteredData(demoData);
@@ -468,16 +494,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
       {/* Ticket Modal */}
       <Dialog open={isTicketModalOpen} onOpenChange={setIsTicketModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex justify-between items-center">
               <DialogTitle>Ticket Details</DialogTitle>
-              <button
-                onClick={() => setIsTicketModalOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-full"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
             {selectedTicket && (
               <div className="text-sm text-gray-600">
@@ -490,7 +510,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             )}
           </DialogHeader>
           {selectedTicket && (
-            <div className="mt-4">
+            <div className="mt-2">
               <TicketCarousel 
                 config={{
                   title: `Ticket #${selectedTicket.id}`,
