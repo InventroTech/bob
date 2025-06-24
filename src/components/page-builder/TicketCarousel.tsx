@@ -32,7 +32,7 @@ interface Ticket {
   tenant_id: string;
   assigned_to: string | null;
   layout_status: string;
-  resolution_status: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested";
+  resolution_status: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested" | "Can't Resolved";
   resolution_time: string | null;
   cse_name: string | null;
   cse_remarks: string | null;
@@ -193,13 +193,23 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     resolved: 0,
     notPossible: 0
   });
-  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolved">(initialTicket?.resolution_status === "Resolved" ? "Resolved" : initialTicket?.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
-  const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(initialTicket?.call_status === "Connected" ? "Connected" : "Not Connected");
+  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolved" | "Pending">(
+    initialTicket?.resolution_status === "Resolved" ? "Resolved" : 
+    initialTicket?.resolution_status === "WIP" ? "WIP" : 
+    initialTicket?.resolution_status === "Can't Resolved" ? "Can't Resolved" : 
+    "Pending" // Default to Pending if null or any other value
+  );
+  const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(
+    initialTicket?.call_status === "Connected" ? "Connected" : 
+    initialTicket?.call_status === "Not Connected" ? "Not Connected" : 
+    "Connected" // Default to Connected if null or any other value
+  );
   const [cseRemarks, setCseRemarks] = useState(initialTicket?.cse_remarks || "");
   const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>(parseOtherReasons(initialTicket?.other_reasons));
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [ticketStartTime, setTicketStartTime] = useState<Date | null>(null);
+  const [fetchingNext, setFetchingNext] = useState(false);
 
   // If initialTicket is provided, use it instead of fetching
   const isReadOnly = config?.readOnly || false;
@@ -289,7 +299,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     try {
       setLoading(true);
       const endpoint = config?.apiEndpoint || '/api/tickets';
-      const apiUrl = `${API_URI}${endpoint}`;
+      const apiUrl = `${API_URI}${endpoint}${currentTicket?.id ? `?action=getNextTicket&currentTicketId=${currentTicket.id}&resolutionStatus=${resolutionStatus}` : ''}`;
       
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -297,6 +307,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       if (!token) {
         throw new Error('Authentication required');
       }
+
+      console.log('Fetching next ticket from:', apiUrl);
 
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -306,27 +318,66 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         }
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const ticketData = await response.json();
+      console.log('Received ticket data:', ticketData);
+      console.log('Ticket data type:', typeof ticketData);
+      console.log('Ticket data keys:', ticketData ? Object.keys(ticketData) : 'null/undefined');
       
+      // Handle different response formats
+      let nextTicket = null;
       if (ticketData && typeof ticketData === 'object') {
-        setCurrentTicket(ticketData);
-        setResolutionStatus(ticketData.resolution_status === "Resolved" ? "Resolved" : ticketData.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
-        setCseRemarks(ticketData.cse_remarks || "");
-        setCallStatus(ticketData.call_status === "Connected" ? "Connected" : "Not Connected");
-        setSelectedOtherReasons(parseOtherReasons(ticketData.other_reasons));
+        if (ticketData.id) {
+          // Direct ticket object
+          nextTicket = ticketData;
+        } else if (ticketData.ticket && ticketData.ticket.id) {
+          // Nested ticket object
+          nextTicket = ticketData.ticket;
+        } else if (ticketData.data && ticketData.data.id) {
+          // Data wrapper
+          nextTicket = ticketData.data;
+        } else if (Array.isArray(ticketData) && ticketData.length > 0) {
+          // Array of tickets, take the first one
+          nextTicket = ticketData[0];
+        }
+      }
+      
+      if (nextTicket && nextTicket.id) {
+        setCurrentTicket(nextTicket);
+        setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolved" ? "Can't Resolved" : "Pending");
+        setCseRemarks(nextTicket.cse_remarks || "");
+        setCallStatus(
+          nextTicket.call_status === "Connected" ? "Connected" : 
+          nextTicket.call_status === "Not Connected" ? "Not Connected" : 
+          "Connected" // Default to Connected if null or any other value
+        );
+        setSelectedOtherReasons(parseOtherReasons(nextTicket.other_reasons));
         setShowPendingCard(false);
         // Set the start time when ticket is fetched
         setTicketStartTime(new Date());
+        console.log('Next ticket loaded successfully');
       } else {
-        throw new Error('Invalid ticket data received');
+        console.log('No next ticket available, showing pending card');
+        // If no ticket is returned, show the pending card
+        setShowPendingCard(true);
+        setCurrentTicket(null);
+        await fetchTicketStats();
+        toast.info('No more tickets available. Click "Get First Ticket" to continue.');
       }
     } catch (error: any) {
       console.error('Error fetching ticket:', error);
       toast.error(error.message || 'Failed to fetch ticket');
+      // On error, show the pending card
+      setShowPendingCard(true);
+      setCurrentTicket(null);
+      await fetchTicketStats();
+      toast.info('Error fetching next ticket. Click "Get First Ticket" to continue.');
     } finally {
       setLoading(false);
     }
@@ -359,17 +410,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.hidden && currentTicket?.id) {
-        // Only unassign if the ticket is not in WIP status
-        if (resolutionStatus !== "WIP") {
-          await unassignTicket(currentTicket.id);
-          toast.info('Ticket unassigned due to tab change. Click "Get Tickets" to continue.');
-        } else {
-          toast.info('Ticket is in progress. Tab change detected but ticket remains assigned.');
-        }
-        
-        setShowPendingCard(true);
-        setCurrentTicket(null);
-        await fetchTicketStats();
+        // Don't automatically unassign tickets on tab change
+        // Only unassign when user explicitly clicks "Take a Break"
+        console.log('Tab change detected but ticket remains assigned');
       }
     };
 
@@ -390,7 +433,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
     const interval = setInterval(() => {
       fetchTicketStats();
-      toast.info('Ticket statistics refreshed');
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
@@ -400,9 +442,13 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   useEffect(() => {
     if (initialTicket) {
       setCurrentTicket(initialTicket);
-      setResolutionStatus(initialTicket.resolution_status === "Resolved" ? "Resolved" : initialTicket.resolution_status === "WIP" ? "WIP" : "Can't Resolved");
+      setResolutionStatus(initialTicket.resolution_status === "Resolved" ? "Resolved" : initialTicket.resolution_status === "WIP" ? "WIP" : initialTicket.resolution_status === "Can't Resolved" ? "Can't Resolved" : "Pending");
       setCseRemarks(initialTicket.cse_remarks || "");
-      setCallStatus(initialTicket.call_status === "Connected" ? "Connected" : "Not Connected");
+      setCallStatus(
+        initialTicket.call_status === "Connected" ? "Connected" : 
+        initialTicket.call_status === "Not Connected" ? "Not Connected" : 
+        "Connected" // Default to Connected if null or any other value
+      );
       setSelectedOtherReasons(parseOtherReasons(initialTicket.other_reasons));
       setShowPendingCard(false);
       // Set the start time when initial ticket is provided
@@ -508,8 +554,115 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         onUpdate(updatedTicketData);
       }
 
-      // Fetch next ticket
-      await fetchTicket();
+      console.log('Ticket updated successfully, resolution status:', resolutionStatus);
+      console.log('Current ticket ID:', currentTicket?.id);
+      console.log('Fetching next ticket...');
+
+      // Add a small delay to ensure the database update is complete
+      setTimeout(async () => {
+        try {
+          setFetchingNext(true);
+          // Store the current ticket ID to check if we get a different ticket
+          const currentTicketId = currentTicket?.id;
+          
+          if (!currentTicketId) {
+            console.log('No current ticket ID available, showing pending card');
+            setShowPendingCard(true);
+            setCurrentTicket(null);
+            await fetchTicketStats();
+            return;
+          }
+          
+          // Try to fetch next ticket with retry mechanism
+          let nextTicket = null;
+          let attempts = 0;
+          const maxAttempts = 3;
+          
+          while (attempts < maxAttempts && (!nextTicket || nextTicket.id === currentTicketId)) {
+            attempts++;
+            console.log(`Attempt ${attempts} to fetch next ticket...`);
+            
+            // Fetch next ticket
+            const endpoint = config?.apiEndpoint || '/api/tickets';
+            const apiUrl = `${API_URI}${endpoint}?action=getNextTicket&currentTicketId=${currentTicketId}&resolutionStatus=${resolutionStatus}`;
+            
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            
+            if (!token) {
+              throw new Error('Authentication required');
+            }
+
+            console.log('Fetching next ticket from:', apiUrl);
+
+            const response = await fetch(apiUrl, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            });
+
+            console.log('Response status:', response.status);
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const ticketData = await response.json();
+            console.log('Received ticket data:', ticketData);
+            
+            // Handle different response formats
+            if (ticketData && typeof ticketData === 'object') {
+              if (ticketData.id) {
+                nextTicket = ticketData;
+              } else if (ticketData.ticket && ticketData.ticket.id) {
+                nextTicket = ticketData.ticket;
+              } else if (ticketData.data && ticketData.data.id) {
+                nextTicket = ticketData.data;
+              } else if (Array.isArray(ticketData) && ticketData.length > 0) {
+                nextTicket = ticketData[0];
+              }
+            }
+            
+            // If we got the same ticket, wait a bit before retrying
+            if (nextTicket && nextTicket.id === currentTicketId && attempts < maxAttempts) {
+              console.log('Same ticket returned, waiting before retry...');
+              await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+            }
+          }
+          
+          // Check if we got a different ticket
+          if (nextTicket && nextTicket.id && nextTicket.id !== currentTicketId) {
+            console.log('Next ticket loaded successfully, ID:', nextTicket.id);
+            setCurrentTicket(nextTicket);
+            setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolved" ? "Can't Resolved" : "Pending");
+            setCseRemarks(nextTicket.cse_remarks || "");
+            setCallStatus(
+              nextTicket.call_status === "Connected" ? "Connected" : 
+              nextTicket.call_status === "Not Connected" ? "Not Connected" : 
+              "Connected" // Default to Connected if null or any other value
+            );
+            setSelectedOtherReasons(parseOtherReasons(nextTicket.other_reasons));
+            setShowPendingCard(false);
+            setTicketStartTime(new Date());
+          } else {
+            console.log('Same ticket returned or no ticket available, showing pending card');
+            console.log('Current ID:', currentTicketId, 'Next ID:', nextTicket?.id);
+            setShowPendingCard(true);
+            setCurrentTicket(null);
+            await fetchTicketStats();
+            toast.info('No more tickets available. Click "Get First Ticket" to continue.');
+          }
+        } catch (error) {
+          console.error('Error in delayed fetch:', error);
+          setShowPendingCard(true);
+          setCurrentTicket(null);
+          await fetchTicketStats();
+        } finally {
+          setFetchingNext(false);
+        }
+      }, 1000); // 1 second delay
       
     } catch (err: any) {
       console.error('Update error:', err);
@@ -554,6 +707,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   return (
     <div className="relative w-full h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
+        {fetchingNext && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
+            <div className="flex flex-col items-center gap-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="text-sm text-muted-foreground">Loading next ticket...</p>
+            </div>
+          </div>
+        )}
         <div className="space-y-4">
           {/* Header Section */}
           <div className="flex justify-between items-start">
@@ -589,7 +750,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
               </Button>
               <Select 
                 value={resolutionStatus} 
-                onValueChange={async (value: "WIP" | "Resolved" | "Can't Resolved") => {
+                onValueChange={async (value: "WIP" | "Resolved" | "Can't Resolved" | "Pending") => {
                   setResolutionStatus(value);
                   
                   // If WIP is selected, immediately assign the ticket to the CSE
@@ -628,6 +789,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
                   <SelectItem value="WIP">Work in Progress</SelectItem>
                   <SelectItem value="Resolved">Resolved</SelectItem>
                   <SelectItem value="Can't Resolved">Can't Resolved</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -636,7 +798,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
           {/* User Information */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+              <div 
+                className={`flex items-center text-sm bg-muted/50 p-2 rounded-md ${currentTicket?.praja_dashboard_user_link ? 'cursor-pointer hover:bg-muted/70 transition-colors' : ''}`}
+                onClick={() => {
+                  if (currentTicket?.praja_dashboard_user_link) {
+                    window.open(currentTicket.praja_dashboard_user_link, '_blank');
+                  }
+                }}
+              >
                 {currentTicket?.display_pic_url ? (
                   <img 
                     src={currentTicket.display_pic_url} 
@@ -833,12 +1002,17 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
             onClick={handleSubmit}
             size="sm"
             className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={updating || isReadOnly}
+            disabled={updating || isReadOnly || fetchingNext}
           >
             {updating ? (
               <>
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                 Updating...
+              </>
+            ) : fetchingNext ? (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                Loading Next Ticket...
               </>
             ) : isReadOnly ? (
               'Close'
