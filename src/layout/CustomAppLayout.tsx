@@ -112,33 +112,10 @@ const CustomAppLayout: React.FC = () => {
                 <path d="M2 8H20M2 2H20M2 14H20" stroke="#1E1E1E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            <h2 className="text-xl font-bold">Pyro Dashboard</h2>
+            <h2 className="text-xl font-bold">Pyro</h2>
           </div>
 
-          {/* Search */}
-          <div className="flex-1 flex justify-center items-center">
-            <div className="relative w-1/2">
-              <input
-                type="text"
-                className="p-2 pl-10 pr-4 border border-[#D0D5DD] rounded-lg w-full"
-                placeholder="Search..."
-              />
-              <svg
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M21 21l-4.35-4.35M18 10a8 8 0 10-8 8 8 8 0 008-8z"
-                />
-              </svg>
-            </div>
-          </div>
+          
 
           {/* User Section */}
           <div className="flex items-center gap-4 relative">

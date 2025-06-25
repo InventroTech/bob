@@ -122,6 +122,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
       }
     } else if (col.type === 'link') {
       const linkValue = row[col.accessor];
+      console.log("row", row);
       if (linkValue && linkValue !== 'N/A') {
         return (
           <a 
@@ -131,7 +132,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
             className="text-blue-600 hover:text-blue-800 underline text-sm"
             onClick={(e) => e.stopPropagation()} // Prevent row click when clicking link
           >
-            View Dashboard
+            {row.user_id}
           </a>
         );
       } else {

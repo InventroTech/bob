@@ -65,6 +65,32 @@ const getDisplayName = (email: string | null): string => {
   return displayName;
 };
 
+// Function to format relative time
+const formatRelativeTime = (dateString: string): string => {
+  const now = new Date();
+  const date = new Date(dateString);
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) {
+    return `${diffInSeconds} sec ago`;
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes} min ago`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  } else {
+    // For 1 day or more, show date and time
+    return date.toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+};
+
 // Demo data for fallback
 const DEMO_TICKETS = [
   {
@@ -139,8 +165,7 @@ const DEMO_TICKETS = [
 
 const columns: Column[] = [
   { header: 'Name', accessor: 'name', type: 'text' },
-  { header: 'Praja User Id', accessor: 'user_id', type: 'text' },
-  { header: 'Dashboard Link', accessor: 'praja_dashboard_user_link', type: 'link' },
+  { header: 'Praja User Id', accessor: 'praja_dashboard_user_link', type: 'link' },
   { header: 'Created At', accessor: 'created_at', type: 'text' },
   { header: 'Assigned To', accessor: 'cse_name', type: 'text' },
   { header: 'Reason', accessor: 'reason', type: 'text' },
@@ -292,14 +317,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Transform the data with the new attributes
         const transformedData = tickets.map(ticket => ({
           ...ticket,
-          // Format created_at
-          created_at: ticket.created_at ? new Date(ticket.created_at).toLocaleString('en-IN', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }) : 'N/A',
+          // Format created_at with relative time
+          created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
           // Use cse_name for assigned to with display name
           cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
           // Combine first_name and last_name for name
@@ -325,13 +344,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           console.log('No tickets found, using demo data');
           const demoData = DEMO_TICKETS.map(ticket => ({
             ...ticket,
-            created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            }),
+            created_at: formatRelativeTime(ticket.created_at),
             cse_name: getDisplayName(ticket.assigned_to),
             name: `${ticket.first_name} ${ticket.last_name}`,
             reason: ticket.reason || ticket.Description || 'No reason provided',
@@ -352,13 +365,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Use demo data with the new structure
         const demoData = DEMO_TICKETS.map(ticket => ({
           ...ticket,
-          created_at: new Date(ticket.created_at).toLocaleString('en-IN', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
+          created_at: formatRelativeTime(ticket.created_at),
           cse_name: getDisplayName(ticket.assigned_to),
           name: `${ticket.first_name} ${ticket.last_name}`,
           reason: ticket.reason || ticket.Description || 'No reason provided',
