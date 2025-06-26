@@ -193,10 +193,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     resolved: 0,
     notPossible: 0
   });
-  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolved" | "Pending">(
+  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolve" | "Pending">(
     initialTicket?.resolution_status === "Resolved" ? "Resolved" : 
     initialTicket?.resolution_status === "WIP" ? "WIP" : 
-    initialTicket?.resolution_status === "Can't Resolved" ? "Can't Resolved" : 
+    initialTicket?.resolution_status === "Can't Resolve" ? "Can't Resolve" : 
     "Pending" // Default to Pending if null or any other value
   );
   const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(
@@ -350,7 +350,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       
       if (nextTicket && nextTicket.id) {
         setCurrentTicket(nextTicket);
-        setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolved" ? "Can't Resolved" : "Pending");
+        setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolve" ? "Can't Resolve" : "Pending");
         setCseRemarks(nextTicket.cse_remarks || "");
         setCallStatus(
           nextTicket.call_status === "Connected" ? "Connected" : 
@@ -442,7 +442,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   useEffect(() => {
     if (initialTicket) {
       setCurrentTicket(initialTicket);
-      setResolutionStatus(initialTicket.resolution_status === "Resolved" ? "Resolved" : initialTicket.resolution_status === "WIP" ? "WIP" : initialTicket.resolution_status === "Can't Resolved" ? "Can't Resolved" : "Pending");
+        setResolutionStatus(initialTicket.resolution_status === "Resolved" ? "Resolved" : initialTicket.resolution_status === "WIP" ? "WIP" : initialTicket.resolution_status === "Can't Resolve" ? "Can't Resolve" : "Pending");
       setCseRemarks(initialTicket.cse_remarks || "");
       setCallStatus(
         initialTicket.call_status === "Connected" ? "Connected" : 
@@ -636,7 +636,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
           if (nextTicket && nextTicket.id && nextTicket.id !== currentTicketId) {
             console.log('Next ticket loaded successfully, ID:', nextTicket.id);
             setCurrentTicket(nextTicket);
-            setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolved" ? "Can't Resolved" : "Pending");
+              setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolve" ? "Can't Resolve" : "Pending");
             setCseRemarks(nextTicket.cse_remarks || "");
             setCallStatus(
               nextTicket.call_status === "Connected" ? "Connected" : 
@@ -750,7 +750,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
               </Button>
               <Select 
                 value={resolutionStatus} 
-                onValueChange={async (value: "WIP" | "Resolved" | "Can't Resolved" | "Pending") => {
+                onValueChange={async (value: "WIP" | "Resolved" | "Can't Resolve" | "Pending") => {
                   setResolutionStatus(value);
                   
                   // If WIP is selected, immediately assign the ticket to the CSE

@@ -106,11 +106,9 @@ const CustomAppLayout: React.FC = () => {
       {/* Header */}
       <div className="fixed top-0 left-0 w-full bg-white p-2 border-b z-20">
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <button className="text-black p-2">
-              <svg width="22" height="16" viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 8H20M2 2H20M2 14H20" stroke="#1E1E1E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+          <div className="flex items-center ">
+            <button className="text-black ">
+              <img src="/fire-logo.png" alt="Pyro" className="w-8 h-8 " />
             </button>
             <h2 className="text-xl font-bold">Pyro</h2>
           </div>
