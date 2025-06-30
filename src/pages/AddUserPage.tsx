@@ -129,9 +129,8 @@ const AddUserPage = () => {
 
       if (error) throw error;
 
-      // Filter out null uids and transform the data
+      // Transform the data without filtering out users
       const transformedUsers: User[] = ((data as unknown) as DatabaseUser[])
-        .filter(user => user.uid !== null && user.uid !== undefined)
         .map((user, index) => ({
           uid: user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
           name: user.name || 'Unnamed User',
@@ -194,51 +193,29 @@ const AddUserPage = () => {
         name: formData.name, 
         email: formData.email, 
         role_id: selectedRoleId, 
-        tenant_id: companyId 
+        tenant_id: companyId,
+        created_at: new Date().toISOString()
       }]).select().single();
+
+      if (error) {
+        console.error('Error adding user:', error);
+        toast.error(`Error adding user: ${error.message}`);
+        return;
+      }
+
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
-    setFormData({ name: '', email: '' });
-    setSelectedRoleId('');
+      setFormData({ name: '', email: '' });
+      setSelectedRoleId('');
 
-    try {
-      const { data: updatedData, error: fetchError } = await supabase
-        .from('users')
-        .select(`
-          uid,
-          name,
-          email,
-          role_id,
-          created_at,
-          roles (
-            id,
-            name
-          )
-        `)
-        .eq('tenant_id', companyId)
-        .order('created_at', { ascending: false });
+      // Refresh the users list
+      await fetchUsers();
 
-      if (fetchError) throw fetchError;
-
-      const transformedUsers: User[] = ((updatedData as unknown) as DatabaseUser[]).map(user => ({
-        uid: user.uid || Math.random().toString(36).substring(2, 15),
-        name: user.name || 'Unnamed User',
-        email: user.email || 'No Email',
-        role_id: user.role_id || '',
-        created_at: user.created_at || new Date().toISOString(),
-        role: user.roles || undefined
-      }))
-      console.log("transformedUsers", transformedUsers);
-      setUsers(transformedUsers);
     } catch (error: any) {
       console.error("Unexpected error:", error);
       toast.error(`Unexpected error: ${error.message}`);
     }
-  } catch (error: any) {
-    console.error("Unexpected error:", error);
-    toast.error(`Unexpected error: ${error.message}`);
-  }
-  }
+  };
 
   const handleDeleteUser = async (email: string, userId: string) => {
     if (!confirm('Are you sure you want to delete this user?')) {
@@ -249,7 +226,7 @@ const AddUserPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      const response = await fetch(`${import.meta.env.API_URI}/delete-user`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URI}/delete-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -340,7 +317,7 @@ const AddUserPage = () => {
         </div>
 
         <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Users </h2>
+          <h2 className="text-xl font-semibold mb-4">Users List</h2>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -363,7 +340,7 @@ const AddUserPage = () => {
                 </TableHeader>
                 <TableBody>
                   {users
-                    .filter(user => user.uid && user.email) // Only show users with both uid and email
+                    .filter(user => user.name && user.email) // Only show users with name and email
                     .map((user, index) => (
                       <TableRow key={`${user.uid}-${index}`}>
                         <TableCell className="font-medium">{user.name}</TableCell>
