@@ -9,7 +9,6 @@ import { Trash2 } from 'lucide-react';
 import { PrajaTable } from '../ui/prajaTable';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { API_URI } from '@/const';
 
 interface Column {
   header: string;
@@ -131,7 +130,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         // Use configured endpoint or fallback to default
         const endpoint = config?.apiEndpoint || '/api/leads';
-        const apiUrl = `${API_URI}${endpoint}`;
+        const apiUrl = `${import.meta.env.API_URI}${endpoint}`;
         
         const response = await fetch(apiUrl, {
           method: 'GET',

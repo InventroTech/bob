@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface TemporaryLogoutProps {
@@ -16,7 +15,7 @@ interface TemporaryLogoutProps {
 }
 
 export const TemporaryLogoutComponent: React.FC<TemporaryLogoutProps> = ({ config }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -27,14 +26,12 @@ export const TemporaryLogoutComponent: React.FC<TemporaryLogoutProps> = ({ confi
 
     setIsLoggingOut(true);
     try {
-      // Sign out the user
-      const { error } = await supabase.auth.signOut();
+      console.log('TemporaryLogoutComponent: Starting logout...');
       
-      if (error) {
-        throw error;
-      }
-
-      toast.success('Logged out successfully');
+      // Use the centralized logout function
+      await logout();
+      
+      console.log('TemporaryLogoutComponent: Logout successful, redirecting...');
       
       // Redirect to login page after a short delay
       setTimeout(() => {
@@ -42,7 +39,7 @@ export const TemporaryLogoutComponent: React.FC<TemporaryLogoutProps> = ({ confi
       }, 1000);
 
     } catch (error: any) {
-      console.error('Logout error:', error);
+      console.error('TemporaryLogoutComponent: Logout error:', error);
       toast.error('Failed to logout. Please try again.');
     } finally {
       setIsLoggingOut(false);

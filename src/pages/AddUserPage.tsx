@@ -8,7 +8,6 @@ import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { API_URI } from '@/const';
 import { Trash2 } from 'lucide-react';
 
 interface Role {
@@ -250,7 +249,7 @@ const AddUserPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      const response = await fetch(`${API_URI}/delete-user`, {
+      const response = await fetch(`${import.meta.env.API_URI}/delete-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
