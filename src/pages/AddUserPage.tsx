@@ -188,8 +188,9 @@ const AddUserPage = () => {
       return;
     }
     try {
-      // create a new user
+      // create a new user with required id field
       const { data, error } = await supabase.from('users').insert([{ 
+        id: crypto.randomUUID(), // Generate a unique ID
         name: formData.name, 
         email: formData.email, 
         role_id: selectedRoleId, 
