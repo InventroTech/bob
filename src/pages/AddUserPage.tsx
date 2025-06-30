@@ -197,6 +197,12 @@ const AddUserPage = () => {
         created_at: new Date().toISOString()
       }]).select().single();
 
+      console.log("data", data);
+      console.log("error", error);
+      console.log("formData", formData);
+      console.log("selectedRoleId", selectedRoleId);
+      console.log("companyId", companyId);
+
       if (error) {
         console.error('Error adding user:', error);
         toast.error(`Error adding user: ${error.message}`);
