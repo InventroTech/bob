@@ -184,8 +184,75 @@ interface TicketCarouselProps {
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialTicket, onUpdate }) => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
-  const [currentTicket, setCurrentTicket] = useState<any>(initialTicket || null);
-  const [showPendingCard, setShowPendingCard] = useState(!initialTicket);
+  
+  // Add ref to track if component has been initialized
+  const isInitialized = React.useRef(false);
+  
+  // Helper function to get persisted state from session storage
+  const getPersistedState = () => {
+    try {
+      const persisted = sessionStorage.getItem('ticketCarouselState');
+      return persisted ? JSON.parse(persisted) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Helper function to persist state to session storage
+  const persistState = (state: any) => {
+    try {
+      sessionStorage.setItem('ticketCarouselState', JSON.stringify(state));
+    } catch (error) {
+      console.error('Error persisting state:', error);
+    }
+  };
+
+  // Helper function to clear persisted state
+  const clearPersistedState = () => {
+    try {
+      sessionStorage.removeItem('ticketCarouselState');
+    } catch (error) {
+      console.error('Error clearing persisted state:', error);
+    }
+  };
+
+  // Get initial state from props or persisted state
+  const getInitialState = () => {
+    if (initialTicket) {
+      return {
+        currentTicket: initialTicket,
+        showPendingCard: false,
+        resolutionStatus: initialTicket.resolution_status === "Resolved" ? "Resolved" : 
+                         initialTicket.resolution_status === "WIP" ? "WIP" : 
+                         initialTicket.resolution_status === "Can't Resolve" ? "Can't Resolve" : 
+                         "Pending",
+        callStatus: initialTicket.call_status === "Connected" ? "Connected" : 
+                   initialTicket.call_status === "Not Connected" ? "Not Connected" : 
+                   "Connected",
+        cseRemarks: initialTicket.cse_remarks || "",
+        selectedOtherReasons: parseOtherReasons(initialTicket.other_reasons)
+      };
+    }
+
+    const persisted = getPersistedState();
+    if (persisted) {
+      return persisted;
+    }
+
+    return {
+      currentTicket: null,
+      showPendingCard: true,
+      resolutionStatus: "Pending" as const,
+      callStatus: "Connected" as const,
+      cseRemarks: "",
+      selectedOtherReasons: []
+    };
+  };
+
+  const initialState = getInitialState();
+  
+  const [currentTicket, setCurrentTicket] = useState<any>(initialState.currentTicket);
+  const [showPendingCard, setShowPendingCard] = useState(initialState.showPendingCard);
   const [ticketStats, setTicketStats] = useState<TicketStats>({
     total: 0,
     pending: 0,
@@ -193,19 +260,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     resolved: 0,
     notPossible: 0
   });
-  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolve" | "Pending">(
-    initialTicket?.resolution_status === "Resolved" ? "Resolved" : 
-    initialTicket?.resolution_status === "WIP" ? "WIP" : 
-    initialTicket?.resolution_status === "Can't Resolve" ? "Can't Resolve" : 
-    "Pending" // Default to Pending if null or any other value
-  );
-  const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(
-    initialTicket?.call_status === "Connected" ? "Connected" : 
-    initialTicket?.call_status === "Not Connected" ? "Not Connected" : 
-    "Connected" // Default to Connected if null or any other value
-  );
-  const [cseRemarks, setCseRemarks] = useState(initialTicket?.cse_remarks || "");
-  const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>(parseOtherReasons(initialTicket?.other_reasons));
+  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolve" | "Pending">(initialState.resolutionStatus);
+  const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(initialState.callStatus);
+  const [cseRemarks, setCseRemarks] = useState(initialState.cseRemarks);
+  const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>(initialState.selectedOtherReasons);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [ticketStartTime, setTicketStartTime] = useState<Date | null>(null);
@@ -213,6 +271,20 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
   // If initialTicket is provided, use it instead of fetching
   const isReadOnly = config?.readOnly || false;
+
+  // Persist state changes
+  useEffect(() => {
+    if (isInitialized.current) {
+      persistState({
+        currentTicket,
+        showPendingCard,
+        resolutionStatus,
+        callStatus,
+        cseRemarks,
+        selectedOtherReasons
+      });
+    }
+  }, [currentTicket, showPendingCard, resolutionStatus, callStatus, cseRemarks, selectedOtherReasons]);
 
   // Function to calculate resolution time
   const calculateResolutionTime = (): string => {
@@ -361,12 +433,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         setShowPendingCard(false);
         // Set the start time when ticket is fetched
         setTicketStartTime(new Date());
+        isInitialized.current = true;
         console.log('Next ticket loaded successfully');
       } else {
         console.log('No next ticket available, showing pending card');
         // If no ticket is returned, show the pending card
         setShowPendingCard(true);
         setCurrentTicket(null);
+        isInitialized.current = false; // Reset initialization flag
+        clearPersistedState(); // Clear persisted state
         await fetchTicketStats();
         toast.info('No more tickets available. Click "Get First Ticket" to continue.');
       }
@@ -376,6 +451,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       // On error, show the pending card
       setShowPendingCard(true);
       setCurrentTicket(null);
+      isInitialized.current = false; // Reset initialization flag
+      clearPersistedState(); // Clear persisted state
       await fetchTicketStats();
       toast.info('Error fetching next ticket. Click "Get First Ticket" to continue.');
     } finally {
@@ -395,6 +472,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
       
       setShowPendingCard(true);
       setCurrentTicket(null);
+      isInitialized.current = false; // Reset initialization flag
+      clearPersistedState(); // Clear persisted state
       
       // Refresh ticket statistics
       await fetchTicketStats();
@@ -406,25 +485,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     }
   };
 
-  // Handle tab visibility change
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.hidden && currentTicket?.id) {
-        // Don't automatically unassign tickets on tab change
-        // Only unassign when user explicitly clicks "Take a Break"
-        console.log('Tab change detected but ticket remains assigned');
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [currentTicket?.id, resolutionStatus]);
-
   // Fetch ticket statistics on component mount
   useEffect(() => {
     fetchTicketStats();
+    
   }, []);
 
   // Refresh ticket statistics every 30 seconds when showing pending card
@@ -437,24 +501,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
 
     return () => clearInterval(interval);
   }, [showPendingCard]);
-
-  // Update state when initialTicket changes
-  useEffect(() => {
-    if (initialTicket) {
-      setCurrentTicket(initialTicket);
-        setResolutionStatus(initialTicket.resolution_status === "Resolved" ? "Resolved" : initialTicket.resolution_status === "WIP" ? "WIP" : initialTicket.resolution_status === "Can't Resolve" ? "Can't Resolve" : "Pending");
-      setCseRemarks(initialTicket.cse_remarks || "");
-      setCallStatus(
-        initialTicket.call_status === "Connected" ? "Connected" : 
-        initialTicket.call_status === "Not Connected" ? "Not Connected" : 
-        "Connected" // Default to Connected if null or any other value
-      );
-      setSelectedOtherReasons(parseOtherReasons(initialTicket.other_reasons));
-      setShowPendingCard(false);
-      // Set the start time when initial ticket is provided
-      setTicketStartTime(new Date());
-    }
-  }, [initialTicket]);
 
   const handleOtherReasonChange = (reason: string, checked: boolean) => {
     if (checked) {
@@ -636,7 +682,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
           if (nextTicket && nextTicket.id && nextTicket.id !== currentTicketId) {
             console.log('Next ticket loaded successfully, ID:', nextTicket.id);
             setCurrentTicket(nextTicket);
-              setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolve" ? "Can't Resolve" : "Pending");
+            setResolutionStatus(nextTicket.resolution_status === "Resolved" ? "Resolved" : nextTicket.resolution_status === "WIP" ? "WIP" : nextTicket.resolution_status === "Can't Resolve" ? "Can't Resolve" : "Pending");
             setCseRemarks(nextTicket.cse_remarks || "");
             setCallStatus(
               nextTicket.call_status === "Connected" ? "Connected" : 
@@ -646,11 +692,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
             setSelectedOtherReasons(parseOtherReasons(nextTicket.other_reasons));
             setShowPendingCard(false);
             setTicketStartTime(new Date());
+            isInitialized.current = true; // Set initialization flag
           } else {
             console.log('Same ticket returned or no ticket available, showing pending card');
             console.log('Current ID:', currentTicketId, 'Next ID:', nextTicket?.id);
             setShowPendingCard(true);
             setCurrentTicket(null);
+            isInitialized.current = false; // Reset initialization flag
+            clearPersistedState(); // Clear persisted state
             await fetchTicketStats();
             toast.info('No more tickets available. Click "Get First Ticket" to continue.');
           }
@@ -658,6 +707,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
           console.error('Error in delayed fetch:', error);
           setShowPendingCard(true);
           setCurrentTicket(null);
+          isInitialized.current = false; // Reset initialization flag
+          clearPersistedState(); // Clear persisted state
           await fetchTicketStats();
         } finally {
           setFetchingNext(false);
@@ -972,26 +1023,13 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         <div className="flex justify-between items-center gap-3 mt-4 pt-3 border-t">
           <div className="flex gap-2">
             <Button
-              onClick={() => setCallStatus("Connected")}
-              size="sm"
-              variant={callStatus === "Connected" ? "default" : "outline"}
-              className={`${
-                callStatus === "Connected" 
-                  ? "bg-green-600 hover:bg-green-700 text-white" 
-                  : "bg-white text-green-600 border-green-600 hover:bg-green-50"
-              } transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-              disabled={updating || isReadOnly}
-            >
-              Connected
-            </Button>
-            <Button
-              onClick={() => setCallStatus("Not Connected")}
+              onClick={() => setCallStatus(callStatus === "Not Connected" ? "Connected" : "Not Connected")}
               size="sm"
               variant={callStatus === "Not Connected" ? "default" : "outline"}
               className={`${
                 callStatus === "Not Connected" 
                   ? "bg-red-600 hover:bg-red-700 text-white" 
-                  : "bg-white text-red-600 border-red-600 hover:bg-red-50"
+                  : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
               } transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
               disabled={updating || isReadOnly}
             >
