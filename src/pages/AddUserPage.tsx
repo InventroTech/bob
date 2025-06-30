@@ -340,7 +340,7 @@ const AddUserPage = () => {
         </div>
 
         <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Users List</h2>
+          <h2 className="text-xl font-semibold mb-4">Users </h2>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
