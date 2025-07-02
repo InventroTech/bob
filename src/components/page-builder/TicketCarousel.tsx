@@ -186,7 +186,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
   
   // Add ref to track if component has been initialized
   const isInitialized = React.useRef(false);
-  
+  const ActionNotConnected = async (ticketId: number) => {
+    setCallStatus(callStatus === "Not Connected" ? "Connected" : "Not Connected")
+    handleSubmit()
+  }
   // Helper function to get persisted state from session storage
   const getPersistedState = () => {
     try {
@@ -1022,7 +1025,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
         <div className="flex justify-between items-center gap-3 mt-4 pt-3 border-t">
           <div className="flex gap-2">
             <Button
-              onClick={() => setCallStatus(callStatus === "Not Connected" ? "Connected" : "Not Connected")}
+              onClick={() => ActionNotConnected(currentTicket.id)}
               size="sm"
               variant={callStatus === "Not Connected" ? "default" : "outline"}
               className={`${
