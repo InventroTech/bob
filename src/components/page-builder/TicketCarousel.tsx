@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, User, Tag, ChevronDown, Phone, Star, Clock, MessageSquare, Award, CheckCircle2, XCircle, AlertCircle, PieChart, Coffee, Waypoints } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { API_URI } from '@/const';
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -371,8 +370,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
     try {
       setLoading(true);
       const endpoint = config?.apiEndpoint || '/api/tickets';
-      const apiUrl = `${API_URI}${endpoint}${currentTicket?.id ? `?action=getNextTicket&currentTicketId=${currentTicket.id}&resolutionStatus=${resolutionStatus}` : ''}`;
-      
+      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}${currentTicket?.id ? `?action=getNextTicket&currentTicketId=${currentTicket.id}&resolutionStatus=${resolutionStatus}` : ''}`;
+      console.log('API URL:', apiUrl);
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       
@@ -630,8 +629,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({ config, initialT
             
             // Fetch next ticket
             const endpoint = config?.apiEndpoint || '/api/tickets';
-            const apiUrl = `${API_URI}${endpoint}?action=getNextTicket&currentTicketId=${currentTicketId}&resolutionStatus=${resolutionStatus}`;
-            
+            const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?action=getNextTicket&currentTicketId=${currentTicketId}&resolutionStatus=${resolutionStatus}`;
+            console.log('API URL:', apiUrl);
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
             

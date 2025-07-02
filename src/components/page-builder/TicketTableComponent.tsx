@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
-import { API_URI } from '@/const';
 import { Badge } from '@/components/ui/badge';
 import { TicketCarousel } from './TicketCarousel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -284,7 +283,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const authToken = session?.access_token;
 
         const endpoint = config?.apiEndpoint || '/api/tickets';
-        const apiUrl = `${API_URI}${endpoint}`;
+        const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
+        console.log('API URL:', apiUrl);
         
         const response = await fetch(apiUrl, {
           method: 'GET',
@@ -339,43 +339,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           display_pic_url: ticket.display_pic_url || null
         }));
 
-        // If no data found, use demo data
-        if (transformedData.length === 0) {
-          console.log('No tickets found, using demo data');
-          const demoData = DEMO_TICKETS.map(ticket => ({
-            ...ticket,
-            created_at: formatRelativeTime(ticket.created_at),
-            cse_name: getDisplayName(ticket.assigned_to),
-            name: `${ticket.first_name} ${ticket.last_name}`,
-            reason: ticket.reason || ticket.Description || 'No reason provided',
-            resolution_status: ticket.resolution_status || 'Open',
-            poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
-            praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`,
-            display_pic_url: null
-          }));
-          setData(demoData);
-          setFilteredData(demoData);
-        } else {
-          setData(transformedData);
-          setFilteredData(transformedData);
-        }
+        // Set the data (empty array if no tickets found)
+        setData(transformedData);
+        setFilteredData(transformedData);
       } catch (error) {
         console.error('Error fetching tickets:', error);
-        toast.error('Failed to load tickets. Using demo data.');
-        // Use demo data with the new structure
-        const demoData = DEMO_TICKETS.map(ticket => ({
-          ...ticket,
-          created_at: formatRelativeTime(ticket.created_at),
-          cse_name: getDisplayName(ticket.assigned_to),
-          name: `${ticket.first_name} ${ticket.last_name}`,
-          reason: ticket.reason || ticket.Description || 'No reason provided',
-          resolution_status: ticket.resolution_status || 'Open',
-          poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
-          praja_dashboard_user_link: `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`,
-          display_pic_url: null
-        }));
-        setData(demoData);
-        setFilteredData(demoData);
+        // Set empty data on error instead of using demo data
+        setData([]);
+        setFilteredData([]);
       } finally {
         setLoading(false);
       }
@@ -483,11 +454,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
         {filteredData.length === 0 ? (
           <div className="text-center p-8 text-gray-600">
-            {data.length === 0 ? (
-              "No tickets available"
-            ) : (
-              "No tickets match the current filters"
-            )}
+            No data available
           </div>
         ) : (
           <PrajaTable 

@@ -25,7 +25,7 @@ const UnauthorizedPage: React.FC<{ onLogout: () => void }> = ({ onLogout }) => (
 );
 
 const ProtectedAppRoute: React.FC = () => {
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, logout } = useAuth();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -126,8 +126,16 @@ const ProtectedAppRoute: React.FC = () => {
   }, [session, tenantSlug, authLoading, navigate]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate(`/app/${tenantSlug}/login`);
+    try {
+      // Use the centralized logout function
+      await logout();
+      
+      // Navigate to login page
+      navigate(`/app/${tenantSlug}/login`);
+      
+    } catch (error) {
+      console.error('Logout navigation error:', error);
+    }
   };
 
   if (authLoading || allowed === null) {
