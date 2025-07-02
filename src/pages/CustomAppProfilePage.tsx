@@ -7,16 +7,20 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 const CustomAppProfilePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { role } = useTenant();
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error('Error logging out');
-    } else {
+    try {
+      // Use the centralized logout function
+      await logout();
+      
+      // Navigate to login page
       window.location.href = `/app/${tenantSlug}/login`;
+      
+    } catch (error) {
+      console.error('Logout navigation error:', error);
     }
   };
 
