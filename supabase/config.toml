@@ -1,11 +1,178 @@
 
+# Core Auth Functions
 [functions.create_user_schema]
 enabled = true
 verify_jwt = true
-import_map = "./functions/create_user_schema/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
-entrypoint = "./functions/create_user_schema/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/create_user_schema/*.html" ]
+import_map = "./functions/core/auth/create_user_schema/deno.json"
+entrypoint = "./functions/core/auth/create_user_schema/index.ts"
+
+[functions.delete_user]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/auth/delete-user/index.ts"
+
+[functions.invite_user]
+enabled = true
+verify_jwt = true
+import_map = "./functions/core/auth/invite_user/deno.json"
+entrypoint = "./functions/core/auth/invite_user/index.ts"
+
+[functions.send_password_reset]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/auth/send-password-reset/index.ts"
+
+# Core Leads Functions
+[functions.create_leads]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/create-leads/index.ts"
+
+[functions.delete_leads]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/delete-leads/index.ts"
+
+[functions.get_all_leads]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/get-all-leads/index.ts"
+
+[functions.get_lead_id]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/get-lead-id/index.ts"
+
+[functions.update_lead]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/update-lead/index.ts"
+
+[functions.converted_leads]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/converted-leads/index.ts"
+
+[functions.pending_leads]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/pending-leads/index.ts"
+
+[functions.lead_list_of_OE]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/lead-list-of-OE/index.ts"
+
+[functions.lead_list_of_RM]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/lead-list-of-RM/index.ts"
+
+[functions.recommended_lead_of_OE]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/recommended-lead-of-OE/index.ts"
+
+[functions.recommended_lead_of_RM]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/leads/recommended-lead-of-RM/index.ts"
+
+# Core Tickets Functions
+[functions.create_support_ticket_webhook]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/create_support_ticket_webhook/index.ts"
+
+[functions.get_all_support_tickets]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/get-all-support-tickets/index.ts"
+
+[functions.get_completed_ticket]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/get-completed-ticket/index.ts"
+
+[functions.get_next_ticket]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/get-next-ticket/index.ts"
+
+[functions.get_pending_ticket]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/get-pending-ticket/index.ts"
+
+[functions.get_ticket_data]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/get-ticket-data/index.ts"
+
+[functions.get_ticket_status]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/get-ticket-status/index.ts"
+
+[functions.get_WIP_tickets]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/get-WIP-tickets/index.ts"
+
+[functions.populate_ticket]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/populate-ticket/index.ts"
+
+[functions.process_dumped_tickets]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/process-dumped-tickets/index.ts"
+
+[functions.search_ticket]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/search-ticket/index.ts"
+
+[functions.ticket_stats]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/ticket-stats/index.ts"
+
+[functions.ticket_webhook]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tickets/ticket-webhook/index.ts"
+
+# Core Tasks Functions
+[functions.assign_head]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tasks/assign-head/index.ts"
+
+[functions.task_of_RM]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tasks/task-of-RM/index.ts"
+
+[functions.log_failed_call_attempt]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/core/tasks/log-failed-call-attempt/index.ts"
+
+# Common Functions
+[functions.feature_flag_manager]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/common/feature-flag-manager/index.ts"
+
+[functions.link_user_email]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/common/link-user-email/index.ts"
+
+# Utils Functions
+[functions.test]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/utils/test/index.ts"
