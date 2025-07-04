@@ -211,6 +211,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
   const [ticketStartTime, setTicketStartTime] = useState<Date | null>(null);
+  const [notConnectedClicked, setNotConnectedClicked] = useState(false);
 
   const isReadOnly = config?.readOnly || false;
 
@@ -261,7 +262,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       if (!session) return;
 
       const response = await fetch(
-        "https://hihrftwrriygnbrsvlrr.supabase.co/functions/v1/get-ticket-status",
+        `${import.meta.env.VITE_API_URI}/get-ticket-status`,
         {
           method: "GET",
           headers: {
@@ -485,6 +486,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const ActionNotConnected = async (ticketId: number) => {
     const newCallStatus = callStatus === "Not Connected" ? "Connected" : "Not Connected";
     setCallStatus(newCallStatus);
+    
+    // Set flag when "Not Connected" button is clicked
+    if (newCallStatus === "Not Connected") {
+      setNotConnectedClicked(true);
+    }
+    
     await handleSubmit();
   };
 
@@ -510,21 +517,25 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       const calculatedResolutionTime = calculateResolutionTime();
       const isCallNotConnected = callStatus === "Not Connected";
       let snoozeUntil = null;
+      let newCallAttempts = currentTicket.call_attempts || 0;
 
       if (isCallNotConnected) {
-        
         const currentDate = new Date();
-        if ((currentTicket.call_attempts || 0) === 0) {
+        if (newCallAttempts === 0) {
           currentDate.setHours(currentDate.getHours() + 1);
           snoozeUntil = currentDate.toISOString();
         } else {
           currentDate.setDate(currentDate.getDate() + 1000);
           snoozeUntil = currentDate.toISOString();
         }
-        currentTicket.call_attempts=currentTicket.call_attempts+1;
+      }
+
+      // Only increment call attempts when "Not Connected" button was clicked
+      if (notConnectedClicked && isCallNotConnected) {
+        newCallAttempts += 1;
+        setNotConnectedClicked(false); // Reset the flag
       }
       
-
       const shouldAssign = resolutionStatus === "WIP";
       const assignedTo = shouldAssign ? user?.id || "Unknown CSE" : null;
 
@@ -537,7 +548,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           cse_name: user?.email || "Unknown CSE",
           call_status: callStatus,
           resolution_time: calculatedResolutionTime || null,
-          call_attempts: (currentTicket.call_attempts || 0),
+          call_attempts: newCallAttempts,
           completed_at: resolutionStatus === "Resolved" || resolutionStatus === "Can't Resolve" ? currentTime : null,
           snooze_until: snoozeUntil,
           other_reasons: selectedOtherReasons,
@@ -558,7 +569,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             cse_name: user?.email || "Unknown CSE",
             call_status: callStatus,
             resolution_time: calculatedResolutionTime || null,
-            call_attempts: (currentTicket.call_attempts || 0),
+            call_attempts: newCallAttempts,
             completed_at: resolutionStatus === "Resolved" || resolutionStatus === "Can't Resolve" ? currentTime : null,
             snooze_until: snoozeUntil,
             other_reasons: selectedOtherReasons,
