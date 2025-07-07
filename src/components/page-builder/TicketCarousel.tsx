@@ -118,10 +118,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   onUpdate,
 }) => {
   const { user } = useAuth();
-  const { tenantId } = useTenant();
 
   const isInitialized = React.useRef(false);
 
+  //getting the persisted state from the session storage
   const getPersistedState = () => {
     try {
       const persisted = sessionStorage.getItem("ticketCarouselState");
@@ -131,6 +131,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
+  //persisting the state to the session storage
   const persistState = (state: any) => {
     try {
       sessionStorage.setItem("ticketCarouselState", JSON.stringify(state));
@@ -139,6 +140,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
+  //clearing the persisted state from the session storage
   const clearPersistedState = () => {
     try {
       sessionStorage.removeItem("ticketCarouselState");
@@ -147,6 +149,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
+  //getting the initial state from the initial ticket
   const getInitialState = () => {
     if (initialTicket) {
       return {
@@ -186,6 +189,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     };
   };
 
+  //getting the initial state from the initial ticket
   const initialState = getInitialState();
 
   const [currentTicket, setCurrentTicket] = useState<any>(initialState.currentTicket);
@@ -211,7 +215,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
   const [ticketStartTime, setTicketStartTime] = useState<Date | null>(null);
-  const [notConnectedClicked, setNotConnectedClicked] = useState(false);
 
   const isReadOnly = config?.readOnly || false;
 
@@ -228,6 +231,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   }, [currentTicket, showPendingCard, resolutionStatus, callStatus, cseRemarks, selectedOtherReasons]);
 
+  //calculating the resolution time
   const calculateResolutionTime = (): string => {
     if (!ticketStartTime) return "";
     const endTime = new Date();
@@ -237,25 +241,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  const unassignTicket = async (ticketId: number) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      await supabase
-        .from("support_ticket")
-        .update({
-          assigned_to: null,
-          cse_name: null,
-        })
-        .eq("id", ticketId);
-
-      console.log("Ticket unassigned successfully");
-    } catch (error) {
-      console.error("Error unassigning ticket:", error);
-    }
-  };
-
+  //fetching the ticket stats
   const fetchTicketStats = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -300,12 +286,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
-  const fetchTicket = async () => {
+  //fetching the next ticket
+  const fetchNextTicket = async (currentTicketId: number) => {
     try {
-      setLoading(true);
       const endpoint = config?.apiEndpoint || "/api/tickets";
-      const excludeParam = currentTicket?.id ? `&exclude=${currentTicket.id}` : '';
-      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false${excludeParam}`;
+      const excludeParam = currentTicketId ? `&exclude=${currentTicketId}` : '';
+      const nextTicketUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false${excludeParam}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -313,8 +299,302 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const nextTicketResponse = await fetch(nextTicketUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!nextTicketResponse.ok) {
+        if (nextTicketResponse.status === 404) {
+          setShowPendingCard(true);
+          setCurrentTicket(null);
+          setTicketStartTime(null);
+          setResolutionStatus("Pending");
+          setCseRemarks("");
+          setCallStatus("Connected");
+          setSelectedOtherReasons([]);
+          isInitialized.current = false;
+          clearPersistedState();
+          await fetchTicketStats();
+          toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
+          return;
+        }
+        throw new Error(`HTTP error! status: ${nextTicketResponse.status}`);
+      }
+
+      const ticketData = await nextTicketResponse.json();
+
+      if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
+        setShowPendingCard(true);
+        setCurrentTicket(null);
+        setTicketStartTime(null);
+        setResolutionStatus("Pending");
+        setCseRemarks("");
+        setCallStatus("Connected");
+        setSelectedOtherReasons([]);
+        isInitialized.current = false;
+        clearPersistedState();
+        await fetchTicketStats();
+        toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
+        return;
+      }
+
+      let nextTicket = null;
+      if (ticketData && typeof ticketData === "object") {
+        if (ticketData.id) {
+          nextTicket = ticketData;
+        } else if (ticketData.ticket && ticketData.ticket.id) {
+          nextTicket = ticketData.ticket;
+        } else if (ticketData.data && ticketData.data.id) {
+          nextTicket = ticketData.data;
+        } else if (Array.isArray(ticketData) && ticketData.length > 0) {
+          nextTicket = ticketData[0];
+        }
+      }
+
+      if (nextTicket && nextTicket.id) {
+        setCurrentTicket(nextTicket);
+        setResolutionStatus(
+          nextTicket.resolution_status === "Resolved"
+            ? "Resolved"
+            : nextTicket.resolution_status === "WIP"
+            ? "WIP"
+            : nextTicket.resolution_status === "Can't Resolve"
+            ? "Can't Resolve"
+            : "Pending"
+        );
+        setCseRemarks(nextTicket.cse_remarks || "");
+        setCallStatus(
+          nextTicket.call_status === "Connected"
+            ? "Connected"
+            : nextTicket.call_status === "Not Connected"
+            ? "Not Connected"
+            : "Connected"
+        );
+        setSelectedOtherReasons(parseOtherReasons(nextTicket.other_reasons));
+        setShowPendingCard(false);
+        setTicketStartTime(new Date());
+        isInitialized.current = true;
+      } else {
+        setShowPendingCard(true);
+        setCurrentTicket(null);
+        setTicketStartTime(null);
+        setResolutionStatus("Pending");
+        setCseRemarks("");
+        setCallStatus("Connected");
+        setSelectedOtherReasons([]);
+        isInitialized.current = false;
+        clearPersistedState();
+        await fetchTicketStats();
+        toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
+      }
+
+    } catch (error: any) {
+      console.error("Error fetching next ticket:", error);
+      toast.error(error.message || "Failed to fetch next ticket");
+      setShowPendingCard(true);
+      setCurrentTicket(null);
+      setTicketStartTime(null);
+      setResolutionStatus("Pending");
+      setCseRemarks("");
+      setCallStatus("Connected");
+      setSelectedOtherReasons([]);
+      isInitialized.current = false;
+      clearPersistedState();
+      await fetchTicketStats();
+    }
+  };
+
+  //taking a break
+  const handleTakeBreak = async () => {
+    try {
+      const apiUrl = `${import.meta.env.VITE_API_URI}/take-a-break`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error("Authentication required");
+      }
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ticketId: currentTicket?.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Navigate to pending card
+      setShowPendingCard(true);
+      setCurrentTicket(null);
+      setTicketStartTime(null);
+      setResolutionStatus("Pending");
+      setCseRemarks("");
+      setCallStatus("Connected");
+      setSelectedOtherReasons([]);
+      isInitialized.current = false;
+      clearPersistedState();
+      await fetchTicketStats();
+      toast.info("Taking a break. Click 'Get Tickets' when ready to continue.");
+    } catch (error) {
+      console.error("Error taking break:", error);
+      toast.error("Error taking break. Please try again.");
+    }
+  };
+
+  //fetching the ticket stats (initially)
+  useEffect(() => {
+    fetchTicketStats();
+  }, []);
+
+  //fetching the ticket stats (interval)
+  useEffect(() => {
+    if (!showPendingCard) return;
+    const interval = setInterval(() => {
+      fetchTicketStats();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [showPendingCard]);
+
+  //handling the other reason change
+  const handleOtherReasonChange = (reason: string, checked: boolean) => {
+    if (checked) {
+      setSelectedOtherReasons((prev) => [...prev, reason]);
+    } else {
+      setSelectedOtherReasons((prev) => prev.filter((r) => r !== reason));
+    }
+  };
+
+  //handling the not connected action
+  const ActionNotConnected = async (ticketId: number) => {
+    const newCallStatus = callStatus === "Not Connected" ? "Connected" : "Not Connected";
+    setCallStatus(newCallStatus);
+    
+    try {
+      const apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error("Authentication required");
+      }
+
+      const payload = {
+        ticketId: currentTicket?.id,
+        resolutionStatus: resolutionStatus,
+        callStatus: newCallStatus,
+        cseRemarks: cseRemarks,
+        resolutionTime: calculateResolutionTime(),
+        otherReasons: selectedOtherReasons,
+        ticketStartTime: ticketStartTime?.toISOString(),
+        isReadOnly: isReadOnly
+      };
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // After successful API call, fetch next ticket
+      await fetchNextTicket(currentTicket?.id);
+
+    } catch (error: any) {
+      console.error("Error in ActionNotConnected:", error);
+      toast.error(error.message || "Failed to process not connected action");
+    }
+  };
+
+  //handling the submit action (save and continue)
+  const handleSubmit = async () => {
+    try {
+      if (!currentTicket?.id) {
+        toast.error("No ticket ID available");
+        return;
+      }
+
+      if (isReadOnly) {
+        toast.error("This ticket is read-only");
+        return;
+      }
+
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Authentication required");
+      }
+
+      const apiUrl = `${import.meta.env.VITE_API_URI}/save-and-continue`;
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error("Authentication required");
+      }
+
+      const payload = {
+        ticketId: currentTicket?.id,
+        resolutionStatus: resolutionStatus,
+        callStatus: callStatus,
+        cseRemarks: cseRemarks,
+        resolutionTime: calculateResolutionTime(),
+        otherReasons: selectedOtherReasons,
+        ticketStartTime: ticketStartTime?.toISOString(),
+        isReadOnly: isReadOnly
+      };
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // After successful API call, fetch next ticket
+      await fetchNextTicket(currentTicket?.id);
+
+    } catch (error: any) {
+      console.error("Error in handleSubmit:", error);
+      toast.error(error.message || "Failed to save and continue");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  //fetching the first ticket
+  const fetchFirstTicket = async () => {
+    try {
+      setLoading(true);
+      const endpoint = config?.apiEndpoint || "/api/tickets";
+      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error("Authentication required");
+      }
 
       const response = await fetch(apiUrl, {
         method: "GET",
@@ -322,10 +602,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -341,10 +618,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           await fetchTicketStats();
           toast.info("No tickets available at the moment.");
           return;
-        } else if (response.status === 409) {
-          toast.warning("Ticket already claimed, retrying...");
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return fetchTicket(); // Retry
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -413,15 +686,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         isInitialized.current = false;
         clearPersistedState();
         await fetchTicketStats();
-        toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
+        toast.info("No tickets available.");
       }
+
     } catch (error: any) {
-      if (error.name === "AbortError") {
-        toast.error("Request timed out. Please try again.");
-      } else {
-        console.error("Error fetching ticket:", error);
-        toast.error(error.message || "Failed to fetch ticket");
-      }
+      console.error("Error fetching first ticket:", error);
+      toast.error(error.message || "Failed to fetch ticket");
       setShowPendingCard(true);
       setCurrentTicket(null);
       setTicketStartTime(null);
@@ -437,328 +707,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
-  const handleTakeBreak = async () => {
-    try {
-      if (currentTicket?.id && resolutionStatus !== "WIP") {
-        await unassignTicket(currentTicket.id);
-        toast.info("Ticket unassigned. Taking a break.");
-      } else if (resolutionStatus === "WIP") {
-        toast.info("Ticket is in progress. Taking a break without unassigning.");
-      }
-
-      setShowPendingCard(true);
-      setCurrentTicket(null);
-      setTicketStartTime(null);
-      setResolutionStatus("Pending");
-      setCseRemarks("");
-      setCallStatus("Connected");
-      setSelectedOtherReasons([]);
-      isInitialized.current = false;
-      clearPersistedState();
-      await fetchTicketStats();
-      toast.info("Taking a break. Click 'Get Tickets' when ready to continue.");
-    } catch (error) {
-      console.error("Error taking break:", error);
-      toast.error("Error taking break. Please try again.");
-    }
-  };
-
-  useEffect(() => {
-    fetchTicketStats();
-  }, []);
-
-  useEffect(() => {
-    if (!showPendingCard) return;
-    const interval = setInterval(() => {
-      fetchTicketStats();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [showPendingCard]);
-
-  const handleOtherReasonChange = (reason: string, checked: boolean) => {
-    if (checked) {
-      setSelectedOtherReasons((prev) => [...prev, reason]);
-    } else {
-      setSelectedOtherReasons((prev) => prev.filter((r) => r !== reason));
-    }
-  };
-
-  const ActionNotConnected = async (ticketId: number) => {
-    const newCallStatus = callStatus === "Not Connected" ? "Connected" : "Not Connected";
-    setCallStatus(newCallStatus);
-    
-    // Set flag when "Not Connected" button is clicked
-    if (newCallStatus === "Not Connected") {
-      setNotConnectedClicked(true);
-    }
-    
-    await handleSubmit();
-  };
-
-  const handleSubmit = async () => {
-    try {
-      if (!currentTicket?.id) {
-        toast.error("No ticket ID available");
-        return;
-      }
-
-      if (isReadOnly) {
-        toast.error("This ticket is read-only");
-        return;
-      }
-
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error("Authentication required");
-      }
-
-      const currentTime = new Date().toISOString();
-      const calculatedResolutionTime = calculateResolutionTime();
-      const isCallNotConnected = callStatus === "Not Connected";
-      let snoozeUntil = null;
-      let newCallAttempts = currentTicket.call_attempts || 0;
-
-      if (isCallNotConnected) {
-        const currentDate = new Date();
-        if (newCallAttempts === 0) {
-          currentDate.setHours(currentDate.getHours() + 1);
-          snoozeUntil = currentDate.toISOString();
-        } else {
-          currentDate.setDate(currentDate.getDate() + 1000);
-          snoozeUntil = currentDate.toISOString();
-        }
-      }
-
-      // Only increment call attempts when "Not Connected" button was clicked
-      if (notConnectedClicked && isCallNotConnected) {
-        newCallAttempts += 1;
-        setNotConnectedClicked(false); // Reset the flag
-      }
-      
-      const shouldAssign = resolutionStatus === "WIP";
-      const assignedTo = shouldAssign ? user?.id || "Unknown CSE" : null;
-
-      const { data: updatedTicket, error: updateError } = await supabase
-        .from("support_ticket")
-        .update({
-          resolution_status: resolutionStatus,
-          assigned_to: assignedTo,
-          cse_remarks: cseRemarks,
-          cse_name: user?.email || "Unknown CSE",
-          call_status: callStatus,
-          resolution_time: calculatedResolutionTime || null,
-          call_attempts: newCallAttempts,
-          completed_at: resolutionStatus === "Resolved" || resolutionStatus === "Can't Resolve" ? currentTime : null,
-          snooze_until: snoozeUntil,
-          other_reasons: selectedOtherReasons,
-        })
-        .eq("id", currentTicket.id)
-        .select()
-        .maybeSingle();
-
-      if (updateError) {
-        toast.error("Failed to update ticket. Retrying...");
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const { data: retryUpdatedTicket, error: retryError } = await supabase
-          .from("support_ticket")
-          .update({
-            resolution_status: resolutionStatus,
-            assigned_to: assignedTo,
-            cse_remarks: cseRemarks,
-            cse_name: user?.email || "Unknown CSE",
-            call_status: callStatus,
-            resolution_time: calculatedResolutionTime || null,
-            call_attempts: newCallAttempts,
-            completed_at: resolutionStatus === "Resolved" || resolutionStatus === "Can't Resolve" ? currentTime : null,
-            snooze_until: snoozeUntil,
-            other_reasons: selectedOtherReasons,
-          })
-          .eq("id", currentTicket.id)
-          .select()
-          .maybeSingle();
-
-        if (retryError) {
-          throw retryError;
-        }
-        setCurrentTicket(retryUpdatedTicket);
-      } else {
-        setCurrentTicket(updatedTicket);
-      }
-
-      if (onUpdate) {
-        onUpdate(updatedTicket);
-      }
-
-      setTimeout(async () => {
-        try {
-          setFetchingNext(true);
-          const currentTicketId = currentTicket?.id;
-
-          if (!currentTicketId) {
-            setShowPendingCard(true);
-            setCurrentTicket(null);
-            setTicketStartTime(null);
-            setResolutionStatus("Pending");
-            setCseRemarks("");
-            setCallStatus("Connected");
-            setSelectedOtherReasons([]);
-            isInitialized.current = false;
-            clearPersistedState();
-            await fetchTicketStats();
-            return;
-          }
-
-          let nextTicket = null;
-          let attempts = 0;
-          const maxAttempts = 3;
-
-          while (attempts < maxAttempts) {
-            attempts++;
-            const endpoint = config?.apiEndpoint || "/api/tickets";
-            const excludeParam = currentTicketId ? `&exclude=${currentTicketId}` : '';
-            const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false${excludeParam}`;
-            const { data: { session } } = await supabase.auth.getSession();
-            const token = session?.access_token;
-
-            if (!token) {
-              throw new Error("Authentication required");
-            }
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-            const response = await fetch(apiUrl, {
-              method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-             
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-              if (response.status === 404) {
-                setShowPendingCard(true);
-                setCurrentTicket(null);
-                setTicketStartTime(null);
-                setResolutionStatus("Pending");
-                setCseRemarks("");
-                setCallStatus("Connected");
-                setSelectedOtherReasons([]);
-                isInitialized.current = false;
-                clearPersistedState();
-                await fetchTicketStats();
-                toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
-                return;
-              } else if (response.status === 409) {
-                toast.warning("Ticket already claimed, retrying...");
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                continue;
-              }
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const ticketData = await response.json();
-
-            if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
-              setShowPendingCard(true);
-              setCurrentTicket(null);
-              setTicketStartTime(null);
-              setResolutionStatus("Pending");
-              setCseRemarks("");
-              setCallStatus("Connected");
-              setSelectedOtherReasons([]);
-              isInitialized.current = false;
-              clearPersistedState();
-              await fetchTicketStats();
-              toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
-              return;
-            }
-
-            if (ticketData.id) {
-              nextTicket = ticketData;
-            } else if (ticketData.ticket && ticketData.ticket.id) {
-              nextTicket = ticketData.ticket;
-            } else if (ticketData.data && ticketData.data.id) {
-              nextTicket = ticketData.data;
-            } else if (Array.isArray(ticketData) && ticketData.length > 0) {
-              nextTicket = ticketData[0];
-            }
-
-            if (nextTicket && nextTicket.id && nextTicket.id !== currentTicketId) {
-              setCurrentTicket(nextTicket);
-              setResolutionStatus(
-                nextTicket.resolution_status === "Resolved"
-                  ? "Resolved"
-                  : nextTicket.resolution_status === "WIP"
-                  ? "WIP"
-                  : nextTicket.resolution_status === "Can't Resolve"
-                  ? "Can't Resolve"
-                  : "Pending"
-              );
-              setCseRemarks(nextTicket.cse_remarks || "");
-              setCallStatus(
-                nextTicket.call_status === "Connected"
-                  ? "Connected"
-                  : nextTicket.call_status === "Not Connected"
-                  ? "Not Connected"
-                  : "Connected"
-              );
-              setSelectedOtherReasons(parseOtherReasons(nextTicket.other_reasons));
-              setShowPendingCard(false);
-              setTicketStartTime(new Date());
-              isInitialized.current = true;
-              break;
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-
-          if (!nextTicket || !nextTicket.id || nextTicket.id === currentTicketId) {
-            setShowPendingCard(true);
-            setCurrentTicket(null);
-            setTicketStartTime(null);
-            setResolutionStatus("Pending");
-            setCseRemarks("");
-            setCallStatus("Connected");
-            setSelectedOtherReasons([]);
-            isInitialized.current = false;
-            clearPersistedState();
-            await fetchTicketStats();
-            toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
-          }
-        } catch (error: any) {
-          if (error.name === "AbortError") {
-            toast.error("Request timed out. Please try again.");
-          } else {
-            console.error("Error in delayed fetch:", error);
-            toast.error(error.message || "Failed to fetch next ticket");
-          }
-          setShowPendingCard(true);
-          setCurrentTicket(null);
-          setTicketStartTime(null);
-          setResolutionStatus("Pending");
-          setCseRemarks("");
-          setCallStatus("Connected");
-          setSelectedOtherReasons([]);
-          isInitialized.current = false;
-          clearPersistedState();
-          await fetchTicketStats();
-        } finally {
-          setFetchingNext(false);
-        }
-      }, 1000);
-    } catch (err: any) {
-      console.error("Update error:", err);
-      toast.error(err.message || "Failed to update ticket. Please try again.");
-    } finally {
-      setUpdating(false);
-    }
-  };
-
+  //loading the page
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -767,27 +716,30 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     );
   }
 
+  //showing the pending tickets card
   if (showPendingCard) {
     return (
       <PendingTicketsCard
-        onGetFirstTicket={fetchTicket}
+        onGetFirstTicket={fetchFirstTicket}
         loading={loading}
         ticketStats={ticketStats}
       />
     );
   }
 
+  //showing the no ticket available card
   if (!currentTicket) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
         <p>No ticket available</p>
-        <Button onClick={fetchTicket} disabled={loading}>
+        <Button onClick={fetchFirstTicket} disabled={loading}>
           Get Tickets
         </Button>
       </div>
     );
   }
 
+  //formatting the ticket date
   const formattedDate = currentTicket?.ticket_date
     ? new Date(currentTicket.ticket_date).toLocaleDateString("en-US", {
         year: "numeric",
@@ -796,6 +748,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       })
     : "N/A";
 
+  //showing the ticket card
   return (
     <div className="relative w-full h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
