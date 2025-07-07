@@ -201,20 +201,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     resolved: 0,
     notPossible: 0,
   });
-  const [resolutionStatus, setResolutionStatus] = useState<"WIP" | "Resolved" | "Can't Resolve" | "Pending">(
-    initialState.resolutionStatus
-  );
-  const [callStatus, setCallStatus] = useState<"Connected" | "Not Connected">(
-    initialState.callStatus
-  );
-  const [cseRemarks, setCseRemarks] = useState(initialState.cseRemarks);
-  const [selectedOtherReasons, setSelectedOtherReasons] = useState<string[]>(
-    initialState.selectedOtherReasons
-  );
+  const [ticket, setTicket] = useState({
+    resolutionStatus: initialState.resolutionStatus as "WIP" | "Resolved" | "Can't Resolve" | "Pending",
+    callStatus: initialState.callStatus as "Connected" | "Not Connected",
+    cseRemarks: initialState.cseRemarks,
+    selectedOtherReasons: initialState.selectedOtherReasons,
+    ticketStartTime: null as Date | null,
+  });
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
-  const [ticketStartTime, setTicketStartTime] = useState<Date | null>(null);
 
   const isReadOnly = config?.readOnly || false;
 
@@ -223,19 +219,19 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       persistState({
         currentTicket,
         showPendingCard,
-        resolutionStatus,
-        callStatus,
-        cseRemarks,
-        selectedOtherReasons,
+        resolutionStatus: ticket.resolutionStatus,
+        callStatus: ticket.callStatus,
+        cseRemarks: ticket.cseRemarks,
+        selectedOtherReasons: ticket.selectedOtherReasons,
       });
     }
-  }, [currentTicket, showPendingCard, resolutionStatus, callStatus, cseRemarks, selectedOtherReasons]);
+  }, [currentTicket, showPendingCard, ticket.resolutionStatus, ticket.callStatus, ticket.cseRemarks, ticket.selectedOtherReasons]);
 
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
-    if (!ticketStartTime) return "";
+    if (!ticket.ticketStartTime) return "";
     const endTime = new Date();
-    const diffInSeconds = Math.floor((endTime.getTime() - ticketStartTime.getTime()) / 1000);
+    const diffInSeconds = Math.floor((endTime.getTime() - ticket.ticketStartTime.getTime()) / 1000);
     const minutes = Math.floor(diffInSeconds / 60);
     const seconds = diffInSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
@@ -286,12 +282,45 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
+  // Helper function to reset ticket state
+  const resetTicketState = () => {
+    setTicket({
+      resolutionStatus: "Pending",
+      callStatus: "Connected",
+      cseRemarks: "",
+      selectedOtherReasons: [],
+      ticketStartTime: null,
+    });
+  };
+
+  // Helper function to set ticket from API response
+  const setTicketFromResponse = (nextTicket: any) => {
+    setCurrentTicket(nextTicket);
+    setTicket({
+      resolutionStatus: nextTicket.resolution_status === "Resolved"
+        ? "Resolved"
+        : nextTicket.resolution_status === "WIP"
+        ? "WIP"
+        : nextTicket.resolution_status === "Can't Resolve"
+        ? "Can't Resolve"
+        : "Pending",
+      callStatus: nextTicket.call_status === "Connected"
+        ? "Connected"
+        : nextTicket.call_status === "Not Connected"
+        ? "Not Connected"
+        : "Connected",
+      cseRemarks: nextTicket.cse_remarks || "",
+      selectedOtherReasons: parseOtherReasons(nextTicket.other_reasons),
+      ticketStartTime: new Date(),
+    });
+    setShowPendingCard(false);
+    isInitialized.current = true;
+  };
+
   //fetching the next ticket
   const fetchNextTicket = async (currentTicketId: number) => {
     try {
-      const endpoint = config?.apiEndpoint || "/api/tickets";
-      const excludeParam = currentTicketId ? `&exclude=${currentTicketId}` : '';
-      const nextTicketUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false${excludeParam}`;
+      const nextTicketUrl = `${import.meta.env.VITE_API_URI}/get-next-ticket`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -311,11 +340,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         if (nextTicketResponse.status === 404) {
           setShowPendingCard(true);
           setCurrentTicket(null);
-          setTicketStartTime(null);
-          setResolutionStatus("Pending");
-          setCseRemarks("");
-          setCallStatus("Connected");
-          setSelectedOtherReasons([]);
+          resetTicketState();
           isInitialized.current = false;
           clearPersistedState();
           await fetchTicketStats();
@@ -330,11 +355,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
         setShowPendingCard(true);
         setCurrentTicket(null);
-        setTicketStartTime(null);
-        setResolutionStatus("Pending");
-        setCseRemarks("");
-        setCallStatus("Connected");
-        setSelectedOtherReasons([]);
+        resetTicketState();
         isInitialized.current = false;
         clearPersistedState();
         await fetchTicketStats();
@@ -356,36 +377,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
       if (nextTicket && nextTicket.id) {
-        setCurrentTicket(nextTicket);
-        setResolutionStatus(
-          nextTicket.resolution_status === "Resolved"
-            ? "Resolved"
-            : nextTicket.resolution_status === "WIP"
-            ? "WIP"
-            : nextTicket.resolution_status === "Can't Resolve"
-            ? "Can't Resolve"
-            : "Pending"
-        );
-        setCseRemarks(nextTicket.cse_remarks || "");
-        setCallStatus(
-          nextTicket.call_status === "Connected"
-            ? "Connected"
-            : nextTicket.call_status === "Not Connected"
-            ? "Not Connected"
-            : "Connected"
-        );
-        setSelectedOtherReasons(parseOtherReasons(nextTicket.other_reasons));
-        setShowPendingCard(false);
-        setTicketStartTime(new Date());
-        isInitialized.current = true;
+        setTicketFromResponse(nextTicket);
       } else {
         setShowPendingCard(true);
         setCurrentTicket(null);
-        setTicketStartTime(null);
-        setResolutionStatus("Pending");
-        setCseRemarks("");
-        setCallStatus("Connected");
-        setSelectedOtherReasons([]);
+        resetTicketState();
         isInitialized.current = false;
         clearPersistedState();
         await fetchTicketStats();
@@ -397,11 +393,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       toast.error(error.message || "Failed to fetch next ticket");
       setShowPendingCard(true);
       setCurrentTicket(null);
-      setTicketStartTime(null);
-      setResolutionStatus("Pending");
-      setCseRemarks("");
-      setCallStatus("Connected");
-      setSelectedOtherReasons([]);
+      resetTicketState();
       isInitialized.current = false;
       clearPersistedState();
       await fetchTicketStats();
@@ -437,11 +429,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       // Navigate to pending card
       setShowPendingCard(true);
       setCurrentTicket(null);
-      setTicketStartTime(null);
-      setResolutionStatus("Pending");
-      setCseRemarks("");
-      setCallStatus("Connected");
-      setSelectedOtherReasons([]);
+      resetTicketState();
       isInitialized.current = false;
       clearPersistedState();
       await fetchTicketStats();
@@ -469,16 +457,25 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //handling the other reason change
   const handleOtherReasonChange = (reason: string, checked: boolean) => {
     if (checked) {
-      setSelectedOtherReasons((prev) => [...prev, reason]);
+      setTicket(prev => ({
+        ...prev,
+        selectedOtherReasons: [...prev.selectedOtherReasons, reason]
+      }));
     } else {
-      setSelectedOtherReasons((prev) => prev.filter((r) => r !== reason));
+      setTicket(prev => ({
+        ...prev,
+        selectedOtherReasons: prev.selectedOtherReasons.filter((r) => r !== reason)
+      }));
     }
   };
 
   //handling the not connected action
   const ActionNotConnected = async (ticketId: number) => {
-    const newCallStatus = callStatus === "Not Connected" ? "Connected" : "Not Connected";
-    setCallStatus(newCallStatus);
+    const newCallStatus = ticket.callStatus === "Not Connected" ? "Connected" : "Not Connected";
+    setTicket(prev => ({
+      ...prev,
+      callStatus: newCallStatus
+    }));
     
     try {
       const apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
@@ -491,12 +488,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       const payload = {
         ticketId: currentTicket?.id,
-        resolutionStatus: resolutionStatus,
+        resolutionStatus: ticket.resolutionStatus,
         callStatus: newCallStatus,
-        cseRemarks: cseRemarks,
+        cseRemarks: ticket.cseRemarks,
         resolutionTime: calculateResolutionTime(),
-        otherReasons: selectedOtherReasons,
-        ticketStartTime: ticketStartTime?.toISOString(),
+        otherReasons: ticket.selectedOtherReasons,
+        ticketStartTime: ticket.ticketStartTime?.toISOString(),
         isReadOnly: isReadOnly
       };
 
@@ -550,12 +547,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       const payload = {
         ticketId: currentTicket?.id,
-        resolutionStatus: resolutionStatus,
-        callStatus: callStatus,
-        cseRemarks: cseRemarks,
+        resolutionStatus: ticket.resolutionStatus,
+        callStatus: ticket.callStatus,
+        cseRemarks: ticket.cseRemarks,
         resolutionTime: calculateResolutionTime(),
-        otherReasons: selectedOtherReasons,
-        ticketStartTime: ticketStartTime?.toISOString(),
+        otherReasons: ticket.selectedOtherReasons,
+        ticketStartTime: ticket.ticketStartTime?.toISOString(),
         isReadOnly: isReadOnly
       };
 
@@ -608,11 +605,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         if (response.status === 404) {
           setShowPendingCard(true);
           setCurrentTicket(null);
-          setTicketStartTime(null);
-          setResolutionStatus("Pending");
-          setCseRemarks("");
-          setCallStatus("Connected");
-          setSelectedOtherReasons([]);
+          resetTicketState();
           isInitialized.current = false;
           clearPersistedState();
           await fetchTicketStats();
@@ -627,11 +620,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
         setShowPendingCard(true);
         setCurrentTicket(null);
-        setTicketStartTime(null);
-        setResolutionStatus("Pending");
-        setCseRemarks("");
-        setCallStatus("Connected");
-        setSelectedOtherReasons([]);
+        resetTicketState();
         isInitialized.current = false;
         clearPersistedState();
         await fetchTicketStats();
@@ -653,36 +642,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
       if (nextTicket && nextTicket.id) {
-        setCurrentTicket(nextTicket);
-        setResolutionStatus(
-          nextTicket.resolution_status === "Resolved"
-            ? "Resolved"
-            : nextTicket.resolution_status === "WIP"
-            ? "WIP"
-            : nextTicket.resolution_status === "Can't Resolve"
-            ? "Can't Resolve"
-            : "Pending"
-        );
-        setCseRemarks(nextTicket.cse_remarks || "");
-        setCallStatus(
-          nextTicket.call_status === "Connected"
-            ? "Connected"
-            : nextTicket.call_status === "Not Connected"
-            ? "Not Connected"
-            : "Connected"
-        );
-        setSelectedOtherReasons(parseOtherReasons(nextTicket.other_reasons));
-        setShowPendingCard(false);
-        setTicketStartTime(new Date());
-        isInitialized.current = true;
+        setTicketFromResponse(nextTicket);
       } else {
         setShowPendingCard(true);
         setCurrentTicket(null);
-        setTicketStartTime(null);
-        setResolutionStatus("Pending");
-        setCseRemarks("");
-        setCallStatus("Connected");
-        setSelectedOtherReasons([]);
+        resetTicketState();
         isInitialized.current = false;
         clearPersistedState();
         await fetchTicketStats();
@@ -694,11 +658,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       toast.error(error.message || "Failed to fetch ticket");
       setShowPendingCard(true);
       setCurrentTicket(null);
-      setTicketStartTime(null);
-      setResolutionStatus("Pending");
-      setCseRemarks("");
-      setCallStatus("Connected");
-      setSelectedOtherReasons([]);
+      resetTicketState();
       isInitialized.current = false;
       clearPersistedState();
       await fetchTicketStats();
@@ -796,9 +756,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                 Take a Break
               </Button>
               <Select
-                value={resolutionStatus}
+                value={ticket.resolutionStatus}
                 onValueChange={async (value: "WIP" | "Resolved" | "Can't Resolve" | "Pending") => {
-                  setResolutionStatus(value);
+                  setTicket(prev => ({
+                    ...prev,
+                    resolutionStatus: value
+                  }));
                   if (value === "WIP" && currentTicket?.id && !isReadOnly) {
                     try {
                       const { data: { session } } = await supabase.auth.getSession();
@@ -935,8 +898,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                             disabled={updating || isReadOnly}
                           >
                             <span className="text-sm">
-                              {selectedOtherReasons.length > 0
-                                ? `${selectedOtherReasons.length} reason(s) selected`
+                              {ticket.selectedOtherReasons.length > 0
+                                ? `${ticket.selectedOtherReasons.length} reason(s) selected`
                                 : "Select other reasons"}
                             </span>
                             <ChevronDown className="h-3 w-3 opacity-50" />
@@ -950,7 +913,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                                 <div key={reason} className="flex items-center space-x-2">
                                   <Checkbox
                                     id={`reason-${reason}`}
-                                    checked={selectedOtherReasons.includes(reason)}
+                                    checked={ticket.selectedOtherReasons.includes(reason)}
                                     onCheckedChange={(checked) =>
                                       handleOtherReasonChange(reason, checked as boolean)
                                     }
@@ -965,12 +928,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                                 </div>
                               ))}
                             </div>
-                            {selectedOtherReasons.length > 0 && (
+                            {ticket.selectedOtherReasons.length > 0 && (
                               <div className="pt-2 border-t">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => setSelectedOtherReasons([])}
+                                  onClick={() => setTicket(prev => ({
+                                    ...prev,
+                                    selectedOtherReasons: []
+                                  }))}
                                   disabled={updating || isReadOnly}
                                   className="text-xs"
                                 >
@@ -981,9 +947,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                           </div>
                         </PopoverContent>
                       </Popover>
-                      {selectedOtherReasons.length > 0 && (
+                      {ticket.selectedOtherReasons.length > 0 && (
                         <div className="flex flex-wrap gap-1">
-                          {selectedOtherReasons.map((reason) => (
+                          {ticket.selectedOtherReasons.map((reason) => (
                             <Badge key={reason} variant="secondary" className="text-xs">
                               {reason}
                             </Badge>
@@ -1000,8 +966,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   CSE Remarks
                 </label>
                 <Textarea
-                  value={cseRemarks}
-                  onChange={(e) => setCseRemarks(e.target.value)}
+                  value={ticket.cseRemarks}
+                  onChange={(e) => setTicket(prev => ({
+                    ...prev,
+                    cseRemarks: e.target.value
+                  }))}
                   placeholder="Add your remarks about this ticket..."
                   className="min-h-[80px]"
                   disabled={updating || isReadOnly}
@@ -1016,9 +985,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             <Button
               onClick={() => ActionNotConnected(currentTicket.id)}
               size="sm"
-              variant={callStatus === "Not Connected" ? "default" : "outline"}
+              variant={ticket.callStatus === "Not Connected" ? "default" : "outline"}
               className={`
-                ${callStatus === "Not Connected" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}
+                ${ticket.callStatus === "Not Connected" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}
                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed
               `}
               disabled={updating || isReadOnly}
