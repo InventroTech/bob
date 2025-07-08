@@ -111,7 +111,7 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
           <div className="text-center mb-6">
             <div className="flex items-center justify-center mb-4">
               <PieChart className="h-8 w-8 text-primary mr-2" />
-              <h2 className="text-2xl font-semibold text-gray-800">Today’s Tickets</h2>
+              <h2 className="text-2xl font-semibold text-gray-800">Today's Tickets</h2>
             </div>
             <p className="text-gray-600 mb-6">Click to start working on tickets</p>
           </div>
@@ -131,7 +131,7 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
             <div className="flex justify-between items-center">
               <div className="flex items-center">
                 <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                <span className="text-sm text-gray-700">Others</span>
+                <span className="text-sm text-gray-700">Work in Progress</span>
               </div>
               <span className="text-sm font-medium">{ticketStats.inProgress}</span>
             </div>

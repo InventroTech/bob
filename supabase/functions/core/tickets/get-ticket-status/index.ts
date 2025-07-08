@@ -1,8 +1,3 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -89,9 +84,9 @@ Deno.serve(async (req) => {
 
     // 1. Resolved By You (Today) - For the current CSE
     // Check cse_name field which can contain either name or email or userId
-    const { data: resolvedToday, error: resolvedError } = await supabase
+    const { count: resolvedTodayCount, error: resolvedError } = await supabase
       .from('support_ticket')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`)
       .eq('resolution_status', 'Resolved')
       .gte('completed_at', startOfDayISO)
@@ -103,9 +98,9 @@ Deno.serve(async (req) => {
 
     // 2. Total Pending Tickets (Overall. Not specific to this CSE)
     // Include both 'Pending' status and null resolution_status
-    const { data: totalPending, error: pendingError } = await supabase
+    const { count: totalPendingCount, error: pendingError } = await supabase
       .from('support_ticket')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .or('resolution_status.eq.Pending,resolution_status.is.null');
 
     if (pendingError) {
@@ -114,9 +109,9 @@ Deno.serve(async (req) => {
 
     // 3. WIP tickets (For this CSE) - Not filtered by today
     // Use cse_name which can contain either name or email or userId
-    const { data: wipTickets, error: wipError } = await supabase
+    const { count: wipTicketsCount, error: wipError } = await supabase
       .from('support_ticket')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`)
       .eq('resolution_status', 'WIP');
 
@@ -126,9 +121,9 @@ Deno.serve(async (req) => {
 
     // 4. Can't Resolve (Today) (For this CSE)
     // Use cse_name which can contain either name or email or userId
-    const { data: cantResolveToday, error: cantResolveError } = await supabase
+    const { count: cantResolveTodayCount, error: cantResolveError } = await supabase
       .from('support_ticket')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`)
       .eq('resolution_status', "Can't Resolved")
       .gte('completed_at', startOfDayISO)
@@ -140,10 +135,10 @@ Deno.serve(async (req) => {
 
     // Prepare response
     const ticketStats = {
-      resolvedByYouToday: resolvedToday?.length || 0,
-      totalPendingTickets: totalPending?.length || 0,
-      wipTickets: wipTickets?.length || 0,
-      cantResolveToday: cantResolveToday?.length || 0
+      resolvedByYouToday: resolvedTodayCount || 0,
+      totalPendingTickets: totalPendingCount || 0,
+      wipTickets: wipTicketsCount || 0,
+      cantResolveToday: cantResolveTodayCount || 0
     };
 
     return new Response(JSON.stringify({ 

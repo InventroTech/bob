@@ -130,25 +130,6 @@ Deno.serve(async (req) => {
     }
 
     const currentTime = new Date().toISOString();
-    
-    // Calculate snooze_until based on call status and attempts
-    let snoozeUntil = null;
-    const isCallNotConnected = callStatus === "Not Connected";
-    
-    if (isCallNotConnected) {
-      const currentDate = new Date();
-      
-      // First attempt - snooze for 1 hour
-      if (currentTicket.call_attempts === 0) {
-        currentDate.setHours(currentDate.getHours() + 1);
-        snoozeUntil = currentDate.toISOString();
-      } 
-      // Subsequent attempts - snooze for 10 days
-      else {
-        currentDate.setDate(currentDate.getDate() + 10);
-        snoozeUntil = currentDate.toISOString();
-      }
-    }
 
     // Determine assignment based on resolution status
     const shouldAssign = resolutionStatus === "WIP";
@@ -168,7 +149,6 @@ Deno.serve(async (req) => {
         resolution_time: resolutionTime || null,
         call_attempts: currentTicket.call_attempts + 1,
         completed_at: currentTime,
-        snooze_until: snoozeUntil,
         other_reasons: otherReasons
       })
       .eq('id', ticketId)
@@ -186,94 +166,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Function to get next ticket with retry mechanism
-    const getNextTicket = async (currentTicketId: number, maxAttempts: number = 3) => {
-      let attempts = 0;
-      let nextTicket = null;
-      
-      while (attempts < maxAttempts && (!nextTicket || nextTicket.id === currentTicketId)) {
-        attempts++;
-        console.log(`Attempt ${attempts} to fetch next ticket...`);
-        
-        // Query for next available ticket
-        // Priority: unassigned tickets first, then by creation date
-        const { data: tickets, error: fetchError } = await supabase
-          .from('support_ticket')
-          .select('*')
-          .or(`assigned_to.is.null,assigned_to.eq.${userId}`)
-          .neq('id', currentTicketId)
-          .is('snooze_until', null)
-          .order('assigned_to', { ascending: true, nullsFirst: true })
-          .order('created_at', { ascending: true })
-          .limit(1);
-
-        if (fetchError) {
-          console.error('Error fetching next ticket:', fetchError);
-          break;
-        }
-
-        if (tickets && tickets.length > 0) {
-          nextTicket = tickets[0];
-        }
-        
-        // If we got the same ticket, wait a bit before retrying
-        if (nextTicket && nextTicket.id === currentTicketId && attempts < maxAttempts) {
-          console.log('Same ticket returned, waiting before retry...');
-          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-        }
-      }
-      
-      return nextTicket;
-    };
-
-    // Get next ticket
-    const nextTicket = await getNextTicket(ticketId);
-
-    // Get updated ticket statistics
-    const { data: stats, error: statsError } = await supabase
-      .from('support_ticket')
-      .select('resolution_status')
-      .is('assigned_to', null);
-
-    if (statsError) {
-      console.error('Error fetching stats:', statsError);
-    }
-
-    const ticketStats = {
-      total: stats?.length || 0,
-      pending: stats?.filter(t => t.resolution_status === "Pending").length || 0,
-      inProgress: stats?.filter(t => t.resolution_status === "WIP").length || 0,
-      resolved: stats?.filter(t => t.resolution_status === "Resolved").length || 0,
-      notPossible: stats?.filter(t => t.resolution_status === "Can't Resolved").length || 0
-    };
-
     // Prepare response
-    const response: any = {
+    const response = {
       success: true,
       message: "Ticket updated successfully",
       updatedTicket: updatedTicket,
-      ticketStats: ticketStats,
       userId: userId,
       userEmail: userEmail
     };
-
-    if (nextTicket && nextTicket.id && nextTicket.id !== ticketId) {
-      // Format next ticket for frontend consumption
-      const formattedNextTicket = {
-        ...nextTicket,
-        resolution_status: nextTicket.resolution_status || "Pending",
-        call_status: nextTicket.call_status || "Connected",
-        cse_remarks: nextTicket.cse_remarks || "",
-        other_reasons: nextTicket.other_reasons || []
-      };
-
-      response.nextTicket = formattedNextTicket;
-      response.hasNextTicket = true;
-      response.message = "Ticket updated and next ticket loaded successfully";
-    } else {
-      response.hasNextTicket = false;
-      response.message = "Ticket updated successfully. No more tickets available.";
-    }
 
     return new Response(JSON.stringify(response), {
       headers: { 
