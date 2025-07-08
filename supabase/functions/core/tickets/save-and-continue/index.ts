@@ -153,7 +153,8 @@ Deno.serve(async (req) => {
     // Determine assignment based on resolution status
     const shouldAssign = resolutionStatus === "WIP";
     const assignedTo = shouldAssign ? userId : null;
-    const cseName = shouldAssign ? userEmail : null;
+    // Always save cse_name for all resolution statuses
+    const cseName = userEmail;
 
     // Update the current ticket
     const { data: updatedTicket, error: updateError } = await supabase
