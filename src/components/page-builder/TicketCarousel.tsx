@@ -259,15 +259,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
       const data = await response.json();
+      
+      // Map the new backend structure to our TicketStats interface
       const stats: TicketStats = {
-        total: data.total_tickets || 0,
-        pending: data.total_pending_tickets || 0,
-        inProgress: 0,
-        resolved: data.total_completed_tickets || 0,
-        notPossible: 0,
+        total: (data.ticketStats?.totalPendingTickets || 0) + (data.ticketStats?.wipTickets || 0) + (data.ticketStats?.resolvedByYouToday || 0) + (data.ticketStats?.cantResolveToday || 0),
+        pending: data.ticketStats?.totalPendingTickets || 0,
+        inProgress: data.ticketStats?.wipTickets || 0,
+        resolved: data.ticketStats?.resolvedByYouToday || 0,
+        notPossible: data.ticketStats?.cantResolveToday || 0,
       };
-      const calculatedInProgress = Math.max(0, stats.total - stats.pending - stats.resolved);
-      stats.inProgress = calculatedInProgress;
 
       setTicketStats(stats);
     } catch (error) {
@@ -320,7 +320,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the next ticket
   const fetchNextTicket = async (currentTicketId: number) => {
     try {
-      const nextTicketUrl = `${import.meta.env.VITE_API_URI}/get-next-ticket`;
+      const nextTicketUrl = `${import.meta.env.VITE_API_URI}${config?.apiEndpoint || "/api/tickets"}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
