@@ -1,16 +1,13 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Get env vars from Supabase Edge runtime
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-console.log("Hello from get-ticket-status!")
-
-Deno.serve(async (req) => {
+console.log("Hello from get-ticket-status!");
+Deno.serve(async (req)=>{
   // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -18,18 +15,20 @@ Deno.serve(async (req) => {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      }
     });
   }
 
   // Allow GET and POST requests
   if (req.method !== 'GET' && req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { 
+    return new Response(JSON.stringify({
+      error: "Method not allowed"
+    }), {
       status: 405,
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': '*'
       }
     });
   }
@@ -38,38 +37,44 @@ Deno.serve(async (req) => {
     // Get JWT from Authorization header
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Missing or invalid auth header" }), { 
+      return new Response(JSON.stringify({
+        error: "Missing or invalid auth header"
+      }), {
         status: 401,
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': '*'
         }
       });
     }
     const jwt = authHeader.replace("Bearer ", "");
 
     // Decode JWT to get user id and email
-    let userId: string | undefined;
-    let userEmail: string | undefined;
+    let userId;
+    let userEmail;
     try {
       const payload = JSON.parse(atob(jwt.split(".")[1]));
       userId = payload.sub;
       userEmail = payload.email;
     } catch (e) {
-      return new Response(JSON.stringify({ error: "Invalid JWT" }), { 
+      return new Response(JSON.stringify({
+        error: "Invalid JWT"
+      }), {
         status: 401,
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': '*'
         }
       });
     }
     if (!userId) {
-      return new Response(JSON.stringify({ error: "No user id in JWT" }), { 
+      return new Response(JSON.stringify({
+        error: "No user id in JWT"
+      }), {
         status: 400,
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': '*'
         }
       });
     }
@@ -141,8 +146,8 @@ Deno.serve(async (req) => {
       cantResolveToday: cantResolveTodayCount || 0
     };
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       message: "Ticket status retrieved successfully",
       ticketStats: ticketStats,
       userId: userId,
@@ -152,23 +157,25 @@ Deno.serve(async (req) => {
         endOfDay: endOfDayISO
       }
     }), {
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': '*'
       }
     });
 
   } catch (error) {
     console.error('Error in get-ticket-status function:', error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), { 
+    return new Response(JSON.stringify({
+      error: "Internal server error"
+    }), {
       status: 500,
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': '*'
       }
     });
   }
-})
+});
 
 /* To invoke locally:
 

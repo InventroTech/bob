@@ -1,22 +1,15 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Get env vars from Supabase Edge runtime
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // In-memory cache to track recently processed tickets (per user)
 const processedTicketsCache = new Map<string, Set<number>>();
 
-console.log("Hello from get-next-ticket!")
+console.log("Hello from get-next-ticket!");
 
 Deno.serve(async (req) => {
   // Handle CORS
@@ -133,62 +126,40 @@ Deno.serve(async (req) => {
           query = query.neq('id', excludeTicketId);
         }
 
-        // Exclude tickets that have been recently processed by this user
-        // Get the last 10 processed tickets to exclude them from the query
-        const recentProcessedTickets = Array.from(userProcessedTickets).slice(-10);
-        if (recentProcessedTickets.length > 0) {
-          query = query.not('id', 'in', `(${recentProcessedTickets.join(',')})`);
+        // Exclude recently processed tickets (last 10)
+        const recentProcessed = Array.from(userProcessedTickets).slice(-10);
+        if (recentProcessed.length > 0) {
+          query = query.not('id', 'in', `(${recentProcessed.join(',')})`);
         }
 
-        const { data: tickets, error: fetchError } = await query;
+        const { data: tickets, error } = await query;
 
-        if (fetchError) {
-          console.error('Error fetching next ticket:', fetchError);
+        if (error) {
+          console.error('Error fetching tickets:', error);
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+            continue;
+          }
+          throw error;
+        }
+
+        if (!tickets || tickets.length === 0) {
+          console.log('No more tickets available');
           break;
         }
 
-        if (tickets && tickets.length > 0) {
-          nextTicket = tickets[0];
-          
-          // Check if this ticket was already processed by this user
-          if (userProcessedTickets.has(nextTicket.id)) {
-            console.log(`Ticket ${nextTicket.id} already processed by user ${userId}, skipping...`);
-            nextTicket = null; // Reset to continue searching
-          }
-        }
-        
-        // If we got the same ticket or no valid ticket, wait a bit before retrying
-        if ((nextTicket && excludeTicketId && nextTicket.id === excludeTicketId) || 
-            (nextTicket && userProcessedTickets.has(nextTicket.id)) ||
-            !nextTicket) {
+        nextTicket = tickets[0];
+
+        // Check if this ticket is already in processed cache
+        if (userProcessedTickets.has(nextTicket.id)) {
+          console.log(`Ticket ${nextTicket.id} already processed, trying next...`);
           if (attempts < maxAttempts) {
-            console.log('Same ticket returned or no valid ticket, waiting before retry...');
-            await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+            await new Promise(resolve => setTimeout(resolve, 500)); // Short wait before retry
+            continue;
           }
-        }
-      }
-      
-      // If we found a valid ticket, add it to processed tickets
-      if (nextTicket && !userProcessedTickets.has(nextTicket.id)) {
-        userProcessedTickets.add(nextTicket.id);
-        console.log(`Added ticket ${nextTicket.id} to processed tickets for user ${userId}`);
-        
-        // Clean up cache if it gets too large (keep only last 1000 tickets per user)
-        if (userProcessedTickets.size > 1000) {
-          const ticketsArray = Array.from(userProcessedTickets);
-          const ticketsToKeep = ticketsArray.slice(-1000);
-          userProcessedTickets.clear();
-          ticketsToKeep.forEach(id => userProcessedTickets.add(id));
-          console.log(`Cleaned up processed tickets cache for user ${userId}`);
         }
       }
 
-      // Also add the excluded ticket to processed tickets to prevent it from being returned again
-      if (excludeTicketId && !userProcessedTickets.has(excludeTicketId)) {
-        userProcessedTickets.add(excludeTicketId);
-        console.log(`Added excluded ticket ${excludeTicketId} to processed tickets for user ${userId}`);
-      }
-      
       return nextTicket;
     };
 
@@ -196,12 +167,14 @@ Deno.serve(async (req) => {
     const nextTicket = await getNextTicket(currentTicketId);
 
     if (!nextTicket) {
-      return new Response(JSON.stringify({ 
-        success: false, 
+      return new Response(JSON.stringify({
+        success: true,
         message: "No more tickets available",
-        hasNextTicket: false
-      }), { 
-        status: 404,
+        ticket: null,
+        hasNextTicket: false,
+        userId: userId,
+        userEmail: userEmail
+      }), {
         headers: { 
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
@@ -209,17 +182,43 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Format next ticket for frontend consumption
+    // Add to processed cache
+    if (!processedTicketsCache.has(userId)) {
+      processedTicketsCache.set(userId, new Set());
+    }
+    const userProcessedTickets = processedTicketsCache.get(userId)!;
+    userProcessedTickets.add(nextTicket.id);
+
+    // Keep only last 20 processed tickets to prevent memory bloat
+    if (userProcessedTickets.size > 20) {
+      const ticketsArray = Array.from(userProcessedTickets);
+      const newSet = new Set(ticketsArray.slice(-20));
+      processedTicketsCache.set(userId, newSet);
+    }
+
+    // Format the ticket for response
     const formattedNextTicket = {
-      ...nextTicket,
-      resolution_status: nextTicket.resolution_status || "Pending",
-      call_status: nextTicket.call_status || "Connected",
-      cse_remarks: nextTicket.cse_remarks || "",
-      other_reasons: nextTicket.other_reasons || []
+      id: nextTicket.id,
+      title: nextTicket.title,
+      description: nextTicket.description,
+      priority: nextTicket.priority,
+      status: nextTicket.status,
+      resolution_status: nextTicket.resolution_status,
+      assigned_to: nextTicket.assigned_to,
+      cse_name: nextTicket.cse_name,
+      cse_remarks: nextTicket.cse_remarks,
+      call_status: nextTicket.call_status,
+      resolution_time: nextTicket.resolution_time,
+      call_attempts: nextTicket.call_attempts,
+      snooze_until: nextTicket.snooze_until,
+      other_reasons: nextTicket.other_reasons,
+      created_at: nextTicket.created_at,
+      updated_at: nextTicket.updated_at,
+      completed_at: nextTicket.completed_at
     };
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       message: "Next ticket retrieved successfully",
       ticket: formattedNextTicket,
       hasNextTicket: true,
@@ -242,7 +241,7 @@ Deno.serve(async (req) => {
       }
     });
   }
-})
+});
 
 /* To invoke locally:
 
