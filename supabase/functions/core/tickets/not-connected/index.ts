@@ -137,9 +137,9 @@ Deno.serve(async (req) => {
         currentDate.setHours(currentDate.getHours() + 1);
         snoozeUntil = currentDate.toISOString();
       } 
-      // Subsequent attempts - snooze for 10 days
+      // Subsequent attempts - snooze for 10 years
       else {
-        currentDate.setDate(currentDate.getDate() + 10);
+        currentDate.setFullYear(currentDate.getFullYear() + 10);
         snoozeUntil = currentDate.toISOString();
       }
     }

@@ -136,29 +136,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get updated ticket stats
-    const { data: stats, error: statsError } = await supabase
-      .from('support_ticket')
-      .select('resolution_status')
-      .is('assigned_to', null);
-
-    if (statsError) {
-      console.error('Error fetching stats:', statsError);
-    }
-
-    const ticketStats = {
-      total: stats?.length || 0,
-      pending: stats?.filter(t => t.resolution_status === "Pending").length || 0,
-      inProgress: stats?.filter(t => t.resolution_status === "WIP").length || 0,
-      resolved: stats?.filter(t => t.resolution_status === "Resolved").length || 0,
-      notPossible: stats?.filter(t => t.resolution_status === "Can't Resolved").length || 0
-    };
-
     return new Response(JSON.stringify({ 
       success: true, 
       message: message,
       ticketUnassigned: shouldUnassign,
-      ticketStats: ticketStats,
       userId: userId,
       userEmail: userEmail
     }), {
