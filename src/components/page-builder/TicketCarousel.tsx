@@ -871,6 +871,18 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   Attempts: {currentTicket?.call_attempts || 0}
                 </span>
               </div>
+              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+                <Calendar className="h-3 w-3 mr-2 text-primary" />
+                <span className="font-medium text-sm">
+                  Created: {currentTicket?.created_at ? new Date(currentTicket.created_at).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  }) : "N/A"}
+                </span>
+              </div>
             </div>
 
             <div className="space-y-3">
