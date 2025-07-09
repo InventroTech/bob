@@ -4,8 +4,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-// In-memory cache to track recently processed tickets (per user)
-const processedTicketsCache = new Map();
 console.log("Hello from get-next-ticket!");
 Deno.serve(async (req)=>{
   // Handle CORS
@@ -75,122 +73,96 @@ Deno.serve(async (req)=>{
         }
       });
     }
-    // Get current ticket ID from request body or query params
-    let currentTicketId = null;
-    if (req.method === 'POST') {
-      try {
-        const body = await req.json();
-        currentTicketId = body.currentTicketId || body.ticketId || null;
-      } catch (e) {
-      // If body parsing fails, continue without currentTicketId
-      }
-    } else {
-      // For GET requests, try to get from URL params
-      const url = new URL(req.url);
-      currentTicketId = url.searchParams.get('exclude') ? parseInt(url.searchParams.get('exclude')) : null;
-    }
-    // Function to get next ticket with retry mechanism
-    const getNextTicket = async (excludeTicketId, maxAttempts = 3)=>{
-      let attempts = 0;
-      let nextTicket = null;
-      // Get or create user's processed tickets set
-      if (!processedTicketsCache.has(userId)) {
-        processedTicketsCache.set(userId, new Set());
-      }
-      const userProcessedTickets = processedTicketsCache.get(userId);
-      while(attempts < maxAttempts && (!nextTicket || excludeTicketId && nextTicket.id === excludeTicketId || userProcessedTickets.has(nextTicket.id))){
-        attempts++;
-        console.log(`Attempt ${attempts} to fetch next ticket...`);
-        // Build query for next available ticket
-        // Priority: unassigned tickets first, then by creation date
-        // Exclude resolved tickets and ensure no repetition
-        let query = supabase.from('support_ticket').select('*').or(`assigned_to.is.null,assigned_to.eq.${userId}`).is('snooze_until', null).neq('resolution_status', 'Resolved').order('assigned_to', {
-          ascending: true,
-          nullsFirst: true
-        }).order('created_at', {
-          ascending: true
-        }).limit(1);
-        // Exclude current ticket if provided
-        if (excludeTicketId) {
-          query = query.neq('id', excludeTicketId);
-        }
-        // Exclude tickets that have been recently processed by this user
-        // Get the last 10 processed tickets to exclude them from the query
-        const recentProcessedTickets = Array.from(userProcessedTickets).slice(-10);
-        if (recentProcessedTickets.length > 0) {
-          query = query.not('id', 'in', `(${recentProcessedTickets.join(',')})`);
-        }
-        const { data: tickets, error: fetchError } = await query;
-        if (fetchError) {
-          console.error('Error fetching next ticket:', fetchError);
-          break;
-        }
-        if (tickets && tickets.length > 0) {
-          nextTicket = tickets[0];
-          // Check if this ticket was already processed by this user
-          if (userProcessedTickets.has(nextTicket.id)) {
-            console.log(`Ticket ${nextTicket.id} already processed by user ${userId}, skipping...`);
-            nextTicket = null; // Reset to continue searching
-          }
-        }
-        // If we got the same ticket or no valid ticket, wait a bit before retrying
-        if (nextTicket && excludeTicketId && nextTicket.id === excludeTicketId || nextTicket && userProcessedTickets.has(nextTicket.id) || !nextTicket) {
-          if (attempts < maxAttempts) {
-            console.log('Same ticket returned or no valid ticket, waiting before retry...');
-            await new Promise((resolve)=>setTimeout(resolve, 2000)); // 2 second delay
-          }
-        }
-      }
-      // If we found a valid ticket, add it to processed tickets
-      if (nextTicket && !userProcessedTickets.has(nextTicket.id)) {
-        userProcessedTickets.add(nextTicket.id);
-        console.log(`Added ticket ${nextTicket.id} to processed tickets for user ${userId}`);
-        // Clean up cache if it gets too large (keep only last 1000 tickets per user)
-        if (userProcessedTickets.size > 1000) {
-          const ticketsArray = Array.from(userProcessedTickets);
-          const ticketsToKeep = ticketsArray.slice(-1000);
-          userProcessedTickets.clear();
-          ticketsToKeep.forEach((id)=>userProcessedTickets.add(id));
-          console.log(`Cleaned up processed tickets cache for user ${userId}`);
-        }
-      }
-      // Also add the excluded ticket to processed tickets to prevent it from being returned again
-      if (excludeTicketId && !userProcessedTickets.has(excludeTicketId)) {
-        userProcessedTickets.add(excludeTicketId);
-        console.log(`Added excluded ticket ${excludeTicketId} to processed tickets for user ${userId}`);
-      }
-      return nextTicket;
+    // Get current time for snooze comparison
+    const currentTime = new Date().toISOString();
+    // Function to try assigning a ticket to the user
+    const tryAssignTicket = async (ticketId)=>{
+      const { error } = await supabase.from('support_ticket').update({
+        assigned_to: userId,
+        cse_name: userEmail
+      }).eq('id', ticketId);
+      console.log(userId, userEmail); // Only assign if not already assigned
+      return !error;
     };
-    // Get next ticket
-    const nextTicket = await getNextTicket(currentTicketId);
+    // Function to get and assign a ticket
+    const getAndAssignTicket = async ()=>{
+      // 1. First, try to get snoozed ticket for the user
+      console.log("1");
+      let query = supabase.from('support_ticket').select('*').eq('assigned_to', userId).eq('resolution_status', 'Pending').not('snooze_until', 'is', null).lt('snooze_until', currentTime) // snoozed_until is in the past
+      .order('snooze_until', {
+        ascending: true
+      }).limit(1);
+      let { data: tickets, error } = await query;
+      if (error) {
+        console.log("2");
+        console.error('Error fetching snoozed tickets:', error);
+        return null;
+      }
+      // If snoozed ticket found, return it
+      if (tickets && tickets.length > 0) {
+        console.log("3");
+        return tickets[0];
+      }
+      // 2. If no snoozed ticket, get oldest unassigned pending ticket
+      query = supabase.from('support_ticket').select('*').is('assigned_to', null).or('resolution_status.eq.Pending,resolution_status.is.null').order('created_at', {
+        ascending: true
+      }).limit(1);
+      const result = await query;
+      tickets = result.data;
+      error = result.error;
+      console.log("4", tickets);
+      if (error) {
+        console.error('Error fetching unassigned tickets:', error);
+        return null;
+      }
+      if (!tickets || tickets.length === 0) {
+        console.log("5");
+        return null; // No tickets available
+      }
+      const ticket = tickets[0];
+      // 3. Try to assign the ticket to the user
+      const assignmentSuccess = await tryAssignTicket(ticket.id);
+      if (assignmentSuccess) {
+        // Fetch the updated ticket
+        console.log("6");
+        const { data: updatedTicket } = await supabase.from('support_ticket').select('*').eq('id', ticket.id).single();
+        return updatedTicket;
+      } else {
+        // If assignment failed, try again recursively
+        console.log("7");
+        return await getAndAssignTicket();
+      }
+    };
+    // Get the ticket
+    const nextTicket = await getAndAssignTicket();
+    // If no tickets available, return empty object
     if (!nextTicket) {
-      return new Response(JSON.stringify({
-        success: false,
-        message: "No more tickets available",
-        hasNextTicket: false
-      }), {
-        status: 404,
+      return new Response(JSON.stringify({}), {
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         }
       });
     }
-    // Format next ticket for frontend consumption
+    // Format the ticket for response
     const formattedNextTicket = {
-      ...nextTicket,
-      resolution_status: nextTicket.resolution_status || "Pending",
-      call_status: nextTicket.call_status || "Connected",
-      cse_remarks: nextTicket.cse_remarks || "",
-      other_reasons: nextTicket.other_reasons || []
+      name: nextTicket.name,
+      id: nextTicket.id,
+      user_id: nextTicket.user_id,
+      phone: nextTicket.phone,
+      source: nextTicket.source,
+      payment_status: nextTicket.payment_status,
+      attempts: nextTicket.attempts,
+      primary_reason: nextTicket.primary_reason,
+      other_reasons: nextTicket.other_reasons,
+      cse_remarks: nextTicket.cse_remarks,
+      status: nextTicket.status,
+      call_status: nextTicket.call_status
     };
     return new Response(JSON.stringify({
       success: true,
-      message: "Next ticket retrieved successfully",
       ticket: formattedNextTicket,
-      hasNextTicket: true,
-      userId: userId,
-      userEmail: userEmail
+      hasNextTicket: true
     }), {
       headers: {
         'Content-Type': 'application/json',
