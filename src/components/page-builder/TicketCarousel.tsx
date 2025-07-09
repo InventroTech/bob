@@ -999,7 +999,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             onClick={handleSubmit}
             size="sm"
             className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={updating || isReadOnly || fetchingNext}
+            disabled={updating || isReadOnly || fetchingNext || ticket.resolutionStatus === "Pending"}
           >
             {updating ? (
               <>
@@ -1013,6 +1013,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
               </>
             ) : isReadOnly ? (
               "Close"
+            ) : ticket.resolutionStatus === "Pending" ? (
+              "Select Status"
             ) : (
               "Save & Continue"
             )}
