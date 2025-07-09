@@ -39,7 +39,7 @@ Deno.serve(async (req)=>{
     // 3. Deduplicate Tickets based on the user_id field of dumpedTickets
     const uniqueTickets = [
       ...new Map(dumpedTickets.map((ticket)=>[
-          `${ticket.user_id}_${ticket.source}_${ticket.reason}`,
+          `${ticket.user_id}`,
           ticket
         ])).values()
     ];

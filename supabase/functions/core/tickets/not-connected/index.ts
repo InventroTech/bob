@@ -18,17 +18,6 @@ Deno.serve(async (req)=>{
     });
   }
   // Only allow POST requests
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({
-      error: "Method not allowed"
-    }), {
-      status: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
-  }
   try {
     // Get JWT from Authorization header
     const authHeader = req.headers.get("Authorization");
@@ -172,13 +161,9 @@ Deno.serve(async (req)=>{
       });
     }
     return new Response(JSON.stringify({
-      success: true,
-      message: "Ticket updated successfully",
       ticket: updatedTicket,
       snoozeUntil: snoozeUntil,
       callAttempts: ticket.call_attempts + 1,
-      userId: userId,
-      userEmail: userEmail
     }), {
       headers: {
         'Content-Type': 'application/json',

@@ -17,18 +17,6 @@ Deno.serve(async (req)=>{
       }
     });
   }
-  // Allow GET and POST requests
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return new Response(JSON.stringify({
-      error: "Method not allowed"
-    }), {
-      status: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
-  }
   try {
     // Get JWT from Authorization header
     const authHeader = req.headers.get("Authorization");
@@ -80,7 +68,7 @@ Deno.serve(async (req)=>{
       const { error } = await supabase.from('support_ticket').update({
         assigned_to: userId,
         cse_name: userEmail
-      }).eq('id', ticketId);
+      }).eq('id', ticketId).is('assigned_to', null);
       console.log(userId, userEmail); // Only assign if not already assigned
       return !error;
     };
@@ -144,25 +132,8 @@ Deno.serve(async (req)=>{
         }
       });
     }
-    // Format the ticket for response
-    const formattedNextTicket = {
-      name: nextTicket.name,
-      id: nextTicket.id,
-      user_id: nextTicket.user_id,
-      phone: nextTicket.phone,
-      source: nextTicket.source,
-      payment_status: nextTicket.payment_status,
-      attempts: nextTicket.attempts,
-      primary_reason: nextTicket.primary_reason,
-      other_reasons: nextTicket.other_reasons,
-      cse_remarks: nextTicket.cse_remarks,
-      status: nextTicket.status,
-      call_status: nextTicket.call_status
-    };
     return new Response(JSON.stringify({
-      success: true,
-      ticket: formattedNextTicket,
-      hasNextTicket: true
+      ticket: nextTicket,
     }), {
       headers: {
         'Content-Type': 'application/json',
