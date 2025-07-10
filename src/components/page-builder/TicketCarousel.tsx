@@ -21,14 +21,8 @@ import {
   PieChart,
   Coffee,
   Waypoints,
+  MoreVertical,
 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,7 +32,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsCard";
+
 
 interface Ticket {
   id: number;
@@ -99,6 +100,44 @@ const parseOtherReasons = (otherReasons: any): string[] => {
     }
   }
   return [];
+};
+
+// Function to format phone number
+const formatPhoneNumber = (phone: string): string => {
+  if (!phone) return "N/A";
+  
+  // Remove all non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+  
+  // Check if it's a valid Indian mobile number (10 digits starting with 6-9)
+  if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+    return `+91 ${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
+  }
+  
+  // Check if it already has country code (12 digits starting with 91)
+  if (cleaned.length === 12 && cleaned.startsWith('91')) {
+    return `+${cleaned.slice(0, 2)} ${cleaned.slice(2, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8)}`;
+  }
+  
+  // If it doesn't match expected formats, return as is
+  return phone;
+};
+
+// Function to get clean phone number for links
+const getCleanPhoneNumber = (phone: string): string => {
+  if (!phone) return "";
+  return phone.replace(/\D/g, '');
+};
+
+
+// Function to handle WhatsApp action
+const handleWhatsApp = (phone: string) => {
+  const cleanNumber = getCleanPhoneNumber(phone);
+  if (cleanNumber) {
+    const message = `Hi, I'm calling regarding your support ticket.`;
+    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  }
 };
 
 interface TicketCarouselProps {
@@ -469,58 +508,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
-  //handling the not connected action
-  const ActionNotConnected = async (ticketId: number) => {
-    const newCallStatus = ticket.callStatus === "Not Connected" ? "Connected" : "Not Connected";
-    setTicket(prev => ({
-      ...prev,
-      callStatus: newCallStatus
-    }));
-    
-    try {
-      const apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
-      const payload = {
-        ticketId: currentTicket?.id,
-        resolutionStatus: ticket.resolutionStatus,
-        callStatus: newCallStatus,
-        cseRemarks: ticket.cseRemarks,
-        resolutionTime: calculateResolutionTime(),
-        otherReasons: ticket.selectedOtherReasons,
-        ticketStartTime: ticket.ticketStartTime?.toISOString(),
-        isReadOnly: isReadOnly
-      };
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // After successful API call, fetch next ticket
-      await fetchNextTicket(currentTicket?.id);
-
-    } catch (error: any) {
-      console.error("Error in ActionNotConnected:", error);
-      toast.error(error.message || "Failed to process not connected action");
-    }
-  };
-
-  //handling the submit action (save and continue)
-  const handleSubmit = async () => {
+  //handling the action buttons
+  const handleActionButton = async (action: "Not Connected" | "Can't Resolve" | "Call Later" | "Resolve") => {
     try {
       if (!currentTicket?.id) {
         toast.error("No ticket ID available");
@@ -538,6 +527,35 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
+      // Map action to resolution status
+      let resolutionStatus: "Pending" | "WIP" | "Can't Resolve" | "Resolved";
+      let callStatus = ticket.callStatus;
+      
+      switch (action) {
+        case "Not Connected":
+          resolutionStatus = "Pending";
+          callStatus = "Not Connected";
+          break;
+        case "Can't Resolve":
+          resolutionStatus = "Can't Resolve";
+          break;
+        case "Call Later":
+          resolutionStatus = "WIP";
+          break;
+        case "Resolve":
+          resolutionStatus = "Resolved";
+          break;
+        default:
+          resolutionStatus = "Pending";
+      }
+
+      // Update local state
+      setTicket(prev => ({
+        ...prev,
+        resolutionStatus,
+        callStatus
+      }));
+
       const apiUrl = `${import.meta.env.VITE_API_URI}/save-and-continue`;
       const token = session?.access_token;
 
@@ -547,8 +565,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       const payload = {
         ticketId: currentTicket?.id,
-        resolutionStatus: ticket.resolutionStatus,
-        callStatus: ticket.callStatus,
+        resolutionStatus,
+        callStatus,
         cseRemarks: ticket.cseRemarks,
         resolutionTime: calculateResolutionTime(),
         otherReasons: ticket.selectedOtherReasons,
@@ -573,8 +591,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       await fetchNextTicket(currentTicket?.id);
 
     } catch (error: any) {
-      console.error("Error in handleSubmit:", error);
-      toast.error(error.message || "Failed to save and continue");
+      console.error("Error in handleActionButton:", error);
+      toast.error(error.message || "Failed to process action");
     } finally {
       setUpdating(false);
     }
@@ -723,9 +741,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         <div className="space-y-4">
           <div className="flex justify-between items-start">
             <div>
-              <h2 className="text-xl font-semibold text-primary">
-                {config?.title || "Support Tickets"}
-              </h2>
               <div className="flex items-center gap-4 mt-1">
                 {currentTicket?.badge && currentTicket.badge !== "N/A" && (
                   <div className="flex items-center gap-2">
@@ -743,60 +758,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     </div>
                   )}
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={handleTakeBreak}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2"
-                disabled={updating || isReadOnly}
-              >
-                <Coffee className="h-3 w-3" />
-                Take a Break
-              </Button>
-              <Select
-                value={ticket.resolutionStatus}
-                onValueChange={async (value: "WIP" | "Resolved" | "Can't Resolve" | "Pending") => {
-                  setTicket(prev => ({
-                    ...prev,
-                    resolutionStatus: value
-                  }));
-                  if (value === "WIP" && currentTicket?.id && !isReadOnly) {
-                    try {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      if (session) {
-                        await supabase
-                          .from("support_ticket")
-                          .update({
-                            assigned_to: user?.id || "Unknown CSE",
-                            cse_name: user?.email || "Unknown CSE",
-                          })
-                          .eq("id", currentTicket.id);
-                        setCurrentTicket((prev: any) => ({
-                          ...prev,
-                          assigned_to: user?.id || "Unknown CSE",
-                          cse_name: user?.email || "Unknown CSE",
-                        }));
-                      }
-                    } catch (error) {
-                      console.error("Error assigning ticket:", error);
-                      toast.error("Failed to assign ticket");
-                    }
-                  }
-                }}
-                disabled={updating || isReadOnly}
-              >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="WIP">Work in Progress</SelectItem>
-                  <SelectItem value="Resolved">Resolved</SelectItem>
-                  <SelectItem value="Can't Resolve">Can't Resolve</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
@@ -846,9 +807,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   </div>
                 </div>
               )}
-              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
+              <div 
+                className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
+                onClick={() => handleWhatsApp(currentTicket?.phone)}
+              >
                 <Phone className="h-3 w-3 mr-2 text-primary" />
-                <span className="font-medium text-sm">{currentTicket?.phone || "N/A"}</span>
+                <span className="font-medium text-sm">{formatPhoneNumber(currentTicket?.phone) || "N/A"}</span>
               </div>
               <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
                 <Waypoints className="h-3 w-3 mr-2 text-primary" />
@@ -863,12 +827,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                 <span className="font-medium text-sm">
                   Payment Status (Atleast once):{" "}
                   {currentTicket?.atleast_paid_once ? "Paid" : "Never Paid"}
-                </span>
-              </div>
-              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
-                <Clock className="h-3 w-3 mr-2 text-primary" />
-                <span className="font-medium text-sm">
-                  Attempts: {currentTicket?.call_attempts || 0}
                 </span>
               </div>
               <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
@@ -889,11 +847,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
               <div className="bg-muted/30 p-3 rounded-md">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertCircle className="h-3 w-3 text-primary" />
-                  <p className="font-medium text-sm">Issue Details</p>
+                  <p className="font-medium text-sm">Task Details</p>
                 </div>
                 <div className="space-y-2">
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Primary Reason</p>
                     <p className="text-sm bg-muted/50 p-2 rounded-md">
                       {currentTicket?.reason || "No reason provided"}
                     </p>
@@ -992,46 +949,72 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           </div>
         </div>
 
-        <div className="flex justify-between items-center gap-3 mt-4 pt-3 border-t">
-          <div className="flex gap-2">
-            <Button
-              onClick={() => ActionNotConnected(currentTicket.id)}
-              size="sm"
-              variant={ticket.callStatus === "Not Connected" ? "default" : "outline"}
-              className={`
-                ${ticket.callStatus === "Not Connected" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}
-                transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-              `}
-              disabled={updating || isReadOnly}
-            >
-              Not Connected
-            </Button>
-          </div>
+        <div className="flex justify-center items-center gap-3 mt-4 pt-3 border-t">
           <Button
-            onClick={handleSubmit}
+            onClick={() => handleActionButton("Not Connected")}
             size="sm"
-            className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={updating || isReadOnly || fetchingNext || ticket.resolutionStatus === "Pending"}
+            variant="outline"
+            className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={updating || isReadOnly}
+          >
+            Not Connected
+          </Button>
+          <Button
+            onClick={() => handleActionButton("Can't Resolve")}
+            size="sm"
+            variant="outline"
+            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={updating || isReadOnly}
+          >
+            Can't Resolve
+          </Button>
+          <Button
+            onClick={() => handleActionButton("Call Later")}
+            size="sm"
+            variant="outline"
+            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={updating || isReadOnly}
+          >
+            Call Later
+          </Button>
+          <Button
+            onClick={() => handleActionButton("Resolve")}
+            size="sm"
+            variant="outline"
+            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            disabled={updating || isReadOnly || fetchingNext}
           >
             {updating ? (
               <>
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                 Updating...
               </>
             ) : fetchingNext ? (
               <>
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                 Loading Next Ticket...
               </>
             ) : isReadOnly ? (
               "Close"
-            ) : ticket.resolutionStatus === "Pending" ? (
-              "Select Status"
             ) : (
-              "Save & Continue"
+              "Resolve"
             )}
           </Button>
         </div>
+      </div>
+      
+      {/* Take a Break button outside the main card at bottom */}
+      <div className="mt-4 flex justify-center">
+        <Button
+          onClick={handleTakeBreak}
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-2"
+          disabled={updating || isReadOnly}
+        >
+          <Coffee className="h-3 w-3" />
+          Take a Break
+        </Button>
       </div>
     </div>
   );
