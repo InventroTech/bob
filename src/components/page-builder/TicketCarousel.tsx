@@ -763,6 +763,20 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
+              <div className="bg-muted/30 p-3 rounded-md">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="h-3 w-3 text-primary" />
+                  <p className="font-medium text-sm">Task Details</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <p className="text-sm bg-muted/50 p-2 rounded-md">
+                      {currentTicket?.reason || "No reason provided"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
               <div
                 className={`flex items-center text-sm bg-muted/50 p-2 rounded-md ${
                   currentTicket?.praja_dashboard_user_link
@@ -844,89 +858,76 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             </div>
 
             <div className="space-y-3">
-              <div className="bg-muted/30 p-3 rounded-md">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="h-3 w-3 text-primary" />
-                  <p className="font-medium text-sm">Task Details</p>
-                </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Other Reasons</p>
                 <div className="space-y-2">
-                  <div className="space-y-1">
-                    <p className="text-sm bg-muted/50 p-2 rounded-md">
-                      {currentTicket?.reason || "No reason provided"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Other Reasons</p>
-                    <div className="space-y-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full justify-between"
-                            disabled={updating || isReadOnly}
-                          >
-                            <span className="text-sm">
-                              {ticket.selectedOtherReasons.length > 0
-                                ? `${ticket.selectedOtherReasons.length} reason(s) selected`
-                                : "Select other reasons"}
-                            </span>
-                            <ChevronDown className="h-3 w-3 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 p-4" align="start">
-                          <div className="space-y-3">
-                            <h4 className="font-medium text-sm">Select Other Reasons</h4>
-                            <div className="space-y-2 max-h-60 overflow-y-auto">
-                              {OTHER_REASONS_OPTIONS.map((reason) => (
-                                <div key={reason} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`reason-${reason}`}
-                                    checked={ticket.selectedOtherReasons.includes(reason)}
-                                    onCheckedChange={(checked) =>
-                                      handleOtherReasonChange(reason, checked as boolean)
-                                    }
-                                    disabled={updating || isReadOnly}
-                                  />
-                                  <label
-                                    htmlFor={`reason-${reason}`}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                  >
-                                    {reason}
-                                  </label>
-                                </div>
-                              ))}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-between"
+                        disabled={updating || isReadOnly}
+                      >
+                        <span className="text-sm">
+                          {ticket.selectedOtherReasons.length > 0
+                            ? `${ticket.selectedOtherReasons.length} reason(s) selected`
+                            : "Select other reasons"}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-4" align="start">
+                      <div className="space-y-3">
+                        <h4 className="font-medium text-sm">Select Other Reasons</h4>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {OTHER_REASONS_OPTIONS.map((reason) => (
+                            <div key={reason} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`reason-${reason}`}
+                                checked={ticket.selectedOtherReasons.includes(reason)}
+                                onCheckedChange={(checked) =>
+                                  handleOtherReasonChange(reason, checked as boolean)
+                                }
+                                disabled={updating || isReadOnly}
+                              />
+                              <label
+                                htmlFor={`reason-${reason}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {reason}
+                              </label>
                             </div>
-                            {ticket.selectedOtherReasons.length > 0 && (
-                              <div className="pt-2 border-t">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setTicket(prev => ({
-                                    ...prev,
-                                    selectedOtherReasons: []
-                                  }))}
-                                  disabled={updating || isReadOnly}
-                                  className="text-xs"
-                                >
-                                  Clear All
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      {ticket.selectedOtherReasons.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {ticket.selectedOtherReasons.map((reason) => (
-                            <Badge key={reason} variant="secondary" className="text-xs">
-                              {reason}
-                            </Badge>
                           ))}
                         </div>
-                      )}
+                        {ticket.selectedOtherReasons.length > 0 && (
+                          <div className="pt-2 border-t">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setTicket(prev => ({
+                                ...prev,
+                                selectedOtherReasons: []
+                              }))}
+                              disabled={updating || isReadOnly}
+                              className="text-xs"
+                            >
+                              Clear All
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  {ticket.selectedOtherReasons.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {ticket.selectedOtherReasons.map((reason) => (
+                        <Badge key={reason} variant="secondary" className="text-xs">
+                          {reason}
+                        </Badge>
+                      ))}
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
               <div className="space-y-1">
@@ -941,7 +942,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     cseRemarks: e.target.value
                   }))}
                   placeholder="Add your remarks about this ticket..."
-                  className="min-h-[80px]"
+                  className="min-h-[250px]"
                   disabled={updating || isReadOnly}
                 />
               </div>
