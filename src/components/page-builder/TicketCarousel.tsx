@@ -728,7 +728,19 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   //showing the ticket card
   return (
-    <div className="mainCard w-full border flex justify-center items-center">
+    <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
+      <div className="mt-4 flex  w-[70%] justify-end">
+        <Button
+          onClick={handleTakeBreak}
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-2"
+          disabled={updating || isReadOnly}
+        >
+          <Coffee className="h-3 w-3" />
+          Take a Break
+        </Button>
+      </div>
     <div className="relative w-[70%] h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
         {fetchingNext && (
@@ -951,7 +963,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             onClick={() => handleActionButton("Call Later")}
             size="sm"
             variant="outline"
-            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={updating || isReadOnly}
           >
             Call Later
@@ -998,18 +1010,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       </div>
       
       {/* Take a Break button outside the main card at bottom */}
-      <div className="mt-4 flex justify-center">
-        <Button
-          onClick={handleTakeBreak}
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2"
-          disabled={updating || isReadOnly}
-        >
-          <Coffee className="h-3 w-3" />
-          Take a Break
-        </Button>
-      </div>
+      
     </div>
     </div>
   );
