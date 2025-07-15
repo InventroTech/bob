@@ -761,92 +761,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-4">
             <div className="space-y-2">
-              <div className="bg-muted/30 p-3 rounded-md">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="h-3 w-3 text-primary" />
-                  <p className="font-medium text-sm">Task Details</p>
-                </div>
+             
                 <div className="space-y-2">
                   <div className="space-y-1">
-                    <p className="text-sm bg-muted/50 p-2 rounded-md">
-                      {currentTicket?.reason || "No reason provided"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div
-                className={`flex items-center text-sm bg-muted/50 p-2 rounded-md ${
-                  currentTicket?.praja_dashboard_user_link
-                    ? "cursor-pointer hover:bg-muted/70 transition-colors"
-                    : ""
-                }`}
-                onClick={() => {
-                  if (currentTicket?.praja_dashboard_user_link) {
-                    window.open(currentTicket.praja_dashboard_user_link, "_blank");
-                  }
-                }}
-              >
-                {currentTicket?.display_pic_url ? (
-                  <img
-                    src={currentTicket.display_pic_url}
-                    alt={`${currentTicket.name || "User"} profile`}
-                    className="h-6 w-6 rounded-full mr-2 object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                    }}
-                  />
-                ) : null}
-                <User
-                  className={`h-3 w-3 mr-2 text-primary ${
-                    currentTicket?.display_pic_url ? "hidden" : ""
-                  }`}
-                />
-                <div>
-                  <p className="font-medium text-sm">{currentTicket?.name || "N/A"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    ID: {currentTicket?.user_id || "N/A"}
-                  </p>
-                </div>
-              </div>
-              {currentTicket?.rm_name && (
-                <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
-                  <User className="h-3 w-3 mr-2 text-primary" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">RM Name</p>
-                    <p className="font-medium text-sm">{currentTicket.rm_name}</p>
-                  </div>
-                </div>
-              )}
-              <div 
-                className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
-                onClick={() => handleWhatsApp(currentTicket?.phone)}
-              >
-                <Phone className="h-3 w-3 mr-2 text-primary" />
-                <span className="font-medium text-sm">{formatPhoneNumber(currentTicket?.phone) || "N/A"}</span>
-              </div>
-              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
-                <Waypoints className="h-3 w-3 mr-2 text-primary" />
-                <span className="font-medium text-sm">{currentTicket?.source || "N/A"}</span>
-              </div>
-              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
-                {currentTicket?.atleast_paid_once ? (
-                  <CheckCircle2 className="h-3 w-3 mr-2 text-green-500" />
-                ) : (
-                  <XCircle className="h-3 w-3 mr-2 text-red-500" />
-                )}
-                <span className="font-medium text-sm">
-                  Payment Status (Atleast once):{" "}
-                  {currentTicket?.atleast_paid_once ? "Paid" : "Never Paid"}
-                </span>
-              </div>
-              <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
-                <Calendar className="h-3 w-3 mr-2 text-primary" />
-                <span className="font-medium text-sm">
-                  Created: {currentTicket?.created_at ? new Date(currentTicket.created_at).toLocaleDateString("en-US", {
+                    <p className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
+                    <span className="font-medium text-sm">
+                  {currentTicket?.created_at ? new Date(currentTicket.created_at).toLocaleDateString("en-US", {
                     year: "numeric",
                     month: "short",
                     day: "numeric",
@@ -854,87 +776,150 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     minute: "2-digit"
                   }) : "N/A"}
                 </span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Other Reasons</p>
-                <div className="space-y-2">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full justify-between"
-                        disabled={updating || isReadOnly}
-                      >
-                        <span className="text-sm">
-                          {ticket.selectedOtherReasons.length > 0
-                            ? `${ticket.selectedOtherReasons.length} reason(s) selected`
-                            : "Select other reasons"}
-                        </span>
-                        <ChevronDown className="h-3 w-3 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80 p-4" align="start">
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-sm">Select Other Reasons</h4>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                          {OTHER_REASONS_OPTIONS.map((reason) => (
-                            <div key={reason} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`reason-${reason}`}
-                                checked={ticket.selectedOtherReasons.includes(reason)}
-                                onCheckedChange={(checked) =>
-                                  handleOtherReasonChange(reason, checked as boolean)
-                                }
-                                disabled={updating || isReadOnly}
-                              />
-                              <label
-                                htmlFor={`reason-${reason}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {reason}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                        {ticket.selectedOtherReasons.length > 0 && (
-                          <div className="pt-2 border-t">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setTicket(prev => ({
-                                ...prev,
-                                selectedOtherReasons: []
-                              }))}
-                              disabled={updating || isReadOnly}
-                              className="text-xs"
-                            >
-                              Clear All
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  {ticket.selectedOtherReasons.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {ticket.selectedOtherReasons.map((reason) => (
-                        <Badge key={reason} variant="secondary" className="text-xs">
-                          {reason}
-                        </Badge>
-                      ))}
+                <div className="flex justify-between">
+                      <span className="font-medium text-lg">{currentTicket?.reason || "No reason provided"}</span>
+                      <span className=" text-sm">{currentTicket?.source || "N/A"}</span>
+                </div>
+                      
+                    </p>
+                  </div>
+                 
+                </div>
+                
+                
+            
+           
+              <div className="">
+                <div
+                  className={`flex items-center text-sm bg-muted/50 p-2 rounded-md ${
+                    currentTicket?.praja_dashboard_user_link
+                      ? "cursor-pointer hover:bg-muted/70 transition-colors"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    if (currentTicket?.praja_dashboard_user_link) {
+                      window.open(currentTicket.praja_dashboard_user_link, "_blank");
+                    }
+                  }}
+                >
+                  {currentTicket?.display_pic_url ? (
+                    <img
+                      src={currentTicket.display_pic_url}
+                      alt={`${currentTicket.name || "User"} profile`}
+                      className="h-6 w-6 rounded-full mr-2 object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                      }}
+                    />
+                  ) : null}
+                  <User
+                    className={`h-3 w-3 mr-2 text-primary ${
+                      currentTicket?.display_pic_url ? "hidden" : ""
+                    }`}
+                  />
+                  <div className="flex justify-between w-full items-center">
+                    <div>
+                      <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        ID: {currentTicket?.user_id || "N/A"}
+                      </p>
                     </div>
-                  )}
+                    <span className="font-medium text-sm ml-4 flex items-center gap-1">
+                      {currentTicket?.atleast_paid_once ? (
+                        <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <XCircle className="h-3 w-3 text-red-500" />
+                      )}
+                      {currentTicket?.atleast_paid_once ? "Paid" : "Never Paid"}
+                    </span>
+                  </div>
+                </div>
+                {/* Removed the separate payment status row */}
+                <div 
+                  className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
+                  onClick={() => handleWhatsApp(currentTicket?.phone)}
+                >
+                  <Phone className="h-3 w-3 mr-2 text-primary" />
+                  <span className="font-medium text-sm">{formatPhoneNumber(currentTicket?.phone) || "N/A"}</span>
                 </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Award className="h-3 w-3 text-primary" />
-                  CSE Remarks
-                </label>
+              
+          
+              
+            </div>
+
+            <div className="flex flex-row gap-2 w-full items-start">
+              <div className="w-full">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-between"
+                      disabled={updating || isReadOnly}
+                    >
+                      <span className="text-sm">
+                        {ticket.selectedOtherReasons.length > 0
+                          ? `${ticket.selectedOtherReasons.length} reason(s) selected`
+                          : "Select other reasons"}
+                      </span>
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-4" align="start">
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm">Select Other Reasons</h4>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {OTHER_REASONS_OPTIONS.map((reason) => (
+                          <div key={reason} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`reason-${reason}`}
+                              checked={ticket.selectedOtherReasons.includes(reason)}
+                              onCheckedChange={(checked) =>
+                                handleOtherReasonChange(reason, checked as boolean)
+                              }
+                              disabled={updating || isReadOnly}
+                            />
+                            <label
+                              htmlFor={`reason-${reason}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            >
+                              {reason}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      {ticket.selectedOtherReasons.length > 0 && (
+                        <div className="pt-2 border-t">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setTicket(prev => ({
+                              ...prev,
+                              selectedOtherReasons: []
+                            }))}
+                            disabled={updating || isReadOnly}
+                            className="text-xs"
+                          >
+                            Clear All
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {ticket.selectedOtherReasons.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {ticket.selectedOtherReasons.map((reason) => (
+                      <Badge key={reason} variant="secondary" className="text-xs">
+                        {reason}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="w-full space-y-2">
                 <Textarea
                   value={ticket.cseRemarks}
                   onChange={(e) => setTicket(prev => ({
@@ -942,15 +927,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     cseRemarks: e.target.value
                   }))}
                   placeholder="Add your remarks about this ticket..."
-                  className="min-h-[250px]"
+                  className="min-h-[100px]"
                   disabled={updating || isReadOnly}
                 />
               </div>
             </div>
           </div>
         </div>
-
-        <div className="flex justify-center items-center gap-3 mt-4 pt-3 border-t">
+  <div className="buttons flex flex-row items-center justify-center gap-[200px]  w-full">
+        <div className="flex justify-center items-center gap-3 mt-4 pt-3  ">
           <Button
             onClick={() => handleActionButton("Not Connected")}
             size="sm"
@@ -960,15 +945,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           >
             Not Connected
           </Button>
-          <Button
-            onClick={() => handleActionButton("Can't Resolve")}
-            size="sm"
-            variant="outline"
-            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || isReadOnly}
-          >
-            Can't Resolve
-          </Button>
+          
           <Button
             onClick={() => handleActionButton("Call Later")}
             size="sm"
@@ -978,6 +955,20 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           >
             Call Later
           </Button>
+          
+        </div>
+        <div className="flex justify-center items-center gap-3 mt-4 pt-3  ">
+          
+          <Button
+            onClick={() => handleActionButton("Can't Resolve")}
+            size="sm"
+            variant="outline"
+            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={updating || isReadOnly}
+          >
+            Can't Resolve
+          </Button>
+         
           <Button
             onClick={() => handleActionButton("Resolve")}
             size="sm"
@@ -1001,6 +992,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
               "Resolve"
             )}
           </Button>
+        </div>
         </div>
       </div>
       
