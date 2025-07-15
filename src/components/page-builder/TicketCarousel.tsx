@@ -728,7 +728,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   //showing the ticket card
   return (
-    <div className="relative w-full h-full">
+    <div className="mainCard w-full border flex justify-center items-center">
+    <div className="relative w-[70%] h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
         {fetchingNext && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
@@ -761,8 +762,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
-            <div className="space-y-2">
+          <div className="flex flex-col gap-4 ">
+            <div className="space-y-2 flex flex-col gap-2">
              
                 <div className="space-y-2">
                   <div className="space-y-1">
@@ -776,9 +777,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     minute: "2-digit"
                   }) : "N/A"}
                 </span>
-                <div className="flex justify-between">
+                <div className="flex flex-col">
                       <span className="font-medium text-lg">{currentTicket?.reason || "No reason provided"}</span>
-                      <span className=" text-sm">{currentTicket?.source || "N/A"}</span>
+                      <span className=" text-sm pt-2">{currentTicket?.source || "N/A"}</span>
                 </div>
                       
                     </p>
@@ -791,7 +792,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
            
               <div className="">
                 <div
-                  className={`flex items-center text-sm bg-muted/50 p-2 rounded-md ${
+                  className={`flex items-center text-sm bg-muted/50 p-4 rounded-md ${
                     currentTicket?.praja_dashboard_user_link
                       ? "cursor-pointer hover:bg-muted/70 transition-colors"
                       : ""
@@ -806,7 +807,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     <img
                       src={currentTicket.display_pic_url}
                       alt={`${currentTicket.name || "User"} profile`}
-                      className="h-6 w-6 rounded-full mr-2 object-cover"
+                      className="h-12 w-12 rounded-full mr-2 object-cover"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove("hidden");
@@ -818,14 +819,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       currentTicket?.display_pic_url ? "hidden" : ""
                     }`}
                   />
-                  <div className="flex justify-between w-full items-center">
+                  <div className="flex flex-col w-full gap-2">
                     <div>
                       <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground pt-2">
                         ID: {currentTicket?.user_id || "N/A"}
                       </p>
                     </div>
-                    <span className="font-medium text-sm ml-4 flex items-center gap-1">
+                    <span className="font-medium text-sm  flex items-center gap-1">
                       {currentTicket?.atleast_paid_once ? (
                         <CheckCircle2 className="h-3 w-3 text-green-500" />
                       ) : (
@@ -1009,6 +1010,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           Take a Break
         </Button>
       </div>
+    </div>
     </div>
   );
 };
