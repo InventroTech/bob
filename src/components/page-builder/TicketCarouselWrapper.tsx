@@ -4,7 +4,7 @@ import { TicketCarousel } from "./TicketCarousel";
 interface TicketCarouselWrapperProps {
   config?: {
     apiEndpoint?: string;
-    title?: string;
+    title?: string; 
     showFilters?: boolean;
     readOnly?: boolean;
   };
