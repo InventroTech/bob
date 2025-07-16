@@ -82,7 +82,8 @@ import { TicketBarGraphComponent } from "@/components/page-builder/TicketBarGrap
 import { Textarea } from "@/components/ui/textarea";
 import { debounce } from 'lodash';
 import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLogoutComponent";
-
+import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChart";
+import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 // Add configuration types
 interface ComponentConfig {
   apiEndpoint?: string;
@@ -126,6 +127,8 @@ export const componentMap: Record<string, React.FC<any>> = {
   ticketCarousel: TicketCarouselWrapper,
   ticketBarGraph: TicketBarGraphComponent,
   temporaryLogout: TemporaryLogoutComponent,
+  stackedBarChart: StackedBarChart,
+  lineChart: LineChart,
 };
 
 // Add this interface near the top with other interfaces
@@ -425,7 +428,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','temporaryLogout'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','temporaryLogout','stackedBarChart','lineChart'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -877,6 +880,23 @@ const PageBuilder = () => {
                           id="ticketTable"
                           label="Ticket Table"
                           icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                      </div>
+                    </div>
+                    <Separator />
+                    {/* Analytical Components */}
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Analytical Components</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DraggableSidebarItem
+                          id="stackedBarChart"
+                          label="Stacked Bar Chart"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="lineChart"
+                          label="Line Chart"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
