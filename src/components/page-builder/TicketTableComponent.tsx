@@ -169,7 +169,8 @@ const columns: Column[] = [
   { header: 'Assigned To', accessor: 'cse_name', type: 'text' },
   { header: 'Reason', accessor: 'reason', type: 'text' },
   { header: 'Poster Subscription Status', accessor: 'poster_subscription_status', type: 'chip' },
-  { header: 'Resolution Status', accessor: 'resolution_status', type: 'chip' }
+  { header: 'Resolution Status', accessor: 'resolution_status', type: 'chip' },
+  { header: 'Remarks', accessor: 'cse_remarks', type: 'text' }
 ];
 
 interface TicketTableProps {
