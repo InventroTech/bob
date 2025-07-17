@@ -18,7 +18,8 @@ Deno.serve(async (req)=>{
     });
   }
   try {
-    // Get JWT from Authorization header
+    // Get JWT
+    // from Authorization header
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(JSON.stringify({

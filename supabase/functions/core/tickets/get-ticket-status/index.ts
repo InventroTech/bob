@@ -81,41 +81,50 @@ Deno.serve(async (req)=>{
     const endOfDayISO = endOfDay.toISOString();
     // 1. Resolved By You (Today) - For the current CSE
     // Check cse_name field which can contain either name or email or userId
-    const { data: resolvedToday, error: resolvedError } = await supabase.from('support_ticket').select('id').or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`).eq('resolution_status', 'Resolved').gte('completed_at', startOfDayISO).lte('completed_at', endOfDayISO);
+    const { count: resolvedTodayCount, error: resolvedError } = await supabase.from('support_ticket').select('*', {
+      count: 'exact',
+      head: true
+    }).or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`).eq('resolution_status', 'Resolved').gte('completed_at', startOfDayISO).lte('completed_at', endOfDayISO);
     if (resolvedError) {
       console.error('Error fetching resolved tickets:', resolvedError);
     }
     // 2. Total Pending Tickets (Overall. Not specific to this CSE)
     // Include both 'Pending' status and null resolution_status
-    const { data: totalPending, error: pendingError } = await supabase.from('support_ticket').select('id').or('resolution_status.eq.Pending,resolution_status.is.null');
+    const { count: totalPendingCount, error: pendingError } = await supabase.from('support_ticket').select('*', {
+      count: 'exact',
+      head: true
+    }).or('resolution_status.eq.Pending,resolution_status.is.null');
     if (pendingError) {
       console.error('Error fetching pending tickets:', pendingError);
     }
     // 3. WIP tickets (For this CSE) - Not filtered by today
     // Use cse_name which can contain either name or email or userId
-    const { data: wipTickets, error: wipError } = await supabase.from('support_ticket').select('id').or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`).eq('resolution_status', 'WIP');
+    const { count: wipTicketsCount, error: wipError } = await supabase.from('support_ticket').select('*', {
+      count: 'exact',
+      head: true
+    }).or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`).eq('resolution_status', 'WIP');
     if (wipError) {
       console.error('Error fetching WIP tickets:', wipError);
     }
     // 4. Can't Resolve (Today) (For this CSE)
     // Use cse_name which can contain either name or email or userId
-    const { data: cantResolveToday, error: cantResolveError } = await supabase.from('support_ticket').select('id').or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`).eq('resolution_status', "Can't Resolve").gte('completed_at', startOfDayISO).lte('completed_at', endOfDayISO);
+    const { count: cantResolveTodayCount, error: cantResolveError } = await supabase.from('support_ticket').select('*', {
+      count: 'exact',
+      head: true
+    }).or(`cse_name.eq.${userEmail},cse_name.eq.${userId}`).eq('resolution_status', "Can't Resolve").gte('completed_at', startOfDayISO).lte('completed_at', endOfDayISO);
     if (cantResolveError) {
       console.error('Error fetching cant resolve tickets:', cantResolveError);
     }
     // Prepare response
     const ticketStats = {
-      resolvedByYouToday: resolvedToday?.length || 0,
-      totalPendingTickets: totalPending?.length || 0,
-      wipTickets: wipTickets?.length || 0,
-      cantResolveToday: cantResolveToday?.length || 0
+      resolvedByYouToday: resolvedTodayCount || 0,
+      totalPendingTickets: totalPendingCount || 0,
+      wipTickets: wipTicketsCount || 0,
+      cantResolveToday: cantResolveTodayCount || 0
     };
     return new Response(JSON.stringify({
       success: true,
-      message: "Ticket status retrieved successfully",
       ticketStats: ticketStats,
-      userId: userId,
-      userEmail: userEmail,
       dateRange: {
         startOfDay: startOfDayISO,
         endOfDay: endOfDayISO

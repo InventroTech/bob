@@ -1,59 +1,115 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// Get env vars from Supabase Edge runtime
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-console.log("Hello from ticket-webhook!")
-
-Deno.serve(async (req) => {
-  // Get JWT from Authorization header
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Missing or invalid auth header" }), { status: 401 });
+// supabase/functions/dump-ticket-webhook/index.ts
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+// Define the exact list of fields to accept from the payload
+const ALLOWED_FIELDS = [
+  'tenant_id',
+  'ticket_date',
+  'user_id',
+  'name',
+  'phone',
+  'reason',
+  'rm_name',
+  'layout_status',
+  'badge',
+  'poster',
+  'subscription_status',
+  'atleast_paid_once',
+  'source',
+  'praja_dashboard_user_link',
+  'display_pic_url'
+];
+Deno.serve(async (req)=>{
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
   }
-  const jwt = authHeader.replace("Bearer ", "");
-
-  // Decode JWT to get user id
-  let userId: string | undefined;
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({
+      error: 'Method not allowed'
+    }), {
+      status: 405,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  }
   try {
-    const payload = JSON.parse(atob(jwt.split(".")[1]));
-    userId = payload.sub;
-  } catch (e) {
-    return new Response(JSON.stringify({ error: "Invalid JWT" }), { status: 401 });
+    // 1. Validate webhook secret for security
+    const webhookSecret = req.headers.get('x-webhook-secret');
+    const storedSecret = Deno.env.get('WEBHOOK_SECRET');
+    if (!webhookSecret || webhookSecret !== storedSecret) {
+      console.warn('Unauthorized webhook attempt.');
+      return new Response(JSON.stringify({
+        error: 'Unauthorized: Invalid or missing webhook secret'
+      }), {
+        status: 401,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    // 2. Parse the incoming JSON payload
+    const payload = await req.json();
+    if (!payload || typeof payload !== 'object') {
+      throw new Error("Invalid or empty JSON payload.");
+    }
+    // 3. Create a clean data object with only the allowed fields
+    const cleanedData = {};
+    // The tenant_id is absolutely required.
+    if (!payload.tenant_id) {
+      throw new Error("Missing required field: tenant_id");
+    }
+    for (const field of ALLOWED_FIELDS){
+      // If the field exists in the payload (and is not null/undefined), add it to our clean object.
+      if (payload[field] !== null && payload[field] !== undefined) {
+        cleanedData[field] = payload[field];
+      }
+    }
+    // Ensure ticket_date is present; default to now if not.
+    if (!cleanedData.ticket_date) {
+      cleanedData.ticket_date = new Date().toISOString();
+    }
+    // Set default is_processed status for the cron job
+    cleanedData.is_processed = false;
+    // 4. Insert the cleaned data into the dump table
+    const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    const { data, error } = await supabaseClient.from('support_ticket_dump').insert(cleanedData).select().single();
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    // 5. Success response
+    return new Response(JSON.stringify({
+      message: 'Ticket created successfully in dump table',
+      ticket_id: data.id
+    }), {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Critical error:', error);
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
+      status: 400,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
   }
-  if (!userId) {
-    return new Response(JSON.stringify({ error: "No user id in JWT" }), { status: 400 });
-  }
-
-  // TODO: Implement ticket-webhook logic here
-  
-  return new Response(JSON.stringify({ 
-    success: true, 
-    message: "ticket-webhook function called successfully",
-    userId: userId 
-  }), {
-    headers: { "Content-Type": "application/json" },
-  });
-})
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/ticket-webhook' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
-*/
+});
