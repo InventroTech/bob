@@ -5,9 +5,12 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { LogOut } from 'lucide-react';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,9 +18,12 @@ const ProfilePage = () => {
     setLoading(true);
     setError(null);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      console.log("Successfully logged out");
+      // Use the centralized logout function
+      await logout();
+      
+      // Navigate to auth page
+      navigate('/auth');
+      
     } catch (error: any) {
       console.error('Error logging out:', error);
       setError(error.message || 'Failed to log out');

@@ -25,6 +25,7 @@ import {
   Table,
   ChevronDown,
   LogOut,
+  TrendingUp,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -76,10 +77,13 @@ import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
 import { ProgressBar } from "@/components/ui/progressBar";
 import { TicketTableComponent } from "@/components/page-builder/TicketTableComponent";
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
+import { TicketCarouselWrapper } from "@/components/page-builder/TicketCarouselWrapper";
+import { TicketBarGraphComponent } from "@/components/page-builder/TicketBarGraphComponent";
 import { Textarea } from "@/components/ui/textarea";
 import { debounce } from 'lodash';
 import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLogoutComponent";
-
+import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChart";
+import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 // Add configuration types
 interface ComponentConfig {
   apiEndpoint?: string;
@@ -120,8 +124,11 @@ export const componentMap: Record<string, React.FC<any>> = {
   oeLeadsTable: OeLeadsTable,
   progressBar: ProgressBar,
   ticketTable: TicketTableComponent,
-  ticketCarousel: TicketCarousel,
+  ticketCarousel: TicketCarouselWrapper,
+  ticketBarGraph: TicketBarGraphComponent,
   temporaryLogout: TemporaryLogoutComponent,
+  stackedBarChart: StackedBarChart,
+  lineChart: LineChart,
 };
 
 // Add this interface near the top with other interfaces
@@ -421,7 +428,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','temporaryLogout'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','temporaryLogout','stackedBarChart','lineChart'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -821,6 +828,11 @@ const PageBuilder = () => {
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
+                          id="ticketBarGraph"
+                          label="Ticket Bar Graph"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
                           id="progressBar"
                           label="Progress Bar"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
@@ -868,6 +880,23 @@ const PageBuilder = () => {
                           id="ticketTable"
                           label="Ticket Table"
                           icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                      </div>
+                    </div>
+                    <Separator />
+                    {/* Analytical Components */}
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Analytical Components</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DraggableSidebarItem
+                          id="stackedBarChart"
+                          label="Stacked Bar Chart"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="lineChart"
+                          label="Line Chart"
+                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
