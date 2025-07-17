@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [pages, setPages] = useState<{ id: string; name: string }[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -97,8 +97,19 @@ const CustomAppLayout: React.FC = () => {
   }, [tenantId, userRoleId]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate(`/app/${tenantSlug}/login`);
+    try {
+      // Use the centralized logout function
+      await logout();
+      
+      // Close the logout dropdown
+      setLogoutOpen(false);
+      
+      // Navigate to login page
+      navigate(`/app/${tenantSlug}/login`);
+      
+    } catch (error) {
+      console.error('Logout navigation error:', error);
+    }
   };
 
   return (

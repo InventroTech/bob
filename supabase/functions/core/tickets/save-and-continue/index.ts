@@ -117,6 +117,7 @@ Deno.serve(async (req)=>{
     const assignedTo = shouldAssign ? userId : null;
     // Always save cse_name for all resolution statuses
     const cseName = userEmail;
+
     // Update the current ticket
     const { data: updatedTicket, error: updateError } = await supabase.from('support_ticket').update({
       resolution_status: resolutionStatus,

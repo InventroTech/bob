@@ -6,7 +6,6 @@ import DonutPie from '../ui/donoutPie';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
-import { API_URI } from '@/const';
 
 interface DonutData {
   id: number;
@@ -63,7 +62,7 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
       try {
         setLoading(true);
         const endpoint = config?.apiEndpoint || '/api/card-stats';
-        const apiUrl = `${API_URI}${endpoint}`;
+        const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
         
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
