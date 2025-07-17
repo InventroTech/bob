@@ -1,0 +1,10 @@
+{
+  "source": {
+    "url": "https://hihrftwrriygnbrsvlrr.supabase.co",
+    "key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpaHJmdHdycml5Z25icnN2bHJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ5Nzk2MjMsImV4cCI6MjA2MDU1NTYyM30.evU6fctW9QGiqfFFjtpBAvgSiCr-h9DTGdS8T_2bpX8"
+  },
+  "staging": {
+    "url": "https://ymqptqorkuwnmvyszxls.supabase.co",
+    "key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltcXB0cW9ya3V3bm12eXN6eGxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA3NDExOTAsImV4cCI6MjA2NjMxNzE5MH0.fbrckX_w-03UTddd58a2tDGYvdJy3KSCCr5fL02wMVU"
+  }
+} 
