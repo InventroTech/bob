@@ -144,6 +144,32 @@ const handleWhatsApp = (phone: string) => {
   }
 };
 
+// Function to format poster status with better UI
+const formatPosterStatus = (poster: string): { label: string; color: string; bgColor: string } => {
+  switch (poster) {
+    case 'in_trial':
+      return { label: 'In Trial', color: 'text-blue-600', bgColor: 'bg-blue-50' };
+    case 'paid':
+      return { label: 'Paid', color: 'text-green-600', bgColor: 'bg-green-50' };
+    case 'in_trial_extension':
+      return { label: 'Trial Extended', color: 'text-purple-600', bgColor: 'bg-purple-50' };
+    case 'in_premium_extension':
+      return { label: 'Premium Extended', color: 'text-indigo-600', bgColor: 'bg-indigo-50' };
+    case 'trial_expired':
+      return { label: 'Trial Expired', color: 'text-red-600', bgColor: 'bg-red-50' };
+    case 'in_grace_period':
+      return { label: 'Grace Period', color: 'text-orange-600', bgColor: 'bg-orange-50' };
+    case 'auto_pay_not_set_up':
+      return { label: 'Auto-pay Not Set', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
+    case 'autopay_setup_no_layout':
+      return { label: 'Auto-pay No Layout', color: 'text-amber-600', bgColor: 'bg-amber-50' };
+    case 'free':
+      return { label: 'Free', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+    default:
+      return { label: poster || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+  }
+};
+
 interface TicketCarouselProps {
   config?: {
     apiEndpoint?: string;
@@ -854,9 +880,18 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     </div>
                     <span className="font-medium text-sm  flex items-center gap-1">
                       {currentTicket?.poster ? (
-                        <span className="text-blue-600">{currentTicket.poster}</span>
+                        (() => {
+                          const posterInfo = formatPosterStatus(currentTicket.poster);
+                          return (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
+                              {posterInfo.label}
+                            </span>
+                          );
+                        })()
                       ) : (
-                        <span className="text-muted-foreground">No Poster</span>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
+                          No Poster
+                        </span>
                       )}
                     </span>
                   </div>
