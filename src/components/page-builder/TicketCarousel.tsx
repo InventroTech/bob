@@ -72,21 +72,25 @@ interface Ticket {
 }
 
 const OTHER_REASONS_OPTIONS = [
-  "Technical Issue",
-  "Billing Problem",
-  "Account Access",
+  "Protocal Change",
+  "Badge Request",
+  "Badge Change",
+  "Badge Removal",
+  "Add Additional Badge",
+  "User Name Update",
+  "User Photo Change",
+  "User Photo Background Change",
+  "Update Affiliated Party",
+  "Subscription Information",
+  "Autopay Cancellation",
+  "Autopay Cancellation Confirmation",
+  "Frame Change",
+  "Location Change",
+  "Number Update",
+  "Features Information",
+  "New Poster Request",
+  "User photo/Protocal Size Issue",
   "Feature Request",
-  "Bug Report",
-  "Performance Issue",
-  "Security Concern",
-  "Data Issue",
-  "Integration Problem",
-  "User Training",
-  "Documentation Request",
-  "Service Outage",
-  "Configuration Issue",
-  "Compatibility Problem",
-  "Other",
 ];
 
 const parseOtherReasons = (otherReasons: any): string[] => {
@@ -556,14 +560,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         callStatus
       }));
 
-      const apiUrl = `${import.meta.env.VITE_API_URI}/save-and-continue`;
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
-      const payload = {
+      let apiUrl = `${import.meta.env.VITE_API_URI}/save-and-continue`;
+      let payload: any = {
         ticketId: currentTicket?.id,
         resolutionStatus,
         callStatus,
@@ -573,6 +571,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         ticketStartTime: ticket.ticketStartTime?.toISOString(),
         isReadOnly: isReadOnly
       };
+
+      // If Not Connected, use /not-connected endpoint and adjust payload
+      if (action === "Not Connected") {
+        apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
+        payload = {
+          ticketId: currentTicket?.id,
+          callStatus,
+          cseRemarks: ticket.cseRemarks,
+          otherReasons: ticket.selectedOtherReasons,
+        };
+      }
+
+      const token = session?.access_token;
+      if (!token) {
+        throw new Error("Authentication required");
+      }
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -839,12 +853,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       </p>
                     </div>
                     <span className="font-medium text-sm  flex items-center gap-1">
-                      {currentTicket?.atleast_paid_once ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      {currentTicket?.poster ? (
+                        <span className="text-blue-600">{currentTicket.poster}</span>
                       ) : (
-                        <XCircle className="h-3 w-3 text-red-500" />
+                        <span className="text-muted-foreground">No Poster</span>
                       )}
-                      {currentTicket?.atleast_paid_once ? "Paid" : "Never Paid"}
                     </span>
                   </div>
                 </div>

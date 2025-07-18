@@ -1,59 +1,78 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// Get env vars from Supabase Edge runtime
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-console.log("Hello from get-pending-ticket!")
-
-Deno.serve(async (req) => {
-  // Get JWT from Authorization header
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Missing or invalid auth header" }), { status: 401 });
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS'
+};
+Deno.serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders,
+      status: 200
+    });
   }
-  const jwt = authHeader.replace("Bearer ", "");
-
-  // Decode JWT to get user id
-  let userId: string | undefined;
   try {
-    const payload = JSON.parse(atob(jwt.split(".")[1]));
-    userId = payload.sub;
-  } catch (e) {
-    return new Response(JSON.stringify({ error: "Invalid JWT" }), { status: 401 });
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: req.headers.get('Authorization')
+        }
+      }
+    });
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('User fetch error:', userError);
+      return new Response(JSON.stringify({
+        error: 'Authentication failed or user not found.'
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 401
+      });
+    }
+    const cseUserId = user.id;
+    const now = new Date().toISOString();
+    // Fetch pending tickets: 'Pending' status and not currently snoozed
+    // Sorted by creation date, oldest first
+    const { data: pendingTickets, error: ticketsError } = await supabase.from('support_ticket').select('*').eq('assigned_to', cseUserId).neq('resolution_status', 'Resolved') // Not snoozed or snooze has passed
+    .order('created_at', {
+      ascending: true
+    });
+    if (ticketsError) {
+      console.error('Error fetching pending tickets:', ticketsError);
+      return new Response(JSON.stringify({
+        error: 'Failed to fetch pending tickets.',
+        details: ticketsError.message
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 500
+      });
+    }
+    return new Response(JSON.stringify(pendingTickets || []), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
+  } catch (error) {
+    console.error('Unexpected error in get-pending-tickets:', error);
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
   }
-  if (!userId) {
-    return new Response(JSON.stringify({ error: "No user id in JWT" }), { status: 400 });
-  }
-
-  // TODO: Implement get-pending-ticket logic here
-  
-  return new Response(JSON.stringify({ 
-    success: true, 
-    message: "get-pending-ticket function called successfully",
-    userId: userId 
-  }), {
-    headers: { "Content-Type": "application/json" },
-  });
-})
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/get-pending-ticket' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
-*/
+});
