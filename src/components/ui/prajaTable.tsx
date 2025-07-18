@@ -48,6 +48,32 @@ const getStatusColor = (status: string) => {
   }
 };
 
+// Function to format poster status with better UI
+const formatPosterStatus = (poster: string): { label: string; color: string; bgColor: string } => {
+  switch (poster) {
+    case 'in_trial':
+      return { label: 'In Trial', color: 'text-blue-600', bgColor: 'bg-blue-50' };
+    case 'paid':
+      return { label: 'Paid', color: 'text-green-600', bgColor: 'bg-green-50' };
+    case 'in_trial_extension':
+      return { label: 'Trial Extended', color: 'text-purple-600', bgColor: 'bg-purple-50' };
+    case 'in_premium_extension':
+      return { label: 'Premium Extended', color: 'text-indigo-600', bgColor: 'bg-indigo-50' };
+    case 'trial_expired':
+      return { label: 'Trial Expired', color: 'text-red-600', bgColor: 'bg-red-50' };
+    case 'in_grace_period':
+      return { label: 'Grace Period', color: 'text-orange-600', bgColor: 'bg-orange-50' };
+    case 'auto_pay_not_set_up':
+      return { label: 'Auto-pay Not Set', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
+    case 'autopay_setup_no_layout':
+      return { label: 'Auto-pay No Layout', color: 'text-amber-600', bgColor: 'bg-amber-50' };
+    case 'free':
+      return { label: 'Free', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+    default:
+      return { label: poster || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+  }
+};
+
 export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,6 +131,13 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
           >
             {row[col.accessor]}
           </Badge>
+        );
+      } else if (col.accessor === 'poster') {
+        const posterInfo = formatPosterStatus(row[col.accessor]);
+        return (
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
+            {posterInfo.label}
+          </span>
         );
       } else if (col.accessor === 'status') {
         return (
