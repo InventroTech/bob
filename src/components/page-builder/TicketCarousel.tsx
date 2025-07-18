@@ -853,12 +853,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       </p>
                     </div>
                     <span className="font-medium text-sm  flex items-center gap-1">
-                      {currentTicket?.atleast_paid_once ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      {currentTicket?.poster ? (
+                        <span className="text-blue-600">{currentTicket.poster}</span>
                       ) : (
-                        <XCircle className="h-3 w-3 text-red-500" />
+                        <span className="text-muted-foreground">No Poster</span>
                       )}
-                      {currentTicket?.atleast_paid_once ? "Paid" : "Never Paid"}
                     </span>
                   </div>
                 </div>

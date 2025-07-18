@@ -14,20 +14,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { TrendingUp } from "lucide-react";
 
-interface StackedBarChartProps {
+interface BarGraphProps {
   config?: {
     apiEndpoint?: string;
     title?: string;
     refreshInterval?: number;
   };
 }
+
 // Register chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
+export const BarGraph: React.FC<BarGraphProps> = ({ config }) => {
   // Demo data as default
   const demoData = {
-    labels: ["January", "February", "March", "April", "May"],
+    labels: ["Jan", "Feb", "Mar", "Apr", "May"],
     datasets: [
       {
         label: "Dataset 1",
@@ -38,11 +39,6 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
         label: "Dataset 2",
         data: [20, 30, 40, 50, 60],
         backgroundColor: "rgba(54, 162, 235, 0.5)",
-      },
-      {
-        label: "Dataset 3",
-        data: [30, 40, 50, 60, 70],
-        backgroundColor: "rgba(75, 192, 192, 0.5)",
       },
     ],
   };
@@ -103,7 +99,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
       setUsingDemoData(false);
 
     } catch (error) {
-      console.error('Error fetching stacked bar chart data:', error);
+      console.error('Error fetching bar graph data:', error);
       setError('Failed to load data. Using demo data.');
       setData(demoData);
       setUsingDemoData(true);
@@ -123,23 +119,22 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     }
   }, [config?.refreshInterval, config?.apiEndpoint]);
 
-  // Options for the stacked bar chart
   const options = {
     responsive: true,
     scales: {
       x: {
-        stacked: true, // Enable stacking on the x-axis
+        stacked: false,
       },
       y: {
-        stacked: true, // Enable stacking on the y-axis
+        stacked: false,
       },
     },
     plugins: {
       legend: {
-        position: "top" as const, // Position of the legend
+        position: "top" as const,
       },
       tooltip: {
-        enabled: true, // Enable tooltips
+        enabled: true,
       },
     },
   };
@@ -150,7 +145,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            {config?.title || "Stacked Bar Chart"}
+            {config?.title || "Bar Graph"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -167,7 +162,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
-          {config?.title || "Stacked Bar Chart"}
+          {config?.title || "Bar Graph"}
         </CardTitle>
         {error && (
           <p className="text-sm text-muted-foreground">{error}</p>
@@ -187,4 +182,3 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     </Card>
   );
 };
-
