@@ -84,6 +84,7 @@ import { debounce } from 'lodash';
 import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLogoutComponent";
 import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChart";
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
+import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
 // Add configuration types
 interface ComponentConfig {
   apiEndpoint?: string;
@@ -129,6 +130,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   temporaryLogout: TemporaryLogoutComponent,
   stackedBarChart: StackedBarChart,
   lineChart: LineChart,
+  barGraph: BarGraph,
 };
 
 // Add this interface near the top with other interfaces
@@ -381,6 +383,39 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           </div>
         );
 
+      case 'barGraph':
+      case 'lineChart':
+      case 'stackedBarChart':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>API Endpoint</Label>
+              <Input
+                value={localConfig.apiEndpoint}
+                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
+                placeholder="/api/analytics/data"
+              />
+            </div>
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={localConfig.title}
+                onChange={(e) => handleInputChange('title', e.target.value)}
+                placeholder="Chart Title"
+              />
+            </div>
+            <div>
+              <Label>Refresh Interval (seconds)</Label>
+              <Input
+                type="number"
+                value={localConfig.refreshInterval}
+                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
+                placeholder="0 for no refresh"
+              />
+            </div>
+          </div>
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -428,7 +463,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','temporaryLogout','stackedBarChart','lineChart'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -898,6 +933,11 @@ const PageBuilder = () => {
                           label="Line Chart"
                           icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
                         />
+                        <DraggableSidebarItem
+                          id="barGraph"
+                          label="Bar Graph"
+                          icon={<Grid3X3 className="h-8 w-8 mb-1 text-primary" />}
+                        />
                       </div>
                     </div>
 
@@ -921,6 +961,30 @@ const PageBuilder = () => {
                           id="image"
                           label="Image"
                           icon={<ImageIcon className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Analytics Components */}
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Analytics</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DraggableSidebarItem
+                          id="barGraph"
+                          label="Bar Graph"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="lineChart"
+                          label="Line Chart"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="stackedBarChart"
+                          label="Stacked Bar"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
