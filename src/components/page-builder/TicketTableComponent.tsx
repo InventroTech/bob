@@ -90,6 +90,32 @@ const formatRelativeTime = (dateString: string): string => {
   }
 };
 
+// Function to format poster status with better UI
+const formatPosterStatus = (poster: string): { label: string; color: string; bgColor: string } => {
+  switch (poster) {
+    case 'in_trial':
+      return { label: 'In Trial', color: 'text-blue-600', bgColor: 'bg-blue-50' };
+    case 'paid':
+      return { label: 'Paid', color: 'text-green-600', bgColor: 'bg-green-50' };
+    case 'in_trial_extension':
+      return { label: 'Trial Extended', color: 'text-purple-600', bgColor: 'bg-purple-50' };
+    case 'in_premium_extension':
+      return { label: 'Premium Extended', color: 'text-indigo-600', bgColor: 'bg-indigo-50' };
+    case 'trial_expired':
+      return { label: 'Trial Expired', color: 'text-red-600', bgColor: 'bg-red-50' };
+    case 'in_grace_period':
+      return { label: 'Grace Period', color: 'text-orange-600', bgColor: 'bg-orange-50' };
+    case 'auto_pay_not_set_up':
+      return { label: 'Auto-pay Not Set', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
+    case 'autopay_setup_no_layout':
+      return { label: 'Auto-pay No Layout', color: 'text-amber-600', bgColor: 'bg-amber-50' };
+    case 'free':
+      return { label: 'Free', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+    default:
+      return { label: poster || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+  }
+};
+
 // Demo data for fallback
 const DEMO_TICKETS = [
   {
@@ -168,7 +194,7 @@ const columns: Column[] = [
   { header: 'Created At', accessor: 'created_at', type: 'text' },
   { header: 'Assigned To', accessor: 'cse_name', type: 'text' },
   { header: 'Reason', accessor: 'reason', type: 'text' },
-  { header: 'Poster Subscription Status', accessor: 'poster_subscription_status', type: 'chip' },
+  { header: 'Poster Status', accessor: 'poster', type: 'chip' },
   { header: 'Resolution Status', accessor: 'resolution_status', type: 'chip' },
   { header: 'Remarks', accessor: 'cse_remarks', type: 'text' }
 ];
@@ -330,8 +356,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           reason: ticket.reason || ticket.Description || 'No reason provided',
           // Use resolution_status with proper formatting
           resolution_status: ticket.resolution_status || ticket.status || 'Open',
-          // Handle poster subscription status
-          poster_subscription_status: ticket.subscription_status === true ? 'Paid' : 'Not Paid',
+          // Use poster field directly
+          poster: ticket.poster || 'No Poster',
           // Generate Praja dashboard user link
           praja_dashboard_user_link: ticket.praja_user_id 
             ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
