@@ -38,11 +38,11 @@ Deno.serve(async (req)=>{
     console.log(`Found ${dumpedTickets.length} unprocessed tickets to process from dump.`);
     // 3. Deduplicate Tickets based on user_id, source, and reason fields of dumpedTickets
     const uniqueTickets = [
-      ...new Map(dumpedTickets.map((ticket) => [
-        `${ticket.user_id}-${ticket.source}-${ticket.reason}`,
-        ticket
-      ])).values()
-    ];
+  ...new Map(dumpedTickets.map((ticket)=>[
+    ticket.user_id,       // Key is the ORIGINAL TYPE
+    ticket
+  ])).values()
+];
     // remove the key value pairs (dump_id, is_processed) from the uniqueTickets
     // but preserve dumped_at timestamp for tracking
     uniqueTickets.forEach((ticket)=>{
