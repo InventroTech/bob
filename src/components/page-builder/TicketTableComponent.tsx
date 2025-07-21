@@ -190,7 +190,7 @@ const DEMO_TICKETS = [
 
 const columns: Column[] = [
   { header: 'Name', accessor: 'name', type: 'text' },
-  { header: 'Praja User Id', accessor: 'praja_dashboard_user_link', type: 'link' },
+  { header: 'Praja User Id', accessor: 'user_id', type: 'link' },
   { header: 'Created At', accessor: 'created_at', type: 'text' },
   { header: 'Assigned To', accessor: 'cse_name', type: 'text' },
   { header: 'Reason', accessor: 'reason', type: 'text' },

@@ -154,8 +154,28 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
         );
       }
     } else if (col.type === 'link') {
+      // Special handling for Praja User Id link
+      if (col.accessor === 'praja_user_id') {
+        const userId = row.praja_user_id;
+        const dashboardLink = row.praja_dashboard_user_link;
+        if (userId && dashboardLink && dashboardLink !== 'N/A') {
+          return (
+            <a
+              href={dashboardLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline text-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {userId}
+            </a>
+          );
+        } else {
+          return <span className="text-gray-400 text-sm">N/A</span>;
+        }
+      }
+      // Default link rendering for other link types
       const linkValue = row[col.accessor];
-      console.log("row", row);
       if (linkValue && linkValue !== 'N/A') {
         return (
           <a 
@@ -165,7 +185,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
             className="text-blue-600 hover:text-blue-800 underline text-sm"
             onClick={(e) => e.stopPropagation()} // Prevent row click when clicking link
           >
-            {row.user_id}
+            {linkValue}
           </a>
         );
       } else {
