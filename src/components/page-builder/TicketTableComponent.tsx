@@ -448,6 +448,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     <SelectContent>
                       <SelectItem value="all">All Assignees</SelectItem>
                       <SelectItem value="myself">Assigned to myself</SelectItem>
+                      {getUniqueAssignedTo().map(assignee => (
+                        <SelectItem key={assignee} value={assignee}>
+                          {assignee}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
