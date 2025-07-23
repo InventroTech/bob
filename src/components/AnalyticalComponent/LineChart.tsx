@@ -20,6 +20,10 @@ interface LineChartProps {
     apiEndpoint?: string;
     title?: string;
     refreshInterval?: number;
+    datasets?: Array<{
+      label: string;
+      backgroundColor: string;
+    }>;
   };
 }
 
@@ -35,39 +39,62 @@ ChartJS.register(
 );
 
 export const LineChart: React.FC<LineChartProps> = ({ config }) => {
-  // Demo data as default
-  const demoData = {
-    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-    datasets: [
+  // Create demo data based on configured datasets or use defaults
+  const createDemoData = () => {
+    const configuredDatasets = config?.datasets || [];
+    const defaultDatasets = [
       {
         label: "Visitors",
-        data: [50, 60, 55, 70, 60, 80],
         borderColor: "rgba(75,192,192,1)",
         backgroundColor: "rgba(75,192,192,0.2)",
-        fill: true,
-        tension: 0.4,
       },
       {
         label: "Signups",
-        data: [30, 40, 45, 50, 55, 65],
         borderColor: "rgba(153,102,255,1)",
         backgroundColor: "rgba(153,102,255,0.2)",
+      },
+    ];
+
+    // Use configured datasets if available, otherwise use defaults
+    const datasetsToUse = configuredDatasets.length > 0 ? configuredDatasets : defaultDatasets;
+
+    return {
+      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+      datasets: datasetsToUse.map((dataset, index) => ({
+        label: dataset.label,
+        data: [
+          50 + (index * 10), 
+          60 + (index * 10), 
+          55 + (index * 10), 
+          70 + (index * 10), 
+          60 + (index * 10), 
+          80 + (index * 10)
+        ],
+        borderColor: dataset.backgroundColor.replace('0.5)', '1)'),
+        backgroundColor: dataset.backgroundColor,
         fill: true,
         tension: 0.4,
-      },
-    ],
+      })),
+    };
   };
 
-  const [data, setData] = useState(demoData);
+  const [data, setData] = useState(createDemoData());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usingDemoData, setUsingDemoData] = useState(true);
   const { session } = useAuth();
 
+  // Update demo data when datasets configuration changes
+  useEffect(() => {
+    if (!config?.apiEndpoint) {
+      setData(createDemoData());
+    }
+  }, [config?.datasets]);
+
   const fetchData = async () => {
     // If no API endpoint is provided, use demo data
     if (!config?.apiEndpoint) {
-      setData(demoData);
+      setData(createDemoData());
       setUsingDemoData(true);
       setError(null);
       return;
@@ -110,13 +137,31 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
         throw new Error("Invalid data format received");
       }
 
+      // If we have configured datasets, apply their labels and colors to the API data
+      if (config?.datasets && config.datasets.length > 0 && chartData.datasets) {
+        chartData.datasets = chartData.datasets.map((dataset: any, index: number) => {
+          const configuredDataset = config.datasets![index];
+          if (configuredDataset) {
+            return {
+              ...dataset,
+              label: configuredDataset.label,
+              borderColor: configuredDataset.backgroundColor.replace('0.5)', '1)'),
+              backgroundColor: configuredDataset.backgroundColor,
+              fill: true,
+              tension: 0.4,
+            };
+          }
+          return dataset;
+        });
+      }
+
       setData(chartData);
       setUsingDemoData(false);
 
     } catch (error) {
       console.error('Error fetching line chart data:', error);
       setError('Failed to load data. Using demo data.');
-      setData(demoData);
+      setData(createDemoData());
       setUsingDemoData(true);
     } finally {
       setLoading(false);

@@ -19,44 +19,70 @@ interface StackedBarChartProps {
     apiEndpoint?: string;
     title?: string;
     refreshInterval?: number;
+    datasets?: Array<{
+      label: string;
+      backgroundColor: string;
+    }>;
   };
 }
 // Register chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
-  // Demo data as default
-  const demoData = {
-    labels: ["January", "February", "March", "April", "May"],
-    datasets: [
+  // Create demo data based on configured datasets or use defaults
+  const createDemoData = () => {
+    const configuredDatasets = config?.datasets || [];
+    const defaultDatasets = [
       {
         label: "Dataset 1",
-        data: [10, 20, 30, 40, 50],
         backgroundColor: "rgba(255, 99, 132, 0.5)",
       },
       {
-        label: "Dataset 2",
-        data: [20, 30, 40, 50, 60],
+        label: "Dataset 2", 
         backgroundColor: "rgba(54, 162, 235, 0.5)",
       },
       {
         label: "Dataset 3",
-        data: [30, 40, 50, 60, 70],
         backgroundColor: "rgba(75, 192, 192, 0.5)",
       },
-    ],
+    ];
+
+    // Use configured datasets if available, otherwise use defaults
+    const datasetsToUse = configuredDatasets.length > 0 ? configuredDatasets : defaultDatasets;
+
+    return {
+      labels: ["January", "February", "March", "April", "May"],
+      datasets: datasetsToUse.map((dataset, index) => ({
+        label: dataset.label,
+        data: [
+          10 + (index * 10), 
+          20 + (index * 10), 
+          30 + (index * 10), 
+          40 + (index * 10), 
+          50 + (index * 10)
+        ],
+        backgroundColor: dataset.backgroundColor,
+      })),
+    };
   };
 
-  const [data, setData] = useState(demoData);
+  const [data, setData] = useState(createDemoData());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usingDemoData, setUsingDemoData] = useState(true);
   const { session } = useAuth();
 
+  // Update demo data when datasets configuration changes
+  useEffect(() => {
+    if (!config?.apiEndpoint) {
+      setData(createDemoData());
+    }
+  }, [config?.datasets]);
+
   const fetchData = async () => {
     // If no API endpoint is provided, use demo data
     if (!config?.apiEndpoint) {
-      setData(demoData);
+      setData(createDemoData());
       setUsingDemoData(true);
       setError(null);
       return;
@@ -99,13 +125,28 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
         throw new Error("Invalid data format received");
       }
 
+      // If we have configured datasets, apply their labels and colors to the API data
+      if (config?.datasets && config.datasets.length > 0 && chartData.datasets) {
+        chartData.datasets = chartData.datasets.map((dataset: any, index: number) => {
+          const configuredDataset = config.datasets![index];
+          if (configuredDataset) {
+            return {
+              ...dataset,
+              label: configuredDataset.label,
+              backgroundColor: configuredDataset.backgroundColor,
+            };
+          }
+          return dataset;
+        });
+      }
+
       setData(chartData);
       setUsingDemoData(false);
 
     } catch (error) {
       console.error('Error fetching stacked bar chart data:', error);
       setError('Failed to load data. Using demo data.');
-      setData(demoData);
+      setData(createDemoData());
       setUsingDemoData(true);
     } finally {
       setLoading(false);
