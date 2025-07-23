@@ -85,6 +85,15 @@ import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLog
 import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChart";
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
+// Import configuration components
+import { 
+  DataCardConfig, 
+  TableConfig, 
+  CarouselConfig, 
+  BasicChartConfig, 
+  AdvancedChartConfig 
+} from "@/component-config";
+
 // Add configuration types
 interface ComponentConfig {
   apiEndpoint?: string;
@@ -267,343 +276,53 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     switch (selectedComponentType) {
       case 'dataCard':
         return (
-          <div className="space-y-4">
-            <div>
-              <Label>API Endpoint</Label>
-              <Input
-                value={localConfig.apiEndpoint}
-                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                placeholder="/api/cards"
-              />
-            </div>
-            <div>
-              <Label>Title</Label>
-              <Input
-                value={localConfig.title}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-                placeholder="Card Title"
-              />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                value={localConfig.description}
-                onChange={(e) => handleInputChange('description', e.target.value)}
-                placeholder="Card Description"
-              />
-            </div>
-            <div>
-              <Label>Refresh Interval (seconds)</Label>
-              <Input
-                type="number"
-                value={localConfig.refreshInterval}
-                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
-                placeholder="0 for no refresh"
-              />
-            </div>
-          </div>
+          <DataCardConfig
+            localConfig={localConfig}
+            handleInputChange={handleInputChange}
+          />
         );
 
       case 'ticketTable':
       case 'leadTable':
       case 'oeLeadsTable':
         return (
-          <div className="space-y-4">
-            <div>
-              <Label>API Endpoint</Label>
-              <Input
-                value={localConfig.apiEndpoint}
-                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                placeholder="/api/tickets"
-              />
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <Label>Number of Columns</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={numColumns}
-                  onChange={(e) => handleColumnCountChange(parseInt(e.target.value) || 0)}
-                  className="w-24"
-                />
-              </div>
-
-              {Array.from({ length: numColumns }).map((_, index) => {
-                const column = localColumns[index] || { key: '', label: '', type: 'text' };
-                return (
-                  <div key={index} className="space-y-2 p-4 border rounded-lg">
-                    <h4 className="font-medium">Column {index + 1}</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Column Name</Label>
-                        <Input
-                          value={column.label}
-                          onChange={(e) => handleColumnFieldChange(index, 'label', e.target.value)}
-                          placeholder="Display Name"
-                        />
-                      </div>
-                      <div>
-                        <Label>Accessor Key</Label>
-                        <Input
-                          value={column.key}
-                          onChange={(e) => handleColumnFieldChange(index, 'key', e.target.value)}
-                          placeholder="data_key"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Label>Column Type</Label>
-                        <Select
-                          value={column.type}
-                          onValueChange={(value: 'text' | 'chip' | 'date' | 'number') => 
-                            handleColumnFieldChange(index, 'type', value)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="chip">Chip/Badge</SelectItem>
-                            <SelectItem value="date">Date</SelectItem>
-                            <SelectItem value="number">Number</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                checked={localConfig.showFilters}
-                onCheckedChange={(checked) => handleInputChange('showFilters', checked)}
-              />
-              <Label>Show Filters</Label>
-            </div>
-          </div>
+          <TableConfig
+            localConfig={localConfig}
+            localColumns={localColumns}
+            numColumns={numColumns}
+            handleInputChange={handleInputChange}
+            handleColumnCountChange={handleColumnCountChange}
+            handleColumnFieldChange={handleColumnFieldChange}
+          />
         );
 
       case 'ticketCarousel':
         return (
-          <div className="space-y-4">
-            <div>
-              <Label>API Endpoint</Label>
-              <Input
-                value={localConfig.apiEndpoint}
-                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                placeholder="/api/tickets/carousel"
-              />
-            </div>
-            <div>
-              <Label>Title</Label>
-              <Input
-                value={localConfig.title}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-                placeholder="Carousel Title"
-              />
-            </div>
-            <div className="flex items-center space-x-2">
-              <Switch
-                checked={localConfig.showFilters}
-                onCheckedChange={(checked) => handleInputChange('showFilters', checked)}
-              />
-              <Label>Show Status Filter</Label>
-            </div>
-          </div>
+          <CarouselConfig
+            localConfig={localConfig}
+            handleInputChange={handleInputChange}
+          />
         );
 
       case 'barGraph':
         return (
-          <div className="space-y-4">
-            <div>
-              <Label>API Endpoint</Label>
-              <Input
-                value={localConfig.apiEndpoint}
-                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                placeholder="/api/analytics/data"
-              />
-            </div>
-            <div>
-              <Label>Title</Label>
-              <Input
-                value={localConfig.title}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-                placeholder="Chart Title"
-              />
-            </div>
-            <div>
-              <Label>Refresh Interval (seconds)</Label>
-              <Input
-                type="number"
-                value={localConfig.refreshInterval}
-                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
-                placeholder="0 for no refresh"
-              />
-            </div>
-          </div>
+          <BasicChartConfig
+            localConfig={localConfig}
+            handleInputChange={handleInputChange}
+          />
         );
 
       case 'lineChart':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label>API Endpoint</Label>
-              <Input
-                value={localConfig.apiEndpoint}
-                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                placeholder="/api/analytics/data"
-              />
-            </div>
-            <div>
-              <Label>Title</Label>
-              <Input
-                value={localConfig.title}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-                placeholder="Chart Title"
-              />
-            </div>
-            <div>
-              <Label>Refresh Interval (seconds)</Label>
-              <Input
-                type="number"
-                value={localConfig.refreshInterval}
-                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
-                placeholder="0 for no refresh"
-              />
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <Label>Number of Datasets</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={numDatasets}
-                  onChange={(e) => handleDatasetCountChange(parseInt(e.target.value) || 1)}
-                  className="w-24"
-                />
-              </div>
-
-              {Array.from({ length: numDatasets }).map((_, index) => {
-                const dataset = localDatasets[index] || { label: `Dataset ${index + 1}`, backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)` };
-                return (
-                  <div key={index} className="space-y-2 p-4 border rounded-lg">
-                    <h4 className="font-medium">Dataset {index + 1}</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Dataset Label</Label>
-                        <Input
-                          value={dataset.label}
-                          onChange={(e) => handleDatasetFieldChange(index, 'label', e.target.value)}
-                          placeholder={`Dataset ${index + 1}`}
-                        />
-                      </div>
-                      <div>
-                        <Label>Background Color</Label>
-                        <Input
-                          type="color"
-                          value={dataset.backgroundColor.includes('rgba') ? '#ff6384' : dataset.backgroundColor}
-                          onChange={(e) => {
-                            const hex = e.target.value;
-                            const r = parseInt(hex.slice(1, 3), 16);
-                            const g = parseInt(hex.slice(3, 5), 16);
-                            const b = parseInt(hex.slice(5, 7), 16);
-                            handleDatasetFieldChange(index, 'backgroundColor', `rgba(${r}, ${g}, ${b}, 0.5)`);
-                          }}
-                          className="w-full h-10"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-
       case 'stackedBarChart':
         return (
-          <div className="space-y-4">
-            <div>
-              <Label>API Endpoint</Label>
-              <Input
-                value={localConfig.apiEndpoint}
-                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                placeholder="/api/analytics/data"
-              />
-            </div>
-            <div>
-              <Label>Title</Label>
-              <Input
-                value={localConfig.title}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-                placeholder="Chart Title"
-              />
-            </div>
-            <div>
-              <Label>Refresh Interval (seconds)</Label>
-              <Input
-                type="number"
-                value={localConfig.refreshInterval}
-                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
-                placeholder="0 for no refresh"
-              />
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <Label>Number of Datasets</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={numDatasets}
-                  onChange={(e) => handleDatasetCountChange(parseInt(e.target.value) || 1)}
-                  className="w-24"
-                />
-              </div>
-
-              {Array.from({ length: numDatasets }).map((_, index) => {
-                const dataset = localDatasets[index] || { label: `Dataset ${index + 1}`, backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)` };
-                return (
-                  <div key={index} className="space-y-2 p-4 border rounded-lg">
-                    <h4 className="font-medium">Dataset {index + 1}</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Dataset Label</Label>
-                        <Input
-                          value={dataset.label}
-                          onChange={(e) => handleDatasetFieldChange(index, 'label', e.target.value)}
-                          placeholder={`Dataset ${index + 1}`}
-                        />
-                      </div>
-                      <div>
-                        <Label>Background Color</Label>
-                        <Input
-                          type="color"
-                          value={dataset.backgroundColor.includes('rgba') ? '#ff6384' : dataset.backgroundColor}
-                          onChange={(e) => {
-                            const hex = e.target.value;
-                            const r = parseInt(hex.slice(1, 3), 16);
-                            const g = parseInt(hex.slice(3, 5), 16);
-                            const b = parseInt(hex.slice(5, 7), 16);
-                            handleDatasetFieldChange(index, 'backgroundColor', `rgba(${r}, ${g}, ${b}, 0.5)`);
-                          }}
-                          className="w-full h-10"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <AdvancedChartConfig
+            localConfig={localConfig}
+            localDatasets={localDatasets}
+            numDatasets={numDatasets}
+            handleInputChange={handleInputChange}
+            handleDatasetCountChange={handleDatasetCountChange}
+            handleDatasetFieldChange={handleDatasetFieldChange}
+          />
         );
 
       default:

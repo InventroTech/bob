@@ -98,48 +98,26 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
 
   // Function to detect if search term looks like a phone number
   const isPhoneNumber = (term: string): boolean => {
-    // Remove all non-digit characters and check if it's mostly digits
     const digitsOnly = term.replace(/[^0-9]/g, '');
-    // Consider it a phone number if it has 7+ digits
     return digitsOnly.length >= 7;
   };
 
-  // Simplified and more robust filtering logic
+  // Simplified filtering logic
   const filteredData = data.filter((row) => {
     if (!searchTerm.trim()) return true;
 
     const lowerSearchTerm = searchTerm.toLowerCase().trim();
     
-    // If it looks like a phone number, search more aggressively
+    // Phone number search
     if (isPhoneNumber(lowerSearchTerm)) {
       const cleanSearchTerm = lowerSearchTerm.replace(/[\s\-\(\)\+]/g, '');
+      const phoneValue = String(row.phone || '');
+      const cleanPhoneValue = phoneValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
       
-      // Only check phone-related fields to avoid false matches
-      const phoneFields = ['phone', 'phone_number', 'mobile', 'contact_number', 'mobile_number', 'contact'];
-      
-      for (const field of phoneFields) {
-        const phoneValue = row[field];
-        if (phoneValue != null) {
-          const stringValue = String(phoneValue);
-          const cleanValue = stringValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
-          
-          // More precise phone matching
-          if (
-            cleanValue === cleanSearchTerm ||                                // Exact match
-            cleanValue.includes(cleanSearchTerm) ||                         // Direct substring match
-            (cleanValue.length >= 10 && cleanSearchTerm.length >= 10 && 
-             cleanValue.slice(-10) === cleanSearchTerm.slice(-10))          // Last 10 digits match
-          ) {
-            return true;
-          }
-        }
-      }
-      
-      // If no phone field matches, return false (don't search other fields for phone numbers)
-      return false;
+      return cleanPhoneValue.includes(cleanSearchTerm);
     }
 
-    // Regular search through visible columns for non-phone searches
+    // Regular text search through visible columns
     return columns.some((col) =>
       String(row[col.accessor] || '')
         .toLowerCase()
