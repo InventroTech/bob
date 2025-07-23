@@ -93,6 +93,10 @@ interface ComponentConfig {
     label: string;
     type: 'text' | 'chip' | 'date' | 'number';
   }>;
+  datasets?: Array<{
+    label: string;
+    backgroundColor: string;
+  }>;
   title?: string;
   description?: string;
   refreshInterval?: number;
@@ -150,6 +154,7 @@ interface ConfigurationPanelProps {
 const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedComponent, setCanvasComponents, onClose }) => {
   const { id: selectedComponentId, config: initialConfig = {}, type: selectedComponentType } = selectedComponent;
   const initialColumns = initialConfig.columns || [];
+  const initialDatasets = initialConfig.datasets || [];
 
   type LocalConfigType = {
     apiEndpoint: string;
@@ -171,6 +176,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   // Separate state for columns
   const [localColumns, setLocalColumns] = useState<ColumnConfig[]>(initialColumns);
   const [numColumns, setNumColumns] = useState<number>(initialColumns.length);
+
+  // Separate state for datasets (for StackedBarChart)
+  const [localDatasets, setLocalDatasets] = useState<Array<{label: string; backgroundColor: string}>>(initialDatasets);
+  const [numDatasets, setNumDatasets] = useState<number>(initialDatasets.length || 3);
 
   // Debounced update to parent state
   const debouncedUpdate = useCallback(
@@ -228,6 +237,31 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     setLocalColumns(newColumns);
     debouncedUpdateWithDelay({ columns: newColumns });
   }, [localColumns, debouncedUpdateWithDelay]);
+
+  // Handle dataset count change
+  const handleDatasetCountChange = useCallback((count: number) => {
+    setNumDatasets(count);
+    const newDatasets = Array.from({ length: count }, (_, index) => {
+      const existing = localDatasets[index];
+      return existing || {
+        label: `Dataset ${index + 1}`,
+        backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)`
+      };
+    });
+    setLocalDatasets(newDatasets);
+    debouncedUpdateWithDelay({ datasets: newDatasets });
+  }, [localDatasets, debouncedUpdateWithDelay]);
+
+  // Handle individual dataset field changes
+  const handleDatasetFieldChange = useCallback((index: number, field: 'label' | 'backgroundColor', value: string) => {
+    const updatedDatasets = [...localDatasets];
+    if (!updatedDatasets[index]) {
+      updatedDatasets[index] = { label: '', backgroundColor: '' };
+    }
+    updatedDatasets[index] = { ...updatedDatasets[index], [field]: value };
+    setLocalDatasets(updatedDatasets);
+    debouncedUpdateWithDelay({ datasets: updatedDatasets });
+  }, [localDatasets, debouncedUpdateWithDelay]);
 
   const renderConfigFields = () => {
     switch (selectedComponentType) {
@@ -384,7 +418,115 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         );
 
       case 'barGraph':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>API Endpoint</Label>
+              <Input
+                value={localConfig.apiEndpoint}
+                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
+                placeholder="/api/analytics/data"
+              />
+            </div>
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={localConfig.title}
+                onChange={(e) => handleInputChange('title', e.target.value)}
+                placeholder="Chart Title"
+              />
+            </div>
+            <div>
+              <Label>Refresh Interval (seconds)</Label>
+              <Input
+                type="number"
+                value={localConfig.refreshInterval}
+                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
+                placeholder="0 for no refresh"
+              />
+            </div>
+          </div>
+        );
+
       case 'lineChart':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>API Endpoint</Label>
+              <Input
+                value={localConfig.apiEndpoint}
+                onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
+                placeholder="/api/analytics/data"
+              />
+            </div>
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={localConfig.title}
+                onChange={(e) => handleInputChange('title', e.target.value)}
+                placeholder="Chart Title"
+              />
+            </div>
+            <div>
+              <Label>Refresh Interval (seconds)</Label>
+              <Input
+                type="number"
+                value={localConfig.refreshInterval}
+                onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
+                placeholder="0 for no refresh"
+              />
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <Label>Number of Datasets</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={numDatasets}
+                  onChange={(e) => handleDatasetCountChange(parseInt(e.target.value) || 1)}
+                  className="w-24"
+                />
+              </div>
+
+              {Array.from({ length: numDatasets }).map((_, index) => {
+                const dataset = localDatasets[index] || { label: `Dataset ${index + 1}`, backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)` };
+                return (
+                  <div key={index} className="space-y-2 p-4 border rounded-lg">
+                    <h4 className="font-medium">Dataset {index + 1}</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Dataset Label</Label>
+                        <Input
+                          value={dataset.label}
+                          onChange={(e) => handleDatasetFieldChange(index, 'label', e.target.value)}
+                          placeholder={`Dataset ${index + 1}`}
+                        />
+                      </div>
+                      <div>
+                        <Label>Background Color</Label>
+                        <Input
+                          type="color"
+                          value={dataset.backgroundColor.includes('rgba') ? '#ff6384' : dataset.backgroundColor}
+                          onChange={(e) => {
+                            const hex = e.target.value;
+                            const r = parseInt(hex.slice(1, 3), 16);
+                            const g = parseInt(hex.slice(3, 5), 16);
+                            const b = parseInt(hex.slice(5, 7), 16);
+                            handleDatasetFieldChange(index, 'backgroundColor', `rgba(${r}, ${g}, ${b}, 0.5)`);
+                          }}
+                          className="w-full h-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+
       case 'stackedBarChart':
         return (
           <div className="space-y-4">
@@ -412,6 +554,54 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
                 onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
                 placeholder="0 for no refresh"
               />
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <Label>Number of Datasets</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={numDatasets}
+                  onChange={(e) => handleDatasetCountChange(parseInt(e.target.value) || 1)}
+                  className="w-24"
+                />
+              </div>
+
+              {Array.from({ length: numDatasets }).map((_, index) => {
+                const dataset = localDatasets[index] || { label: `Dataset ${index + 1}`, backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)` };
+                return (
+                  <div key={index} className="space-y-2 p-4 border rounded-lg">
+                    <h4 className="font-medium">Dataset {index + 1}</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Dataset Label</Label>
+                        <Input
+                          value={dataset.label}
+                          onChange={(e) => handleDatasetFieldChange(index, 'label', e.target.value)}
+                          placeholder={`Dataset ${index + 1}`}
+                        />
+                      </div>
+                      <div>
+                        <Label>Background Color</Label>
+                        <Input
+                          type="color"
+                          value={dataset.backgroundColor.includes('rgba') ? '#ff6384' : dataset.backgroundColor}
+                          onChange={(e) => {
+                            const hex = e.target.value;
+                            const r = parseInt(hex.slice(1, 3), 16);
+                            const g = parseInt(hex.slice(3, 5), 16);
+                            const b = parseInt(hex.slice(5, 7), 16);
+                            handleDatasetFieldChange(index, 'backgroundColor', `rgba(${r}, ${g}, ${b}, 0.5)`);
+                          }}
+                          className="w-full h-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );

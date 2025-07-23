@@ -96,13 +96,56 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
     }
   };
 
-  const filteredData = data.filter((row) =>
-    columns.some((col) =>
+  // Function to detect if search term looks like a phone number
+  const isPhoneNumber = (term: string): boolean => {
+    // Remove all non-digit characters and check if it's mostly digits
+    const digitsOnly = term.replace(/[^0-9]/g, '');
+    // Consider it a phone number if it has 7+ digits
+    return digitsOnly.length >= 7;
+  };
+
+  // Simplified and more robust filtering logic
+  const filteredData = data.filter((row) => {
+    if (!searchTerm.trim()) return true;
+
+    const lowerSearchTerm = searchTerm.toLowerCase().trim();
+    
+    // If it looks like a phone number, search more aggressively
+    if (isPhoneNumber(lowerSearchTerm)) {
+      const cleanSearchTerm = lowerSearchTerm.replace(/[\s\-\(\)\+]/g, '');
+      
+      // Only check phone-related fields to avoid false matches
+      const phoneFields = ['phone', 'phone_number', 'mobile', 'contact_number', 'mobile_number', 'contact'];
+      
+      for (const field of phoneFields) {
+        const phoneValue = row[field];
+        if (phoneValue != null) {
+          const stringValue = String(phoneValue);
+          const cleanValue = stringValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
+          
+          // More precise phone matching
+          if (
+            cleanValue === cleanSearchTerm ||                                // Exact match
+            cleanValue.includes(cleanSearchTerm) ||                         // Direct substring match
+            (cleanValue.length >= 10 && cleanSearchTerm.length >= 10 && 
+             cleanValue.slice(-10) === cleanSearchTerm.slice(-10))          // Last 10 digits match
+          ) {
+            return true;
+          }
+        }
+      }
+      
+      // If no phone field matches, return false (don't search other fields for phone numbers)
+      return false;
+    }
+
+    // Regular search through visible columns for non-phone searches
+    return columns.some((col) =>
       String(row[col.accessor] || '')
         .toLowerCase()
-        .includes(searchTerm.toLowerCase())
-    )
-  );
+        .includes(lowerSearchTerm)
+    );
+  });
 
   const totalPages = Math.ceil(filteredData.length / entriesPerPage);
   const startIndex = (currentPage - 1) * entriesPerPage;
@@ -214,7 +257,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
         <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
         <input
           type="text"
-          placeholder="Search..."
+          placeholder="Search (supports phone numbers)..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
