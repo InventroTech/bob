@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { X, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface Column {
   header: string;
@@ -280,12 +281,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   // Check if current user can edit the ticket
   const canEditTicket = (ticket: any) => {
-    if (!user?.email) return false;
-    
-    // Check if the ticket is assigned to the current user
-    const assignedTo = ticket.cse_name || ticket.assigned_to;
-    const userDisplayName = getDisplayName(user.email);
-    return assignedTo === userDisplayName || assignedTo === user.email || assignedTo === user.id;
+    // Allow all users to edit all tickets
+    return true;
   };
 
   const handleRowClick = (row: any) => {
@@ -448,6 +445,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     <SelectContent>
                       <SelectItem value="all">All Assignees</SelectItem>
                       <SelectItem value="myself">Assigned to myself</SelectItem>
+                      {getUniqueAssignedTo().map(assignee => (
+                        <SelectItem key={assignee} value={assignee}>
+                          {assignee}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -487,7 +489,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           <PrajaTable 
             columns={tableColumns} 
             data={filteredData} 
-            title=""
+            title={config?.title || "Support Tickets"}
             onRowClick={handleRowClick}
           />
         )}
@@ -500,15 +502,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             <div className="flex justify-between items-center">
               <DialogTitle>Ticket Details</DialogTitle>
             </div>
-            {selectedTicket && (
-              <div className="text-sm text-gray-600">
-                {canEditTicket(selectedTicket) ? (
-                  <span className="text-green-600">✓ You can edit this ticket</span>
-                ) : (
-                  <span className="text-orange-600">⚠ Read-only view (not assigned to you)</span>
-                )}
-              </div>
-            )}
           </DialogHeader>
           {selectedTicket && (
             <div className="mt-2">
