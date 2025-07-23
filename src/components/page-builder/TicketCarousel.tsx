@@ -44,7 +44,7 @@ import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsC
 interface Ticket {
   id: number;
   created_at: string;
-  ticket_date: string;
+  dumped_at: string;
   user_id: string;
   name: string;
   phone: string;
@@ -762,8 +762,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   }
 
   //formatting the ticket date
-  const formattedDate = currentTicket?.ticket_date
-    ? new Date(currentTicket.ticket_date).toLocaleDateString("en-US", {
+  const formattedDate = currentTicket?.dumped_at
+    ? new Date(currentTicket.dumped_at).toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "numeric",
@@ -825,7 +825,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   <div className="space-y-1">
                     <p className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
                     <span className="font-medium text-sm">
-                  {currentTicket?.created_at ? new Date(currentTicket.created_at).toLocaleDateString("en-US", {
+                  {currentTicket?.dumped_at ? new Date(currentTicket.dumped_at).toLocaleDateString("en-US", {
                     year: "numeric",
                     month: "short",
                     day: "numeric",

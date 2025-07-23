@@ -96,13 +96,34 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
     }
   };
 
-  const filteredData = data.filter((row) =>
-    columns.some((col) =>
+  // Function to detect if search term looks like a phone number
+  const isPhoneNumber = (term: string): boolean => {
+    const digitsOnly = term.replace(/[^0-9]/g, '');
+    return digitsOnly.length >= 7;
+  };
+
+  // Simplified filtering logic
+  const filteredData = data.filter((row) => {
+    if (!searchTerm.trim()) return true;
+
+    const lowerSearchTerm = searchTerm.toLowerCase().trim();
+    
+    // Phone number search
+    if (isPhoneNumber(lowerSearchTerm)) {
+      const cleanSearchTerm = lowerSearchTerm.replace(/[\s\-\(\)\+]/g, '');
+      const phoneValue = String(row.phone || '');
+      const cleanPhoneValue = phoneValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
+      
+      return cleanPhoneValue.includes(cleanSearchTerm);
+    }
+
+    // Regular text search through visible columns
+    return columns.some((col) =>
       String(row[col.accessor] || '')
         .toLowerCase()
-        .includes(searchTerm.toLowerCase())
-    )
-  );
+        .includes(lowerSearchTerm)
+    );
+  });
 
   const totalPages = Math.ceil(filteredData.length / entriesPerPage);
   const startIndex = (currentPage - 1) * entriesPerPage;
@@ -214,7 +235,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
         <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
         <input
           type="text"
-          placeholder="Search..."
+          placeholder="Search (supports phone numbers)..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
