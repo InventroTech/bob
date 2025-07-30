@@ -4,6 +4,42 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Mixpanel API configuration
+const MIXPANEL_API_URL = "https://api.thecircleapp.in/pyro/send_to_mixpanel";
+const MIXPANEL_TOKEN = Deno.env.get("MIXPANEL_TOKEN");
+
+// Helper function to send event to Mixpanel
+async function sendToMixpanel(userId: string, eventName: string, properties: any) {
+  try {
+    if (!MIXPANEL_TOKEN) {
+      console.warn("MIXPANEL_TOKEN not configured, skipping Mixpanel event");
+      return;
+    }
+
+    const response = await fetch(MIXPANEL_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${MIXPANEL_TOKEN}`
+      },
+      body: JSON.stringify({
+        user_id: parseInt(userId),
+        event_name: eventName,
+        properties: properties
+      })
+    });
+
+    if (!response.ok) {
+      console.error(`Mixpanel API error: ${response.status} ${response.statusText}`);
+    } else {
+      console.log(`Mixpanel event sent successfully: ${eventName}`);
+    }
+  } catch (error) {
+    console.error('Error sending to Mixpanel:', error);
+  }
+}
+
 console.log("Hello from save-and-continue!");
 Deno.serve(async (req)=>{
   // Handle CORS
@@ -142,6 +178,33 @@ Deno.serve(async (req)=>{
         }
       });
     }
+
+    // Send Mixpanel event based on resolution status
+    let mixpanelEventName = '';
+    switch (resolutionStatus) {
+      case 'Resolved':
+        mixpanelEventName = 'pyro_resolve';
+        break;
+      case 'Cannot Resolve':
+        mixpanelEventName = 'pyro_cannot_resolve';
+        break;
+      case 'Call Later':
+        mixpanelEventName = 'pyro_call_later';
+        break;
+      default:
+        // For other statuses, don't send Mixpanel event
+        break;
+    }
+
+    if (mixpanelEventName) {
+      await sendToMixpanel(userId, mixpanelEventName, {
+        support_ticket_id: ticketId,
+        remarks: cseRemarks || '',
+        cse_email_id: userEmail,
+        reasons: otherReasons || []
+      });
+    }
+
     // Prepare response
     const response = {
       success: true,
