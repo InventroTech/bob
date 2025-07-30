@@ -12,7 +12,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Calendar } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface StackedBarChartProps {
   config?: {
@@ -29,6 +30,52 @@ interface StackedBarChartProps {
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
+  // Transform backend data format to Chart.js format
+  const transformBackendData = (backendData: any[]) => {
+    if (!Array.isArray(backendData) || backendData.length === 0) {
+      return createDemoData();
+    }
+
+    // Extract labels from x field
+    const labels = backendData.map(item => item.x);
+
+    // Find all y fields dynamically (y1, y2, y3, etc.)
+    const sampleItem = backendData[0];
+    const yFields = Object.keys(sampleItem)
+      .filter(key => key.startsWith('y') && /^y\d+$/.test(key))
+      .sort((a, b) => {
+        const numA = parseInt(a.substring(1));
+        const numB = parseInt(b.substring(1));
+        return numA - numB;
+      });
+
+    // Create datasets for each y field
+    const datasets = yFields.map((yField, index) => {
+      const data = backendData.map(item => item[yField] || 0);
+      
+      // Use configured dataset info if available
+      const configuredDataset = config?.datasets?.[index];
+      const defaultColors = [
+        "rgba(255, 99, 132, 0.5)",
+        "rgba(54, 162, 235, 0.5)", 
+        "rgba(75, 192, 192, 0.5)",
+        "rgba(255, 206, 86, 0.5)",
+        "rgba(153, 102, 255, 0.5)"
+      ];
+
+      return {
+        label: configuredDataset?.label || `Dataset ${index + 1}`,
+        data: data,
+        backgroundColor: configuredDataset?.backgroundColor || defaultColors[index % defaultColors.length],
+      };
+    });
+
+    return {
+      labels,
+      datasets
+    };
+  };
+
   // Create demo data based on configured datasets or use defaults
   const createDemoData = () => {
     const configuredDatasets = config?.datasets || [];
@@ -70,19 +117,62 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usingDemoData, setUsingDemoData] = useState(true);
+  const [dateFilter, setDateFilter] = useState<string>('last7days');
   const { session } = useAuth();
 
-  // Update demo data when datasets configuration changes
-  useEffect(() => {
-    if (!config?.apiEndpoint) {
-      setData(createDemoData());
+  // Calculate date range based on filter
+  const getDateRange = (filter: string) => {
+    const today = new Date();
+    const end = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    let start: string;
+    switch (filter) {
+      case 'last3days':
+        const threeDaysAgo = new Date(today);
+        threeDaysAgo.setDate(today.getDate() - 3);
+        start = threeDaysAgo.toISOString().split('T')[0];
+        break;
+      case 'last7days':
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(today.getDate() - 7);
+        start = sevenDaysAgo.toISOString().split('T')[0];
+        break;
+      case 'last30days':
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        start = thirtyDaysAgo.toISOString().split('T')[0];
+        break;
+      default:
+        const sevenDays = new Date(today);
+        sevenDays.setDate(today.getDate() - 7);
+        start = sevenDays.toISOString().split('T')[0];
     }
-  }, [config?.datasets]);
+    
+    return { start, end };
+  };
 
   const fetchData = async () => {
+    console.log('StackedBarChart - fetchData called with dateFilter:', dateFilter);
+    console.log('StackedBarChart - API endpoint:', config?.apiEndpoint);
+    
     // If no API endpoint is provided, use demo data
     if (!config?.apiEndpoint) {
-      setData(createDemoData());
+      console.log('StackedBarChart - No API endpoint, using demo data');
+      const { start, end } = getDateRange(dateFilter);
+      console.log('StackedBarChart - Demo data date range:', { start, end });
+      
+      const demo = [
+        { "x": "2025-07-10", "y1": 10, "y2": 10 },
+        { "x": "2025-07-11", "y1": 16, "y2": 9 },
+        { "x": "2025-07-12", "y1": 10, "y2": 20 },
+        { "x": "2025-07-13", "y1": 10, "y2": 10 },
+        { "x": "2025-07-14", "y1": 5, "y2": 11 },
+        { "x": "2025-07-15", "y1": 20, "y2": 12 },
+        { "x": "2025-07-16", "y1": 23, "y2": 12 },
+        { "x": "2025-07-17", "y1": 23, "y2": 12 }
+      ];
+      const chartData = transformBackendData(demo);
+      setData(chartData);
       setUsingDemoData(true);
       setError(null);
       return;
@@ -99,7 +189,16 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
         throw new Error("Authentication required");
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URI}${config.apiEndpoint}`, {
+      // Add date filter parameters to API endpoint
+      const { start, end } = getDateRange(dateFilter);
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const endpoint = config.apiEndpoint.startsWith('/') ? config.apiEndpoint : `/${config.apiEndpoint}`;
+      const url = new URL(`${baseUrl}${endpoint}`);
+      url.searchParams.append('start', start);
+      url.searchParams.append('end', end);
+      console.log('StackedBarChart - URL:', url.toString());
+
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -116,28 +215,15 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
       // Handle different response formats
       let chartData;
       if (responseData.success && responseData.data) {
-        chartData = responseData.data;
+        chartData = transformBackendData(responseData.data);
       } else if (responseData.data) {
-        chartData = responseData.data;
+        chartData = transformBackendData(responseData.data);
+      } else if (Array.isArray(responseData)) {
+        chartData = transformBackendData(responseData);
       } else if (responseData.labels && responseData.datasets) {
         chartData = responseData;
       } else {
         throw new Error("Invalid data format received");
-      }
-
-      // If we have configured datasets, apply their labels and colors to the API data
-      if (config?.datasets && config.datasets.length > 0 && chartData.datasets) {
-        chartData.datasets = chartData.datasets.map((dataset: any, index: number) => {
-          const configuredDataset = config.datasets![index];
-          if (configuredDataset) {
-            return {
-              ...dataset,
-              label: configuredDataset.label,
-              backgroundColor: configuredDataset.backgroundColor,
-            };
-          }
-          return dataset;
-        });
       }
 
       setData(chartData);
@@ -146,7 +232,20 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     } catch (error) {
       console.error('Error fetching stacked bar chart data:', error);
       setError('Failed to load data. Using demo data.');
-      setData(createDemoData());
+      
+      // Fallback to demo data
+      const demo = [
+        { "x": "2025-07-10", "y1": 10, "y2": 10 },
+        { "x": "2025-07-11", "y1": 16, "y2": 9 },
+        { "x": "2025-07-12", "y1": 10, "y2": 20 },
+        { "x": "2025-07-13", "y1": 10, "y2": 10 },
+        { "x": "2025-07-14", "y1": 5, "y2": 11 },
+        { "x": "2025-07-15", "y1": 20, "y2": 12 },
+        { "x": "2025-07-16", "y1": 23, "y2": 12 },
+        { "x": "2025-07-17", "y1": 23, "y2": 12 }
+      ];
+      const chartData = transformBackendData(demo);
+      setData(chartData);
       setUsingDemoData(true);
     } finally {
       setLoading(false);
@@ -155,7 +254,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
 
   useEffect(() => {
     fetchData();
-  }, [config?.apiEndpoint]);
+  }, [config?.apiEndpoint, dateFilter]);
 
   useEffect(() => {
     if (config?.refreshInterval && config.refreshInterval > 0) {
@@ -204,12 +303,31 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
   }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full ">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
           {config?.title || "Stacked Bar Chart"}
         </CardTitle>
+        
+        {/* Date Filter */}
+        <div className="flex items-center gap-2 mt-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Select value={dateFilter} onValueChange={(value) => {
+            console.log('StackedBarChart - Date filter changed from', dateFilter, 'to', value);
+            setDateFilter(value);
+          }}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="last3days">Last 3 Days</SelectItem>
+              <SelectItem value="last7days">Last 7 Days</SelectItem>
+              <SelectItem value="last30days">Last 30 Days</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {error && (
           <p className="text-sm text-muted-foreground">{error}</p>
         )}
@@ -221,8 +339,8 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
         )}
       </CardHeader>
       <CardContent>
-        <div className="h-80 w-full">
-          <Bar data={data} options={options} />
+        <div className="h-full w-full  flex justify-center items-center">
+          <Bar data={data} options={options}/>
         </div>
       </CardContent>
     </Card>

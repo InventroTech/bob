@@ -13,7 +13,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Calendar } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface LineChartProps {
   config?: {
@@ -39,18 +40,68 @@ ChartJS.register(
 );
 
 export const LineChart: React.FC<LineChartProps> = ({ config }) => {
+  // Transform backend data format to Chart.js format for LineChart
+  const transformBackendData = (backendData: any[]) => {
+    if (!Array.isArray(backendData) || backendData.length === 0) {
+      return createDemoData();
+    }
+
+    // Extract labels from x field
+    const labels = backendData.map(item => item.x);
+    
+    // Extract data from y field
+    const data = backendData.map(item => item.y || 0);
+
+    // Create single dataset
+    const configuredDatasets = config?.datasets || [];
+    
+    // Use configured dataset if available, otherwise use default
+    const datasetConfig = configuredDatasets[0];
+    
+    let borderColor, backgroundColor, label;
+    
+    if (datasetConfig) {
+      label = datasetConfig.label;
+      backgroundColor = datasetConfig.backgroundColor;
+      // Convert backgroundColor to borderColor (make it solid)
+      if (backgroundColor.includes('rgba')) {
+        borderColor = backgroundColor.replace(/,\s*[\d.]+\)/, ', 1)');
+      } else {
+        borderColor = backgroundColor;
+      }
+    } else {
+      label = "Data";
+      borderColor = "rgba(75,192,192,1)";
+      backgroundColor = "rgba(75,192,192,0.2)";
+    }
+
+    const datasets = [{
+      label: label,
+      data: data,
+      borderColor: borderColor,
+      backgroundColor: backgroundColor,
+      fill: true,
+      tension: 0.4,
+    }];
+
+    const result = {
+      labels,
+      datasets
+    };
+    
+    return result;
+  };
+
   // Create demo data based on configured datasets or use defaults
   const createDemoData = () => {
     const configuredDatasets = config?.datasets || [];
     const defaultDatasets = [
       {
         label: "Visitors",
-        borderColor: "rgba(75,192,192,1)",
         backgroundColor: "rgba(75,192,192,0.2)",
       },
       {
         label: "Signups",
-        borderColor: "rgba(153,102,255,1)",
         backgroundColor: "rgba(153,102,255,0.2)",
       },
     ];
@@ -60,21 +111,30 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
 
     return {
       labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-      datasets: datasetsToUse.map((dataset, index) => ({
-        label: dataset.label,
-        data: [
-          50 + (index * 10), 
-          60 + (index * 10), 
-          55 + (index * 10), 
-          70 + (index * 10), 
-          60 + (index * 10), 
-          80 + (index * 10)
-        ],
-        borderColor: dataset.backgroundColor.replace('0.5)', '1)'),
-        backgroundColor: dataset.backgroundColor,
-        fill: true,
-        tension: 0.4,
-      })),
+      datasets: datasetsToUse.map((dataset, index) => {
+        let borderColor;
+        if (dataset.backgroundColor.includes('rgba')) {
+          borderColor = dataset.backgroundColor.replace(/,\s*[\d.]+\)/, ', 1)');
+        } else {
+          borderColor = dataset.backgroundColor;
+        }
+        
+        return {
+          label: dataset.label,
+          data: [
+            50 + (index * 10), 
+            60 + (index * 10), 
+            55 + (index * 10), 
+            70 + (index * 10), 
+            60 + (index * 10), 
+            80 + (index * 10)
+          ],
+          borderColor: borderColor,
+          backgroundColor: dataset.backgroundColor,
+          fill: true,
+          tension: 0.4,
+        };
+      }),
     };
   };
 
@@ -82,19 +142,70 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usingDemoData, setUsingDemoData] = useState(true);
+  const [dateFilter, setDateFilter] = useState<string>('last7days');
   const { session } = useAuth();
 
-  // Update demo data when datasets configuration changes
-  useEffect(() => {
-    if (!config?.apiEndpoint) {
-      setData(createDemoData());
+  // Calculate date range based on filter
+  const getDateRange = (filter: string) => {
+    const today = new Date();
+    const end = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    let start: string;
+    switch (filter) {
+      case 'last3days':
+        const threeDaysAgo = new Date(today);
+        threeDaysAgo.setDate(today.getDate() - 3);
+        start = threeDaysAgo.toISOString().split('T')[0];
+        break;
+      case 'last7days':
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(today.getDate() - 7);
+        start = sevenDaysAgo.toISOString().split('T')[0];
+        break;
+      case 'last30days':
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        start = thirtyDaysAgo.toISOString().split('T')[0];
+        break;
+      default:
+        const sevenDays = new Date(today);
+        sevenDays.setDate(today.getDate() - 7);
+        start = sevenDays.toISOString().split('T')[0];
     }
-  }, [config?.datasets]);
+    
+    return { start, end };
+  };
 
   const fetchData = async () => {
+    console.log('LineChart - fetchData called with dateFilter:', dateFilter);
+    console.log('LineChart - API endpoint:', config?.apiEndpoint);
+    
     // If no API endpoint is provided, use demo data
     if (!config?.apiEndpoint) {
-      setData(createDemoData());
+      console.log('LineChart - No API endpoint, using demo data');
+      const { start, end } = getDateRange(dateFilter);
+      console.log('LineChart - Demo data date range:', { start, end });
+      
+      const demo = [
+        { "x": "2025-07-10", "y": 10 },
+        { "x": "2025-07-11", "y": 22 },
+        { "x": "2025-07-12", "y": 11 },
+        { "x": "2025-07-13", "y": 32},
+        { "x": "2025-07-14", "y": 11 },
+        { "x": "2025-07-15", "y": 3 },
+        { "x": "2025-07-16", "y": 23 },
+        { "x": "2025-07-17", "y": 33},
+        { "x": "2025-07-18", "y": 5 },
+        { "x": "2025-07-19", "y": 10 },
+        { "x": "2025-07-20", "y": 15},
+        { "x": "2025-07-21", "y": 12.12 },
+        { "x": "2025-07-22", "y": 10.62 },
+        { "x": "2025-07-23", "y": 2.11 },
+        { "x": "2025-07-24", "y": 3.11 },
+        { "x": "2025-07-25", "y": 0 }
+      ];
+      const chartData = transformBackendData(demo);
+      setData(chartData);
       setUsingDemoData(true);
       setError(null);
       return;
@@ -111,7 +222,16 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
         throw new Error("Authentication required");
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URI}${config.apiEndpoint}`, {
+      // Add date filter parameters to API endpoint
+      const { start, end } = getDateRange(dateFilter);
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const endpoint = config.apiEndpoint.startsWith('/') ? config.apiEndpoint : `/${config.apiEndpoint}`;
+      const url = new URL(`${baseUrl}${endpoint}`);
+      url.searchParams.append('start', start);
+      url.searchParams.append('end', end);
+      console.log('LineChart - URL:', url.toString());
+
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -128,31 +248,15 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       // Handle different response formats
       let chartData;
       if (responseData.success && responseData.data) {
-        chartData = responseData.data;
+        chartData = transformBackendData(responseData.data);
       } else if (responseData.data) {
-        chartData = responseData.data;
+        chartData = transformBackendData(responseData.data);
+      } else if (Array.isArray(responseData)) {
+        chartData = transformBackendData(responseData);
       } else if (responseData.labels && responseData.datasets) {
         chartData = responseData;
       } else {
         throw new Error("Invalid data format received");
-      }
-
-      // If we have configured datasets, apply their labels and colors to the API data
-      if (config?.datasets && config.datasets.length > 0 && chartData.datasets) {
-        chartData.datasets = chartData.datasets.map((dataset: any, index: number) => {
-          const configuredDataset = config.datasets![index];
-          if (configuredDataset) {
-            return {
-              ...dataset,
-              label: configuredDataset.label,
-              borderColor: configuredDataset.backgroundColor.replace('0.5)', '1)'),
-              backgroundColor: configuredDataset.backgroundColor,
-              fill: true,
-              tension: 0.4,
-            };
-          }
-          return dataset;
-        });
       }
 
       setData(chartData);
@@ -161,7 +265,28 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
     } catch (error) {
       console.error('Error fetching line chart data:', error);
       setError('Failed to load data. Using demo data.');
-      setData(createDemoData());
+      
+      // Fallback to demo data
+      const demo = [
+        { "x": "2025-07-10", "y": 10 },
+        { "x": "2025-07-11", "y": 22 },
+        { "x": "2025-07-12", "y": 11 },
+        { "x": "2025-07-13", "y": 32},
+        { "x": "2025-07-14", "y": 11 },
+        { "x": "2025-07-15", "y": 3 },
+        { "x": "2025-07-16", "y": 23 },
+        { "x": "2025-07-17", "y": 33},
+        { "x": "2025-07-18", "y": 5 },
+        { "x": "2025-07-19", "y": 10 },
+        { "x": "2025-07-20", "y": 15},
+        { "x": "2025-07-21", "y": 12.12 },
+        { "x": "2025-07-22", "y": 10.62 },
+        { "x": "2025-07-23", "y": 2.11 },
+        { "x": "2025-07-24", "y": 3.11 },
+        { "x": "2025-07-25", "y": 0 }
+      ];
+      const chartData = transformBackendData(demo);
+      setData(chartData);
       setUsingDemoData(true);
     } finally {
       setLoading(false);
@@ -170,7 +295,7 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
 
   useEffect(() => {
     fetchData();
-  }, [config?.apiEndpoint]);
+  }, [config?.apiEndpoint, dateFilter]);
 
   useEffect(() => {
     if (config?.refreshInterval && config.refreshInterval > 0) {
@@ -221,6 +346,25 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
           <TrendingUp className="h-5 w-5" />
           {config?.title || "Line Chart"}
         </CardTitle>
+        
+        {/* Date Filter */}
+        <div className="flex items-center gap-2 mt-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Select value={dateFilter} onValueChange={(value) => {
+            console.log('LineChart - Date filter changed from', dateFilter, 'to', value);
+            setDateFilter(value);
+          }}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="last3days">Last 3 Days</SelectItem>
+              <SelectItem value="last7days">Last 7 Days</SelectItem>
+              <SelectItem value="last30days">Last 30 Days</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {error && (
           <p className="text-sm text-muted-foreground">{error}</p>
         )}
@@ -232,7 +376,7 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
         )}
       </CardHeader>
       <CardContent>
-        <div className="h-80 w-full">
+        <div className="h-full w-full  flex justify-center items-center">
           <Line data={data} options={options} />
         </div>
       </CardContent>

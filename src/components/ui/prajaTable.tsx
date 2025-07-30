@@ -96,10 +96,10 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
     }
   };
 
-  // Function to detect if search term looks like a phone number
-  const isPhoneNumber = (term: string): boolean => {
+  // Function to detect if search term contains digits
+  const containsDigits = (term: string): boolean => {
     const digitsOnly = term.replace(/[^0-9]/g, '');
-    return digitsOnly.length >= 7;
+    return digitsOnly.length >= 1;
   };
 
   // Simplified filtering logic
@@ -107,14 +107,29 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
     if (!searchTerm.trim()) return true;
 
     const lowerSearchTerm = searchTerm.toLowerCase().trim();
+    const digitsOnly = lowerSearchTerm.replace(/[^0-9]/g, '');
     
-    // Phone number search
-    if (isPhoneNumber(lowerSearchTerm)) {
+    // Digit-based search
+    if (containsDigits(lowerSearchTerm)) {
       const cleanSearchTerm = lowerSearchTerm.replace(/[\s\-\(\)\+]/g, '');
-      const phoneValue = String(row.phone || '');
-      const cleanPhoneValue = phoneValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
       
-      return cleanPhoneValue.includes(cleanSearchTerm);
+      // For 8+ digits: search only phone numbers
+      if (digitsOnly.length >= 8) {
+        const phoneValue = String(row.phone || '');
+        const cleanPhoneValue = phoneValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
+        return cleanPhoneValue.includes(cleanSearchTerm);
+      }
+      
+      // For 1-7 digits: search both phone numbers and praja user IDs
+      else {
+        const phoneValue = String(row.phone || '');
+        const cleanPhoneValue = phoneValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
+        
+        const userIdValue = String(row.user_id || row.praja_user_id || '');
+        const cleanUserIdValue = userIdValue.toLowerCase();
+        
+        return cleanPhoneValue.includes(cleanSearchTerm) || cleanUserIdValue.includes(cleanSearchTerm);
+      }
     }
 
     // Regular text search through visible columns
@@ -235,7 +250,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
         <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
         <input
           type="text"
-          placeholder="Search (supports phone numbers)..."
+          placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
