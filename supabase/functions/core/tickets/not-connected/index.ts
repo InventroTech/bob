@@ -4,32 +4,30 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
 // Mixpanel API configuration
 const MIXPANEL_API_URL = "https://api.thecircleapp.in/pyro/send_to_mixpanel";
 const MIXPANEL_TOKEN = Deno.env.get("MIXPANEL_TOKEN");
-
 // Helper function to send event to Mixpanel
-async function sendToMixpanel(userId: string, eventName: string, properties: any) {
+async function sendToMixpanel(userId, eventName, properties) {
   try {
     if (!MIXPANEL_TOKEN) {
       console.warn("MIXPANEL_TOKEN not configured, skipping Mixpanel event");
       return;
     }
-
+    const requestBody = {
+      user_id: parseInt(userId),
+      event_name: eventName,
+      properties: properties
+    };
+    console.log('Sending to Mixpanel:', eventName, 'for user:', userId);
     const response = await fetch(MIXPANEL_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${MIXPANEL_TOKEN}`
       },
-      body: JSON.stringify({
-        user_id: parseInt(userId),
-        event_name: eventName,
-        properties: properties
-      })
+      body: JSON.stringify(requestBody)
     });
-
     if (!response.ok) {
       console.error(`Mixpanel API error: ${response.status} ${response.statusText}`);
     } else {
@@ -39,8 +37,7 @@ async function sendToMixpanel(userId: string, eventName: string, properties: any
     console.error('Error sending to Mixpanel:', error);
   }
 }
-
-console.log("Hello from update-call-status!");
+console.log("Not-connected API started");
 Deno.serve(async (req)=>{
   // Handle CORS
   if (req.method === 'OPTIONS') {
@@ -76,7 +73,9 @@ Deno.serve(async (req)=>{
       const payload = JSON.parse(atob(jwt.split(".")[1]));
       userId = payload.sub;
       userEmail = payload.email;
+      console.log('CSE processing request - CSE ID:', userId, 'CSE Email:', userEmail);
     } catch (e) {
+      console.error('Error decoding JWT:', e);
       return new Response(JSON.stringify({
         error: "Invalid JWT"
       }), {
@@ -124,7 +123,7 @@ Deno.serve(async (req)=>{
       });
     }
     // Check if ticket exists and get current data
-    const { data: ticket, error: ticketError } = await supabase.from('support_ticket').select('id, call_attempts, call_status, resolution_status, assigned_to, cse_name').eq('id', ticketId).single();
+    const { data: ticket, error: ticketError } = await supabase.from('support_ticket').select('id, call_attempts, call_status, resolution_status, assigned_to, cse_name, user_id').eq('id', ticketId).single();
     if (ticketError || !ticket) {
       return new Response(JSON.stringify({
         error: "Ticket not found"
@@ -146,7 +145,7 @@ Deno.serve(async (req)=>{
       if (ticket.call_attempts === 0) {
         currentDate.setHours(currentDate.getHours() + 1);
         snoozeUntil = currentDate.toISOString();
-        console.log("snooze", snoozeUntil);
+        console.log("Setting snooze until:", snoozeUntil);
       } else {
         currentDate.setFullYear(currentDate.getFullYear() + 10);
         snoozeUntil = currentDate.toISOString();
@@ -196,21 +195,29 @@ Deno.serve(async (req)=>{
         }
       });
     }
-
     // Send Mixpanel event for "Not Connected" status
     if (callStatus === "Not Connected") {
-      await sendToMixpanel(userId, 'pyro_not_connected', {
-        support_ticket_id: ticketId,
-        remarks: cseRemarks || '',
-        cse_email_id: userEmail,
-        reasons: otherReasons || []
-      });
+      console.log('Processing "Not Connected" status for ticket:', ticketId);
+      try {
+        if (ticket.user_id) {
+          console.log('Sending Mixpanel event for customer user_id:', ticket.user_id, '(CSE:', userEmail, ')');
+          await sendToMixpanel(ticket.user_id, 'pyro_not_connected', {
+            support_ticket_id: ticketId,
+            remarks: cseRemarks || '',
+            cse_email_id: userEmail,
+            reasons: otherReasons || []
+          });
+        } else {
+          console.log('No customer user_id found in ticket, skipping Mixpanel event');
+        }
+      } catch (error) {
+        console.error('Error sending Mixpanel event:', error);
+      }
     }
-
     return new Response(JSON.stringify({
       ticket: updatedTicket,
       snoozeUntil: snoozeUntil,
-      callAttempts: ticket.call_attempts + 1,
+      callAttempts: ticket.call_attempts + 1
     }), {
       headers: {
         'Content-Type': 'application/json',
