@@ -97,19 +97,41 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     // Use configured datasets if available, otherwise use defaults
     const datasetsToUse = configuredDatasets.length > 0 ? configuredDatasets : defaultDatasets;
 
+    // Generate demo backend data that matches the expected format with y1, y2, y3...
+    const demoBackendData = [
+      { x: "2025-07-10", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 10)])) },
+      { x: "2025-07-11", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 16 + (i * 10)])) },
+      { x: "2025-07-12", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 10)])) },
+      { x: "2025-07-13", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 10)])) },
+      { x: "2025-07-14", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 5 + (i * 10)])) },
+      { x: "2025-07-15", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 20 + (i * 10)])) },
+      { x: "2025-07-16", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 23 + (i * 10)])) },
+      { x: "2025-07-17", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 23 + (i * 10)])) }
+    ];
+
+    // Transform the demo data using the same logic as backend data
+    return transformBackendDataForDemo(demoBackendData, datasetsToUse);
+  };
+
+  // Separate function for transforming demo data to ensure consistent behavior
+  const transformBackendDataForDemo = (backendData: any[], datasetsConfig: any[]) => {
+    const labels = backendData.map(item => item.x);
+
+    // Create datasets using the configured datasets
+    const datasets = datasetsConfig.map((datasetConfig, index) => {
+      const yField = `y${index + 1}`;
+      const data = backendData.map(item => item[yField] || 0);
+      
+      return {
+        label: datasetConfig.label,
+        data: data,
+        backgroundColor: datasetConfig.backgroundColor,
+      };
+    });
+
     return {
-      labels: ["January", "February", "March", "April", "May"],
-      datasets: datasetsToUse.map((dataset, index) => ({
-        label: dataset.label,
-        data: [
-          10 + (index * 10), 
-          20 + (index * 10), 
-          30 + (index * 10), 
-          40 + (index * 10), 
-          50 + (index * 10)
-        ],
-        backgroundColor: dataset.backgroundColor,
-      })),
+      labels,
+      datasets
     };
   };
 
@@ -129,22 +151,22 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     switch (filter) {
       case 'last3days':
         const threeDaysAgo = new Date(today);
-        threeDaysAgo.setDate(today.getDate() - 3);
+        threeDaysAgo.setDate(today.getDate() - 2); // Changed from -3 to -2
         start = threeDaysAgo.toISOString().split('T')[0];
         break;
       case 'last7days':
         const sevenDaysAgo = new Date(today);
-        sevenDaysAgo.setDate(today.getDate() - 7);
+        sevenDaysAgo.setDate(today.getDate() - 6); // Changed from -7 to -6
         start = sevenDaysAgo.toISOString().split('T')[0];
         break;
       case 'last30days':
         const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 30);
+        thirtyDaysAgo.setDate(today.getDate() - 29); // Changed from -30 to -29
         start = thirtyDaysAgo.toISOString().split('T')[0];
         break;
       default:
         const sevenDays = new Date(today);
-        sevenDays.setDate(today.getDate() - 7);
+        sevenDays.setDate(today.getDate() - 6); // Changed from -7 to -6
         start = sevenDays.toISOString().split('T')[0];
     }
     
@@ -161,15 +183,23 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
       const { start, end } = getDateRange(dateFilter);
       console.log('StackedBarChart - Demo data date range:', { start, end });
       
+      // Use the configured datasets to generate appropriate demo data
+      const configuredDatasets = config?.datasets || [];
+      const defaultDatasets = [
+        { label: "Dataset 1", backgroundColor: "rgba(255, 99, 132, 0.5)" },
+        { label: "Dataset 2", backgroundColor: "rgba(54, 162, 235, 0.5)" }
+      ];
+      const datasetsToUse = configuredDatasets.length > 0 ? configuredDatasets : defaultDatasets;
+      
       const demo = [
-        { "x": "2025-07-10", "y1": 10, "y2": 10 },
-        { "x": "2025-07-11", "y1": 16, "y2": 9 },
-        { "x": "2025-07-12", "y1": 10, "y2": 20 },
-        { "x": "2025-07-13", "y1": 10, "y2": 10 },
-        { "x": "2025-07-14", "y1": 5, "y2": 11 },
-        { "x": "2025-07-15", "y1": 20, "y2": 12 },
-        { "x": "2025-07-16", "y1": 23, "y2": 12 },
-        { "x": "2025-07-17", "y1": 23, "y2": 12 }
+        { x: "2025-07-10", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 5)])) },
+        { x: "2025-07-11", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 16 + (i * 5)])) },
+        { x: "2025-07-12", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 10)])) },
+        { x: "2025-07-13", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 5)])) },
+        { x: "2025-07-14", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 5 + (i * 6)])) },
+        { x: "2025-07-15", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 20 + (i * 7)])) },
+        { x: "2025-07-16", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 23 + (i * 5)])) },
+        { x: "2025-07-17", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 23 + (i * 5)])) }
       ];
       const chartData = transformBackendData(demo);
       setData(chartData);
@@ -234,15 +264,22 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
       setError('Failed to load data. Using demo data.');
       
       // Fallback to demo data
+      const configuredDatasets = config?.datasets || [];
+      const defaultDatasets = [
+        { label: "Dataset 1", backgroundColor: "rgba(255, 99, 132, 0.5)" },
+        { label: "Dataset 2", backgroundColor: "rgba(54, 162, 235, 0.5)" }
+      ];
+      const datasetsToUse = configuredDatasets.length > 0 ? configuredDatasets : defaultDatasets;
+      
       const demo = [
-        { "x": "2025-07-10", "y1": 10, "y2": 10 },
-        { "x": "2025-07-11", "y1": 16, "y2": 9 },
-        { "x": "2025-07-12", "y1": 10, "y2": 20 },
-        { "x": "2025-07-13", "y1": 10, "y2": 10 },
-        { "x": "2025-07-14", "y1": 5, "y2": 11 },
-        { "x": "2025-07-15", "y1": 20, "y2": 12 },
-        { "x": "2025-07-16", "y1": 23, "y2": 12 },
-        { "x": "2025-07-17", "y1": 23, "y2": 12 }
+        { x: "2025-07-10", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 5)])) },
+        { x: "2025-07-11", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 16 + (i * 5)])) },
+        { x: "2025-07-12", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 10)])) },
+        { x: "2025-07-13", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 10 + (i * 5)])) },
+        { x: "2025-07-14", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 5 + (i * 6)])) },
+        { x: "2025-07-15", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 20 + (i * 7)])) },
+        { x: "2025-07-16", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 23 + (i * 5)])) },
+        { x: "2025-07-17", ...Object.fromEntries(datasetsToUse.map((_, i) => [`y${i + 1}`, 23 + (i * 5)])) }
       ];
       const chartData = transformBackendData(demo);
       setData(chartData);

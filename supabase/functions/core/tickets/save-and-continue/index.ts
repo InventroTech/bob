@@ -4,7 +4,43 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-console.log("Hello from save-and-continue!");
+
+// Mixpanel API configuration
+const MIXPANEL_API_URL = "https://api.thecircleapp.in/pyro/send_to_mixpanel";
+const MIXPANEL_TOKEN = Deno.env.get("MIXPANEL_TOKEN");
+
+// Helper function to send event to Mixpanel
+async function sendToMixpanel(userId: string, eventName: string, properties: any) {
+  try {
+    if (!MIXPANEL_TOKEN) {
+      console.warn("MIXPANEL_TOKEN not configured, skipping Mixpanel event");
+      return;
+    }
+
+    const response = await fetch(MIXPANEL_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${MIXPANEL_TOKEN}`
+      },
+      body: JSON.stringify({
+        user_id: parseInt(userId),
+        event_name: eventName,
+        properties: properties
+      })
+    });
+
+    if (!response.ok) {
+      console.error(`Mixpanel API error: ${response.status} ${response.statusText}`);
+    } else {
+      console.log(`Mixpanel event sent successfully: ${eventName}`);
+    }
+  } catch (error) {
+    console.error('Error sending to Mixpanel:', error);
+  }
+}
+
+console.log("Save-and-continue API started");
 Deno.serve(async (req)=>{
   // Handle CORS
   if (req.method === 'OPTIONS') {
@@ -51,6 +87,7 @@ Deno.serve(async (req)=>{
       const payload = JSON.parse(atob(jwt.split(".")[1]));
       userId = payload.sub;
       userEmail = payload.email;
+      console.log('CSE processing request - CSE ID:', userId, 'CSE Email:', userEmail);
     } catch (e) {
       return new Response(JSON.stringify({
         error: "Invalid JWT"
@@ -76,6 +113,7 @@ Deno.serve(async (req)=>{
     // Parse request body
     const body = await req.json();
     const { ticketId, resolutionStatus, callStatus, cseRemarks, resolutionTime, otherReasons, ticketStartTime, isReadOnly = false } = body;
+    console.log('Processing ticket:', ticketId, 'with resolution status:', resolutionStatus);
     if (!ticketId) {
       return new Response(JSON.stringify({
         error: "Ticket ID is required"
@@ -99,8 +137,9 @@ Deno.serve(async (req)=>{
       });
     }
     // Check if ticket exists and get current data
-    const { data: currentTicket, error: ticketError } = await supabase.from('support_ticket').select('*').eq('id', ticketId).single();
+    const { data: currentTicket, error: ticketError } = await supabase.from('support_ticket').select('*, user_id').eq('id', ticketId).single();
     if (ticketError || !currentTicket) {
+      console.error('Ticket not found:', ticketId, 'Error:', ticketError);
       return new Response(JSON.stringify({
         error: "Ticket not found"
       }), {
@@ -119,6 +158,7 @@ Deno.serve(async (req)=>{
     const cseName = userEmail;
 
     // Update the current ticket
+    console.log('Updating ticket with resolution:', resolutionStatus, 'call status:', callStatus);
     const { data: updatedTicket, error: updateError } = await supabase.from('support_ticket').update({
       resolution_status: resolutionStatus,
       assigned_to: assignedTo,
@@ -142,7 +182,40 @@ Deno.serve(async (req)=>{
         }
       });
     }
+
+    // Send Mixpanel event based on resolution status
+    let mixpanelEventName = '';
+    switch (resolutionStatus) {
+      case 'Resolved':
+        mixpanelEventName = 'pyro_resolve';
+        break;
+      case "Can't Resolve":
+        mixpanelEventName = 'pyro_cannot_resolve';
+        break;
+      case 'WIP':
+        mixpanelEventName = 'pyro_call_later';
+        break;
+      default:
+        // For other statuses, don't send Mixpanel event
+        break;
+    }
+
+    if (mixpanelEventName && currentTicket.user_id) {
+      console.log('Sending Mixpanel event for customer user_id:', currentTicket.user_id, 'event:', mixpanelEventName, '(CSE:', userEmail, ')');
+      await sendToMixpanel(currentTicket.user_id, mixpanelEventName, {
+        support_ticket_id: ticketId,
+        remarks: cseRemarks || '',
+        cse_email_id: userEmail,
+        reasons: otherReasons || []
+      });
+    } else if (mixpanelEventName && !currentTicket.user_id) {
+      console.log('No customer user_id found in ticket, skipping Mixpanel event for:', mixpanelEventName);
+    } else {
+      console.log('No Mixpanel event configured for resolution status:', resolutionStatus);
+    }
+
     // Prepare response
+    console.log('Ticket updated successfully:', ticketId, 'resolution:', resolutionStatus);
     const response = {
       success: true,
       message: "Ticket updated successfully",

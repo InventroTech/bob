@@ -15,11 +15,11 @@ interface AdvancedChartConfigProps {
   handleDatasetFieldChange: (index: number, field: 'label' | 'backgroundColor', value: string) => void;
 }
 
-export const AdvancedChartConfig: React.FC<AdvancedChartConfigProps> = ({ 
+export const AdvancedChartConfig: React.FC<AdvancedChartConfigProps> = ({
   localConfig, 
   localDatasets, 
   numDatasets, 
-  handleInputChange, 
+  handleInputChange,
   handleDatasetCountChange, 
   handleDatasetFieldChange 
 }) => {
