@@ -154,22 +154,22 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
     switch (filter) {
       case 'last3days':
         const threeDaysAgo = new Date(today);
-        threeDaysAgo.setDate(today.getDate() - 3);
+        threeDaysAgo.setDate(today.getDate() - 2); // Changed from -3 to -2
         start = threeDaysAgo.toISOString().split('T')[0];
         break;
       case 'last7days':
         const sevenDaysAgo = new Date(today);
-        sevenDaysAgo.setDate(today.getDate() - 7);
+        sevenDaysAgo.setDate(today.getDate() - 6); // Changed from -7 to -6
         start = sevenDaysAgo.toISOString().split('T')[0];
         break;
       case 'last30days':
         const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 30);
+        thirtyDaysAgo.setDate(today.getDate() - 29); // Changed from -30 to -29
         start = thirtyDaysAgo.toISOString().split('T')[0];
         break;
       default:
         const sevenDays = new Date(today);
-        sevenDays.setDate(today.getDate() - 7);
+        sevenDays.setDate(today.getDate() - 6); // Changed from -7 to -6
         start = sevenDays.toISOString().split('T')[0];
     }
     
@@ -185,6 +185,11 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       console.log('LineChart - No API endpoint, using demo data');
       const { start, end } = getDateRange(dateFilter);
       console.log('LineChart - Demo data date range:', { start, end });
+      
+      // Use configured dataset if available
+      const configuredDatasets = config?.datasets || [];
+      const defaultDataset = { label: "Data", backgroundColor: "rgba(75,192,192,0.2)" };
+      const datasetToUse = configuredDatasets.length > 0 ? configuredDatasets[0] : defaultDataset;
       
       const demo = [
         { "x": "2025-07-10", "y": 10 },
@@ -204,7 +209,22 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
         { "x": "2025-07-24", "y": 3.11 },
         { "x": "2025-07-25", "y": 0 }
       ];
-      const chartData = transformBackendData(demo);
+      
+      // Apply the configured dataset manually to ensure colors/labels work
+      const chartData = {
+        labels: demo.map(item => item.x),
+        datasets: [{
+          label: datasetToUse.label,
+          data: demo.map(item => item.y),
+          borderColor: datasetToUse.backgroundColor.includes('rgba') 
+            ? datasetToUse.backgroundColor.replace(/,\s*[\d.]+\)/, ', 1)')
+            : datasetToUse.backgroundColor,
+          backgroundColor: datasetToUse.backgroundColor,
+          fill: true,
+          tension: 0.4,
+        }]
+      };
+      
       setData(chartData);
       setUsingDemoData(true);
       setError(null);
@@ -267,6 +287,10 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       setError('Failed to load data. Using demo data.');
       
       // Fallback to demo data
+      const configuredDatasets = config?.datasets || [];
+      const defaultDataset = { label: "Data", backgroundColor: "rgba(75,192,192,0.2)" };
+      const datasetToUse = configuredDatasets.length > 0 ? configuredDatasets[0] : defaultDataset;
+      
       const demo = [
         { "x": "2025-07-10", "y": 10 },
         { "x": "2025-07-11", "y": 22 },
@@ -285,7 +309,22 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
         { "x": "2025-07-24", "y": 3.11 },
         { "x": "2025-07-25", "y": 0 }
       ];
-      const chartData = transformBackendData(demo);
+      
+      // Apply the configured dataset manually to ensure colors/labels work
+      const chartData = {
+        labels: demo.map(item => item.x),
+        datasets: [{
+          label: datasetToUse.label,
+          data: demo.map(item => item.y),
+          borderColor: datasetToUse.backgroundColor.includes('rgba') 
+            ? datasetToUse.backgroundColor.replace(/,\s*[\d.]+\)/, ', 1)')
+            : datasetToUse.backgroundColor,
+          backgroundColor: datasetToUse.backgroundColor,
+          fill: true,
+          tension: 0.4,
+        }]
+      };
+      
       setData(chartData);
       setUsingDemoData(true);
     } finally {
