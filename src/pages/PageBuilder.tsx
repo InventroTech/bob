@@ -57,6 +57,7 @@ import {
   TextComponent,
   ButtonComponent,
   ImageComponent,
+  AddUserComponent,
 } from "@/components/page-builder";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { supabase } from "@/lib/supabase";
@@ -144,6 +145,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   stackedBarChart: StackedBarChart,
   lineChart: LineChart,
   barGraph: BarGraph,
+  addUser: AddUserComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -188,7 +190,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   // Separate state for datasets (for StackedBarChart)
   const [localDatasets, setLocalDatasets] = useState<Array<{label: string; backgroundColor: string}>>(initialDatasets);
-  const [numDatasets, setNumDatasets] = useState<number>(initialDatasets.length || 3);
+  const [numDatasets, setNumDatasets] = useState<number>(initialDatasets.length || 1);
 
   // Debounced update to parent state
   const debouncedUpdate = useCallback(
@@ -372,7 +374,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -824,6 +826,11 @@ const PageBuilder = () => {
                           id="ticketTable"
                           label="Ticket Table"
                           icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="addUser"
+                          label="Add User"
+                          icon={<User className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
