@@ -7,6 +7,8 @@ interface AdvancedChartConfigProps {
     apiEndpoint: string;
     title: string;
     refreshInterval: number;
+    xAxisUnit?: string;
+    yAxisUnit?: string;
   };
   localDatasets: Array<{label: string; backgroundColor: string}>;
   numDatasets: number;
@@ -48,6 +50,22 @@ export const AdvancedChartConfig: React.FC<AdvancedChartConfigProps> = ({
           value={localConfig.refreshInterval}
           onChange={(e) => handleInputChange('refreshInterval', parseInt(e.target.value) || 0)}
           placeholder="0 for no refresh"
+        />
+      </div>
+      <div>
+        <Label>X-Axis Unit</Label>
+        <Input
+          value={localConfig.xAxisUnit || ''}
+          onChange={(e) => handleInputChange('xAxisUnit', e.target.value)}
+          placeholder="e.g., Days, Months, Categories"
+        />
+      </div>
+      <div>
+        <Label>Y-Axis Unit</Label>
+        <Input
+          value={localConfig.yAxisUnit || ''}
+          onChange={(e) => handleInputChange('yAxisUnit', e.target.value)}
+          placeholder="e.g., Sales ($), Count, Percentage (%)"
         />
       </div>
       
