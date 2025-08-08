@@ -21,6 +21,8 @@ interface LineChartProps {
     apiEndpoint?: string;
     title?: string;
     refreshInterval?: number;
+    xAxisUnit?: string;
+    yAxisUnit?: string;
     datasets?: Array<{
       label: string;
       backgroundColor: string;
@@ -354,8 +356,18 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       },
     },
     scales: {
+      x: {
+        title: {
+          display: !!(config?.xAxisUnit),
+          text: config?.xAxisUnit || ''
+        }
+      },
       y: {
         beginAtZero: true,
+        title: {
+          display: !!(config?.yAxisUnit),
+          text: config?.yAxisUnit || ''
+        }
       },
     },
   };
