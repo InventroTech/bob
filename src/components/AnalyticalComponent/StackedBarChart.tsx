@@ -20,6 +20,8 @@ interface StackedBarChartProps {
     apiEndpoint?: string;
     title?: string;
     refreshInterval?: number;
+    xAxisUnit?: string;
+    yAxisUnit?: string;
     datasets?: Array<{
       label: string;
       backgroundColor: string;
@@ -306,9 +308,17 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     scales: {
       x: {
         stacked: true, // Enable stacking on the x-axis
+        title: {
+          display: !!(config?.xAxisUnit),
+          text: config?.xAxisUnit || ''
+        }
       },
       y: {
         stacked: true, // Enable stacking on the y-axis
+        title: {
+          display: !!(config?.yAxisUnit),
+          text: config?.yAxisUnit || ''
+        }
       },
     },
     plugins: {
