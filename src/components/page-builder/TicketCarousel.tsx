@@ -22,6 +22,7 @@ import {
   Coffee,
   Waypoints,
   MoreVertical,
+  X,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -284,8 +285,21 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const isReadOnly = config?.readOnly || false;
+
+  // Function to handle opening profile modal
+  const handleOpenProfile = () => {
+    if (currentTicket?.praja_dashboard_user_link) {
+      setShowProfileModal(true);
+    }
+  };
+
+  // Function to close profile modal
+  const handleCloseProfile = () => {
+    setShowProfileModal(false);
+  };
 
   useEffect(() => {
     if (isInitialized.current) {
@@ -785,7 +799,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           Take a Break
         </Button>
       </div>
-    <div className="relative w-[70%] h-full">
+      <div className="relative w-[70%] h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
         {fetchingNext && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
@@ -853,11 +867,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       ? "cursor-pointer hover:bg-muted/70 transition-colors"
                       : ""
                   }`}
-                  onClick={() => {
-                    if (currentTicket?.praja_dashboard_user_link) {
-                      window.open(currentTicket.praja_dashboard_user_link, "_blank");
-                    }
-                  }}
+                  onClick={handleOpenProfile}
                 >
                   {currentTicket?.display_pic_url ? (
                     <img
@@ -1063,6 +1073,56 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       {/* Take a Break button outside the main card at bottom */}
       
+      {/* Profile Modal */}
+      {showProfileModal && currentTicket?.praja_dashboard_user_link && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-3">
+                {currentTicket?.display_pic_url ? (
+                  <img
+                    src={currentTicket.display_pic_url}
+                    alt={`${currentTicket.name || "User"} profile`}
+                    className="h-8 w-8 rounded-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                    }}
+                  />
+                ) : null}
+                <User
+                  className={`h-4 w-4 text-primary ${
+                    currentTicket?.display_pic_url ? "hidden" : ""
+                  }`}
+                />
+                <div>
+                  <h3 className="font-semibold text-lg">{currentTicket?.name || "User Profile"}</h3>
+                  <p className="text-sm text-muted-foreground">ID: {currentTicket?.user_id || "N/A"}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCloseProfile}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Modal Content - Iframe */}
+            <div className="flex-1 p-4">
+              <iframe
+                src={currentTicket.praja_dashboard_user_link}
+                className="w-full h-full border-0 rounded-md"
+                title={`${currentTicket?.name || "User"} Profile`}
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </div>
   );
