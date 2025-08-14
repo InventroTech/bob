@@ -2,4 +2,6 @@ export { DataCardConfig } from './DataCardConfig';
 export { TableConfig } from './TableConfig';
 export { CarouselConfig } from './CarouselConfig';
 export { BasicChartConfig } from './BasicChartConfig';
-export { AdvancedChartConfig } from './AdvancedChartConfig'; 
+export { AdvancedChartConfig } from './AdvancedChartConfig';
+export { TicketCarouselConfig } from '../components/page-builder/component-config/TicketCarouselConfig';
+export { TicketTableConfig } from '../components/page-builder/component-config/TicketTableConfig'; 

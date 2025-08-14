@@ -189,7 +189,8 @@ const DEMO_TICKETS = [
   }
 ];
 
-const columns: Column[] = [
+// Default columns if no configuration is provided
+const defaultColumns: Column[] = [
   { header: 'Name', accessor: 'name', type: 'text' },
   { header: 'Praja User Id', accessor: 'user_id', type: 'link' },
   { header: 'Created At', accessor: 'created_at', type: 'text' },
@@ -235,7 +236,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     header: col.label,
     accessor: col.key,
     type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
-  })) || columns;
+  })) || defaultColumns;
 
   // Get unique values for filters
   const getUniqueResolutionStatuses = () => {
@@ -507,8 +508,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             <div className="mt-2">
               <TicketCarousel 
                 config={{
-                  title: `Ticket #${selectedTicket.id}`,
-                  readOnly: !canEditTicket(selectedTicket)
+                  title: `Ticket #${selectedTicket.id}`
                 }}
                 initialTicket={selectedTicket}
                 onUpdate={handleTicketUpdate}

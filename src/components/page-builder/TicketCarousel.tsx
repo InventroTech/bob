@@ -178,9 +178,8 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
 interface TicketCarouselProps {
   config?: {
     apiEndpoint?: string;
+    statusDataApiEndpoint?: string;
     title?: string;
-    showFilters?: boolean;
-    readOnly?: boolean;
   };
   initialTicket?: any;
   onUpdate?: (updatedTicket: any) => void;
@@ -287,7 +286,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [fetchingNext, setFetchingNext] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  const isReadOnly = config?.readOnly || false;
+
 
   // Function to handle opening profile modal
   const handleOpenProfile = () => {
@@ -330,8 +329,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
+      // Use configured status data API endpoint or fallback to default
+      const statusEndpoint = config?.statusDataApiEndpoint || "/get-ticket-status";
+      
       const response = await fetch(
-        `${import.meta.env.VITE_API_URI}/get-ticket-status`,
+        `${import.meta.env.VITE_API_URI}${statusEndpoint}`,
         {
           method: "GET",
           headers: {
@@ -564,10 +566,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      if (isReadOnly) {
-        toast.error("This ticket is read-only");
-        return;
-      }
+
 
       setUpdating(true);
       const { data: { session } } = await supabase.auth.getSession();
@@ -613,7 +612,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         resolutionTime: calculateResolutionTime(),
         otherReasons: ticket.selectedOtherReasons,
         ticketStartTime: ticket.ticketStartTime?.toISOString(),
-        isReadOnly: isReadOnly
+
       };
 
       // If Not Connected, use /not-connected endpoint and adjust payload
@@ -759,6 +758,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         onGetFirstTicket={fetchFirstTicket}
         loading={loading}
         ticketStats={ticketStats}
+        title={config?.title || "Today's Tickets"}
       />
     );
   }
@@ -793,7 +793,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           variant="outline"
           size="sm"
           className="flex items-center gap-2"
-          disabled={updating || isReadOnly}
+          disabled={updating}
         >
           <Coffee className="h-3 w-3" />
           Take a Break
@@ -932,7 +932,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       variant="outline"
                       size="sm"
                       className="w-full justify-between"
-                      disabled={updating || isReadOnly}
+                      disabled={updating}
                     >
                       <span className="text-sm">
                         {ticket.selectedOtherReasons.length > 0
@@ -954,7 +954,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                               onCheckedChange={(checked) =>
                                 handleOtherReasonChange(reason, checked as boolean)
                               }
-                              disabled={updating || isReadOnly}
+                              disabled={updating}
                             />
                             <label
                               htmlFor={`reason-${reason}`}
@@ -974,7 +974,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                               ...prev,
                               selectedOtherReasons: []
                             }))}
-                            disabled={updating || isReadOnly}
+                            disabled={updating}
                             className="text-xs"
                           >
                             Clear All
@@ -1003,7 +1003,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   }))}
                   placeholder="Add your remarks about this ticket..."
                   className="min-h-[100px]"
-                  disabled={updating || isReadOnly}
+                  disabled={updating}
                 />
               </div>
             </div>
@@ -1016,7 +1016,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || isReadOnly}
+            disabled={updating}
           >
             Not Connected
           </Button>
@@ -1026,7 +1026,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || isReadOnly}
+            disabled={updating}
           >
             Call Later
           </Button>
@@ -1039,7 +1039,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || isReadOnly}
+            disabled={updating}
           >
             Can't Resolve
           </Button>
@@ -1049,7 +1049,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={updating || isReadOnly || fetchingNext}
+            disabled={updating || fetchingNext}
           >
             {updating ? (
               <>
@@ -1061,8 +1061,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                 Loading Next Ticket...
               </>
-            ) : isReadOnly ? (
-              "Close"
             ) : (
               "Resolve"
             )}

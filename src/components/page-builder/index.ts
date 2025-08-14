@@ -5,4 +5,6 @@ export * from './TableComponent';
 export * from './TextComponent';
 export * from './ButtonComponent';
 export * from './ImageComponent';
-export { default as AddUserComponent } from './AddUserComponent'; 
+export { default as AddUserComponent } from './AddUserComponent';
+export { TicketCarouselConfig } from './component-config/TicketCarouselConfig';
+export { TicketTableConfig } from './component-config/TicketTableConfig'; 
