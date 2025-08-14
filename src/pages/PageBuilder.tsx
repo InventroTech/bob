@@ -92,12 +92,15 @@ import {
   TableConfig, 
   CarouselConfig, 
   BasicChartConfig, 
-  AdvancedChartConfig 
+  AdvancedChartConfig,
+  TicketCarouselConfig
 } from "@/component-config";
+import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 
 // Add configuration types
 interface ComponentConfig {
   apiEndpoint?: string;
+  statusDataApiEndpoint?: string;
   columns?: Array<{
     key: string;
     label: string;
@@ -169,6 +172,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   type LocalConfigType = {
     apiEndpoint: string;
+    statusDataApiEndpoint: string;
     title: string;
     description: string;
     refreshInterval: number;
@@ -178,6 +182,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   // Local state for all input fields
   const [localConfig, setLocalConfig] = useState<LocalConfigType>({
     apiEndpoint: initialConfig.apiEndpoint || '',
+    statusDataApiEndpoint: initialConfig.statusDataApiEndpoint || '',
     title: initialConfig.title || '',
     description: initialConfig.description || '',
     refreshInterval: initialConfig.refreshInterval || 0,
@@ -285,6 +290,17 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         );
 
       case 'ticketTable':
+        return (
+          <TicketTableConfig
+            localConfig={localConfig}
+            localColumns={localColumns}
+            numColumns={numColumns}
+            handleInputChange={handleInputChange}
+            handleColumnCountChange={handleColumnCountChange}
+            handleColumnFieldChange={handleColumnFieldChange}
+          />
+        );
+
       case 'leadTable':
       case 'oeLeadsTable':
         return (
@@ -300,7 +316,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
       case 'ticketCarousel':
         return (
-          <CarouselConfig
+          <TicketCarouselConfig
             localConfig={localConfig}
             handleInputChange={handleInputChange}
           />
