@@ -4,4 +4,5 @@ export { CarouselConfig } from './CarouselConfig';
 export { BasicChartConfig } from './BasicChartConfig';
 export { AdvancedChartConfig } from './AdvancedChartConfig';
 export { TicketCarouselConfig } from '../components/page-builder/component-config/TicketCarouselConfig';
-export { TicketTableConfig } from '../components/page-builder/component-config/TicketTableConfig'; 
+export { TicketTableConfig } from '../components/page-builder/component-config/TicketTableConfig';
+export { LeadCardCarouselConfig } from '../components/page-builder/component-config/LeadCardCarouselConfig'; 

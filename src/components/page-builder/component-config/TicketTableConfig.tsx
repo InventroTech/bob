@@ -10,6 +10,7 @@ interface TicketTableConfigProps {
   localConfig: {
     apiEndpoint?: string;
     title?: string;
+    apiPrefix?: 'supabase' | 'renderer';
     columns?: Array<{
       key: string;
       label: string;
@@ -57,6 +58,25 @@ export const TicketTableConfig: React.FC<TicketTableConfigProps> = ({
             onChange={(e) => handleInputChange("title", e.target.value)}
             placeholder="Enter table title"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="apiPrefix">API Prefix</Label>
+          <Select
+            value={localConfig.apiPrefix || "supabase"}
+            onValueChange={(value) => handleInputChange("apiPrefix", value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select API Prefix" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="supabase">Supabase</SelectItem>
+              <SelectItem value="renderer">Renderer</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Choose the API service to use for fetching data
+          </p>
         </div>
 
         <div className="space-y-2">
