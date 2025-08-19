@@ -1113,6 +1113,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             <div className="flex-1 p-4">
               <iframe
                 src={currentTicket.praja_dashboard_user_link}
+                //src="https://x.com/elonmusk/status/1956779702145667096"
                 className="w-full h-full border-0 rounded-md"
                 title={`${currentTicket?.name || "User"} Profile`}
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"

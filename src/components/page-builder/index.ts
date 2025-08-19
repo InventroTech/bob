@@ -7,4 +7,7 @@ export * from './ButtonComponent';
 export * from './ImageComponent';
 export { default as AddUserComponent } from './AddUserComponent';
 export { TicketCarouselConfig } from './component-config/TicketCarouselConfig';
-export { TicketTableConfig } from './component-config/TicketTableConfig'; 
+export { TicketTableConfig } from './component-config/TicketTableConfig';
+export { LeadCardCarousel } from './LeadCardCarousel';
+export { LeadCardCarouselWrapper } from './LeadCardCarouselWrapper';
+export { LeadCardCarouselConfig } from './component-config/LeadCardCarouselConfig'; 
