@@ -189,7 +189,8 @@ const DEMO_TICKETS = [
   }
 ];
 
-const columns: Column[] = [
+// Default columns if no configuration is provided
+const defaultColumns: Column[] = [
   { header: 'Name', accessor: 'name', type: 'text' },
   { header: 'Praja User Id', accessor: 'user_id', type: 'link' },
   { header: 'Created At', accessor: 'created_at', type: 'text' },
@@ -209,6 +210,7 @@ interface TicketTableProps {
       type: 'text' | 'chip' | 'date' | 'number' | 'link';
     }>;
     title?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
 }
 
@@ -229,13 +231,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [showFilters, setShowFilters] = useState(false);
   const [resolutionStatusFilter, setResolutionStatusFilter] = useState<string>('all');
   const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
+  const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
   const { session, user } = useAuth();
 
   const tableColumns: Column[] = config?.columns?.map(col => ({
     header: col.label,
     accessor: col.key,
     type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
-  })) || columns;
+  })) || defaultColumns;
 
   // Get unique values for filters
   const getUniqueResolutionStatuses = () => {
@@ -307,7 +310,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const authToken = session?.access_token;
 
         const endpoint = config?.apiEndpoint || '/api/tickets';
-        const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
+        const baseUrl = apiPrefix === 'renderer' 
+          ? import.meta.env.VITE_RENDER_API_URL 
+          : import.meta.env.VITE_API_URI;
+        const apiUrl = `${baseUrl}${endpoint}`;
         console.log('API URL:', apiUrl);
         
         const response = await fetch(apiUrl, {
@@ -377,12 +383,19 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     };
 
     fetchTickets();
-  }, [session, config?.apiEndpoint]);
+  }, [session, config?.apiEndpoint, apiPrefix]);
 
   // Apply filters when filter values change
   useEffect(() => {
     applyFilters();
   }, [resolutionStatusFilter, assignedToFilter, data]);
+
+  // Update apiPrefix when config changes
+  useEffect(() => {
+    if (config?.apiPrefix) {
+      setApiPrefix(config.apiPrefix);
+    }
+  }, [config?.apiPrefix]);
 
   if (loading) {
     return (
@@ -414,7 +427,22 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    API Prefix
+                  </label>
+                  <Select value={apiPrefix} onValueChange={(value: 'supabase' | 'renderer') => setApiPrefix(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select API" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="supabase">Supabase</SelectItem>
+                      <SelectItem value="renderer">Renderer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Resolution Status
@@ -507,8 +535,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             <div className="mt-2">
               <TicketCarousel 
                 config={{
-                  title: `Ticket #${selectedTicket.id}`,
-                  readOnly: !canEditTicket(selectedTicket)
+                  title: `Ticket #${selectedTicket.id}`
                 }}
                 initialTicket={selectedTicket}
                 onUpdate={handleTicketUpdate}

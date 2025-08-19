@@ -1,7 +1,7 @@
 import React from "react";
-import { TicketCarousel } from "./TicketCarousel";
+import { LeadCardCarousel } from "./LeadCardCarousel";
 
-interface TicketCarouselWrapperProps {
+interface LeadCardCarouselWrapperProps {
   config?: {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
@@ -9,12 +9,12 @@ interface TicketCarouselWrapperProps {
   };
 }
 
-export const TicketCarouselWrapper: React.FC<TicketCarouselWrapperProps> = ({ config }) => {
+export const LeadCardCarouselWrapper: React.FC<LeadCardCarouselWrapperProps> = ({ config }) => {
   return (
     <div className="w-full h-full min-h-[600px]">
-      <TicketCarousel 
+      <LeadCardCarousel 
         config={config}
       />
     </div>
   );
-}; 
+};

@@ -97,12 +97,14 @@ interface PendingTicketsCardProps {
   onGetFirstTicket: () => void;
   loading: boolean;
   ticketStats: TicketStats;
+  title?: string;
 }
 
 export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({ 
   onGetFirstTicket, 
   loading, 
-  ticketStats 
+  ticketStats,
+  title = "Today's Tickets"
 }) => {
   return (
     <div className="flex flex-col items-center justify-center h-full p-8">
@@ -111,7 +113,7 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
           <div className="text-center mb-6">
             <div className="flex items-center justify-center mb-4">
               <PieChart className="h-8 w-8 text-primary mr-2" />
-              <h2 className="text-2xl font-semibold text-gray-800">Today's Tickets</h2>
+              <h2 className="text-2xl font-semibold text-gray-800">{title}</h2>
             </div>
             <p className="text-gray-600 mb-6">Click to start working on tickets</p>
           </div>
