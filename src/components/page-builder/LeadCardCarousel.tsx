@@ -139,6 +139,7 @@ interface LeadCardCarouselProps {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
     title?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
   initialLead?: any;
   onUpdate?: (updatedLead: any) => void;
@@ -500,7 +501,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   };
 
   // Handling the action buttons
-  const handleActionButton = async (action: "Qualify" | "Disqualify" | "Follow Up" | "Close") => {
+  const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
     try {
       if (!currentLead?.id) {
         toast.error("No lead ID available");
@@ -513,42 +514,44 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
-      // Map action to lead status
-      let leadStatus: string;
+      // Map action to API endpoint
+      let apiEndpoint: string;
+      let actionMessage: string;
       
       switch (action) {
-        case "Qualify":
-          leadStatus = "Qualified";
+        case "Not Connected":
+          apiEndpoint = "/leads-not-connected";
+          actionMessage = "Lead marked as not connected";
           break;
-        case "Disqualify":
-          leadStatus = "Closed Lost";
+        case "Call Later":
+          apiEndpoint = "/call-lead-later";
+          actionMessage = "Lead moved to WIP for later call";
           break;
-        case "Follow Up":
-          leadStatus = "Follow Up";
+        case "Lost":
+          apiEndpoint = "/lost";
+          actionMessage = "Lead marked as lost";
           break;
-        case "Close":
-          leadStatus = "Closed Won";
+        case "Won":
+          apiEndpoint = "/won";
+          actionMessage = "Lead marked as won";
           break;
         default:
-          leadStatus = "New";
+          throw new Error("Invalid action");
       }
 
-      // Update local state
-      setLead(prev => ({
-        ...prev,
-        leadStatus
-      }));
-
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/update-lead`;
+      // Prepare payload with current lead data
       const payload = {
         leadId: currentLead?.id,
-        leadStatus,
-        priority: lead.priority,
-        notes: lead.notes,
-        tags: lead.selectedTags,
-        nextFollowUp: lead.nextFollowUp,
-        leadTime: calculateLeadTime(),
-        leadStartTime: lead.leadStartTime?.toISOString(),
+        leadData: {
+          ...currentLead,
+          status: action === "Call Later" ? "WIP" : action,
+          priority: lead.priority,
+          notes: lead.notes,
+          tags: lead.selectedTags,
+          nextFollowUp: lead.nextFollowUp,
+          leadTime: calculateLeadTime(),
+          leadStartTime: lead.leadStartTime?.toISOString(),
+        }
       };
 
       const token = session?.access_token;
@@ -556,6 +559,13 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
+      // Use configured API prefix or default to renderer
+      const baseUrl = config?.apiPrefix === 'supabase' 
+        ? import.meta.env.VITE_API_URI 
+        : import.meta.env.VITE_RENDER_API_URL;
+      
+      const apiUrl = `${baseUrl}${apiEndpoint}`;
+      
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
@@ -568,6 +578,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      toast.success(actionMessage);
 
       // After successful API call, fetch next lead
       await fetchNextLead(currentLead?.id);
@@ -1020,41 +1032,41 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
           <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
             <div className="flex justify-center items-center gap-3 mt-4 pt-3">
               <Button
-                onClick={() => handleActionButton("Follow Up")}
+                onClick={() => handleActionButton("Not Connected")}
+                size="sm"
+                variant="outline"
+                className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={updating}
+              >
+                Not Connected
+              </Button>
+              
+              <Button
+                onClick={() => handleActionButton("Call Later")}
                 size="sm"
                 variant="outline"
                 className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={updating}
               >
-                Follow Up
+                Call Later
               </Button>
-              
+            </div>
+            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
               <Button
-                onClick={() => handleActionButton("Disqualify")}
+                onClick={() => handleActionButton("Lost")}
                 size="sm"
                 variant="outline"
                 className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={updating}
               >
-                Disqualify
-              </Button>
-            </div>
-            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
-                onClick={() => handleActionButton("Qualify")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={updating}
-              >
-                Qualify
+                Lost
               </Button>
               
               <Button
-                onClick={() => handleActionButton("Close")}
+                onClick={() => handleActionButton("Won")}
                 size="sm"
                 variant="outline"
-                className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
               >
                 {updating ? (
@@ -1068,7 +1080,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
                     Loading Next Lead...
                   </>
                 ) : (
-                  "Close"
+                  "Won"
                 )}
               </Button>
             </div>
