@@ -224,7 +224,9 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
       // Add date filter parameters to API endpoint
       const { start, end } = getDateRange(dateFilter);
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      console.log(baseUrl)
       const endpoint = config.apiEndpoint.startsWith('/') ? config.apiEndpoint : `/${config.apiEndpoint}`;
+      console.log(endpoint)
       const url = new URL(`${baseUrl}${endpoint}`);
       url.searchParams.append('start', start);
       url.searchParams.append('end', end);

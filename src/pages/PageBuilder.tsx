@@ -80,6 +80,7 @@ import { TicketTableComponent } from "@/components/page-builder/TicketTableCompo
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
 import { TicketCarouselWrapper } from "@/components/page-builder/TicketCarouselWrapper";
 import { TicketBarGraphComponent } from "@/components/page-builder/TicketBarGraphComponent";
+import { LeadCardCarouselWrapper } from "@/components/page-builder/LeadCardCarouselWrapper";
 import { Textarea } from "@/components/ui/textarea";
 import { debounce } from 'lodash';
 import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLogoutComponent";
@@ -92,12 +93,17 @@ import {
   TableConfig, 
   CarouselConfig, 
   BasicChartConfig, 
-  AdvancedChartConfig 
+  AdvancedChartConfig,
+  TicketCarouselConfig,
+  LeadCardCarouselConfig
 } from "@/component-config";
+import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 
 // Add configuration types
 interface ComponentConfig {
   apiEndpoint?: string;
+  statusDataApiEndpoint?: string;
+  apiPrefix?: 'supabase' | 'renderer';
   columns?: Array<{
     key: string;
     label: string;
@@ -136,6 +142,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   leadTable: LeadTableComponent,
   collapseCard: CollapseCard,
   leadCarousel: LeadCarousel,
+  leadCardCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,
   progressBar: ProgressBar,
   ticketTable: TicketTableComponent,
@@ -169,6 +176,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   type LocalConfigType = {
     apiEndpoint: string;
+    statusDataApiEndpoint: string;
+    apiPrefix: 'supabase' | 'renderer';
     title: string;
     description: string;
     refreshInterval: number;
@@ -178,6 +187,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   // Local state for all input fields
   const [localConfig, setLocalConfig] = useState<LocalConfigType>({
     apiEndpoint: initialConfig.apiEndpoint || '',
+    statusDataApiEndpoint: initialConfig.statusDataApiEndpoint || '',
+    apiPrefix: initialConfig.apiPrefix || 'supabase',
     title: initialConfig.title || '',
     description: initialConfig.description || '',
     refreshInterval: initialConfig.refreshInterval || 0,
@@ -285,6 +296,17 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         );
 
       case 'ticketTable':
+        return (
+          <TicketTableConfig
+            localConfig={localConfig}
+            localColumns={localColumns}
+            numColumns={numColumns}
+            handleInputChange={handleInputChange}
+            handleColumnCountChange={handleColumnCountChange}
+            handleColumnFieldChange={handleColumnFieldChange}
+          />
+        );
+
       case 'leadTable':
       case 'oeLeadsTable':
         return (
@@ -300,7 +322,15 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
       case 'ticketCarousel':
         return (
-          <CarouselConfig
+          <TicketCarouselConfig
+            localConfig={localConfig}
+            handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'leadCardCarousel':
+        return (
+          <LeadCardCarouselConfig
             localConfig={localConfig}
             handleInputChange={handleInputChange}
           />
@@ -374,7 +404,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -771,6 +801,11 @@ const PageBuilder = () => {
                         <DraggableSidebarItem
                           id="ticketCarousel"
                           label="Ticket Carousel"
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="leadCardCarousel"
+                          label="Lead Card Carousel"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem

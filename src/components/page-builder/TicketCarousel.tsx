@@ -22,6 +22,7 @@ import {
   Coffee,
   Waypoints,
   MoreVertical,
+  X,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -177,9 +178,8 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
 interface TicketCarouselProps {
   config?: {
     apiEndpoint?: string;
+    statusDataApiEndpoint?: string;
     title?: string;
-    showFilters?: boolean;
-    readOnly?: boolean;
   };
   initialTicket?: any;
   onUpdate?: (updatedTicket: any) => void;
@@ -284,8 +284,21 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
-  const isReadOnly = config?.readOnly || false;
+
+
+  // Function to handle opening profile modal
+  const handleOpenProfile = () => {
+    if (currentTicket?.praja_dashboard_user_link) {
+      setShowProfileModal(true);
+    }
+  };
+
+  // Function to close profile modal
+  const handleCloseProfile = () => {
+    setShowProfileModal(false);
+  };
 
   useEffect(() => {
     if (isInitialized.current) {
@@ -316,8 +329,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
+      // Use configured status data API endpoint or fallback to default
+      const statusEndpoint = config?.statusDataApiEndpoint || "/get-ticket-status";
+      
       const response = await fetch(
-        `${import.meta.env.VITE_API_URI}/get-ticket-status`,
+        `${import.meta.env.VITE_API_URI}${statusEndpoint}`,
         {
           method: "GET",
           headers: {
@@ -550,10 +566,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      if (isReadOnly) {
-        toast.error("This ticket is read-only");
-        return;
-      }
+
 
       setUpdating(true);
       const { data: { session } } = await supabase.auth.getSession();
@@ -599,7 +612,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         resolutionTime: calculateResolutionTime(),
         otherReasons: ticket.selectedOtherReasons,
         ticketStartTime: ticket.ticketStartTime?.toISOString(),
-        isReadOnly: isReadOnly
+
       };
 
       // If Not Connected, use /not-connected endpoint and adjust payload
@@ -745,6 +758,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         onGetFirstTicket={fetchFirstTicket}
         loading={loading}
         ticketStats={ticketStats}
+        title={config?.title || "Today's Tickets"}
       />
     );
   }
@@ -779,13 +793,13 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           variant="outline"
           size="sm"
           className="flex items-center gap-2"
-          disabled={updating || isReadOnly}
+          disabled={updating}
         >
           <Coffee className="h-3 w-3" />
           Take a Break
         </Button>
       </div>
-    <div className="relative w-[70%] h-full">
+      <div className="relative w-[70%] h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
         {fetchingNext && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
@@ -853,11 +867,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       ? "cursor-pointer hover:bg-muted/70 transition-colors"
                       : ""
                   }`}
-                  onClick={() => {
-                    if (currentTicket?.praja_dashboard_user_link) {
-                      window.open(currentTicket.praja_dashboard_user_link, "_blank");
-                    }
-                  }}
+                  onClick={handleOpenProfile}
                 >
                   {currentTicket?.display_pic_url ? (
                     <img
@@ -922,7 +932,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       variant="outline"
                       size="sm"
                       className="w-full justify-between"
-                      disabled={updating || isReadOnly}
+                      disabled={updating}
                     >
                       <span className="text-sm">
                         {ticket.selectedOtherReasons.length > 0
@@ -944,7 +954,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                               onCheckedChange={(checked) =>
                                 handleOtherReasonChange(reason, checked as boolean)
                               }
-                              disabled={updating || isReadOnly}
+                              disabled={updating}
                             />
                             <label
                               htmlFor={`reason-${reason}`}
@@ -964,7 +974,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                               ...prev,
                               selectedOtherReasons: []
                             }))}
-                            disabled={updating || isReadOnly}
+                            disabled={updating}
                             className="text-xs"
                           >
                             Clear All
@@ -993,7 +1003,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   }))}
                   placeholder="Add your remarks about this ticket..."
                   className="min-h-[100px]"
-                  disabled={updating || isReadOnly}
+                  disabled={updating}
                 />
               </div>
             </div>
@@ -1006,7 +1016,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || isReadOnly}
+            disabled={updating}
           >
             Not Connected
           </Button>
@@ -1016,7 +1026,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || isReadOnly}
+            disabled={updating}
           >
             Call Later
           </Button>
@@ -1029,7 +1039,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || isReadOnly}
+            disabled={updating}
           >
             Can't Resolve
           </Button>
@@ -1039,7 +1049,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             size="sm"
             variant="outline"
             className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={updating || isReadOnly || fetchingNext}
+            disabled={updating || fetchingNext}
           >
             {updating ? (
               <>
@@ -1051,8 +1061,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                 Loading Next Ticket...
               </>
-            ) : isReadOnly ? (
-              "Close"
             ) : (
               "Resolve"
             )}
@@ -1063,6 +1071,57 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       {/* Take a Break button outside the main card at bottom */}
       
+      {/* Profile Modal */}
+      {showProfileModal && currentTicket?.praja_dashboard_user_link && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-3">
+                {currentTicket?.display_pic_url ? (
+                  <img
+                    src={currentTicket.display_pic_url}
+                    alt={`${currentTicket.name || "User"} profile`}
+                    className="h-8 w-8 rounded-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                    }}
+                  />
+                ) : null}
+                <User
+                  className={`h-4 w-4 text-primary ${
+                    currentTicket?.display_pic_url ? "hidden" : ""
+                  }`}
+                />
+                <div>
+                  <h3 className="font-semibold text-lg">{currentTicket?.name || "User Profile"}</h3>
+                  <p className="text-sm text-muted-foreground">ID: {currentTicket?.user_id || "N/A"}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCloseProfile}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Modal Content - Iframe */}
+            <div className="flex-1 p-4">
+              <iframe
+                src={currentTicket.praja_dashboard_user_link}
+                //src="https://x.com/elonmusk/status/1956779702145667096"
+                className="w-full h-full border-0 rounded-md"
+                title={`${currentTicket?.name || "User"} Profile`}
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </div>
   );
