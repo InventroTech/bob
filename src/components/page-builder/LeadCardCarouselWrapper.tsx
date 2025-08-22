@@ -5,7 +5,8 @@ interface LeadCardCarouselWrapperProps {
   config?: {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
-    title?: string; 
+    title?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
 }
 

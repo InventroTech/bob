@@ -139,6 +139,7 @@ interface LeadCardCarouselProps {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
     title?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
   initialLead?: any;
   onUpdate?: (updatedLead: any) => void;
@@ -218,10 +219,10 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   const [showPendingCard, setShowPendingCard] = useState(initialState.showPendingCard);
   const [leadStats, setLeadStats] = useState({
     total: 0,
-    new: 0,
-    contacted: 0,
-    qualified: 0,
-    closed: 0,
+    fresh_leads: 0,
+    leads_won: 0,
+    wip_leads: 0,
+    lost_leads: 0,
   });
   const [lead, setLead] = useState({
     leadStatus: initialState.leadStatus as string,
@@ -301,10 +302,10 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       // Map the backend structure to our leadStats interface
       const stats = {
         total: data.total_leads || 0,
-        new: data.new_leads_per_day?.reduce((sum: number, day: any) => sum + day.count, 0) || 0,
-        contacted: data.wip_count || 0, // WIP (Work in Progress) leads are considered contacted
-        qualified: 0, // Not provided in current API response
-        closed: data.closed_count || 0,
+        fresh_leads: data.fresh_leads || 0,
+        leads_won: data.leads_won || 0,
+        wip_leads: data.wip_leads || 0,
+        lost_leads: data.lost_leads || 0,
       };
 
       setLeadStats(stats);
@@ -312,10 +313,10 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       console.error("Error fetching lead statistics:", error);
       setLeadStats({
         total: 0,
-        new: 0,
-        contacted: 0,
-        qualified: 0,
-        closed: 0,
+        fresh_leads: 0,
+        leads_won: 0,
+        wip_leads: 0,
+        lost_leads: 0,
       });
     }
   };
@@ -350,14 +351,16 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   // Fetching the next lead
   const fetchNextLead = async (currentLeadId: number) => {
     try {
+  
       const nextLeadUrl = `${import.meta.env.VITE_RENDER_API_URL}${config?.apiEndpoint || "/api/leads"}`;
+    
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
         throw new Error("Authentication required");
       }
-
+      
       const nextLeadResponse = await fetch(nextLeadUrl, {
         method: "GET",
         headers: {
@@ -433,7 +436,12 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   // Taking a break
   const handleTakeBreak = async () => {
     try {
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/take-a-break`;
+      if (!currentLead?.id) {
+        toast.error("No lead ID available");
+        return;
+      }
+
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/crm/leads/take-break/`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -448,7 +456,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          leadId: currentLead?.id
+          leadId: currentLead.id
         })
       });
 
@@ -500,7 +508,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   };
 
   // Handling the action buttons
-  const handleActionButton = async (action: "Qualify" | "Disqualify" | "Follow Up" | "Close") => {
+  const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
     try {
       if (!currentLead?.id) {
         toast.error("No lead ID available");
@@ -513,42 +521,34 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
-      // Map action to lead status
-      let leadStatus: string;
+      // Map action to outcome parameter
+      let outcome: string;
+      let actionMessage: string;
       
       switch (action) {
-        case "Qualify":
-          leadStatus = "Qualified";
+        case "Not Connected":
+          outcome = "scheduled";
+          actionMessage = "Lead marked as scheduled for later contact";
           break;
-        case "Disqualify":
-          leadStatus = "Closed Lost";
+        case "Call Later":
+          outcome = "call_later";
+          actionMessage = "Lead marked for later call";
           break;
-        case "Follow Up":
-          leadStatus = "Follow Up";
+        case "Lost":
+          outcome = "lost";
+          actionMessage = "Lead marked as lost";
           break;
-        case "Close":
-          leadStatus = "Closed Won";
+        case "Won":
+          outcome = "won";
+          actionMessage = "Lead marked as won";
           break;
         default:
-          leadStatus = "New";
+          throw new Error("Invalid action");
       }
 
-      // Update local state
-      setLead(prev => ({
-        ...prev,
-        leadStatus
-      }));
-
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/update-lead`;
+      // Prepare payload with outcome parameter
       const payload = {
-        leadId: currentLead?.id,
-        leadStatus,
-        priority: lead.priority,
-        notes: lead.notes,
-        tags: lead.selectedTags,
-        nextFollowUp: lead.nextFollowUp,
-        leadTime: calculateLeadTime(),
-        leadStartTime: lead.leadStartTime?.toISOString(),
+        outcome: outcome
       };
 
       const token = session?.access_token;
@@ -556,6 +556,13 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
+      // Use configured API prefix or default to renderer
+      const baseUrl = config?.apiPrefix === 'supabase' 
+        ? import.meta.env.VITE_API_URI 
+        : import.meta.env.VITE_RENDER_API_URL;
+      
+      const apiUrl = `${baseUrl}/crm/leads/${currentLead.id}/call-outcome/`;
+      
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
@@ -568,6 +575,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      toast.success(actionMessage);
 
       // After successful API call, fetch next lead
       await fetchNextLead(currentLead?.id);
@@ -703,30 +712,30 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
                   <div className="w-3 h-3 bg-blue-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">New (30 days)</span>
+                  <span className="text-sm text-gray-700">Fresh leads</span>
                 </div>
-                <span className="text-sm font-medium">{leadStats.new}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Work in Progress</span>
-                </div>
-                <span className="text-sm font-medium">{leadStats.contacted}</span>
+                <span className="text-sm font-medium">{leadStats.fresh_leads}</span>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
                   <div className="w-3 h-3 bg-green-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Qualified</span>
+                  <span className="text-sm text-gray-700">Leads won today</span>
                 </div>
-                <span className="text-sm font-medium">{leadStats.qualified}</span>
+                <span className="text-sm font-medium">{leadStats.leads_won}</span>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
-                  <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Closed</span>
+                  <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
+                  <span className="text-sm text-gray-700">Work In Progress</span>
                 </div>
-                <span className="text-sm font-medium">{leadStats.closed}</span>
+                <span className="text-sm font-medium">{leadStats.wip_leads}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-red-400 rounded-full mr-2"></div>
+                  <span className="text-sm text-gray-700">Leads lost today</span>
+                </div>
+                <span className="text-sm font-medium">{leadStats.lost_leads}</span>
               </div>
             </div>
 
@@ -1020,41 +1029,41 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
           <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
             <div className="flex justify-center items-center gap-3 mt-4 pt-3">
               <Button
-                onClick={() => handleActionButton("Follow Up")}
+                onClick={() => handleActionButton("Not Connected")}
+                size="sm"
+                variant="outline"
+                className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={updating}
+              >
+                Not Connected
+              </Button>
+              
+              <Button
+                onClick={() => handleActionButton("Call Later")}
                 size="sm"
                 variant="outline"
                 className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={updating}
               >
-                Follow Up
+                Call Later
               </Button>
-              
+            </div>
+            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
               <Button
-                onClick={() => handleActionButton("Disqualify")}
+                onClick={() => handleActionButton("Lost")}
                 size="sm"
                 variant="outline"
                 className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={updating}
               >
-                Disqualify
-              </Button>
-            </div>
-            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
-                onClick={() => handleActionButton("Qualify")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={updating}
-              >
-                Qualify
+                Lost
               </Button>
               
               <Button
-                onClick={() => handleActionButton("Close")}
+                onClick={() => handleActionButton("Won")}
                 size="sm"
                 variant="outline"
-                className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
               >
                 {updating ? (
@@ -1068,7 +1077,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
                     Loading Next Lead...
                   </>
                 ) : (
-                  "Close"
+                  "Won"
                 )}
               </Button>
             </div>
