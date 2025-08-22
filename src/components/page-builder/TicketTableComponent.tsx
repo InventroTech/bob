@@ -11,6 +11,9 @@ import { X, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChevronDown } from 'lucide-react';
 
 interface Column {
   header: string;
@@ -231,6 +234,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [showFilters, setShowFilters] = useState(false);
   const [resolutionStatusFilter, setResolutionStatusFilter] = useState<string>('all');
   const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
+  const [posterStatusFilter, setPosterStatusFilter] = useState<string[]>([]);
   const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
   const { session, user } = useAuth();
 
@@ -249,6 +253,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const getUniqueAssignedTo = () => {
     const assigned = [...new Set(data.map(ticket => ticket.cse_name))];
     return assigned.filter(assignee => assignee && assignee !== 'Unassigned');
+  };
+
+  const getUniquePosterStatuses = () => {
+    const statuses = [...new Set(data.map(ticket => ticket.poster))];
+    return statuses.filter(status => status && status !== 'N/A' && status !== 'No Poster');
   };
 
   // Apply filters
@@ -272,6 +281,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }
     }
 
+    // Filter by poster status (multi-select)
+    if (posterStatusFilter.length > 0) {
+      filtered = filtered.filter(ticket => posterStatusFilter.includes(ticket.poster));
+    }
+
     setFilteredData(filtered);
   };
 
@@ -279,6 +293,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const resetFilters = () => {
     setResolutionStatusFilter('all');
     setAssignedToFilter('all');
+    setPosterStatusFilter([]);
     setFilteredData(data);
   };
 
@@ -388,7 +403,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   // Apply filters when filter values change
   useEffect(() => {
     applyFilters();
-  }, [resolutionStatusFilter, assignedToFilter, data]);
+  }, [resolutionStatusFilter, assignedToFilter, posterStatusFilter, data]);
 
   // Update apiPrefix when config changes
   useEffect(() => {
@@ -430,21 +445,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    API Prefix
-                  </label>
-                  <Select value={apiPrefix} onValueChange={(value: 'supabase' | 'renderer') => setApiPrefix(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select API" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="supabase">Supabase</SelectItem>
-                      <SelectItem value="renderer">Renderer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Resolution Status
                   </label>
                   <Select value={resolutionStatusFilter} onValueChange={setResolutionStatusFilter}>
@@ -460,6 +460,67 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Poster Status
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                      >
+                        <span className="text-sm">
+                          {posterStatusFilter.length > 0
+                            ? `${posterStatusFilter.length} status(es) selected`
+                            : "All Poster Statuses"}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-60 p-4" align="start">
+                      <div className="space-y-3">
+                        <h4 className="font-medium text-sm">Select Poster Statuses</h4>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {getUniquePosterStatuses().map((status) => (
+                            <div key={status} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`poster-${status}`}
+                                checked={posterStatusFilter.includes(status)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setPosterStatusFilter(prev => [...prev, status]);
+                                  } else {
+                                    setPosterStatusFilter(prev => prev.filter(s => s !== status));
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`poster-${status}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {status}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        {posterStatusFilter.length > 0 && (
+                          <div className="pt-2 border-t">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setPosterStatusFilter([])}
+                              className="text-xs"
+                            >
+                              Clear All
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 <div>
@@ -496,11 +557,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
                 Showing {filteredData.length} of {data.length} tickets
-                {(resolutionStatusFilter !== 'all' || assignedToFilter !== 'all') && (
+                {(resolutionStatusFilter !== 'all' || assignedToFilter !== 'all' || posterStatusFilter.length > 0) && (
                   <span className="ml-2">
                     (Filtered by: 
                     {resolutionStatusFilter !== 'all' && ` Status: ${resolutionStatusFilter}`}
                     {assignedToFilter !== 'all' && ` ${resolutionStatusFilter !== 'all' ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter}`}
+                    {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter !== 'all' || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
                     )
                   </span>
                 )}
