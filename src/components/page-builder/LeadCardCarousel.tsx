@@ -219,10 +219,10 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   const [showPendingCard, setShowPendingCard] = useState(initialState.showPendingCard);
   const [leadStats, setLeadStats] = useState({
     total: 0,
-    new: 0,
-    contacted: 0,
-    qualified: 0,
-    closed: 0,
+    fresh_leads: 0,
+    leads_won: 0,
+    wip_leads: 0,
+    lost_leads: 0,
   });
   const [lead, setLead] = useState({
     leadStatus: initialState.leadStatus as string,
@@ -302,10 +302,10 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       // Map the backend structure to our leadStats interface
       const stats = {
         total: data.total_leads || 0,
-        new: data.new_leads_per_day?.reduce((sum: number, day: any) => sum + day.count, 0) || 0,
-        contacted: data.wip_count || 0, // WIP (Work in Progress) leads are considered contacted
-        qualified: 0, // Not provided in current API response
-        closed: data.closed_count || 0,
+        fresh_leads: data.fresh_leads || 0,
+        leads_won: data.leads_won || 0,
+        wip_leads: data.wip_leads || 0,
+        lost_leads: data.lost_leads || 0,
       };
 
       setLeadStats(stats);
@@ -313,10 +313,10 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       console.error("Error fetching lead statistics:", error);
       setLeadStats({
         total: 0,
-        new: 0,
-        contacted: 0,
-        qualified: 0,
-        closed: 0,
+        fresh_leads: 0,
+        leads_won: 0,
+        wip_leads: 0,
+        lost_leads: 0,
       });
     }
   };
@@ -351,14 +351,16 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   // Fetching the next lead
   const fetchNextLead = async (currentLeadId: number) => {
     try {
+  
       const nextLeadUrl = `${import.meta.env.VITE_RENDER_API_URL}${config?.apiEndpoint || "/api/leads"}`;
+    
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
         throw new Error("Authentication required");
       }
-
+      
       const nextLeadResponse = await fetch(nextLeadUrl, {
         method: "GET",
         headers: {
@@ -434,7 +436,12 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   // Taking a break
   const handleTakeBreak = async () => {
     try {
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/take-a-break`;
+      if (!currentLead?.id) {
+        toast.error("No lead ID available");
+        return;
+      }
+
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/crm/leads/take-break/`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -449,7 +456,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          leadId: currentLead?.id
+          leadId: currentLead.id
         })
       });
 
@@ -514,44 +521,34 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
-      // Map action to API endpoint
-      let apiEndpoint: string;
+      // Map action to outcome parameter
+      let outcome: string;
       let actionMessage: string;
       
       switch (action) {
         case "Not Connected":
-          apiEndpoint = "/leads-not-connected";
-          actionMessage = "Lead marked as not connected";
+          outcome = "scheduled";
+          actionMessage = "Lead marked as scheduled for later contact";
           break;
         case "Call Later":
-          apiEndpoint = "/call-lead-later";
-          actionMessage = "Lead moved to WIP for later call";
+          outcome = "call_later";
+          actionMessage = "Lead marked for later call";
           break;
         case "Lost":
-          apiEndpoint = "/lost";
+          outcome = "lost";
           actionMessage = "Lead marked as lost";
           break;
         case "Won":
-          apiEndpoint = "/won";
+          outcome = "won";
           actionMessage = "Lead marked as won";
           break;
         default:
           throw new Error("Invalid action");
       }
 
-      // Prepare payload with current lead data
+      // Prepare payload with outcome parameter
       const payload = {
-        leadId: currentLead?.id,
-        leadData: {
-          ...currentLead,
-          status: action === "Call Later" ? "WIP" : action,
-          priority: lead.priority,
-          notes: lead.notes,
-          tags: lead.selectedTags,
-          nextFollowUp: lead.nextFollowUp,
-          leadTime: calculateLeadTime(),
-          leadStartTime: lead.leadStartTime?.toISOString(),
-        }
+        outcome: outcome
       };
 
       const token = session?.access_token;
@@ -564,7 +561,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
         ? import.meta.env.VITE_API_URI 
         : import.meta.env.VITE_RENDER_API_URL;
       
-      const apiUrl = `${baseUrl}${apiEndpoint}`;
+      const apiUrl = `${baseUrl}/crm/leads/${currentLead.id}/call-outcome/`;
       
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -715,30 +712,30 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
                   <div className="w-3 h-3 bg-blue-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">New (30 days)</span>
+                  <span className="text-sm text-gray-700">Fresh leads</span>
                 </div>
-                <span className="text-sm font-medium">{leadStats.new}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Work in Progress</span>
-                </div>
-                <span className="text-sm font-medium">{leadStats.contacted}</span>
+                <span className="text-sm font-medium">{leadStats.fresh_leads}</span>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
                   <div className="w-3 h-3 bg-green-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Qualified</span>
+                  <span className="text-sm text-gray-700">Leads won today</span>
                 </div>
-                <span className="text-sm font-medium">{leadStats.qualified}</span>
+                <span className="text-sm font-medium">{leadStats.leads_won}</span>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
-                  <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Closed</span>
+                  <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
+                  <span className="text-sm text-gray-700">Work In Progress</span>
                 </div>
-                <span className="text-sm font-medium">{leadStats.closed}</span>
+                <span className="text-sm font-medium">{leadStats.wip_leads}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-red-400 rounded-full mr-2"></div>
+                  <span className="text-sm text-gray-700">Leads lost today</span>
+                </div>
+                <span className="text-sm font-medium">{leadStats.lost_leads}</span>
               </div>
             </div>
 
