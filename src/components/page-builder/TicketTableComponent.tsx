@@ -232,7 +232,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [resolutionStatusFilter, setResolutionStatusFilter] = useState<string>('all');
+  const [resolutionStatusFilter, setResolutionStatusFilter] = useState<string[]>([]);
   const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
   const [posterStatusFilter, setPosterStatusFilter] = useState<string[]>([]);
   const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
@@ -264,9 +264,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const applyFilters = () => {
     let filtered = [...data];
 
-    // Filter by resolution status
-    if (resolutionStatusFilter !== 'all') {
-      filtered = filtered.filter(ticket => ticket.resolution_status === resolutionStatusFilter);
+    // Filter by resolution status (multi-select)
+    if (resolutionStatusFilter.length > 0) {
+      filtered = filtered.filter(ticket => resolutionStatusFilter.includes(ticket.resolution_status));
     }
 
     // Filter by assigned to
@@ -291,7 +291,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   // Reset filters
   const resetFilters = () => {
-    setResolutionStatusFilter('all');
+    setResolutionStatusFilter([]);
     setAssignedToFilter('all');
     setPosterStatusFilter([]);
     setFilteredData(data);
@@ -447,19 +447,61 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Resolution Status
                   </label>
-                  <Select value={resolutionStatusFilter} onValueChange={setResolutionStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      {getUniqueResolutionStatuses().map(status => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                      >
+                        <span className="text-sm">
+                          {resolutionStatusFilter.length > 0
+                            ? `${resolutionStatusFilter.length} status(es) selected`
+                            : "All Resolution Statuses"}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-60 p-4" align="start">
+                      <div className="space-y-3">
+                        <h4 className="font-medium text-sm">Select Resolution Statuses</h4>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {getUniqueResolutionStatuses().map((status) => (
+                            <div key={status} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`resolution-${status}`}
+                                checked={resolutionStatusFilter.includes(status)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setResolutionStatusFilter(prev => [...prev, status]);
+                                  } else {
+                                    setResolutionStatusFilter(prev => prev.filter(s => s !== status));
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`resolution-${status}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {status}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        {resolutionStatusFilter.length > 0 && (
+                          <div className="pt-2 border-t">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setResolutionStatusFilter([])}
+                              className="text-xs"
+                            >
+                              Clear All
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 <div>
@@ -557,12 +599,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
                 Showing {filteredData.length} of {data.length} tickets
-                {(resolutionStatusFilter !== 'all' || assignedToFilter !== 'all' || posterStatusFilter.length > 0) && (
+                {(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) && (
                   <span className="ml-2">
                     (Filtered by: 
-                    {resolutionStatusFilter !== 'all' && ` Status: ${resolutionStatusFilter}`}
-                    {assignedToFilter !== 'all' && ` ${resolutionStatusFilter !== 'all' ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter}`}
-                    {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter !== 'all' || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
+                    {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.join(', ')}`}
+                    {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter}`}
+                    {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
                     )
                   </span>
                 )}
