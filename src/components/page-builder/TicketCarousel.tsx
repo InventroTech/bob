@@ -22,7 +22,6 @@ import {
   Coffee,
   Waypoints,
   MoreVertical,
-  X,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -284,21 +283,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
 
-
-
-  // Function to handle opening profile modal
-  const handleOpenProfile = () => {
-    if (currentTicket?.praja_dashboard_user_link) {
-      setShowProfileModal(true);
-    }
-  };
-
-  // Function to close profile modal
-  const handleCloseProfile = () => {
-    setShowProfileModal(false);
-  };
 
   useEffect(() => {
     if (isInitialized.current) {
@@ -861,55 +846,100 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             
            
               <div className="">
-                <div
-                  className={`flex items-center text-sm bg-muted/50 p-4 rounded-md ${
-                    currentTicket?.praja_dashboard_user_link
-                      ? "cursor-pointer hover:bg-muted/70 transition-colors"
-                      : ""
-                  }`}
-                  onClick={handleOpenProfile}
-                >
-                  {currentTicket?.display_pic_url ? (
-                    <img
-                      src={currentTicket.display_pic_url}
-                      alt={`${currentTicket.name || "User"} profile`}
-                      className="h-12 w-12 rounded-full mr-2 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                      }}
-                    />
-                  ) : null}
-                  <User
-                    className={`h-3 w-3 mr-2 text-primary ${
-                      currentTicket?.display_pic_url ? "hidden" : ""
-                    }`}
-                  />
-                  <div className="flex flex-col w-full gap-2">
-                    <div>
-                      <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
-                      <p className="text-xs text-muted-foreground pt-2">
-                        ID: {currentTicket?.user_id || "N/A"}
-                      </p>
-                    </div>
-                    <span className="font-medium text-sm  flex items-center gap-1">
-                      {currentTicket?.poster ? (
-                        (() => {
-                          const posterInfo = formatPosterStatus(currentTicket.poster);
-                          return (
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
-                              {posterInfo.label}
+                {currentTicket?.praja_dashboard_user_link ? (
+                  <a
+                    href={currentTicket.praja_dashboard_user_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <div className="flex items-center text-sm bg-muted/50 p-4 rounded-md cursor-pointer hover:bg-muted/70 transition-colors">
+                      {currentTicket?.display_pic_url ? (
+                        <img
+                          src={currentTicket.display_pic_url}
+                          alt={`${currentTicket.name || "User"} profile`}
+                          className="h-12 w-12 rounded-full mr-2 object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                          }}
+                        />
+                      ) : null}
+                      <User
+                        className={`h-3 w-3 mr-2 text-primary ${
+                          currentTicket?.display_pic_url ? "hidden" : ""
+                        }`}
+                      />
+                      <div className="flex flex-col w-full gap-2">
+                        <div>
+                          <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
+                          <p className="text-xs text-muted-foreground pt-2">
+                            ID: {currentTicket?.user_id || "N/A"}
+                          </p>
+                        </div>
+                        <span className="font-medium text-sm  flex items-center gap-1">
+                          {currentTicket?.poster ? (
+                            (() => {
+                              const posterInfo = formatPosterStatus(currentTicket.poster);
+                              return (
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
+                                  {posterInfo.label}
+                                </span>
+                              );
+                            })()
+                          ) : (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
+                              No Poster
                             </span>
-                          );
-                        })()
-                      ) : (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
-                          No Poster
+                          )}
                         </span>
-                      )}
-                    </span>
+                      </div>
+                    </div>
+                  </a>
+                ) : (
+                  <div className="flex items-center text-sm bg-muted/50 p-4 rounded-md">
+                    {currentTicket?.display_pic_url ? (
+                      <img
+                        src={currentTicket.display_pic_url}
+                        alt={`${currentTicket.name || "User"} profile`}
+                        className="h-12 w-12 rounded-full mr-2 object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                        }}
+                      />
+                    ) : null}
+                    <User
+                      className={`h-3 w-3 mr-2 text-primary ${
+                        currentTicket?.display_pic_url ? "hidden" : ""
+                      }`}
+                    />
+                    <div className="flex flex-col w-full gap-2">
+                      <div>
+                        <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
+                        <p className="text-xs text-muted-foreground pt-2">
+                          ID: {currentTicket?.user_id || "N/A"}
+                        </p>
+                      </div>
+                      <span className="font-medium text-sm  flex items-center gap-1">
+                        {currentTicket?.poster ? (
+                          (() => {
+                            const posterInfo = formatPosterStatus(currentTicket.poster);
+                            return (
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
+                                {posterInfo.label}
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
+                            No Poster
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
                 {/* Removed the separate payment status row */}
                 <div 
                   className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
@@ -1070,58 +1100,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       </div>
       
       {/* Take a Break button outside the main card at bottom */}
-      
-      {/* Profile Modal */}
-      {showProfileModal && currentTicket?.praja_dashboard_user_link && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <div className="flex items-center gap-3">
-                {currentTicket?.display_pic_url ? (
-                  <img
-                    src={currentTicket.display_pic_url}
-                    alt={`${currentTicket.name || "User"} profile`}
-                    className="h-8 w-8 rounded-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                    }}
-                  />
-                ) : null}
-                <User
-                  className={`h-4 w-4 text-primary ${
-                    currentTicket?.display_pic_url ? "hidden" : ""
-                  }`}
-                />
-                <div>
-                  <h3 className="font-semibold text-lg">{currentTicket?.name || "User Profile"}</h3>
-                  <p className="text-sm text-muted-foreground">ID: {currentTicket?.user_id || "N/A"}</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCloseProfile}
-                className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            {/* Modal Content - Iframe */}
-            <div className="flex-1 p-4">
-              <iframe
-                src={currentTicket.praja_dashboard_user_link}
-                //src="https://x.com/elonmusk/status/1956779702145667096"
-                className="w-full h-full border-0 rounded-md"
-                title={`${currentTicket?.name || "User"} Profile`}
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
     </div>
   );
