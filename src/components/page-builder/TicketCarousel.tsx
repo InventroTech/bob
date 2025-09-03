@@ -336,7 +336,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       // Map the new backend structure to our TicketStats interface
       const stats: TicketStats = {
-        total: (data.ticketStats?.totalPendingTickets || 0) + (data.ticketStats?.wipTickets || 0) + (data.ticketStats?.resolvedByYouToday || 0) + (data.ticketStats?.cantResolveToday || 0),
+        total: data.ticketStats?.totalTickets || 0,
         pending: data.ticketStats?.totalPendingTickets || 0,
         inProgress: data.ticketStats?.wipTickets || 0,
         resolved: data.ticketStats?.resolvedByYouToday || 0,
