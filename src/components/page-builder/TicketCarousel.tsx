@@ -492,7 +492,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          ticketId: currentTicket?.id
+          ticketId: currentTicket?.id,
+          assignedTo: user?.id // Add assignedTo field
         })
       });
 
@@ -597,7 +598,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         resolutionTime: calculateResolutionTime(),
         otherReasons: ticket.selectedOtherReasons,
         ticketStartTime: ticket.ticketStartTime?.toISOString(),
-
+        assignedTo: user?.id, // Add assignedTo field
       };
 
       // If Not Connected, use /not-connected endpoint and adjust payload
@@ -608,6 +609,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           callStatus,
           cseRemarks: ticket.cseRemarks,
           otherReasons: ticket.selectedOtherReasons,
+          assignedTo: user?.id, // Add assignedTo field
         };
       }
 
@@ -645,7 +647,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     try {
       setLoading(true);
       const endpoint = config?.apiEndpoint || "/api/tickets";
-      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false`;
+      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
