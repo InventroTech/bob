@@ -150,9 +150,6 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
   const pendingByPoster = ticketStats.pendingByPoster || [];
   const totalPending = ticketStats.totalPendingTickets || ticketStats.pending || 0;
   const [isPendingOpen, setIsPendingOpen] = useState(false);
-  const [isWipOpen, setIsWipOpen] = useState(false);
-  const [isResolvedOpen, setIsResolvedOpen] = useState(false);
-  const [isCantResolveOpen, setIsCantResolveOpen] = useState(false);
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-8">
@@ -220,74 +217,6 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Work in Progress section with accordion dropdown */}
-            <Collapsible open={isWipOpen} onOpenChange={setIsWipOpen}>
-              <CollapsibleTrigger asChild>
-                <div className="flex justify-between items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-all duration-200 ease-in-out">
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                    <span className="text-sm text-gray-700">Work in Progress</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="text-sm font-medium mr-1">{ticketStats.wipTickets || ticketStats.inProgress}</span>
-                    <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform duration-300 ease-in-out ${isWipOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </div>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2">
-                <div className="pl-5 pr-2 pb-2">
-                  <div className="text-center text-gray-500 py-2">
-                    <p className="text-sm">No detailed breakdown available</p>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* Resolved Today section with accordion dropdown */}
-            <Collapsible open={isResolvedOpen} onOpenChange={setIsResolvedOpen}>
-              <CollapsibleTrigger asChild>
-                <div className="flex justify-between items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-all duration-200 ease-in-out">
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                    <span className="text-sm text-gray-700">Resolved Today</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="text-sm font-medium mr-1">{ticketStats.resolvedByYouToday || ticketStats.resolved}</span>
-                    <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform duration-300 ease-in-out ${isResolvedOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </div>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2">
-                <div className="pl-5 pr-2 pb-2">
-                  <div className="text-center text-gray-500 py-2">
-                    <p className="text-sm">No detailed breakdown available</p>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* Can't Resolve Today section with accordion dropdown */}
-            <Collapsible open={isCantResolveOpen} onOpenChange={setIsCantResolveOpen}>
-              <CollapsibleTrigger asChild>
-                <div className="flex justify-between items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-all duration-200 ease-in-out">
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-                    <span className="text-sm text-gray-700">Can't Resolve Today</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="text-sm font-medium mr-1">{ticketStats.cantResolveToday || ticketStats.notPossible}</span>
-                    <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform duration-300 ease-in-out ${isCantResolveOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </div>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2">
-                <div className="pl-5 pr-2 pb-2">
-                  <div className="text-center text-gray-500 py-2">
-                    <p className="text-sm">No detailed breakdown available</p>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
           </div>
 
           <Button 
