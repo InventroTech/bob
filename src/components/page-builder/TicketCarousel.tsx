@@ -272,6 +272,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     inProgress: 0,
     resolved: 0,
     notPossible: 0,
+    // Add the new fields with default values
+    resolvedByYouToday: 0,
+    totalPendingTickets: 0,
+    wipTickets: 0,
+    cantResolveToday: 0,
+    pendingByPoster: [],
   });
   const [ticket, setTicket] = useState({
     resolutionStatus: initialState.resolutionStatus as "WIP" | "Resolved" | "Can't Resolve" | "Pending",
@@ -341,6 +347,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         inProgress: data.ticketStats?.wipTickets || 0,
         resolved: data.ticketStats?.resolvedByYouToday || 0,
         notPossible: data.ticketStats?.cantResolveToday || 0,
+        // Add the new fields from backend
+        resolvedByYouToday: data.ticketStats?.resolvedByYouToday || 0,
+        totalPendingTickets: data.ticketStats?.totalPendingTickets || 0,
+        wipTickets: data.ticketStats?.wipTickets || 0,
+        cantResolveToday: data.ticketStats?.cantResolveToday || 0,
+        pendingByPoster: data.ticketStats?.pendingByPoster || [],
       };
 
       setTicketStats(stats);
@@ -352,6 +364,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         inProgress: 0,
         resolved: 0,
         notPossible: 0,
+        // Add the new fields with default values
+        resolvedByYouToday: 0,
+        totalPendingTickets: 0,
+        wipTickets: 0,
+        cantResolveToday: 0,
+        pendingByPoster: [],
       });
     }
   };
@@ -609,7 +627,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           callStatus,
           cseRemarks: ticket.cseRemarks,
           otherReasons: ticket.selectedOtherReasons,
-          assignedTo: user?.id, // Add assignedTo field
+          assignedTo: null, // Add assignedTo field
         };
       }
 

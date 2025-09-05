@@ -266,6 +266,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     nextPageLink: null,
     previousPageLink: null
   });
+  const [assignees, setAssignees] = useState<Array<{
+    id: number;
+    name: string;
+    email: string;
+    company_name: string | null;
+    uid: string | null;
+  }>>([]);
   const { session, user } = useAuth();
 
   const tableColumns: Column[] = config?.columns?.map(col => ({
@@ -280,22 +287,54 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     return statuses.filter(status => status && status !== 'N/A');
   };
 
-  const getUniqueAssignedTo = () => {
-    // Get unique assignees with their IDs and names
-    const assignees = data.reduce((acc: any[], ticket) => {
-      if (ticket.assigned_to && ticket.cse_name && ticket.cse_name !== 'Unassigned') {
-        const existing = acc.find(item => item.id === ticket.assigned_to);
-        if (!existing) {
-          acc.push({
-            id: ticket.assigned_to,
-            name: ticket.cse_name
-          });
+  // Fetch assignees from API
+  const fetchAssignees = async () => {
+    try {
+      const authToken = session?.access_token;
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/accounts/users/assignees-by-role/?role=CSE`;
+      
+      console.log('Fetching assignees from:', apiUrl);
+      console.log('Auth token:', authToken ? 'Present' : 'Missing');
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
         }
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch assignees: ${response.status} - ${errorText}`);
       }
-      return acc;
-    }, []);
-    
-    return assignees;
+
+      const responseData = await response.json();
+      console.log('Assignees response:', responseData);
+      
+      if (responseData.results && Array.isArray(responseData.results)) {
+        setAssignees(responseData.results);
+      } else {
+        console.error('Invalid assignees data format:', responseData);
+        setAssignees([]);
+      }
+    } catch (error) {
+      console.error('Error fetching assignees:', error);
+      setAssignees([]);
+    }
+  };
+
+  const getUniqueAssignedTo = () => {
+    // Return the assignees fetched from API
+    return assignees.map(assignee => ({
+      id: assignee.uid || assignee.id.toString(), // Use uid if available, fallback to id
+      name: assignee.name
+    }));
   };
 
   const getUniquePosterStatuses = () => {
@@ -695,6 +734,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
     fetchTickets();
   }, [session, config?.apiEndpoint, apiPrefix]);
+
+  // Fetch assignees when component mounts
+  useEffect(() => {
+    if (session?.access_token) {
+      fetchAssignees();
+    }
+  }, [session?.access_token]);
 
   // Apply filters when filter values change
   useEffect(() => {
