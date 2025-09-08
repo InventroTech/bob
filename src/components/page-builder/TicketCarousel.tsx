@@ -224,6 +224,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //getting the initial state from the initial ticket
   const getInitialState = () => {
     if (initialTicket) {
+      const startTime = new Date();
+      console.log('=== INITIAL STATE FROM TABLE ===');
+      console.log('Setting ticketStartTime to:', startTime);
+      console.log('Initial ticket:', initialTicket);
+      
       return {
         currentTicket: initialTicket,
         showPendingCard: false,
@@ -243,6 +248,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             : "Connected",
         cseRemarks: initialTicket.cse_remarks || "",
         selectedOtherReasons: parseOtherReasons(initialTicket.other_reasons),
+        ticketStartTime: startTime, // Always start timing when loading from table
       };
     }
 
@@ -258,6 +264,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       callStatus: "Connected" as const,
       cseRemarks: "",
       selectedOtherReasons: [],
+      ticketStartTime: null,
     };
   };
 
@@ -291,6 +298,36 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [fetchingNext, setFetchingNext] = useState(false);
 
 
+  // Effect to ensure ticketStartTime is set when component mounts with initialTicket
+  useEffect(() => {
+    if (initialTicket && !ticket.ticketStartTime) {
+      console.log('=== EFFECT: Setting ticketStartTime for initialTicket ===');
+      console.log('Current ticket state:', ticket);
+      console.log('Setting ticketStartTime to current time');
+      
+      setTicket(prev => ({
+        ...prev,
+        ticketStartTime: new Date()
+      }));
+    }
+  }, [initialTicket, ticket.ticketStartTime]);
+
+  // Additional effect to ensure timing starts when component first renders with initialTicket
+  useEffect(() => {
+    if (initialTicket && !isInitialized.current) {
+      console.log('=== COMPONENT MOUNT: Starting timing for initialTicket ===');
+      const startTime = new Date();
+      console.log('Starting timing at:', startTime);
+      
+      setTicket(prev => ({
+        ...prev,
+        ticketStartTime: startTime
+      }));
+      
+      isInitialized.current = true;
+    }
+  }, [initialTicket]);
+
   useEffect(() => {
     if (isInitialized.current) {
       persistState({
@@ -306,12 +343,31 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
-    if (!ticket.ticketStartTime) return "";
+    console.log('=== CALCULATE RESOLUTION TIME DEBUG ===');
+    console.log('ticket.ticketStartTime:', ticket.ticketStartTime);
+    console.log('ticket.ticketStartTime type:', typeof ticket.ticketStartTime);
+    console.log('ticket.ticketStartTime instanceof Date:', ticket.ticketStartTime instanceof Date);
+    
+    // If no start time, use current ticket's created_at or current time as fallback
+    let startTime = ticket.ticketStartTime;
+    
+    if (!startTime) {
+      console.log('No ticket start time, using current time minus 1 minute as fallback');
+      // Use current time minus 1 minute as a reasonable fallback
+      startTime = new Date(Date.now() - 60000);
+    }
+    
     const endTime = new Date();
-    const diffInSeconds = Math.floor((endTime.getTime() - ticket.ticketStartTime.getTime()) / 1000);
+    const diffInSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
     const minutes = Math.floor(diffInSeconds / 60);
     const seconds = diffInSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    
+    const resolutionTime = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    console.log('Calculated resolution time:', resolutionTime, 'from start time:', startTime);
+    console.log('End time:', endTime);
+    console.log('Difference in seconds:', diffInSeconds);
+    
+    return resolutionTime;
   };
 
   //fetching the ticket stats
@@ -388,6 +444,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   // Helper function to set ticket from API response
   const setTicketFromResponse = (nextTicket: any) => {
     setCurrentTicket(nextTicket);
+    
+    // Always start timing from now when loading a ticket (whether from carousel or table)
+    // This ensures resolution time is calculated properly
+    const ticketStartTime = new Date();
+    console.log('=== SET TICKET FROM RESPONSE ===');
+    console.log('Setting ticketStartTime to:', ticketStartTime);
+    console.log('Next ticket:', nextTicket);
+    
     setTicket({
       resolutionStatus: nextTicket.resolution_status === "Resolved"
         ? "Resolved"
@@ -403,7 +467,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         : "Connected",
       cseRemarks: nextTicket.cse_remarks || "",
       selectedOtherReasons: parseOtherReasons(nextTicket.other_reasons),
-      ticketStartTime: new Date(),
+      ticketStartTime: ticketStartTime,
     });
     setShowPendingCard(false);
     isInitialized.current = true;
@@ -618,6 +682,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         ticketStartTime: ticket.ticketStartTime?.toISOString(),
         assignedTo: user?.id, // Add assignedTo field
       };
+      
+      console.log('Payload being sent:', payload);
+      console.log('Ticket start time:', ticket.ticketStartTime);
+      console.log('Calculated resolution time:', calculateResolutionTime());
+      console.log('Current ticket state:', ticket);
 
       // If Not Connected, use /not-connected endpoint and adjust payload
       if (action === "Not Connected") {
@@ -647,6 +716,33 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Parse the response to get the updated ticket
+      const responseData = await response.json();
+      console.log('API response:', responseData);
+      
+      // Update the current ticket with the response data
+      if (responseData.updatedTicket) {
+        const updatedTicket = {
+          ...currentTicket,
+          ...responseData.updatedTicket,
+          // Ensure the resolution status is properly set
+          resolution_status: resolutionStatus,
+          cse_name: responseData.updatedTicket.cse_name || user?.email,
+          resolution_time: responseData.updatedTicket.resolution_time || calculateResolutionTime(),
+          cse_remarks: responseData.updatedTicket.cse_remarks || ticket.cseRemarks,
+          other_reasons: responseData.updatedTicket.other_reasons || ticket.selectedOtherReasons,
+          call_status: responseData.updatedTicket.call_status || callStatus,
+          assigned_to: responseData.updatedTicket.assigned_to
+        };
+        
+        console.log('Updated ticket data:', updatedTicket);
+        
+        // Notify parent component about the update
+        if (onUpdate) {
+          onUpdate(updatedTicket);
+        }
       }
 
       // After successful API call, fetch next ticket
