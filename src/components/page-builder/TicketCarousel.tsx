@@ -730,7 +730,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           // Ensure the resolution status is properly set
           resolution_status: resolutionStatus,
           cse_name: responseData.updatedTicket.cse_name || user?.email,
-          resolution_time: responseData.updatedTicket.resolution_time || calculateResolutionTime(),
+          resolution_time: calculateResolutionTime(),
           cse_remarks: responseData.updatedTicket.cse_remarks || ticket.cseRemarks,
           other_reasons: responseData.updatedTicket.other_reasons || ticket.selectedOtherReasons,
           call_status: responseData.updatedTicket.call_status || callStatus,
