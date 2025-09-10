@@ -273,6 +273,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     company_name: string | null;
     uid: string | null;
   }>>([]);
+  const [filterOptions, setFilterOptions] = useState<{
+    resolution_statuses: (string | null)[];
+    poster_statuses: string[];
+  }>({
+    resolution_statuses: [],
+    poster_statuses: []
+  });
   const { session, user } = useAuth();
 
   const tableColumns: Column[] = config?.columns?.map(col => ({
@@ -283,8 +290,65 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   // Get unique values for filters
   const getUniqueResolutionStatuses = () => {
+    // Use API data if available, otherwise fallback to local data
+    if (filterOptions.resolution_statuses.length > 0) {
+      return filterOptions.resolution_statuses;
+    }
+    
+    // Fallback to local data
     const statuses = [...new Set(data.map(ticket => ticket.resolution_status))];
     return statuses.filter(status => status && status !== 'N/A');
+  };
+
+  // Fetch filter options from API
+  const fetchFilterOptions = async () => {
+    try {
+      const authToken = session?.access_token;
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/analytics/support-tickets/filter-options/`;
+      
+      console.log('Fetching filter options from:', apiUrl);
+      console.log('Auth token:', authToken ? 'Present' : 'Missing');
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        }
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch filter options: ${response.status} - ${errorText}`);
+      }
+
+      const responseData = await response.json();
+      console.log('Filter options response:', responseData);
+      
+      if (responseData.resolution_statuses && responseData.poster_statuses) {
+        setFilterOptions({
+          resolution_statuses: responseData.resolution_statuses,
+          poster_statuses: responseData.poster_statuses
+        });
+      } else {
+        console.error('Invalid filter options data format:', responseData);
+        setFilterOptions({
+          resolution_statuses: [],
+          poster_statuses: []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
+      setFilterOptions({
+        resolution_statuses: [],
+        poster_statuses: []
+      });
+    }
   };
 
   // Fetch assignees from API
@@ -338,6 +402,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   };
 
   const getUniquePosterStatuses = () => {
+    // Use API data if available, otherwise fallback to local data
+    if (filterOptions.poster_statuses.length > 0) {
+      return filterOptions.poster_statuses;
+    }
+    
+    // Fallback to local data
     const statuses = [...new Set(data.map(ticket => ticket.poster))];
     return statuses.filter(status => status && status !== 'N/A' && status !== 'No Poster');
   };
@@ -358,7 +428,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       // Add resolution status filters
       if (resolutionStatusFilter.length > 0) {
         resolutionStatusFilter.forEach(status => {
-          params.append('resolution_status', status);
+          // Send null for "Open" status, otherwise send the status as-is
+          const statusToSend = status === 'Open' ? 'null' : status;
+          params.append('resolution_status', statusToSend);
         });
       }
       
@@ -399,6 +471,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       
       const fullUrl = `${apiUrl}?${params.toString()}`;
       console.log('Filtered API URL:', fullUrl);
+      console.log('Resolution status filter mapping:', resolutionStatusFilter.map(status => ({
+        original: status,
+        sent: status === 'Open' ? 'null' : status
+      })));
 
       const response = await fetch(fullUrl, {
         method: 'GET',
@@ -735,9 +811,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     fetchTickets();
   }, [session, config?.apiEndpoint, apiPrefix]);
 
-  // Fetch assignees when component mounts
+  // Fetch filter options and assignees when component mounts
   useEffect(() => {
     if (session?.access_token) {
+      fetchFilterOptions();
       fetchAssignees();
     }
   }, [session?.access_token]);
@@ -824,7 +901,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                                 htmlFor={`resolution-${status}`}
                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                               >
-                                {status}
+                                {status === null ? 'Open' : status}
                               </label>
                             </div>
                           ))}
@@ -1049,7 +1126,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) && (
                   <span className="ml-2">
                     (Filtered by: 
-                    {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.join(', ')}`}
+                    {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.map(status => status === null ? 'Open' : status).join(', ')}`}
                     {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter === 'unassigned' ? 'Unassigned' : getUniqueAssignedTo().find(a => a.id === assignedToFilter)?.name || assignedToFilter}`}
                     {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
                     {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
