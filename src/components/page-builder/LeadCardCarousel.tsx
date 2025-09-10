@@ -527,7 +527,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       
       switch (action) {
         case "Not Connected":
-          outcome = "call_later";
+          outcome = "scheduled";
           actionMessage = "Lead marked as scheduled for later contact";
           break;
         case "Call Later":
