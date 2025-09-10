@@ -168,54 +168,75 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
           </div>
 
           <div className="space-y-3 mb-6">
-            {/* Clickable Pending section with accordion dropdown */}
-            <Collapsible open={isPendingOpen} onOpenChange={setIsPendingOpen}>
-              <CollapsibleTrigger asChild>
-                <div className="flex justify-between items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-all duration-200 ease-in-out">
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
-                    <span className="text-sm text-gray-700">Pending</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="text-sm font-medium mr-1">{totalPending}</span>
-                    <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform duration-300 ease-in-out ${isPendingOpen ? 'rotate-180' : ''}`} />
-                  </div>
+            {/* Stats rows - Resolved Today, WIP Tickets, and Pending */}
+            <div className="space-y-2">
+              {/* Resolved Today */}
+              <div className="flex justify-between items-center p-2 rounded-md bg-green-50 border border-green-200">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                  <span className="text-sm text-gray-700">Resolved Today</span>
                 </div>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2">
-                <div className="pl-5 pr-2 pb-2">
-                  <div className="space-y-2">
-                    {pendingByPoster.length > 0 ? (
-                      pendingByPoster.map((item, index) => {
-                        const posterInfo = formatPosterStatus(item.poster);
-                        return (
-                          <div key={index} className="flex items-center justify-between p-2 rounded-md bg-gray-50">
-                            <div className="flex items-center">
-                              <div 
-                                className="w-3 h-3 rounded-full mr-2" 
-                                style={{ backgroundColor: getPosterColor(item.poster) }}
-                              ></div>
-                              <span className="text-sm font-medium">{posterInfo.label}</span>
-                            </div>
-                            <span className="text-sm font-bold text-gray-700">{item.count}</span>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="text-center text-gray-500 py-2">
-                        <p className="text-sm">No pending tickets available</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="pt-2 border-t mt-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">Total Pending:</span>
-                      <span className="text-sm font-bold text-gray-900">{totalPending}</span>
+                <span className="text-sm font-medium text-green-700">{ticketStats.resolvedByYouToday || 0}</span>
+              </div>
+
+              {/* WIP Tickets */}
+              <div className="flex justify-between items-center p-2 rounded-md bg-blue-50 border border-blue-200">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                  <span className="text-sm text-gray-700">Work in Progress</span>
+                </div>
+                <span className="text-sm font-medium text-blue-700">{ticketStats.wipTickets || 0}</span>
+              </div>
+
+              {/* Clickable Pending section with accordion dropdown */}
+              <Collapsible open={isPendingOpen} onOpenChange={setIsPendingOpen}>
+                <CollapsibleTrigger asChild>
+                  <div className="flex justify-between items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-all duration-200 ease-in-out">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
+                      <span className="text-sm text-gray-700">Pending</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium mr-1">{totalPending}</span>
+                      <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform duration-300 ease-in-out ${isPendingOpen ? 'rotate-180' : ''}`} />
                     </div>
                   </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2">
+                  <div className="pl-5 pr-2 pb-2">
+                    <div className="space-y-2">
+                      {pendingByPoster.length > 0 ? (
+                        pendingByPoster.map((item, index) => {
+                          const posterInfo = formatPosterStatus(item.poster);
+                          return (
+                            <div key={index} className="flex items-center justify-between p-2 rounded-md bg-gray-50">
+                              <div className="flex items-center">
+                                <div 
+                                  className="w-3 h-3 rounded-full mr-2" 
+                                  style={{ backgroundColor: getPosterColor(item.poster) }}
+                                ></div>
+                                <span className="text-sm font-medium">{posterInfo.label}</span>
+                              </div>
+                              <span className="text-sm font-bold text-gray-700">{item.count}</span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center text-gray-500 py-2">
+                          <p className="text-sm">No pending tickets available</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="pt-2 border-t mt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Total Pending:</span>
+                        <span className="text-sm font-bold text-gray-900">{totalPending}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
 
           </div>
 
