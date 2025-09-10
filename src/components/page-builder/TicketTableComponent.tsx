@@ -492,12 +492,16 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       
       // Handle different response formats
       let tickets = [];
+      let pageMeta = null;
+      
       if (responseData.results && Array.isArray(responseData.results)) {
         tickets = responseData.results;
-      } else if (Array.isArray(responseData)) {
-        tickets = responseData;
+        pageMeta = responseData.page_meta;
       } else if (responseData.data && Array.isArray(responseData.data)) {
         tickets = responseData.data;
+        pageMeta = responseData.page_meta;
+      } else if (Array.isArray(responseData)) {
+        tickets = responseData;
       } else {
         throw new Error('Invalid data format received');
       }
@@ -529,6 +533,19 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
       setFilteredData(transformedData);
       setFiltersApplied(true);
+      
+      // Update pagination data if available
+      if (pageMeta) {
+        setPagination({
+          totalCount: pageMeta.total_count || 0,
+          numberOfPages: pageMeta.number_of_pages || 0,
+          currentPage: pageMeta.current_page || 1,
+          pageSize: pageMeta.page_size || 10,
+          nextPageLink: pageMeta.next_page_link || null,
+          previousPageLink: pageMeta.previous_page_link || null
+        });
+        console.log('Updated pagination from filtered response:', pageMeta);
+      }
     } catch (error) {
       console.error('Error applying filters:', error);
       toast.error('Failed to apply filters');
@@ -1122,7 +1139,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
-                Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : data.length} tickets
+                Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} tickets
                 {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) && (
                   <span className="ml-2">
                     (Filtered by: 
