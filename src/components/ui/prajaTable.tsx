@@ -19,7 +19,6 @@ interface PrajaTableProps {
   data: any[];
   title: string;
   onRowClick?: (row: any) => void;
-  disablePagination?: boolean;
 }
 
 // Status color mapping for tickets
@@ -75,7 +74,7 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
   }
 };
 
-export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick, disablePagination = false}) => {
+export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -141,9 +140,9 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
     );
   });
 
-  const totalPages = disablePagination ? 1 : Math.ceil(filteredData.length / entriesPerPage);
-  const startIndex = disablePagination ? 0 : (currentPage - 1) * entriesPerPage;
-  const paginatedData = disablePagination ? filteredData : filteredData.slice(startIndex, startIndex + entriesPerPage);
+  const totalPages = Math.ceil(filteredData.length / entriesPerPage);
+  const startIndex = (currentPage - 1) * entriesPerPage;
+  const paginatedData = filteredData.slice(startIndex, startIndex + entriesPerPage);
 
   const handleNext = () => {
     if (currentPage < totalPages) setCurrentPage(currentPage + 1);
@@ -312,7 +311,7 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
         </div>
       )}
 
-      {filteredData.length > 0 && !disablePagination && (
+      {filteredData.length > 0 && (
         <div className="flex justify-between items-center mt-4">
           <button
             onClick={handlePrevious}
