@@ -20,6 +20,9 @@ interface PrajaTableProps {
   title: string;
   onRowClick?: (row: any) => void;
   disablePagination?: boolean;
+  onSearch?: (searchTerm: string) => void;
+  externalSearch?: boolean;
+  searchTerm?: string;
 }
 
 // Status color mapping for tickets
@@ -75,7 +78,7 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
   }
 };
 
-export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick, disablePagination = false}) => {
+const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick, disablePagination = false, onSearch, externalSearch = false, searchTerm: externalSearchTerm}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -103,11 +106,13 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
     return digitsOnly.length >= 1;
   };
 
-  // Simplified filtering logic
-  const filteredData = data.filter((row) => {
-    if (!searchTerm.trim()) return true;
+  const currentSearchTerm = externalSearch ? (externalSearchTerm || '') : searchTerm;
 
-    const lowerSearchTerm = searchTerm.toLowerCase().trim();
+  // Simplified filtering logic (skip local filtering when external search is enabled)
+  const filteredData = externalSearch ? data : data.filter((row) => {
+    if (!currentSearchTerm.trim()) return true;
+
+    const lowerSearchTerm = currentSearchTerm.toLowerCase().trim();
     const digitsOnly = lowerSearchTerm.replace(/[^0-9]/g, '');
     
     // Digit-based search
@@ -252,8 +257,14 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
         <input
           type="text"
           placeholder="Search..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          value={currentSearchTerm}
+          onChange={(e) => {
+            if (externalSearch && onSearch) {
+              onSearch(e.target.value);
+            } else {
+              setSearchTerm(e.target.value);
+            }
+          }}
           className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -307,8 +318,19 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
       </div>
 
       {filteredData.length === 0 && (
-        <div className="mt-4 text-gray-600 text-center">
-          No results found for "{searchTerm}"
+        <div className="mt-4 text-gray-600 text-center py-8">
+          {currentSearchTerm.trim() !== '' ? (
+            <div>
+              <p className="text-lg font-medium">No results found</p>
+              <p className="text-sm mt-1">No tickets match your search for "{currentSearchTerm}"</p>
+              <p className="text-xs mt-2 text-gray-500">Try adjusting your search terms or filters</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-lg font-medium">No tickets available</p>
+              <p className="text-sm mt-1 text-gray-500">There are no tickets to display</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -344,3 +366,18 @@ export const PrajaTable: React.FC<PrajaTableProps> = ({columns, data, title, onR
     </div>
   );
 };
+
+// Memoize the component to prevent unnecessary re-renders
+export const PrajaTable = React.memo(PrajaTableComponent, (prevProps, nextProps) => {
+  // Custom comparison to prevent re-renders when only searchTerm changes but data is the same
+  return (
+    prevProps.data === nextProps.data &&
+    prevProps.columns === nextProps.columns &&
+    prevProps.title === nextProps.title &&
+    prevProps.disablePagination === nextProps.disablePagination &&
+    prevProps.externalSearch === nextProps.externalSearch &&
+    prevProps.onRowClick === nextProps.onRowClick &&
+    prevProps.onSearch === nextProps.onSearch &&
+    prevProps.searchTerm === nextProps.searchTerm
+  );
+});
