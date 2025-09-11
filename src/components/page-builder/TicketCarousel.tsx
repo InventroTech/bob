@@ -376,25 +376,29 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Use configured status data API endpoint or fallback to default
-      const statusEndpoint = config?.statusDataApiEndpoint || "/get-ticket-status";
+      // Use renderer URL with analytics endpoint
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/analytics/get-ticket-status/`;
       
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URI}${statusEndpoint}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      console.log('Fetching ticket stats from:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          "X-Tenant-Slug": "bibhab-thepyro-ai",
+        },
+      });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('Ticket stats response:', data);
       
       // Map the new backend structure to our TicketStats interface
       const stats: TicketStats = {
