@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
@@ -251,6 +251,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   });
   const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
   const [filtersApplied, setFiltersApplied] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [displaySearchTerm, setDisplaySearchTerm] = useState<string>(''); // Separate state for display
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestSequenceRef = useRef<number>(0);
   const [pagination, setPagination] = useState<{
     totalCount: number;
     numberOfPages: number;
@@ -282,11 +287,15 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   });
   const { session, user } = useAuth();
 
-  const tableColumns: Column[] = config?.columns?.map(col => ({
-    header: col.label,
-    accessor: col.key,
-    type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
-  })) || defaultColumns;
+  // Memoize table columns to prevent unnecessary re-renders
+  const tableColumns: Column[] = useMemo(() => 
+    config?.columns?.map(col => ({
+      header: col.label,
+      accessor: col.key,
+      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
+    })) || defaultColumns,
+    [config?.columns]
+  );
 
   // Get unique values for filters
   const getUniqueResolutionStatuses = () => {
@@ -314,7 +323,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'Content-Type': 'application/json'
         }
       });
 
@@ -351,6 +361,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
   };
 
+  // Debounced function to fetch filter options with search
+  
+
   // Fetch assignees from API
   const fetchAssignees = async () => {
     try {
@@ -365,7 +378,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'Content-Type': 'application/json'
         }
       });
 
@@ -413,9 +427,22 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   };
 
   // Apply filters using analytics endpoint
-  const applyFilters = async () => {
+  const applyFilters = async (requestSequence?: number) => {
     try {
       setLoading(true);
+      
+      // Cancel any previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Create new AbortController for this request
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      
+      // Use provided sequence or increment for non-search calls
+      const currentSequence = requestSequence || ++requestSequenceRef.current;
+      
       const authToken = session?.access_token;
 
       // Always use renderer URL for analytics endpoint
@@ -465,6 +492,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         params.append('created_at__lte', endDateTime.toISOString());
       }
       
+      // Add search filter - use the latest search value from ref
+      const currentSearchTerm = latestSearchValueRef.current;
+      if (currentSearchTerm.trim() !== '') {
+        params.append('search_fields', currentSearchTerm.trim());
+        console.log(`Adding search filter: "${currentSearchTerm}"`);
+      }
+      
       // Add pagination
       params.append('page', '1');
       params.append('page_size', '10'); // Get more results
@@ -480,8 +514,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : ''
-        }
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        },
+        signal: abortController.signal
       });
 
       if (!response.ok) {
@@ -489,6 +525,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }
 
       const responseData = await response.json();
+      
+      // Check if this response is still relevant (not superseded by a newer request)
+      if (currentSequence !== requestSequenceRef.current) {
+        console.log(`Ignoring stale response for sequence ${currentSequence}, current is ${requestSequenceRef.current}, search term was: "${searchTerm}"`);
+        return;
+      }
+      
+      console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length || responseData.results?.length || 0}`);
       
       // Handle different response formats
       let tickets = [];
@@ -531,6 +575,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         display_pic_url: ticket.display_pic_url || null
       }));
 
+      // Set filtered data with the current search context
+      console.log(`Setting filtered data for sequence ${currentSequence} with ${transformedData.length} tickets, search: "${searchTerm}"`);
       setFilteredData(transformedData);
       setFiltersApplied(true);
       
@@ -547,6 +593,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         console.log('Updated pagination from filtered response:', pageMeta);
       }
     } catch (error) {
+      // Don't show error for aborted requests
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
       console.error('Error applying filters:', error);
       toast.error('Failed to apply filters');
     } finally {
@@ -565,9 +616,84 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       startTime: '00:00',
       endTime: '23:59'
     });
+    setSearchTerm(''); // Clear search term
+    setDisplaySearchTerm(''); // Clear display search term
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
     setFilteredData(data); // Show all tickets again
     setFiltersApplied(false);
   };
+
+  // Store the latest search value in a ref to avoid closure issues
+  const latestSearchValueRef = useRef<string>('');
+
+  // Simplified debounced search function - always use latest value
+  const debouncedSearch = useCallback((value: string) => {
+    // Update the latest search value immediately
+    latestSearchValueRef.current = value;
+    
+    console.log(`User typed: "${value}"`);
+    
+    // Update display immediately - no delay for better UX
+    setDisplaySearchTerm(value);
+    // DON'T update searchTerm here - only update it when we actually make the API call
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Cancel any previous request immediately
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Set new timeout for API call
+    searchTimeoutRef.current = setTimeout(() => {
+      // ALWAYS use the latest value from ref, ignore closure value
+      const finalSearchValue = latestSearchValueRef.current;
+      
+      console.log(`Executing API call for latest value: "${finalSearchValue}" (original closure value was: "${value}")`);
+      
+      // NOW update search term to match what we're actually searching for
+      setSearchTerm(finalSearchValue);
+      
+      // Increment sequence for this actual API call
+      const apiSequence = ++requestSequenceRef.current;
+      
+      // If search is empty, show all data (reset to initial state)
+      if (finalSearchValue.trim() === '') {
+        // If no other filters are applied, show original data
+        if (resolutionStatusFilter.length === 0 && 
+            assignedToFilter === 'all' && 
+            posterStatusFilter.length === 0 && 
+            !dateRangeFilter.startDate && 
+            !dateRangeFilter.endDate) {
+          setFilteredData(data);
+          setFiltersApplied(false);
+        } else {
+          // Apply other filters without search
+          applyFilters(apiSequence);
+        }
+      } else {
+        // Apply filters with search
+        applyFilters(apiSequence);
+      }
+    }, 500);
+  }, [applyFilters, data, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter]);
+
+  // Handle search input change from PrajaTable
+  const handleSearchChange = useCallback((value: string) => {
+    debouncedSearch(value);
+  }, [debouncedSearch]);
+
+  // Memoized row click handler
+  const handleRowClick = useCallback((row: any) => {
+    setSelectedTicket(row);
+    setIsTicketModalOpen(true);
+  }, []);
 
   // Handle pagination navigation
   const handleNextPage = async () => {
@@ -580,7 +706,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai'
           }
         });
 
@@ -649,7 +776,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai'
           }
         });
 
@@ -708,10 +836,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
   };
 
-  const handleRowClick = (row: any) => {
-    setSelectedTicket(row);
-    setIsTicketModalOpen(true);
-  };
 
   const handleTicketUpdate = (updatedTicket: any) => {
     // Update the local data with the updated ticket
@@ -744,12 +868,19 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const apiUrl = `${baseUrl}${endpoint}`;
         console.log('API URL:', apiUrl);
         
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
+        };
+
+        // Add X-Tenant-Slug header only for renderer API calls
+        if (apiPrefix === 'renderer') {
+          headers['X-Tenant-Slug'] = 'bibhab-thepyro-ai';
+        }
+
         const response = await fetch(apiUrl, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
-          }
+          headers
         });
 
         if (!response.ok) {
@@ -847,6 +978,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       setApiPrefix(config.apiPrefix);
     }
   }, [config?.apiPrefix]);
+
+  // Cleanup timeout and abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -1129,7 +1272,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </Button>
                 <Button
                   variant="default"
-                  onClick={applyFilters}
+                  onClick={() => applyFilters()}
                   className="flex-1"
                   disabled={loading}
                 >
@@ -1140,17 +1283,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
                 Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} tickets
-                {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) && (
+                {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2">
                     (Filtered by: 
                     {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.map(status => status === null ? 'Open' : status).join(', ')}`}
                     {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter === 'unassigned' ? 'Unassigned' : getUniqueAssignedTo().find(a => a.id === assignedToFilter)?.name || assignedToFilter}`}
                     {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
                     {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
+                    {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
                     )
                   </span>
                 )}
-                {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) && (
+                {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2 text-orange-600">
                     (Filters selected - click "Apply Filters" to see results)
                   </span>
@@ -1165,53 +1309,51 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           )}
         </div>
 
-        {filteredData.length === 0 ? (
-          <div className="text-center p-8 text-gray-600">
-            No data available
-          </div>
-        ) : (
-          <>
-                      <PrajaTable 
-            columns={tableColumns} 
-            data={filteredData} 
-            title={config?.title || "Support Tickets"}
-            onRowClick={handleRowClick}
-            disablePagination={true}
-          />
+        {/* External search handled inside PrajaTable */}
+
+        {/* Always show PrajaTable with search bar */}
+        <PrajaTable 
+          columns={tableColumns} 
+          data={filteredData} 
+          title={config?.title || "Support Tickets"}
+          onRowClick={handleRowClick}
+          disablePagination={true}
+          externalSearch={true}
+          searchTerm={displaySearchTerm}
+          onSearch={handleSearchChange}
+        />
+        
+        {/* Server-side pagination controls */}
+        {pagination.totalCount > 0 && filteredData.length > 0 && (
+          <div className="flex justify-between items-center mt-4 p-4 border-t">
+            <div className="text-sm text-gray-600">
+              Showing {filteredData.length} of {pagination.totalCount} tickets
+            </div>
             
-            {/* Server-side pagination controls */}
-            {pagination.totalCount > 0 && (
-              <div className="flex justify-between items-center mt-4 p-4 border-t">
-                <div className="text-sm text-gray-600">
-                  Showing {filteredData.length} of {pagination.totalCount} tickets
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePreviousPage}
-                    disabled={!pagination.previousPageLink || loading}
-                  >
-                    Previous
-                  </Button>
-                  
-                  <span className="text-sm text-gray-600 px-3">
-                    Page {pagination.currentPage} of {pagination.numberOfPages}
-                  </span>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextPage}
-                    disabled={!pagination.nextPageLink || loading}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-          </>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={!pagination.previousPageLink || loading}
+              >
+                Previous
+              </Button>
+              
+              <span className="text-sm text-gray-600 px-3">
+                Page {pagination.currentPage} of {pagination.numberOfPages}
+              </span>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={!pagination.nextPageLink || loading}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 
