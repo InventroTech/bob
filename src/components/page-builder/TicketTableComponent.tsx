@@ -232,6 +232,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [data, setData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(false); // Separate loading state for table only
+  const [rateLimited, setRateLimited] = useState(false); // Rate limiting indicator
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -429,7 +431,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   // Apply filters using analytics endpoint
   const applyFilters = async (requestSequence?: number) => {
     try {
-      setLoading(true);
+      setTableLoading(true); // Use table loading instead of full component loading
       
       // Cancel any previous request
       if (abortControllerRef.current) {
@@ -521,6 +523,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error(`Rate limit exceeded. Please wait a moment before searching again.`);
+        }
         throw new Error(`Failed to fetch filtered tickets: ${response.status}`);
       }
 
@@ -599,9 +604,17 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         return;
       }
       console.error('Error applying filters:', error);
-      toast.error('Failed to apply filters');
+      
+      // Handle different types of errors
+      if (error.message.includes('Rate limit exceeded')) {
+        toast.error('Too many requests. Please wait a moment before searching again.');
+      } else if (error.message.includes('429')) {
+        toast.error('Rate limit exceeded. Please wait before making another request.');
+      } else {
+        toast.error('Failed to apply filters');
+      }
     } finally {
-      setLoading(false);
+      setTableLoading(false); // Use table loading instead of full component loading
     }
   };
 
@@ -628,8 +641,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   // Store the latest search value in a ref to avoid closure issues
   const latestSearchValueRef = useRef<string>('');
+  const lastApiCallTimeRef = useRef<number>(0);
+  const MIN_TIME_BETWEEN_CALLS = 2000; // Minimum 2 seconds between API calls
 
-  // Simplified debounced search function - always use latest value
+  // Simplified debounced search function - always use latest value with rate limiting
   const debouncedSearch = useCallback((value: string) => {
     // Update the latest search value immediately
     latestSearchValueRef.current = value;
@@ -650,44 +665,86 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       abortControllerRef.current.abort();
     }
     
-    // Set new timeout for API call
+    // Set new timeout for API call with rate limiting
     searchTimeoutRef.current = setTimeout(() => {
       // ALWAYS use the latest value from ref, ignore closure value
       const finalSearchValue = latestSearchValueRef.current;
       
-      console.log(`Executing API call for latest value: "${finalSearchValue}" (original closure value was: "${value}")`);
+      // Check rate limiting
+      const now = Date.now();
+      const timeSinceLastCall = now - lastApiCallTimeRef.current;
       
-      // NOW update search term to match what we're actually searching for
-      setSearchTerm(finalSearchValue);
+      if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
+        const remainingWait = MIN_TIME_BETWEEN_CALLS - timeSinceLastCall;
+        console.log(`Rate limiting: waiting ${remainingWait}ms before API call for "${finalSearchValue}"`);
+        
+        // Show rate limiting indicator
+        setRateLimited(true);
+        
+        // Wait additional time before making API call
+        setTimeout(() => {
+          console.log(`Executing delayed API call for: "${finalSearchValue}"`);
+          setRateLimited(false);
+          makeApiCall(finalSearchValue);
+        }, remainingWait);
+      } else {
+        console.log(`Executing API call for latest value: "${finalSearchValue}" (original closure value was: "${value}")`);
+        makeApiCall(finalSearchValue);
+      }
       
-      // Increment sequence for this actual API call
-      const apiSequence = ++requestSequenceRef.current;
-      
-      // If search is empty, show all data (reset to initial state)
-      if (finalSearchValue.trim() === '') {
-        // If no other filters are applied, show original data
-        if (resolutionStatusFilter.length === 0 && 
-            assignedToFilter === 'all' && 
-            posterStatusFilter.length === 0 && 
-            !dateRangeFilter.startDate && 
-            !dateRangeFilter.endDate) {
-          setFilteredData(data);
-          setFiltersApplied(false);
+      function makeApiCall(searchValue: string) {
+        // Update last API call time
+        lastApiCallTimeRef.current = Date.now();
+        
+        // NOW update search term to match what we're actually searching for
+        setSearchTerm(searchValue);
+        
+        // Increment sequence for this actual API call
+        const apiSequence = ++requestSequenceRef.current;
+        
+        // If search is empty, show all data (reset to initial state)
+        if (searchValue.trim() === '') {
+          // If no other filters are applied, show original data
+          if (resolutionStatusFilter.length === 0 && 
+              assignedToFilter === 'all' && 
+              posterStatusFilter.length === 0 && 
+              !dateRangeFilter.startDate && 
+              !dateRangeFilter.endDate) {
+            setFilteredData(data);
+            setFiltersApplied(false);
+          } else {
+            // Apply other filters without search
+            applyFilters(apiSequence);
+          }
         } else {
-          // Apply other filters without search
+          // Apply filters with search
           applyFilters(apiSequence);
         }
-      } else {
-        // Apply filters with search
-        applyFilters(apiSequence);
       }
-    }, 500);
+    }, 1000); // Increased from 500ms to 1000ms
   }, [applyFilters, data, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter]);
 
   // Handle search input change from PrajaTable
   const handleSearchChange = useCallback((value: string) => {
     debouncedSearch(value);
   }, [debouncedSearch]);
+
+  // Memoized search input component to prevent re-renders
+  const SearchInputComponent = useMemo(() => 
+    React.memo(({ searchTerm, onChange }: { searchTerm: string; onChange: (value: string) => void }) => {
+      console.log('SearchInput render with term:', searchTerm);
+      return (
+        <input
+          type="text"
+          placeholder="Search tickets..."
+          value={searchTerm}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      );
+    }, (prevProps, nextProps) => prevProps.searchTerm === nextProps.searchTerm),
+    []
+  );
 
   // Memoized row click handler
   const handleRowClick = useCallback((row: any) => {
@@ -699,7 +756,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const handleNextPage = async () => {
     if (pagination.nextPageLink) {
       try {
-        setLoading(true);
+        setTableLoading(true);
         const authToken = session?.access_token;
         
         const response = await fetch(pagination.nextPageLink, {
@@ -761,7 +818,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         console.error('Error fetching next page:', error);
         toast.error('Failed to load next page');
       } finally {
-        setLoading(false);
+        setTableLoading(false);
       }
     }
   };
@@ -769,7 +826,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const handlePreviousPage = async () => {
     if (pagination.previousPageLink) {
       try {
-        setLoading(true);
+        setTableLoading(true);
         const authToken = session?.access_token;
         
         const response = await fetch(pagination.previousPageLink, {
@@ -831,7 +888,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         console.error('Error fetching previous page:', error);
         toast.error('Failed to load previous page');
       } finally {
-        setLoading(false);
+        setTableLoading(false);
       }
     }
   };
@@ -1274,9 +1331,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                   variant="default"
                   onClick={() => applyFilters()}
                   className="flex-1"
-                  disabled={loading}
+                  disabled={tableLoading}
                 >
-                  {loading ? 'Applying...' : 'Apply Filters'}
+                  {tableLoading ? 'Applying...' : 'Apply Filters'}
                 </Button>
               </div>
 
@@ -1309,18 +1366,35 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           )}
         </div>
 
-        {/* External search handled inside PrajaTable */}
+        {/* Search Bar Section */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-gray-800">
+              {config?.title || "Support Tickets"}
+            </h2>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <SearchInputComponent 
+                  searchTerm={displaySearchTerm}
+                  onChange={handleSearchChange}
+                />
+                {rateLimited && (
+                  <div className="absolute -top-8 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded border border-yellow-300">
+                    Rate limited - waiting...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
 
-        {/* Always show PrajaTable with search bar */}
+        {/* Table Section */}
         <PrajaTable 
           columns={tableColumns} 
           data={filteredData} 
-          title={config?.title || "Support Tickets"}
           onRowClick={handleRowClick}
           disablePagination={true}
-          externalSearch={true}
-          searchTerm={displaySearchTerm}
-          onSearch={handleSearchChange}
+          loading={tableLoading}
         />
         
         {/* Server-side pagination controls */}
@@ -1331,27 +1405,27 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             </div>
             
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePreviousPage}
-                disabled={!pagination.previousPageLink || loading}
-              >
-                Previous
-              </Button>
-              
-              <span className="text-sm text-gray-600 px-3">
-                Page {pagination.currentPage} of {pagination.numberOfPages}
-              </span>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={!pagination.nextPageLink || loading}
-              >
-                Next
-              </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreviousPage}
+                    disabled={!pagination.previousPageLink || tableLoading}
+                  >
+                    Previous
+                  </Button>
+                  
+                  <span className="text-sm text-gray-600 px-3">
+                    Page {pagination.currentPage} of {pagination.numberOfPages}
+                  </span>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleNextPage}
+                    disabled={!pagination.nextPageLink || tableLoading}
+                  >
+                    Next
+                  </Button>
             </div>
           </div>
         )}
