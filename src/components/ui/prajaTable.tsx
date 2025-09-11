@@ -17,12 +17,10 @@ interface Column {
 interface PrajaTableProps {
   columns: Column[];
   data: any[];
-  title: string;
+  title?: string;
   onRowClick?: (row: any) => void;
   disablePagination?: boolean;
-  onSearch?: (searchTerm: string) => void;
-  externalSearch?: boolean;
-  searchTerm?: string;
+  loading?: boolean;
 }
 
 // Status color mapping for tickets
@@ -78,10 +76,8 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
   }
 };
 
-const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick, disablePagination = false, onSearch, externalSearch = false, searchTerm: externalSearchTerm}) => {
-  const [searchTerm, setSearchTerm] = useState('');
+const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, onRowClick, disablePagination = false, loading = false}) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
   const userType = localStorage.getItem('userType');
 
@@ -106,45 +102,8 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
     return digitsOnly.length >= 1;
   };
 
-  const currentSearchTerm = externalSearch ? (externalSearchTerm || '') : searchTerm;
-
-  // Simplified filtering logic (skip local filtering when external search is enabled)
-  const filteredData = externalSearch ? data : data.filter((row) => {
-    if (!currentSearchTerm.trim()) return true;
-
-    const lowerSearchTerm = currentSearchTerm.toLowerCase().trim();
-    const digitsOnly = lowerSearchTerm.replace(/[^0-9]/g, '');
-    
-    // Digit-based search
-    if (containsDigits(lowerSearchTerm)) {
-      const cleanSearchTerm = lowerSearchTerm.replace(/[\s\-\(\)\+]/g, '');
-      
-      // For 8+ digits: search only phone numbers
-      if (digitsOnly.length >= 8) {
-        const phoneValue = String(row.phone || '');
-        const cleanPhoneValue = phoneValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
-        return cleanPhoneValue.includes(cleanSearchTerm);
-      }
-      
-      // For 1-7 digits: search both phone numbers and praja user IDs
-      else {
-        const phoneValue = String(row.phone || '');
-        const cleanPhoneValue = phoneValue.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
-        
-        const userIdValue = String(row.user_id || row.praja_user_id || '');
-        const cleanUserIdValue = userIdValue.toLowerCase();
-        
-        return cleanPhoneValue.includes(cleanSearchTerm) || cleanUserIdValue.includes(cleanSearchTerm);
-      }
-    }
-
-    // Regular text search through visible columns
-    return columns.some((col) =>
-      String(row[col.accessor] || '')
-        .toLowerCase()
-        .includes(lowerSearchTerm)
-    );
-  });
+  // Use data directly without any filtering (filtering handled externally)
+  const filteredData = data;
 
   const totalPages = disablePagination ? 1 : Math.ceil(filteredData.length / entriesPerPage);
   const startIndex = disablePagination ? 0 : (currentPage - 1) * entriesPerPage;
@@ -251,23 +210,22 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
   };
 
   return (
-    <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
-        <input
-          type="text"
-          placeholder="Search..."
-          value={currentSearchTerm}
-          onChange={(e) => {
-            if (externalSearch && onSearch) {
-              onSearch(e.target.value);
-            } else {
-              setSearchTerm(e.target.value);
-            }
-          }}
-          className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+    <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4 relative">
+      {title && (
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+        </div>
+      )}
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="text-gray-600">Loading...</span>
+          </div>
+        </div>
+      )}
 
       <div className="table border-2 border-gray-200 rounded-lg overflow-hidden w-full">
         <table className="min-w-full bg-white">
@@ -319,18 +277,10 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
 
       {filteredData.length === 0 && (
         <div className="mt-4 text-gray-600 text-center py-8">
-          {currentSearchTerm.trim() !== '' ? (
-            <div>
-              <p className="text-lg font-medium">No results found</p>
-              <p className="text-sm mt-1">No tickets match your search for "{currentSearchTerm}"</p>
-              <p className="text-xs mt-2 text-gray-500">Try adjusting your search terms or filters</p>
-            </div>
-          ) : (
-            <div>
-              <p className="text-lg font-medium">No tickets available</p>
-              <p className="text-sm mt-1 text-gray-500">There are no tickets to display</p>
-            </div>
-          )}
+          <div>
+            <p className="text-lg font-medium">No data available</p>
+            <p className="text-sm mt-1 text-gray-500">There is no data to display</p>
+          </div>
         </div>
       )}
 
@@ -369,15 +319,13 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
 
 // Memoize the component to prevent unnecessary re-renders
 export const PrajaTable = React.memo(PrajaTableComponent, (prevProps, nextProps) => {
-  // Custom comparison to prevent re-renders when only searchTerm changes but data is the same
+  // Custom comparison to prevent re-renders
   return (
     prevProps.data === nextProps.data &&
     prevProps.columns === nextProps.columns &&
     prevProps.title === nextProps.title &&
     prevProps.disablePagination === nextProps.disablePagination &&
-    prevProps.externalSearch === nextProps.externalSearch &&
     prevProps.onRowClick === nextProps.onRowClick &&
-    prevProps.onSearch === nextProps.onSearch &&
-    prevProps.searchTerm === nextProps.searchTerm
+    prevProps.loading === nextProps.loading
   );
 });
