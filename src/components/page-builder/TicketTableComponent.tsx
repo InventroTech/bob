@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
@@ -252,7 +252,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [displaySearchTerm, setDisplaySearchTerm] = useState<string>(''); // Separate state for display
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestSequenceRef = useRef<number>(0);
   const [pagination, setPagination] = useState<{
     totalCount: number;
     numberOfPages: number;
@@ -284,11 +287,15 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   });
   const { session, user } = useAuth();
 
-  const tableColumns: Column[] = config?.columns?.map(col => ({
-    header: col.label,
-    accessor: col.key,
-    type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
-  })) || defaultColumns;
+  // Memoize table columns to prevent unnecessary re-renders
+  const tableColumns: Column[] = useMemo(() => 
+    config?.columns?.map(col => ({
+      header: col.label,
+      accessor: col.key,
+      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
+    })) || defaultColumns,
+    [config?.columns]
+  );
 
   // Get unique values for filters
   const getUniqueResolutionStatuses = () => {
@@ -420,9 +427,22 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   };
 
   // Apply filters using analytics endpoint
-  const applyFilters = async () => {
+  const applyFilters = async (requestSequence?: number) => {
     try {
       setLoading(true);
+      
+      // Cancel any previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Create new AbortController for this request
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      
+      // Use provided sequence or increment for non-search calls
+      const currentSequence = requestSequence || ++requestSequenceRef.current;
+      
       const authToken = session?.access_token;
 
       // Always use renderer URL for analytics endpoint
@@ -472,9 +492,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         params.append('created_at__lte', endDateTime.toISOString());
       }
       
-      // Add search filter
-      if (searchTerm.trim() !== '') {
-        params.append('search_fields', searchTerm.trim());
+      // Add search filter - use the latest search value from ref
+      const currentSearchTerm = latestSearchValueRef.current;
+      if (currentSearchTerm.trim() !== '') {
+        params.append('search_fields', currentSearchTerm.trim());
+        console.log(`Adding search filter: "${currentSearchTerm}"`);
       }
       
       // Add pagination
@@ -494,7 +516,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           'Content-Type': 'application/json',
           'Authorization': authToken ? `Bearer ${authToken}` : '',
           'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        }
+        },
+        signal: abortController.signal
       });
 
       if (!response.ok) {
@@ -502,6 +525,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }
 
       const responseData = await response.json();
+      
+      // Check if this response is still relevant (not superseded by a newer request)
+      if (currentSequence !== requestSequenceRef.current) {
+        console.log(`Ignoring stale response for sequence ${currentSequence}, current is ${requestSequenceRef.current}, search term was: "${searchTerm}"`);
+        return;
+      }
+      
+      console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length || responseData.results?.length || 0}`);
       
       // Handle different response formats
       let tickets = [];
@@ -544,6 +575,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         display_pic_url: ticket.display_pic_url || null
       }));
 
+      // Set filtered data with the current search context
+      console.log(`Setting filtered data for sequence ${currentSequence} with ${transformedData.length} tickets, search: "${searchTerm}"`);
       setFilteredData(transformedData);
       setFiltersApplied(true);
       
@@ -560,6 +593,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         console.log('Updated pagination from filtered response:', pageMeta);
       }
     } catch (error) {
+      // Don't show error for aborted requests
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
       console.error('Error applying filters:', error);
       toast.error('Failed to apply filters');
     } finally {
@@ -579,35 +617,83 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       endTime: '23:59'
     });
     setSearchTerm(''); // Clear search term
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-      setSearchTimeout(null);
+    setDisplaySearchTerm(''); // Clear display search term
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
     }
     setFilteredData(data); // Show all tickets again
     setFiltersApplied(false);
   };
 
-  // Debounced search function that applies filters with search
-  const debouncedSearch = useCallback((searchValue: string) => {
+  // Store the latest search value in a ref to avoid closure issues
+  const latestSearchValueRef = useRef<string>('');
+
+  // Simplified debounced search function - always use latest value
+  const debouncedSearch = useCallback((value: string) => {
+    // Update the latest search value immediately
+    latestSearchValueRef.current = value;
+    
+    console.log(`User typed: "${value}"`);
+    
+    // Update display immediately - no delay for better UX
+    setDisplaySearchTerm(value);
+    // DON'T update searchTerm here - only update it when we actually make the API call
+    
     // Clear existing timeout
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
-
-    // Set new timeout for 500ms
-    const timeout = setTimeout(async () => {
-      setSearchTerm(searchValue);
-      // Apply filters with the search term
-      await applyFilters();
+    
+    // Cancel any previous request immediately
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Set new timeout for API call
+    searchTimeoutRef.current = setTimeout(() => {
+      // ALWAYS use the latest value from ref, ignore closure value
+      const finalSearchValue = latestSearchValueRef.current;
+      
+      console.log(`Executing API call for latest value: "${finalSearchValue}" (original closure value was: "${value}")`);
+      
+      // NOW update search term to match what we're actually searching for
+      setSearchTerm(finalSearchValue);
+      
+      // Increment sequence for this actual API call
+      const apiSequence = ++requestSequenceRef.current;
+      
+      // If search is empty, show all data (reset to initial state)
+      if (finalSearchValue.trim() === '') {
+        // If no other filters are applied, show original data
+        if (resolutionStatusFilter.length === 0 && 
+            assignedToFilter === 'all' && 
+            posterStatusFilter.length === 0 && 
+            !dateRangeFilter.startDate && 
+            !dateRangeFilter.endDate) {
+          setFilteredData(data);
+          setFiltersApplied(false);
+        } else {
+          // Apply other filters without search
+          applyFilters(apiSequence);
+        }
+      } else {
+        // Apply filters with search
+        applyFilters(apiSequence);
+      }
     }, 500);
+  }, [applyFilters, data, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter]);
 
-    setSearchTimeout(timeout);
-  }, [searchTimeout, applyFilters]);
-
-  // Handle search input change
+  // Handle search input change from PrajaTable
   const handleSearchChange = useCallback((value: string) => {
     debouncedSearch(value);
   }, [debouncedSearch]);
+
+  // Memoized row click handler
+  const handleRowClick = useCallback((row: any) => {
+    setSelectedTicket(row);
+    setIsTicketModalOpen(true);
+  }, []);
 
   // Handle pagination navigation
   const handleNextPage = async () => {
@@ -750,10 +836,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
   };
 
-  const handleRowClick = (row: any) => {
-    setSelectedTicket(row);
-    setIsTicketModalOpen(true);
-  };
 
   const handleTicketUpdate = (updatedTicket: any) => {
     // Update the local data with the updated ticket
@@ -897,14 +979,17 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
   }, [config?.apiPrefix]);
 
-  // Cleanup timeout on unmount
+  // Cleanup timeout and abort controller on unmount
   useEffect(() => {
     return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
-  }, [searchTimeout]);
+  }, []);
 
   if (loading) {
     return (
@@ -1187,7 +1272,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </Button>
                 <Button
                   variant="default"
-                  onClick={applyFilters}
+                  onClick={() => applyFilters()}
                   className="flex-1"
                   disabled={loading}
                 >
@@ -1224,71 +1309,51 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           )}
         </div>
 
-        {/* Search Bar - Only shows when filters are applied or when searching */}
-        {(filtersApplied || searchTerm) && (
-          <div className="mb-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-800">
-                {config?.title || "Support Tickets"}
-              </h2>
-              <input
-                type="text"
-                placeholder="Search tickets..."
-                value={searchTerm}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+        {/* External search handled inside PrajaTable */}
+
+        {/* Always show PrajaTable with search bar */}
+        <PrajaTable 
+          columns={tableColumns} 
+          data={filteredData} 
+          title={config?.title || "Support Tickets"}
+          onRowClick={handleRowClick}
+          disablePagination={true}
+          externalSearch={true}
+          searchTerm={displaySearchTerm}
+          onSearch={handleSearchChange}
+        />
+        
+        {/* Server-side pagination controls */}
+        {pagination.totalCount > 0 && filteredData.length > 0 && (
+          <div className="flex justify-between items-center mt-4 p-4 border-t">
+            <div className="text-sm text-gray-600">
+              Showing {filteredData.length} of {pagination.totalCount} tickets
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={!pagination.previousPageLink || loading}
+              >
+                Previous
+              </Button>
+              
+              <span className="text-sm text-gray-600 px-3">
+                Page {pagination.currentPage} of {pagination.numberOfPages}
+              </span>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={!pagination.nextPageLink || loading}
+              >
+                Next
+              </Button>
             </div>
           </div>
-        )}
-
-        {filteredData.length === 0 ? (
-          <div className="text-center p-8 text-gray-600">
-            No data available
-          </div>
-        ) : (
-          <>
-                      <PrajaTable 
-            columns={tableColumns} 
-            data={filteredData} 
-            title={config?.title || "Support Tickets"}
-            onRowClick={handleRowClick}
-            disablePagination={true}
-          />
-            
-            {/* Server-side pagination controls */}
-            {pagination.totalCount > 0 && (
-              <div className="flex justify-between items-center mt-4 p-4 border-t">
-                <div className="text-sm text-gray-600">
-                  Showing {filteredData.length} of {pagination.totalCount} tickets
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePreviousPage}
-                    disabled={!pagination.previousPageLink || loading}
-                  >
-                    Previous
-                  </Button>
-                  
-                  <span className="text-sm text-gray-600 px-3">
-                    Page {pagination.currentPage} of {pagination.numberOfPages}
-                  </span>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextPage}
-                    disabled={!pagination.nextPageLink || loading}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-          </>
         )}
       </div>
 
