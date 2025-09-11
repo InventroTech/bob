@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
@@ -251,6 +251,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   });
   const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
   const [filtersApplied, setFiltersApplied] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [pagination, setPagination] = useState<{
     totalCount: number;
     numberOfPages: number;
@@ -314,7 +316,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'Content-Type': 'application/json'
         }
       });
 
@@ -351,6 +354,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
   };
 
+  // Debounced function to fetch filter options with search
+  
+
   // Fetch assignees from API
   const fetchAssignees = async () => {
     try {
@@ -365,7 +371,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'Content-Type': 'application/json'
         }
       });
 
@@ -465,6 +472,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         params.append('created_at__lte', endDateTime.toISOString());
       }
       
+      // Add search filter
+      if (searchTerm.trim() !== '') {
+        params.append('search_fields', searchTerm.trim());
+      }
+      
       // Add pagination
       params.append('page', '1');
       params.append('page_size', '10'); // Get more results
@@ -480,7 +492,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : ''
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
         }
       });
 
@@ -565,9 +578,36 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       startTime: '00:00',
       endTime: '23:59'
     });
+    setSearchTerm(''); // Clear search term
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+      setSearchTimeout(null);
+    }
     setFilteredData(data); // Show all tickets again
     setFiltersApplied(false);
   };
+
+  // Debounced search function that applies filters with search
+  const debouncedSearch = useCallback((searchValue: string) => {
+    // Clear existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set new timeout for 500ms
+    const timeout = setTimeout(async () => {
+      setSearchTerm(searchValue);
+      // Apply filters with the search term
+      await applyFilters();
+    }, 500);
+
+    setSearchTimeout(timeout);
+  }, [searchTimeout, applyFilters]);
+
+  // Handle search input change
+  const handleSearchChange = useCallback((value: string) => {
+    debouncedSearch(value);
+  }, [debouncedSearch]);
 
   // Handle pagination navigation
   const handleNextPage = async () => {
@@ -580,7 +620,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai'
           }
         });
 
@@ -649,7 +690,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai'
           }
         });
 
@@ -744,12 +786,19 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const apiUrl = `${baseUrl}${endpoint}`;
         console.log('API URL:', apiUrl);
         
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
+        };
+
+        // Add X-Tenant-Slug header only for renderer API calls
+        if (apiPrefix === 'renderer') {
+          headers['X-Tenant-Slug'] = 'bibhab-thepyro-ai';
+        }
+
         const response = await fetch(apiUrl, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
-          }
+          headers
         });
 
         if (!response.ok) {
@@ -847,6 +896,15 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       setApiPrefix(config.apiPrefix);
     }
   }, [config?.apiPrefix]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTimeout]);
 
   if (loading) {
     return (
@@ -1140,17 +1198,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
                 Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} tickets
-                {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) && (
+                {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2">
                     (Filtered by: 
                     {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.map(status => status === null ? 'Open' : status).join(', ')}`}
                     {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter === 'unassigned' ? 'Unassigned' : getUniqueAssignedTo().find(a => a.id === assignedToFilter)?.name || assignedToFilter}`}
                     {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
                     {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
+                    {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
                     )
                   </span>
                 )}
-                {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) && (
+                {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2 text-orange-600">
                     (Filters selected - click "Apply Filters" to see results)
                   </span>
@@ -1164,6 +1223,24 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             </div>
           )}
         </div>
+
+        {/* Search Bar - Only shows when filters are applied or when searching */}
+        {(filtersApplied || searchTerm) && (
+          <div className="mb-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-800">
+                {config?.title || "Support Tickets"}
+              </h2>
+              <input
+                type="text"
+                placeholder="Search tickets..."
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        )}
 
         {filteredData.length === 0 ? (
           <div className="text-center p-8 text-gray-600">
