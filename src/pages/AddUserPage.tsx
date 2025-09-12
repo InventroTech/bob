@@ -188,26 +188,43 @@ const AddUserPage = () => {
       return;
     }
     try {
-      // create a new user - let database auto-generate the id
-      const { data, error } = await supabase.from('users').insert([{ 
-        name: formData.name, 
-        email: formData.email, 
-        role_id: selectedRoleId, 
-        tenant_id: companyId,
-        created_at: new Date().toISOString()
-      }]).select().single();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      console.log("data", data);
-      console.log("error", error);
-      console.log("formData", formData);
-      console.log("selectedRoleId", selectedRoleId);
-      console.log("companyId", companyId);
-
-      if (error) {
-        console.error('Error adding user:', error);
-        toast.error(`Error adding user: ${error.message}`);
+      if (!token) {
+        toast.error('Authentication required');
         return;
       }
+
+      // Use renderer URL for user creation
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/accounts/users/legacy/create/`;
+      
+      console.log('Creating user via:', apiUrl);
+      console.log('Payload:', { name: formData.name, email: formData.email, role_id: selectedRoleId });
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          role_id: selectedRoleId
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error response:', errorData);
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      console.log('User creation response:', responseData);
 
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
@@ -218,8 +235,8 @@ const AddUserPage = () => {
       await fetchUsers();
 
     } catch (error: any) {
-      console.error("Unexpected error:", error);
-      toast.error(`Unexpected error: ${error.message}`);
+      console.error("Error adding user:", error);
+      toast.error(`Error adding user: ${error.message}`);
     }
   };
 
