@@ -344,6 +344,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         inProgress: data.ticketStats?.wipTickets || 0,
         resolved: data.ticketStats?.resolvedByYouToday || 0,
         notPossible: data.ticketStats?.cantResolveToday || 0,
+        // Include the additional backend fields
+        resolvedByYouToday: data.ticketStats?.resolvedByYouToday || 0,
+        totalPendingTickets: data.ticketStats?.totalPendingTickets || 0,
+        wipTickets: data.ticketStats?.wipTickets || 0,
+        cantResolveToday: data.ticketStats?.cantResolveToday || 0,
+        pendingByPoster: data.ticketStats?.pendingByPoster || [],
       };
 
       setTicketStats(stats);
@@ -355,6 +361,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         inProgress: 0,
         resolved: 0,
         notPossible: 0,
+        resolvedByYouToday: 0,
+        totalPendingTickets: 0,
+        wipTickets: 0,
+        cantResolveToday: 0,
+        pendingByPoster: [],
       });
     }
   };
