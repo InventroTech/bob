@@ -43,7 +43,7 @@ const CustomAppAuthPage: React.FC = () => {
 
         if (token) {
           const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-          const apiUrl = `${baseUrl}/authz/link-user-uid/`;
+          const apiUrl = `${baseUrl}/accounts/link-user-uid/`;
           
           console.log('Linking user UID via:', apiUrl);
           console.log('Payload:', { uid: user.id, email: user.email });
