@@ -188,7 +188,7 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
                 <span className="text-sm font-medium text-blue-700">{ticketStats.wipTickets || 0}</span>
               </div>
 
-              {/* Clickable Pending section with accordion dropdown */}
+          
               <Collapsible open={isPendingOpen} onOpenChange={setIsPendingOpen}>
                 <CollapsibleTrigger asChild>
                   <div className="flex justify-between items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-all duration-200 ease-in-out">
