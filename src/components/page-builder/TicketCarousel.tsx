@@ -261,7 +261,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     };
   };
 
-  //getting the initial state from the initial ticket
   const initialState = getInitialState();
 
   const [currentTicket, setCurrentTicket] = useState<any>(initialState.currentTicket);
