@@ -1368,10 +1368,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
         {/* Search Bar Section */}
         <div className="mb-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-800">
-              {config?.title || "Support Tickets"}
-            </h2>
+          <div className="flex justify-end items-center">
             <div className="flex items-center gap-4">
               <div className="relative">
                 <SearchInputComponent 
