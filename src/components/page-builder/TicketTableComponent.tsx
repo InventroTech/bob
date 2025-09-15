@@ -1,19 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { TicketCarousel } from './TicketCarousel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X, Filter } from 'lucide-react';
+import { X, Filter, Calendar, Clock } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ChevronDown } from 'lucide-react';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import { format } from 'date-fns';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 
 interface Column {
   header: string;
@@ -229,64 +232,390 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [data, setData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(false); // Separate loading state for table only
+  const [rateLimited, setRateLimited] = useState(false); // Rate limiting indicator
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [resolutionStatusFilter, setResolutionStatusFilter] = useState<string[]>([]);
   const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
   const [posterStatusFilter, setPosterStatusFilter] = useState<string[]>([]);
+  const [dateRangeFilter, setDateRangeFilter] = useState<{
+    startDate: Date | undefined;
+    endDate: Date | undefined;
+    startTime: string;
+    endTime: string;
+  }>({
+    startDate: undefined,
+    endDate: undefined,
+    startTime: '00:00',
+    endTime: '23:59'
+  });
   const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
+  const [filtersApplied, setFiltersApplied] = useState(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [displaySearchTerm, setDisplaySearchTerm] = useState<string>(''); // Separate state for display
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestSequenceRef = useRef<number>(0);
+  const [pagination, setPagination] = useState<{
+    totalCount: number;
+    numberOfPages: number;
+    currentPage: number;
+    pageSize: number;
+    nextPageLink: string | null;
+    previousPageLink: string | null;
+  }>({
+    totalCount: 0,
+    numberOfPages: 0,
+    currentPage: 1,
+    pageSize: 10,
+    nextPageLink: null,
+    previousPageLink: null
+  });
+  const [assignees, setAssignees] = useState<Array<{
+    id: number;
+    name: string;
+    email: string;
+    company_name: string | null;
+    uid: string | null;
+  }>>([]);
+  const [filterOptions, setFilterOptions] = useState<{
+    resolution_statuses: (string | null)[];
+    poster_statuses: string[];
+  }>({
+    resolution_statuses: [],
+    poster_statuses: []
+  });
   const { session, user } = useAuth();
 
-  const tableColumns: Column[] = config?.columns?.map(col => ({
-    header: col.label,
-    accessor: col.key,
-    type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
-  })) || defaultColumns;
+  // Memoize table columns to prevent unnecessary re-renders
+  const tableColumns: Column[] = useMemo(() => 
+    config?.columns?.map(col => ({
+      header: col.label,
+      accessor: col.key,
+      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
+    })) || defaultColumns,
+    [config?.columns]
+  );
 
   // Get unique values for filters
   const getUniqueResolutionStatuses = () => {
+    // Use API data if available, otherwise fallback to local data
+    if (filterOptions.resolution_statuses.length > 0) {
+      return filterOptions.resolution_statuses;
+    }
+    
+    // Fallback to local data
     const statuses = [...new Set(data.map(ticket => ticket.resolution_status))];
     return statuses.filter(status => status && status !== 'N/A');
   };
 
+  // Fetch filter options from API
+  const fetchFilterOptions = async () => {
+    try {
+      const authToken = session?.access_token;
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/analytics/support-tickets/filter-options/`;
+      
+      console.log('Fetching filter options from:', apiUrl);
+      console.log('Auth token:', authToken ? 'Present' : 'Missing');
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch filter options: ${response.status} - ${errorText}`);
+      }
+
+      const responseData = await response.json();
+      console.log('Filter options response:', responseData);
+      
+      if (responseData.resolution_statuses && responseData.poster_statuses) {
+        setFilterOptions({
+          resolution_statuses: responseData.resolution_statuses,
+          poster_statuses: responseData.poster_statuses
+        });
+      } else {
+        console.error('Invalid filter options data format:', responseData);
+        setFilterOptions({
+          resolution_statuses: [],
+          poster_statuses: []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
+      setFilterOptions({
+        resolution_statuses: [],
+        poster_statuses: []
+      });
+    }
+  };
+
+  // Debounced function to fetch filter options with search
+  
+
+  // Fetch assignees from API
+  const fetchAssignees = async () => {
+    try {
+      const authToken = session?.access_token;
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/accounts/users/assignees-by-role/?role=CSE`;
+      
+      console.log('Fetching assignees from:', apiUrl);
+      console.log('Auth token:', authToken ? 'Present' : 'Missing');
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch assignees: ${response.status} - ${errorText}`);
+      }
+
+      const responseData = await response.json();
+      console.log('Assignees response:', responseData);
+      
+      if (responseData.results && Array.isArray(responseData.results)) {
+        setAssignees(responseData.results);
+      } else {
+        console.error('Invalid assignees data format:', responseData);
+        setAssignees([]);
+      }
+    } catch (error) {
+      console.error('Error fetching assignees:', error);
+      setAssignees([]);
+    }
+  };
+
   const getUniqueAssignedTo = () => {
-    const assigned = [...new Set(data.map(ticket => ticket.cse_name))];
-    return assigned.filter(assignee => assignee && assignee !== 'Unassigned');
+    // Return the assignees fetched from API
+    return assignees.map(assignee => ({
+      id: assignee.uid || assignee.id.toString(), // Use uid if available, fallback to id
+      name: assignee.name
+    }));
   };
 
   const getUniquePosterStatuses = () => {
+    // Use API data if available, otherwise fallback to local data
+    if (filterOptions.poster_statuses.length > 0) {
+      return filterOptions.poster_statuses;
+    }
+    
+    // Fallback to local data
     const statuses = [...new Set(data.map(ticket => ticket.poster))];
     return statuses.filter(status => status && status !== 'N/A' && status !== 'No Poster');
   };
 
-  // Apply filters
-  const applyFilters = () => {
-    let filtered = [...data];
-
-    // Filter by resolution status (multi-select)
-    if (resolutionStatusFilter.length > 0) {
-      filtered = filtered.filter(ticket => resolutionStatusFilter.includes(ticket.resolution_status));
-    }
-
-    // Filter by assigned to
-    if (assignedToFilter !== 'all') {
-      if (assignedToFilter === 'myself') {
-        const userDisplayName = getDisplayName(user?.email);
-        filtered = filtered.filter(ticket => 
-          ticket.cse_name === userDisplayName || ticket.cse_name === user?.email || ticket.cse_name === user?.id
-        );
-      } else {
-        filtered = filtered.filter(ticket => ticket.cse_name === assignedToFilter);
+  // Apply filters using analytics endpoint
+  const applyFilters = async (requestSequence?: number) => {
+    try {
+      setTableLoading(true); // Use table loading instead of full component loading
+      
+      // Cancel any previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
-    }
+      
+      // Create new AbortController for this request
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      
+      // Use provided sequence or increment for non-search calls
+      const currentSequence = requestSequence || ++requestSequenceRef.current;
+      
+      const authToken = session?.access_token;
 
-    // Filter by poster status (multi-select)
-    if (posterStatusFilter.length > 0) {
-      filtered = filtered.filter(ticket => posterStatusFilter.includes(ticket.poster));
-    }
+      // Always use renderer URL for analytics endpoint
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/analytics/support-ticket/`;
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      
+      // Add resolution status filters
+      if (resolutionStatusFilter.length > 0) {
+        resolutionStatusFilter.forEach(status => {
+          // Send null for "Open" status, otherwise send the status as-is
+          const statusToSend = status === 'Open' ? 'null' : status;
+          params.append('resolution_status', statusToSend);
+        });
+      }
+      
+      // Add assigned to filter
+      if (assignedToFilter !== 'all') {
+        if (assignedToFilter === 'myself') {
+          params.append('assigned_to', user?.id || '');
+        } else if (assignedToFilter === 'unassigned') {
+          params.append('assigned_to', 'null');
+        } else {
+          // For specific assignee, use the ID directly
+          params.append('assigned_to', assignedToFilter);
+        }
+      }
+      
+      // Add poster status filters
+      if (posterStatusFilter.length > 0) {
+        posterStatusFilter.forEach(status => {
+          params.append('poster', status);
+        });
+      }
+      
+      // Add date range filters
+      if (dateRangeFilter.startDate) {
+        const startDateTime = new Date(dateRangeFilter.startDate);
+        startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
+        params.append('created_at__gte', startDateTime.toISOString());
+      }
+      if (dateRangeFilter.endDate) {
+        const endDateTime = new Date(dateRangeFilter.endDate);
+        endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
+        params.append('created_at__lte', endDateTime.toISOString());
+      }
+      
+      // Add search filter - use the latest search value from ref
+      const currentSearchTerm = latestSearchValueRef.current;
+      if (currentSearchTerm.trim() !== '') {
+        params.append('search_fields', currentSearchTerm.trim());
+        console.log(`Adding search filter: "${currentSearchTerm}"`);
+      }
+      
+      // Add pagination
+      params.append('page', '1');
+      params.append('page_size', '10'); // Get more results
+      
+      const fullUrl = `${apiUrl}?${params.toString()}`;
+      console.log('Filtered API URL:', fullUrl);
+      console.log('Resolution status filter mapping:', resolutionStatusFilter.map(status => ({
+        original: status,
+        sent: status === 'Open' ? 'null' : status
+      })));
 
-    setFilteredData(filtered);
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        },
+        signal: abortController.signal
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error(`Rate limit exceeded. Please wait a moment before searching again.`);
+        }
+        throw new Error(`Failed to fetch filtered tickets: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      
+      // Check if this response is still relevant (not superseded by a newer request)
+      if (currentSequence !== requestSequenceRef.current) {
+        console.log(`Ignoring stale response for sequence ${currentSequence}, current is ${requestSequenceRef.current}, search term was: "${searchTerm}"`);
+        return;
+      }
+      
+      console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length || responseData.results?.length || 0}`);
+      
+      // Handle different response formats
+      let tickets = [];
+      let pageMeta = null;
+      
+      if (responseData.results && Array.isArray(responseData.results)) {
+        tickets = responseData.results;
+        pageMeta = responseData.page_meta;
+      } else if (responseData.data && Array.isArray(responseData.data)) {
+        tickets = responseData.data;
+        pageMeta = responseData.page_meta;
+      } else if (Array.isArray(responseData)) {
+        tickets = responseData;
+      } else {
+        throw new Error('Invalid data format received');
+      }
+
+      // Transform the data with the new attributes
+      const transformedData = tickets.map((ticket: any) => ({
+        ...ticket,
+        // Format created_at with relative time
+        created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
+        // Use cse_name for assigned to with display name
+        cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
+        // Combine first_name and last_name for name
+        name: ticket.first_name && ticket.last_name 
+          ? `${ticket.first_name} ${ticket.last_name}`
+          : ticket.name || 'N/A',
+        // Use reason field
+        reason: ticket.reason || ticket.Description || 'No reason provided',
+        // Use resolution_status with proper formatting
+        resolution_status: ticket.resolution_status || ticket.status || 'Open',
+        // Use poster field directly
+        poster: ticket.poster || 'No Poster',
+        // Generate Praja dashboard user link
+        praja_dashboard_user_link: ticket.praja_user_id 
+          ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+          : ticket.praja_dashboard_user_link || 'N/A',
+        // Ensure display_pic_url is included
+        display_pic_url: ticket.display_pic_url || null
+      }));
+
+      // Set filtered data with the current search context
+      console.log(`Setting filtered data for sequence ${currentSequence} with ${transformedData.length} tickets, search: "${searchTerm}"`);
+      setFilteredData(transformedData);
+      setFiltersApplied(true);
+      
+      // Update pagination data if available
+      if (pageMeta) {
+        setPagination({
+          totalCount: pageMeta.total_count || 0,
+          numberOfPages: pageMeta.number_of_pages || 0,
+          currentPage: pageMeta.current_page || 1,
+          pageSize: pageMeta.page_size || 10,
+          nextPageLink: pageMeta.next_page_link || null,
+          previousPageLink: pageMeta.previous_page_link || null
+        });
+        console.log('Updated pagination from filtered response:', pageMeta);
+      }
+    } catch (error) {
+      // Don't show error for aborted requests
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
+      console.error('Error applying filters:', error);
+      
+      // Handle different types of errors
+      if (error.message.includes('Rate limit exceeded')) {
+        toast.error('Too many requests. Please wait a moment before searching again.');
+      } else if (error.message.includes('429')) {
+        toast.error('Rate limit exceeded. Please wait before making another request.');
+      } else {
+        toast.error('Failed to apply filters');
+      }
+    } finally {
+      setTableLoading(false); // Use table loading instead of full component loading
+    }
   };
 
   // Reset filters
@@ -294,19 +623,276 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     setResolutionStatusFilter([]);
     setAssignedToFilter('all');
     setPosterStatusFilter([]);
-    setFilteredData(data);
+    setDateRangeFilter({
+      startDate: undefined,
+      endDate: undefined,
+      startTime: '00:00',
+      endTime: '23:59'
+    });
+    setSearchTerm(''); // Clear search term
+    setDisplaySearchTerm(''); // Clear display search term
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    setFilteredData(data); // Show all tickets again
+    setFiltersApplied(false);
   };
 
-  // Check if current user can edit the ticket
-  const canEditTicket = (ticket: any) => {
-    // Allow all users to edit all tickets
-    return true;
-  };
+  // Store the latest search value in a ref to avoid closure issues
+  const latestSearchValueRef = useRef<string>('');
+  const lastApiCallTimeRef = useRef<number>(0);
+  const MIN_TIME_BETWEEN_CALLS = 2000; // Minimum 2 seconds between API calls
 
-  const handleRowClick = (row: any) => {
+  // Simplified debounced search function - always use latest value with rate limiting
+  const debouncedSearch = useCallback((value: string) => {
+    // Update the latest search value immediately
+    latestSearchValueRef.current = value;
+    
+    console.log(`User typed: "${value}"`);
+    
+    // Update display immediately - no delay for better UX
+    setDisplaySearchTerm(value);
+    // DON'T update searchTerm here - only update it when we actually make the API call
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Cancel any previous request immediately
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Set new timeout for API call with rate limiting
+    searchTimeoutRef.current = setTimeout(() => {
+      // ALWAYS use the latest value from ref, ignore closure value
+      const finalSearchValue = latestSearchValueRef.current;
+      
+      // Check rate limiting
+      const now = Date.now();
+      const timeSinceLastCall = now - lastApiCallTimeRef.current;
+      
+      if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
+        const remainingWait = MIN_TIME_BETWEEN_CALLS - timeSinceLastCall;
+        console.log(`Rate limiting: waiting ${remainingWait}ms before API call for "${finalSearchValue}"`);
+        
+        // Show rate limiting indicator
+        setRateLimited(true);
+        
+        // Wait additional time before making API call
+        setTimeout(() => {
+          console.log(`Executing delayed API call for: "${finalSearchValue}"`);
+          setRateLimited(false);
+          makeApiCall(finalSearchValue);
+        }, remainingWait);
+      } else {
+        console.log(`Executing API call for latest value: "${finalSearchValue}" (original closure value was: "${value}")`);
+        makeApiCall(finalSearchValue);
+      }
+      
+      function makeApiCall(searchValue: string) {
+        // Update last API call time
+        lastApiCallTimeRef.current = Date.now();
+        
+        // NOW update search term to match what we're actually searching for
+        setSearchTerm(searchValue);
+        
+        // Increment sequence for this actual API call
+        const apiSequence = ++requestSequenceRef.current;
+        
+        // If search is empty, show all data (reset to initial state)
+        if (searchValue.trim() === '') {
+          // If no other filters are applied, show original data
+          if (resolutionStatusFilter.length === 0 && 
+              assignedToFilter === 'all' && 
+              posterStatusFilter.length === 0 && 
+              !dateRangeFilter.startDate && 
+              !dateRangeFilter.endDate) {
+            setFilteredData(data);
+            setFiltersApplied(false);
+          } else {
+            // Apply other filters without search
+            applyFilters(apiSequence);
+          }
+        } else {
+          // Apply filters with search
+          applyFilters(apiSequence);
+        }
+      }
+    }, 1000); // Increased from 500ms to 1000ms
+  }, [applyFilters, data, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter]);
+
+  // Handle search input change from PrajaTable
+  const handleSearchChange = useCallback((value: string) => {
+    debouncedSearch(value);
+  }, [debouncedSearch]);
+
+  // Memoized search input component to prevent re-renders
+  const SearchInputComponent = useMemo(() => 
+    React.memo(({ searchTerm, onChange }: { searchTerm: string; onChange: (value: string) => void }) => {
+      console.log('SearchInput render with term:', searchTerm);
+      return (
+        <input
+          type="text"
+          placeholder="Search tickets..."
+          value={searchTerm}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      );
+    }, (prevProps, nextProps) => prevProps.searchTerm === nextProps.searchTerm),
+    []
+  );
+
+  // Memoized row click handler
+  const handleRowClick = useCallback((row: any) => {
     setSelectedTicket(row);
     setIsTicketModalOpen(true);
+  }, []);
+
+  // Handle pagination navigation
+  const handleNextPage = async () => {
+    if (pagination.nextPageLink) {
+      try {
+        setTableLoading(true);
+        const authToken = session?.access_token;
+        
+        const response = await fetch(pagination.nextPageLink, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch next page: ${response.status}`);
+        }
+
+        const responseData = await response.json();
+        
+        let tickets = [];
+        let pageMeta = null;
+        
+        if (responseData.data && Array.isArray(responseData.data)) {
+          tickets = responseData.data;
+          pageMeta = responseData.page_meta;
+        } else {
+          throw new Error('Invalid data format received');
+        }
+
+        // Transform the data
+        const transformedData = tickets.map(ticket => ({
+          ...ticket,
+          created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
+          cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
+          name: ticket.first_name && ticket.last_name 
+            ? `${ticket.first_name} ${ticket.last_name}`
+            : ticket.name || 'N/A',
+          reason: ticket.reason || ticket.Description || 'No reason provided',
+          resolution_status: ticket.resolution_status || ticket.status || 'Open',
+          poster: ticket.poster || 'No Poster',
+          praja_dashboard_user_link: ticket.praja_user_id 
+            ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+            : ticket.praja_dashboard_user_link || 'N/A',
+          display_pic_url: ticket.display_pic_url || null
+        }));
+
+        setData(transformedData);
+        setFilteredData(transformedData);
+        
+        if (pageMeta) {
+          setPagination({
+            totalCount: pageMeta.total_count || 0,
+            numberOfPages: pageMeta.number_of_pages || 0,
+            currentPage: pageMeta.current_page || 1,
+            pageSize: pageMeta.page_size || 10,
+            nextPageLink: pageMeta.next_page_link || null,
+            previousPageLink: pageMeta.previous_page_link || null
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching next page:', error);
+        toast.error('Failed to load next page');
+      } finally {
+        setTableLoading(false);
+      }
+    }
   };
+
+  const handlePreviousPage = async () => {
+    if (pagination.previousPageLink) {
+      try {
+        setTableLoading(true);
+        const authToken = session?.access_token;
+        
+        const response = await fetch(pagination.previousPageLink, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch previous page: ${response.status}`);
+        }
+
+        const responseData = await response.json();
+        
+        let tickets = [];
+        let pageMeta = null;
+        
+        if (responseData.data && Array.isArray(responseData.data)) {
+          tickets = responseData.data;
+          pageMeta = responseData.page_meta;
+        } else {
+          throw new Error('Invalid data format received');
+        }
+
+        // Transform the data
+        const transformedData = tickets.map(ticket => ({
+          ...ticket,
+          created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
+          cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
+          name: ticket.first_name && ticket.last_name 
+            ? `${ticket.first_name} ${ticket.last_name}`
+            : ticket.name || 'N/A',
+          reason: ticket.reason || ticket.Description || 'No reason provided',
+          resolution_status: ticket.resolution_status || ticket.status || 'Open',
+          poster: ticket.poster || 'No Poster',
+          praja_dashboard_user_link: ticket.praja_user_id 
+            ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+            : ticket.praja_dashboard_user_link || 'N/A',
+          display_pic_url: ticket.display_pic_url || null
+        }));
+
+        setData(transformedData);
+        setFilteredData(transformedData);
+        
+        if (pageMeta) {
+          setPagination({
+            totalCount: pageMeta.total_count || 0,
+            numberOfPages: pageMeta.number_of_pages || 0,
+            currentPage: pageMeta.current_page || 1,
+            pageSize: pageMeta.page_size || 10,
+            nextPageLink: pageMeta.next_page_link || null,
+            previousPageLink: pageMeta.previous_page_link || null
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching previous page:', error);
+        toast.error('Failed to load previous page');
+      } finally {
+        setTableLoading(false);
+      }
+    }
+  };
+
 
   const handleTicketUpdate = (updatedTicket: any) => {
     // Update the local data with the updated ticket
@@ -314,7 +900,15 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       ticket.id === updatedTicket.id ? updatedTicket : ticket
     );
     setData(updatedData);
-    setFilteredData(updatedData);
+    
+    // If filters are applied, refresh filtered data
+    if (filtersApplied) {
+      applyFilters();
+    } else {
+      // If no filters applied, update filtered data with all tickets
+      setFilteredData(updatedData);
+    }
+    
     setIsTicketModalOpen(false);
   };
 
@@ -331,12 +925,19 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const apiUrl = `${baseUrl}${endpoint}`;
         console.log('API URL:', apiUrl);
         
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
+        };
+
+        // Add X-Tenant-Slug header only for renderer API calls
+        if (apiPrefix === 'renderer') {
+          headers['X-Tenant-Slug'] = 'bibhab-thepyro-ai';
+        }
+
         const response = await fetch(apiUrl, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : ''
-          }
+          headers
         });
 
         if (!response.ok) {
@@ -349,12 +950,15 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
         // Handle different response formats
         let tickets = [];
-        if (Array.isArray(responseData)) {
+        let pageMeta = null;
+        
+        if (responseData.data && Array.isArray(responseData.data)) {
+          tickets = responseData.data;
+          pageMeta = responseData.page_meta;
+        } else if (Array.isArray(responseData)) {
           tickets = responseData;
         } else if (responseData.tickets && Array.isArray(responseData.tickets)) {
           tickets = responseData.tickets;
-        } else if (responseData.data && Array.isArray(responseData.data)) {
-          tickets = responseData.data;
         } else {
           throw new Error('Invalid data format received');
         }
@@ -387,6 +991,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Set the data (empty array if no tickets found)
         setData(transformedData);
         setFilteredData(transformedData);
+        
+        // Set pagination data if available
+        if (pageMeta) {
+          setPagination({
+            totalCount: pageMeta.total_count || 0,
+            numberOfPages: pageMeta.number_of_pages || 0,
+            currentPage: pageMeta.current_page || 1,
+            pageSize: pageMeta.page_size || 10,
+            nextPageLink: pageMeta.next_page_link || null,
+            previousPageLink: pageMeta.previous_page_link || null
+          });
+        }
       } catch (error) {
         console.error('Error fetching tickets:', error);
         // Set empty data on error instead of using demo data
@@ -400,9 +1016,17 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     fetchTickets();
   }, [session, config?.apiEndpoint, apiPrefix]);
 
+  // Fetch filter options and assignees when component mounts
+  useEffect(() => {
+    if (session?.access_token) {
+      fetchFilterOptions();
+      fetchAssignees();
+    }
+  }, [session?.access_token]);
+
   // Apply filters when filter values change
   useEffect(() => {
-    applyFilters();
+    // Don't auto-apply filters, wait for user to click "Apply Filters" button
   }, [resolutionStatusFilter, assignedToFilter, posterStatusFilter, data]);
 
   // Update apiPrefix when config changes
@@ -411,6 +1035,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       setApiPrefix(config.apiPrefix);
     }
   }, [config?.apiPrefix]);
+
+  // Cleanup timeout and abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -442,7 +1078,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Resolution Status
@@ -482,7 +1118,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                                 htmlFor={`resolution-${status}`}
                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                               >
-                                {status}
+                                {status === null ? 'Open' : status}
                               </label>
                             </div>
                           ))}
@@ -576,36 +1212,153 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     <SelectContent>
                       <SelectItem value="all">All Assignees</SelectItem>
                       <SelectItem value="myself">Assigned to myself</SelectItem>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
                       {getUniqueAssignedTo().map(assignee => (
-                        <SelectItem key={assignee} value={assignee}>
-                          {assignee}
+                        <SelectItem key={assignee.id} value={assignee.id}>
+                          {assignee.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
 
-                <div className="flex items-end">
-                  <Button
-                    variant="outline"
-                    onClick={resetFilters}
-                    className="w-full"
-                  >
-                    Reset Filters
-                  </Button>
+              {/* Date Range Filters - 2nd Line */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Date
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRangeFilter.startDate ? (
+                          format(dateRangeFilter.startDate, "PPP")
+                        ) : (
+                          <span className="text-muted-foreground">Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dateRangeFilter.startDate}
+                        onSelect={(date) => setDateRangeFilter(prev => ({
+                          ...prev,
+                          startDate: date
+                        }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Start Time
+                    </label>
+                    <Input
+                      type="time"
+                      value={dateRangeFilter.startTime}
+                      onChange={(e) => setDateRangeFilter(prev => ({
+                        ...prev,
+                        startTime: e.target.value
+                      }))}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    End Date
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRangeFilter.endDate ? (
+                          format(dateRangeFilter.endDate, "PPP")
+                        ) : (
+                          <span className="text-muted-foreground">Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dateRangeFilter.endDate}
+                        onSelect={(date) => setDateRangeFilter(prev => ({
+                          ...prev,
+                          endDate: date
+                        }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      End Time
+                    </label>
+                    <Input
+                      type="time"
+                      value={dateRangeFilter.endTime}
+                      onChange={(e) => setDateRangeFilter(prev => ({
+                        ...prev,
+                        endTime: e.target.value
+                      }))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons - 3rd Line */}
+              <div className="flex items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  onClick={resetFilters}
+                  className="flex-1"
+                >
+                  Reset Filters
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => applyFilters()}
+                  className="flex-1"
+                  disabled={tableLoading}
+                >
+                  {tableLoading ? 'Applying...' : 'Apply Filters'}
+                </Button>
               </div>
 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
-                Showing {filteredData.length} of {data.length} tickets
-                {(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) && (
+                Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} tickets
+                {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2">
                     (Filtered by: 
-                    {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.join(', ')}`}
-                    {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter}`}
+                    {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.map(status => status === null ? 'Open' : status).join(', ')}`}
+                    {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter === 'unassigned' ? 'Unassigned' : getUniqueAssignedTo().find(a => a.id === assignedToFilter)?.name || assignedToFilter}`}
                     {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
+                    {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
+                    {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
                     )
+                  </span>
+                )}
+                {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
+                  <span className="ml-2 text-orange-600">
+                    (Filters selected - click "Apply Filters" to see results)
+                  </span>
+                )}
+                {pagination.totalCount > 0 && (
+                  <span className="ml-2 text-blue-600">
+                    (Page {pagination.currentPage} of {pagination.numberOfPages})
                   </span>
                 )}
               </div>
@@ -613,17 +1366,65 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           )}
         </div>
 
-        {filteredData.length === 0 ? (
-          <div className="text-center p-8 text-gray-600">
-            No data available
+        {/* Search Bar Section */}
+        <div className="mb-6">
+          <div className="flex justify-end items-center">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <SearchInputComponent 
+                  searchTerm={displaySearchTerm}
+                  onChange={handleSearchChange}
+                />
+                {rateLimited && (
+                  <div className="absolute -top-8 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded border border-yellow-300">
+                    Rate limited - waiting...
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        ) : (
-          <PrajaTable 
-            columns={tableColumns} 
-            data={filteredData} 
-            title={config?.title || "Support Tickets"}
-            onRowClick={handleRowClick}
-          />
+        </div>
+
+        {/* Table Section */}
+        <PrajaTable 
+          columns={tableColumns} 
+          data={filteredData} 
+          onRowClick={handleRowClick}
+          disablePagination={true}
+          loading={tableLoading}
+        />
+        
+        {/* Server-side pagination controls */}
+        {pagination.totalCount > 0 && filteredData.length > 0 && (
+          <div className="flex justify-between items-center mt-4 p-4 border-t">
+            <div className="text-sm text-gray-600">
+              Showing {filteredData.length} of {pagination.totalCount} tickets
+            </div>
+            
+            <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreviousPage}
+                    disabled={!pagination.previousPageLink || tableLoading}
+                  >
+                    Previous
+                  </Button>
+                  
+                  <span className="text-sm text-gray-600 px-3">
+                    Page {pagination.currentPage} of {pagination.numberOfPages}
+                  </span>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleNextPage}
+                    disabled={!pagination.nextPageLink || tableLoading}
+                  >
+                    Next
+                  </Button>
+            </div>
+          </div>
         )}
       </div>
 
