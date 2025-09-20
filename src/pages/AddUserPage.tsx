@@ -249,21 +249,46 @@ const AddUserPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      const response = await fetch(`${import.meta.env.VITE_API_URI}/delete-user`, {
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+
+      // Find the user to get their role_id
+      const userToDelete = users.find(user => user.email === email);
+      if (!userToDelete) {
+        toast.error('User not found');
+        return;
+      }
+
+      // Use renderer URL for user deletion
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/accounts/delete-user/`;
+      
+      console.log('Deleting user via:', apiUrl);
+      console.log('Payload:', { email, role_id: userToDelete.role_id });
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
         },
         body: JSON.stringify({
-          email
+          email,
+          role_id: userToDelete.role_id
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to delete user');
+        console.error('Error response:', errorData);
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
+
+      const responseData = await response.json();
+      console.log('User deletion response:', responseData);
 
       // Refresh the users list after successful deletion
       await fetchUsers();

@@ -73,9 +73,51 @@ const getDisplayName = (email: string | null): string => {
 
 // Function to format relative time
 const formatRelativeTime = (dateString: string): string => {
-  const now = new Date();
-  const date = new Date(dateString);
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  // Parse the UTC timestamp from Supabase (assume all timestamps are UTC)
+  let utcDate: Date;
+  
+  // Handle different date string formats - all assumed to be UTC
+  if (dateString.includes('T')) {
+    // ISO format like "2025-09-20T08:28:01.041432"
+    utcDate = new Date(dateString + 'Z'); // Force UTC parsing
+  } else if (dateString.includes(' ')) {
+    // Space format like "2025-09-20 08:28:01"
+    utcDate = new Date(dateString + ' UTC'); // Force UTC parsing
+  } else {
+    utcDate = new Date(dateString);
+  }
+  
+  // Validate the parsed date
+  if (isNaN(utcDate.getTime())) {
+    console.warn('Invalid date string:', dateString);
+    return 'Invalid date';
+  }
+  
+  // Convert UTC to IST (Mumbai) - IST is UTC+5:30
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const istDate = new Date(utcDate.getTime() + istOffset);
+  
+  // Get current time in IST
+  const nowUtc = new Date();
+  const nowIst = new Date(nowUtc.getTime() + istOffset);
+  
+  // Debug logging
+  console.log('Original date string:', dateString);
+  console.log('UTC date:', utcDate.toISOString());
+  console.log('IST date:', istDate.toLocaleString('en-IN'));
+  console.log('Current IST:', nowIst.toLocaleString('en-IN'));
+  
+  // Calculate difference using IST times
+  const diffInMilliseconds = nowIst.getTime() - istDate.getTime();
+  const diffInSeconds = Math.floor(diffInMilliseconds / 1000);
+  
+  console.log('Time difference in seconds:', diffInSeconds);
+  console.log('Time difference in hours:', (diffInSeconds / 3600).toFixed(2));
+  
+  // Handle negative differences
+  if (diffInSeconds < 0) {
+    return 'Just now';
+  }
   
   if (diffInSeconds < 60) {
     return `${diffInSeconds} sec ago`;
@@ -85,15 +127,15 @@ const formatRelativeTime = (dateString: string): string => {
   } else if (diffInSeconds < 86400) {
     const hours = Math.floor(diffInSeconds / 3600);
     return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  } else if (diffInSeconds < 2592000) { // Less than 30 days
+    const days = Math.floor(diffInSeconds / 86400);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  } else if (diffInSeconds < 31536000) { // Less than 365 days
+    const months = Math.floor(diffInSeconds / 2592000);
+    return `${months} month${months > 1 ? 's' : ''} ago`;
   } else {
-    // For 1 day or more, show date and time
-    return date.toLocaleString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    const years = Math.floor(diffInSeconds / 31536000);
+    return `${years} year${years > 1 ? 's' : ''} ago`;
   }
 };
 
