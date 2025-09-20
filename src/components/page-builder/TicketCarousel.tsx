@@ -602,7 +602,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         callStatus
       }));
 
-      let apiUrl = `${import.meta.env.VITE_API_URI}/save-and-continue`;
+      // Use renderer URL for save and continue
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      let apiUrl = `${baseUrl}/support-ticket/save-and-continue/`;
       let payload: any = {
         ticketId: currentTicket?.id,
         resolutionStatus,
@@ -614,7 +616,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       };
 
-      // If Not Connected, use /not-connected endpoint and adjust payload
+      // If Not Connected, use original not-connected endpoint and adjust payload
       if (action === "Not Connected") {
         apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
         payload = {
@@ -630,12 +632,20 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
+      // Add X-Tenant-Slug header only for renderer API calls
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+      
+      // Add tenant slug only for renderer API endpoints
+      if (apiUrl.includes(import.meta.env.VITE_RENDER_API_URL)) {
+        headers["X-Tenant-Slug"] = "bibhab-thepyro-ai";
+      }
+
       const response = await fetch(apiUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify(payload)
       });
 
