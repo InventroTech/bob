@@ -278,6 +278,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     cseRemarks: initialState.cseRemarks,
     selectedOtherReasons: initialState.selectedOtherReasons,
     ticketStartTime: null as Date | null,
+    reviewRequested: false as boolean,
   });
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -378,6 +379,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       cseRemarks: "",
       selectedOtherReasons: [],
       ticketStartTime: null,
+      reviewRequested: false,
     });
   };
 
@@ -400,6 +402,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       cseRemarks: nextTicket.cse_remarks || "",
       selectedOtherReasons: parseOtherReasons(nextTicket.other_reasons),
       ticketStartTime: new Date(),
+      reviewRequested: Boolean(nextTicket.review_requested),
     });
     setShowPendingCard(false);
     isInitialized.current = true;
@@ -613,6 +616,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         resolutionTime: calculateResolutionTime(),
         otherReasons: ticket.selectedOtherReasons,
         ticketStartTime: ticket.ticketStartTime?.toISOString(),
+        reviewRequested: ticket.reviewRequested,
 
       };
 
@@ -624,6 +628,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           callStatus,
           cseRemarks: ticket.cseRemarks,
           otherReasons: ticket.selectedOtherReasons,
+          reviewRequested: ticket.reviewRequested,
         };
       }
 
@@ -1047,6 +1052,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     ))}
                   </div>
                 )}
+              <div className="flex items-center gap-2 mt-3">
+                <Checkbox
+                  id="review-requested"
+                  checked={ticket.reviewRequested}
+                  onCheckedChange={(checked) =>
+                    setTicket(prev => ({ ...prev, reviewRequested: Boolean(checked) }))
+                  }
+                  disabled={updating}
+                />
+                <label
+                  htmlFor="review-requested"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Customer review requested (Yes/No)
+                </label>
+              </div>
               </div>
               <div className="w-full space-y-2">
                 <Textarea
