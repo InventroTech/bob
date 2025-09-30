@@ -178,6 +178,7 @@ interface TicketCarouselProps {
   config?: {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
     title?: string;
   };
   initialTicket?: any;
@@ -411,7 +412,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the next ticket
   const fetchNextTicket = async (currentTicketId: number) => {
     try {
-      const nextTicketUrl = `${import.meta.env.VITE_API_URI}${config?.apiEndpoint || "/api/tickets"}`;
+      // Use renderer URL for get next ticket
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const nextTicketUrl = `${baseUrl}/support-ticket/get-next-ticket/`;
+      
+      console.log('Fetching next ticket from:', nextTicketUrl);
+      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -424,6 +430,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": "bibhab-thepyro-ai",
         },
       });
 
@@ -494,7 +501,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //taking a break
   const handleTakeBreak = async () => {
     try {
-      const apiUrl = `${import.meta.env.VITE_API_URI}/take-a-break`;
+      // Use renderer URL for take break
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/support-ticket/take-break/`;
+      
+      console.log('Taking break from:', apiUrl);
+      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -507,6 +519,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": "bibhab-thepyro-ai",
         },
         body: JSON.stringify({
           ticketId: currentTicket?.id
@@ -620,7 +633,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       };
 
-      // If Not Connected, use original not-connected endpoint and adjust payload
+      // If Not Connected, use original Supabase not-connected endpoint and adjust payload
       if (action === "Not Connected") {
         apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
         payload = {
@@ -632,25 +645,19 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         };
       }
 
+      console.log('Processing action from:', apiUrl);
+
       const token = session?.access_token;
       if (!token) {
         throw new Error("Authentication required");
       }
 
-      // Add X-Tenant-Slug header only for renderer API calls
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
-      
-      // Add tenant slug only for renderer API endpoints
-      if (apiUrl.includes(import.meta.env.VITE_RENDER_API_URL)) {
-        headers["X-Tenant-Slug"] = "bibhab-thepyro-ai";
-      }
-
       const response = await fetch(apiUrl, {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload)
       });
 
@@ -673,8 +680,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const fetchFirstTicket = async () => {
     try {
       setLoading(true);
-      const endpoint = config?.apiEndpoint || "/api/tickets";
-      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false`;
+      // Use renderer URL for get first ticket
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/support-ticket/get-next-ticket/?assign=false`;
+      
+      console.log('Fetching first ticket from:', apiUrl);
+      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -687,6 +698,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": "bibhab-thepyro-ai",
         },
       });
 
@@ -851,7 +863,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
              
                 <div className="space-y-2">
                   <div className="space-y-1">
-                    <p className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
+                    <div className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
                     <span className="font-medium text-sm">
                   {currentTicket?.dumped_at ? new Date(currentTicket.dumped_at).toLocaleDateString("en-US", {
                     year: "numeric",
@@ -866,7 +878,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       <span className=" text-sm pt-2">{currentTicket?.source || "N/A"}</span>
                 </div>
                       
-                    </p>
+                    </div>
                   </div>
                  
                 </div>
