@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -191,6 +192,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   onUpdate,
 }) => {
   const { user } = useAuth();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const isInitialized = React.useRef(false);
 
@@ -326,7 +328,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
-          "X-Tenant-Slug": "bibhab-thepyro-ai",
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });
 
@@ -430,7 +432,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "X-Tenant-Slug": "bibhab-thepyro-ai",
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });
 
@@ -519,7 +521,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "X-Tenant-Slug": "bibhab-thepyro-ai",
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
         body: JSON.stringify({
           ticketId: currentTicket?.id
@@ -698,7 +700,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "X-Tenant-Slug": "bibhab-thepyro-ai",
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });
 
