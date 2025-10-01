@@ -1079,7 +1079,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   htmlFor="review-requested"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 >
-                  Customer review requested (Yes/No)
+                  Customer review submitted
                 </label>
               </div>
               </div>
