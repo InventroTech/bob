@@ -618,7 +618,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       // If Not Connected, use original not-connected endpoint and adjust payload
       if (action === "Not Connected") {
-        apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
+        apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/support-ticket/update-call-status/`;
         payload = {
           ticketId: currentTicket?.id,
           callStatus,
