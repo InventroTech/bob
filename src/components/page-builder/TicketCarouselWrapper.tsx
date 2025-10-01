@@ -5,6 +5,7 @@ interface TicketCarouselWrapperProps {
   config?: {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
     title?: string; 
   };
 }

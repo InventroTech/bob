@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -178,6 +179,7 @@ interface TicketCarouselProps {
   config?: {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
     title?: string;
   };
   initialTicket?: any;
@@ -190,6 +192,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   onUpdate,
 }) => {
   const { user } = useAuth();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const isInitialized = React.useRef(false);
 
@@ -278,6 +281,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     cseRemarks: initialState.cseRemarks,
     selectedOtherReasons: initialState.selectedOtherReasons,
     ticketStartTime: null as Date | null,
+    reviewRequested: false as boolean,
   });
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -324,7 +328,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
-          "X-Tenant-Slug": "bibhab-thepyro-ai",
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });
 
@@ -378,6 +382,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       cseRemarks: "",
       selectedOtherReasons: [],
       ticketStartTime: null,
+      reviewRequested: false,
     });
   };
 
@@ -400,6 +405,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       cseRemarks: nextTicket.cse_remarks || "",
       selectedOtherReasons: parseOtherReasons(nextTicket.other_reasons),
       ticketStartTime: new Date(),
+      reviewRequested: Boolean(nextTicket.review_requested),
     });
     setShowPendingCard(false);
     isInitialized.current = true;
@@ -408,7 +414,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the next ticket
   const fetchNextTicket = async (currentTicketId: number) => {
     try {
-      const nextTicketUrl = `${import.meta.env.VITE_API_URI}${config?.apiEndpoint || "/api/tickets"}`;
+      // Use renderer URL for get next ticket
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const nextTicketUrl = `${baseUrl}/support-ticket/get-next-ticket/`;
+      
+      console.log('Fetching next ticket from:', nextTicketUrl);
+      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -421,6 +432,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });
 
@@ -491,7 +503,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //taking a break
   const handleTakeBreak = async () => {
     try {
-      const apiUrl = `${import.meta.env.VITE_API_URI}/take-a-break`;
+      // Use renderer URL for take break
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/support-ticket/take-break/`;
+      
+      console.log('Taking break from:', apiUrl);
+      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -504,6 +521,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
         body: JSON.stringify({
           ticketId: currentTicket?.id
@@ -613,39 +631,35 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         resolutionTime: calculateResolutionTime(),
         otherReasons: ticket.selectedOtherReasons,
         ticketStartTime: ticket.ticketStartTime?.toISOString(),
+        reviewRequested: ticket.reviewRequested,
 
       };
 
-      // If Not Connected, use original not-connected endpoint and adjust payload
+      // If Not Connected, use original Supabase not-connected endpoint and adjust payload
       if (action === "Not Connected") {
-        apiUrl = `${import.meta.env.VITE_API_URI}/not-connected`;
+        apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/support-ticket/update-call-status/`;
         payload = {
           ticketId: currentTicket?.id,
           callStatus,
           cseRemarks: ticket.cseRemarks,
           otherReasons: ticket.selectedOtherReasons,
+          reviewRequested: ticket.reviewRequested,
         };
       }
+
+      console.log('Processing action from:', apiUrl);
 
       const token = session?.access_token;
       if (!token) {
         throw new Error("Authentication required");
       }
 
-      // Add X-Tenant-Slug header only for renderer API calls
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
-      
-      // Add tenant slug only for renderer API endpoints
-      if (apiUrl.includes(import.meta.env.VITE_RENDER_API_URL)) {
-        headers["X-Tenant-Slug"] = "bibhab-thepyro-ai";
-      }
-
       const response = await fetch(apiUrl, {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload)
       });
 
@@ -668,8 +682,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const fetchFirstTicket = async () => {
     try {
       setLoading(true);
-      const endpoint = config?.apiEndpoint || "/api/tickets";
-      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false`;
+      // Use renderer URL for get first ticket
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/support-ticket/get-next-ticket/?assign=false`;
+      
+      console.log('Fetching first ticket from:', apiUrl);
+      
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -682,6 +700,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });
 
@@ -846,7 +865,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
              
                 <div className="space-y-2">
                   <div className="space-y-1">
-                    <p className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
+                    <div className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
                     <span className="font-medium text-sm">
                   {currentTicket?.dumped_at ? new Date(currentTicket.dumped_at).toLocaleDateString("en-US", {
                     year: "numeric",
@@ -861,7 +880,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       <span className=" text-sm pt-2">{currentTicket?.source || "N/A"}</span>
                 </div>
                       
-                    </p>
+                    </div>
                   </div>
                  
                 </div>
@@ -1047,6 +1066,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     ))}
                   </div>
                 )}
+              <div className="flex items-center gap-2 mt-3">
+                <Checkbox
+                  id="review-requested"
+                  checked={ticket.reviewRequested}
+                  onCheckedChange={(checked) =>
+                    setTicket(prev => ({ ...prev, reviewRequested: Boolean(checked) }))
+                  }
+                  disabled={updating}
+                />
+                <label
+                  htmlFor="review-requested"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Customer review requested (Yes/No)
+                </label>
+              </div>
               </div>
               <div className="w-full space-y-2">
                 <Textarea
