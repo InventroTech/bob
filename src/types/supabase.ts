@@ -285,6 +285,7 @@ export type Database = {
           rm_name: string | null
           completed_at: string | null
           snooze_until: string | null
+          review_requested: boolean
           created_at: string
           updated_at: string
         }
@@ -314,6 +315,7 @@ export type Database = {
           rm_name?: string | null
           completed_at?: string | null
           snooze_until?: string | null
+          review_requested?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -343,6 +345,7 @@ export type Database = {
           rm_name?: string | null
           completed_at?: string | null
           snooze_until?: string | null
+          review_requested?: boolean
           created_at?: string
           updated_at?: string
         }
