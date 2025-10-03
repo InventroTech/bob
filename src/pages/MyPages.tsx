@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
@@ -34,11 +34,10 @@ const MyPages = () => {
     setError(null);
     try {
       // Fetch all roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
-        .select('id, name');
-
-      if (rolesError) throw rolesError;
+      const rolesResponse = await apiService.getRoles('');
+      if (!rolesResponse.success) throw new Error(rolesResponse.error || 'Failed to fetch roles');
+      
+      const rolesData = rolesResponse.data;
 
       const rolesLookup: Record<string, string> = {};
       (rolesData || []).forEach((role) => {
@@ -48,13 +47,10 @@ const MyPages = () => {
       setRolesMap(rolesLookup);
 
       // Fetch pages
-      const { data: pagesData, error: pagesError } = await supabase
-        .from('pages')
-        .select('id, name, updated_at, role')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
-
-      if (pagesError) throw pagesError;
+      const pagesResponse = await apiService.getPagesByUser(user.id);
+      if (!pagesResponse.success) throw new Error(pagesResponse.error || 'Failed to fetch pages');
+      
+      const pagesData = pagesResponse.data;
 
       // Group pages by role name
       const grouped: Record<string, PageRecord[]> = {};
@@ -83,18 +79,13 @@ const MyPages = () => {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data: tu } = await supabase
-        .from('tenant_users')
-        .select('tenant_id')
-        .eq('user_id', user.id)
-        .single();
-      if (!tu) return;
-      const { data: t } = await supabase
-        .from('tenants')
-        .select('slug')
-        .eq('id', tu.tenant_id)
-        .single();
-      if (t?.slug) setTenantSlug(t.slug);
+      const tuResponse = await apiService.getTenantUser(user.id);
+      if (!tuResponse.success || !tuResponse.data) return;
+      
+      const tResponse = await apiService.getTenant(tuResponse.data.tenant_id);
+      if (tResponse.success && tResponse.data?.slug) {
+        setTenantSlug(tResponse.data.slug);
+      }
     })();
   }, [user]);
 
@@ -104,9 +95,9 @@ const MyPages = () => {
 
   const handleDeletePage = async (pageId: string) => {
     if (!confirm('Are you sure you want to delete this page?')) return;
-    const { error } = await supabase.from('pages').delete().eq('id', pageId);
-    if (error) {
-      console.error('Error deleting page:', error);
+    const response = await apiService.deletePage(pageId);
+    if (!response.success) {
+      console.error('Error deleting page:', response.error);
       toast.error('Failed to delete page.');
     } else {
       toast.success('Page deleted.');

@@ -1,7 +1,7 @@
 // /pages/AuthCallbackPage.tsx
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { authService } from '@/lib/authService';
 import { toast } from 'sonner';
 
 const AuthCallbackPage = () => {
@@ -10,18 +10,19 @@ const AuthCallbackPage = () => {
 
   useEffect(() => {
     const fetchAndRedirect = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
+      const userResponse = await authService.getUser();
 
-      if (error || !user?.email || !user?.id) {
+      if (!userResponse.success || !userResponse.data?.email || !userResponse.data?.id) {
         toast.error("Failed to complete login");
         navigate(`/app/${tenantSlug}/login`);
         return;
       }
 
+      const user = userResponse.data;
       try {
         // Call renderer API to link user UID with email
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
+        const sessionResponse = await authService.getSession();
+        const token = sessionResponse.success ? sessionResponse.data?.access_token : null;
 
         if (token) {
           const baseUrl = import.meta.env.VITE_RENDER_API_URL;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/hooks/useTenant';
-import { supabase } from '@/lib/supabase';
+// Removed unused supabase import - using authService instead
 import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';

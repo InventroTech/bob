@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { authService } from '../lib/authService';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 
@@ -34,14 +34,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       sessionStorage.removeItem('ticketCarouselState');
       console.log('Session storage cleared');
       
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Supabase logout error:', error);
+      const response = await authService.signOut();
+      if (!response.success) {
+        console.error('Logout error:', response.error);
         toast.error('Failed to logout. Please try again.');
         return;
       }
       
-      console.log('Supabase logout successful');
+      console.log('Logout successful');
       
       // Clear session and user state
       setSession(null);
@@ -59,25 +59,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    authService.getSession().then((response) => {
+      if (response.success) {
+        setSession(response.data as any); // Type conversion for compatibility
+        setUser(response.data?.user as any ?? null);
+      } else {
+        setSession(null);
+        setUser(null);
+      }
       setLoading(false);
     });
 
     // Listen for auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(
+    const unsubscribe = authService.onAuthStateChange(
       async (_event, session) => {
-        console.log('Supabase auth state changed:', _event, session);
-        setSession(session);
-        setUser(session?.user ?? null);
+        console.log('Auth state changed:', _event, session);
+        setSession(session as any); // Type conversion for compatibility
+        setUser(session?.user as any ?? null);
         setLoading(false); // Ensure loading is false after update
       }
     );
 
     // Cleanup listener on component unmount
     return () => {
-      authListener?.subscription?.unsubscribe();
+      unsubscribe();
     };
   }, []);
 

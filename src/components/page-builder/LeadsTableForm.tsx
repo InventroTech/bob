@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase'; 
+import { apiService } from '@/lib/apiService'; 
 import DashboardLayout from '../layout/DashboardLayout';
 import { LeadTableComponent } from './LeadTableComponent';
 import Papa from 'papaparse';
@@ -180,27 +180,24 @@ export const LeadFormComponent = () => {
 
     // Then check against the database
     try {
-      // Check emails
-      const { data: existingEmails } = await supabase
-        .from('leads_table')
-        .select('email')
-        .in('email', Array.from(emails));
+      // Check emails and phones
+      const response = await apiService.checkExistingLeads(Array.from(emails), Array.from(phones));
+      if (!response.success) {
+        console.error('Error checking existing leads:', response.error);
+        return duplicates;
+      }
 
-      if (existingEmails && existingEmails.length > 0) {
-        existingEmails.forEach(row => {
-          duplicates.email.push(`Database: ${row.email}`);
+      const existingData = response.data;
+      
+      if (existingData.emails && existingData.emails.length > 0) {
+        existingData.emails.forEach(email => {
+          duplicates.email.push(`Database: ${email}`);
         });
       }
 
-      // Check phones
-      const { data: existingPhones } = await supabase
-        .from('leads_table')
-        .select('phone')
-        .in('phone', Array.from(phones));
-
-      if (existingPhones && existingPhones.length > 0) {
-        existingPhones.forEach(row => {
-          duplicates.phone.push(`Database: ${row.phone}`);
+      if (existingData.phones && existingData.phones.length > 0) {
+        existingData.phones.forEach(phone => {
+          duplicates.phone.push(`Database: ${phone}`);
         });
       }
 
@@ -371,17 +368,10 @@ export const LeadFormComponent = () => {
 
                 for (let i = 0; i < validatedData.length; i += batchSize) {
                   const batch = validatedData.slice(i, i + batchSize);
-                  const { error } = await supabase.from('leads_table').insert(batch);
-
-                  if (error) {
-                    console.error('Batch insert error:', error);
-                    if (error.code === '23505') {
-                      if (error.message.includes('leads_table_pkey')) {
-                        // Skip this batch as it contains duplicate IDs
-                        errorCount += batch.length;
-                        continue;
-                      }
-                    }
+                  const response = await apiService.createLeads(batch);
+                  if (!response.success) {
+                    console.error('Batch insert error:', response.error);
+                    // Handle specific error types if needed
                     errorCount += batch.length;
                   } else {
                     successCount += batch.length;
@@ -445,21 +435,14 @@ export const LeadFormComponent = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('leads_table')
-        .insert([{
-          ...formData,
-          email: formData.email.trim().toLowerCase(),
-          lastconnected: formData.lastconnected ? new Date(formData.lastconnected).toISOString() : null
-        }]);
+      const response = await apiService.createLeadsTableRecord({
+        ...formData,
+        email: formData.email.trim().toLowerCase(),
+        lastconnected: formData.lastconnected ? new Date(formData.lastconnected).toISOString() : null
+      });
 
-      if (error) {
-        if (error.code === '23505') {
-          setMessage('A lead with this email or phone number already exists.');
-        } else {
-          console.error('Insert error:', error);
-          setMessage(`Insert failed: ${error.message}`);
-        }
+      if (!response.success) {
+        setMessage(`Insert failed: ${response.error}`);
       } else {
         setMessage('Lead inserted successfully!');
         setFormData({

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/lib/supabase";
+import { authService } from "@/lib/authService";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Calendar, TrendingUp } from "lucide-react";
 
@@ -59,7 +59,8 @@ export const TicketBarGraphComponent: React.FC<TicketBarGraphProps> = ({ config 
         const endpoint = config?.apiEndpoint || '/api/ticket-stats-daily';
         const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?days=${days}`;
         
-        const { data: { session } } = await supabase.auth.getSession();
+        const sessionResponse = await authService.getSession();
+        const session = sessionResponse.success ? sessionResponse.data : null;
         const token = session?.access_token;
 
         if (!token) {

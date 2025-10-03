@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { authService } from '@/lib/authService';
+import { apiService } from '@/lib/apiService';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -52,30 +53,16 @@ const AddUserPage = () => {
     const fetchTenant = async () => {
       if (!user) return;
 
-      let { data, error } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (error || !data) {
-        const emailResponse = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('name', user.email)
-          .single();
-
-        data = { id: emailResponse.data?.id };
-        error = emailResponse.error;
-
-        if (error || !data) {
-          console.error("Error fetching tenant:", error);
-          toast.error('Failed to fetch tenant. Please contact support.');
-          return;
-        }
+      // Get tenant from user data or use user ID as fallback
+      const response = await apiService.getTenant(user.id);
+      
+      if (!response.success || !response.data) {
+        console.error("Error fetching tenant:", response.error);
+        toast.error('Failed to fetch tenant. Please contact support.');
+        return;
       }
 
-      setCompanyId(data.id);
+      setCompanyId(response.data.id);
     };
 
     fetchTenant();
@@ -85,7 +72,8 @@ const AddUserPage = () => {
     const fetchRoles = async () => {
       // Always try to fetch roles from renderer API first, regardless of companyId
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const sessionResponse = await authService.getSession();
+        const session = sessionResponse.success ? sessionResponse.data : null;
         const token = session?.access_token;
 
         if (!token) {
@@ -133,22 +121,21 @@ const AddUserPage = () => {
         console.error('Error fetching roles:', error);
         toast.error(`Failed to fetch roles: ${error.message}`);
         
-        // Fallback to Supabase if renderer API fails (only if companyId is available)
+        // Fallback to apiService if renderer API fails (only if companyId is available)
         if (companyId) {
           try {
-            const { data, error: supabaseError } = await supabase
-              .from('roles')
-              .select('id, name')
-              .eq('tenant_id', companyId);
-              
-            if (supabaseError) throw supabaseError;
-            setRoles(data || []);
+            const fallbackResponse = await apiService.getRoles(companyId);
+            if (fallbackResponse.success) {
+              setRoles(fallbackResponse.data || []);
+            } else {
+              throw new Error(fallbackResponse.error || 'Failed to fetch roles');
+            }
           } catch (fallbackError: any) {
             console.error('Fallback error:', fallbackError);
             toast.error('Failed to fetch roles from fallback');
           }
         } else {
-          console.log('No companyId available for Supabase fallback');
+          console.log('No companyId available for fallback');
           setRoles([]);
         }
       }
@@ -162,7 +149,8 @@ const AddUserPage = () => {
     setIsLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -220,29 +208,16 @@ const AddUserPage = () => {
       console.error('Error fetching users:', error);
       toast.error(`Failed to fetch users: ${error.message}`);
       
-      // Fallback to Supabase if renderer API fails (only if companyId is available)
+      // Fallback to apiService if renderer API fails (only if companyId is available)
       if (companyId) {
         try {
-          const { data, error: supabaseError } = await supabase
-            .from('users')
-            .select(`
-              uid,
-              name,
-              email,
-              role_id,
-              created_at,
-              roles (
-                id,
-                name
-              )
-            `)
-            .eq('tenant_id', companyId)
-            .order('created_at', { ascending: false });
-
-          if (supabaseError) throw supabaseError;
+          const fallbackResponse = await apiService.getUsers(companyId);
+          if (!fallbackResponse.success) {
+            throw new Error(fallbackResponse.error || 'Failed to fetch users');
+          }
 
           // Transform the data without filtering out users
-          const transformedUsers: User[] = ((data as unknown) as DatabaseUser[])
+          const transformedUsers: User[] = ((fallbackResponse.data as unknown) as DatabaseUser[])
             .map((user, index) => ({
               uid: user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
               name: user.name || 'Unnamed User',
@@ -279,7 +254,8 @@ const AddUserPage = () => {
     if (!newRoleName || !newRoleKey) return toast.error('Role name and key are required');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -331,7 +307,8 @@ const AddUserPage = () => {
       // Refresh the roles list by re-running the fetch logic
       const fetchRolesAgain = async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const sessionResponse = await authService.getSession();
+        const session = sessionResponse.success ? sessionResponse.data : null;
           const token = session?.access_token;
 
           if (token) {
@@ -371,29 +348,26 @@ const AddUserPage = () => {
       console.error('Error adding role:', error);
       toast.error(`Error adding role: ${error.message}`);
       
-      // Fallback to Supabase if renderer API fails (only if companyId is available)
+      // Fallback to apiService if renderer API fails (only if companyId is available)
       if (companyId) {
         try {
-          const { data, error: supabaseError } = await supabase
-            .from('roles')
-            .insert([{ name: newRoleName, tenant_id: companyId }])
-            .select()
-            .single();
-
-          if (supabaseError) throw supabaseError;
+          const fallbackResponse = await apiService.createRole(newRoleName, companyId);
+          
+          if (!fallbackResponse.success) {
+            throw new Error(fallbackResponse.error || 'Failed to create role');
+          }
           
           toast.success('Role added (via fallback)');
           setNewRoleName('');
           setNewRoleKey('');
           setShowRoleFields(false);
-          setSelectedRoleId(data.id);
+          setSelectedRoleId(fallbackResponse.data.id);
           
           // Refresh roles list
-          const updated = await supabase
-            .from('roles')
-            .select('id, name')
-            .eq('tenant_id', companyId);
-          setRoles(updated.data || []);
+          const updatedResponse = await apiService.getRoles(companyId);
+          if (updatedResponse.success) {
+            setRoles(updatedResponse.data || []);
+          }
         } catch (fallbackError: any) {
           console.error('Fallback error:', fallbackError);
           toast.error(`Failed to add role: ${fallbackError.message}`);
@@ -408,7 +382,8 @@ const AddUserPage = () => {
       return;
     }
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -466,7 +441,8 @@ const AddUserPage = () => {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {

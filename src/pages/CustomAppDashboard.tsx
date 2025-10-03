@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -23,21 +23,18 @@ const CustomAppDashboard: React.FC = () => {
 
       try {
         // Get tenant_id and role_id for the user
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('tenant_id, role_id')
-          .eq('email', user.email)
-          .single();
+        const userResponse = await apiService.getUserByEmail(user.email);
+        
+        console.log('User data result:', userResponse);
 
-        console.log('User data result:', { userData, userError });
-
-        if (userError) {
-          console.error('Error fetching user data:', userError);
+        if (!userResponse.success) {
+          console.error('Error fetching user data:', userResponse.error);
           toast.error('Failed to load user data');
           setLoading(false);
           return;
         }
 
+        const userData = userResponse.data;
         if (!userData?.tenant_id) {
           console.log('No tenant_id found for user');
           setLoading(false);
@@ -51,21 +48,18 @@ const CustomAppDashboard: React.FC = () => {
         console.log('Tenant ID:', tenantId, 'Role ID:', roleId);
 
         // Fetch pages for this tenant and role
-        const { data: pages, error: pagesError } = await supabase
-          .from('pages')
-          .select('id, name')
-          .eq('tenant_id', tenantId)
-          .eq('role', roleId)
-          .order('updated_at', { ascending: false });
+        const pagesResponse = await apiService.getPages(tenantId, roleId);
 
-        console.log('Pages query result:', { pages, pagesError });
+        console.log('Pages query result:', pagesResponse);
 
-        if (pagesError) {
-          console.error('Error fetching pages:', pagesError);
+        if (!pagesResponse.success) {
+          console.error('Error fetching pages:', pagesResponse.error);
           toast.error('Failed to load pages');
           setLoading(false);
           return;
         }
+
+        const pages = pagesResponse.data;
 
         if (pages && pages.length > 0) {
           console.log('Found pages:', pages);

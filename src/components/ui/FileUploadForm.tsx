@@ -1,22 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { FaFileAlt, FaImage } from 'react-icons/fa';
-import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
-
-// --- Supabase Configuration ---
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const BUCKET_NAME = import.meta.env.VITE_SUPABASE_BUCKET_NAME;
-
-let supabase: SupabaseClient | undefined;
-if (supabaseUrl && supabaseAnonKey && BUCKET_NAME) {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
-} else {
-  console.warn(
-    "Supabase configuration is missing. File uploads will not work. " +
-    "Ensure VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and VITE_SUPABASE_BUCKET_NAME are set."
-  );
-}
-// --- End Supabase Configuration ---
+import { apiService } from '@/lib/apiService';
+import { authService } from '@/lib/authService';
 
 interface FileUploadFormProps {
   leadId: string;
@@ -40,39 +25,36 @@ const FileUploadForm: React.FC<FileUploadFormProps> = ({ leadId, leadName }) => 
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetches user details (like name) from your custom 'users' table using the email from Supabase Auth.
-  const fetchAppUserDetails = async (authUser: SupabaseUser | null): Promise<AppUserData | null> => {
-    if (!supabase) {
-      console.error('Supabase client not initialized in fetchAppUserDetails');
-      return null;
-    }
+  // Fetches user details (like name) from your custom 'users' table using the email from Auth.
+  const fetchAppUserDetails = async (authUser: any): Promise<AppUserData | null> => {
     if (!authUser || !authUser.email) {
-      console.log('No Supabase authenticated user or email found.');
+      console.log('No authenticated user or email found.');
       setAppUser(null); // Clear local app user state
       return null;
     }
 
-    console.log('=== Fetching App User Details for email from Supabase Auth:', authUser.email, '===');
+    console.log('=== Fetching App User Details for email from Auth:', authUser.email, '===');
     try {
-      const { data: userDetailsFromDB, error } = await supabase
-        .from('users') // Your custom table storing user profiles
-        .select('id, name') // Assuming 'name' is the column for the user's display name
-        .eq('email', authUser.email)
-        .limit(1)
-        .single();
+      // Use API service to get user details
+      const response = await fetch(`${import.meta.env.VITE_RENDER_API_URL}/users/by-email/${authUser.email}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (error) {
-        console.error('Error fetching user details from "users" table:', error.message);
-        setMessage(`Error: Could not fetch profile for ${authUser.email}.`);
-        setAppUser(null);
-        return null;
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user details: ${response.statusText}`);
       }
 
-      if (userDetailsFromDB) {
-        console.log('=== App User Details Retrieved from DB ===', userDetailsFromDB);
+      const userDetailsFromDB = await response.json();
+
+      if (userDetailsFromDB && userDetailsFromDB.success) {
+        console.log('=== App User Details Retrieved from DB ===', userDetailsFromDB.data);
+        const userData = userDetailsFromDB.data;
         const fetchedAppUser: AppUserData = {
-            id: userDetailsFromDB.id,
-            name: userDetailsFromDB.name,
+            id: userData.id,
+            name: userData.name,
         };
         setAppUser(fetchedAppUser);
         return fetchedAppUser;
@@ -92,33 +74,24 @@ const FileUploadForm: React.FC<FileUploadFormProps> = ({ leadId, leadName }) => 
   // Effect for initial Supabase config check and setting up auth listener
   useEffect(() => {
     console.log('=== FileUploadForm Mount/Config Check ===');
-    if (supabaseUrl && supabaseAnonKey && BUCKET_NAME) {
-      setIsSupabaseConfigured(true);
-      console.log('Supabase is configured.');
-
-      if (!supabase) {
-        console.error("Supabase client could not be initialized despite config values present.");
-        setIsSupabaseConfigured(false); // Mark as not configured if client is still undefined
-        setMessage("Error: Supabase client initialization failed.");
-        return;
-      }
+    setIsSupabaseConfigured(true); // Always true since we're using API endpoints now
 
       // Immediately fetch current user on load
-      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-        console.log('Initial Supabase Auth User:', authUser);
-        if (authUser) {
-          fetchAppUserDetails(authUser);
+      authService.getUser().then((response) => {
+        if (response.success && response.data) {
+          console.log('Initial Auth User:', response.data);
+          fetchAppUserDetails(response.data);
           // Set the user_email in localStorage if your other components rely on it.
           // However, this component will now prioritize the auth session.
-          localStorage.setItem('user_email', authUser.email || '');
+          localStorage.setItem('user_email', response.data.email || '');
         } else {
           setAppUser(null);
           localStorage.removeItem('user_email'); // Clear if no auth user
         }
       });
 
-      // Listen for Supabase auth state changes (login, logout)
-      const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Listen for auth state changes using authService
+      const unsubscribe = authService.onAuthStateChange(async (event, session) => {
         console.log('Supabase Auth State Change:', event, session);
         const authUser = session?.user ?? null;
         if (authUser) {
@@ -135,20 +108,9 @@ const FileUploadForm: React.FC<FileUploadFormProps> = ({ leadId, leadName }) => 
       });
 
       return () => {
-        if (authListener && typeof authListener.subscription?.unsubscribe === 'function') {
-          authListener.subscription.unsubscribe();
-          console.log("Unsubscribed from Supabase auth changes.");
-        }
+        unsubscribe();
+        console.log("Unsubscribed from auth changes.");
       };
-    } else {
-      setIsSupabaseConfigured(false);
-      console.error('Supabase is NOT configured on mount. Check .env variables.');
-      let missingVars = [];
-      if (!supabaseUrl) missingVars.push("VITE_SUPABASE_URL");
-      if (!supabaseAnonKey) missingVars.push("VITE_SUPABASE_ANON_KEY");
-      if (!BUCKET_NAME) missingVars.push("VITE_SUPABASE_BUCKET_NAME");
-      setMessage(`Error: Supabase config missing: ${missingVars.join(', ')}`);
-    }
   }, []); // Runs once on mount
 
   const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,23 +140,24 @@ const FileUploadForm: React.FC<FileUploadFormProps> = ({ leadId, leadName }) => 
       user: appUser
     });
 
-    if (!isSupabaseConfigured || !supabase) {
-      console.error('Upload failed: Supabase not configured');
-      setMessage('Supabase is not configured correctly. Cannot upload.');
+    if (!isSupabaseConfigured) {
+      console.error('Upload failed: Not configured');
+      setMessage('System is not configured correctly. Cannot upload.');
       return;
     }
 
-    // Get the most current Supabase authenticated user
+    // Get the most current authenticated user
     console.log('Fetching current auth user...');
-    const { data: { user: currentAuthUser }, error: authError } = await supabase.auth.getUser();
+    const userResponse = await authService.getUser();
 
-    if (authError || !currentAuthUser) {
-      console.error('Auth error or no user:', authError);
+    if (!userResponse.success || !userResponse.data) {
+      console.error('Auth error or no user:', userResponse.error);
       setMessage('Error: Could not verify authentication. Please sign in again.');
       setUploading(false);
       return;
     }
 
+    const currentAuthUser = userResponse.data;
     console.log('Current auth user:', currentAuthUser.email);
     
     // Fetch app user details
@@ -235,17 +198,11 @@ const FileUploadForm: React.FC<FileUploadFormProps> = ({ leadId, leadName }) => 
         const pdfFilePath = `public/pdfs/${sanitizedUserName}/${sanitizedLeadName}/${Date.now()}-${pdfFile.name.replace(/\s+/g, '_')}`;
         console.log('Attempting to upload PDF to:', pdfFilePath);
         
-        const { data, error } = await supabase.storage
-          .from(BUCKET_NAME!) 
-          .upload(pdfFilePath, pdfFile, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: 'application/pdf'
-          });
-
-        if (error) {
-          throw new Error(`PDF Upload Error: ${error.message}`);
+        const response = await apiService.uploadFile(pdfFile, pdfFilePath);
+        if (!response.success) {
+          throw new Error(`PDF Upload Error: ${response.error}`);
         }
+        const data = response.data;
         console.log('PDF Upload Success:', data);
         currentMessages.push(`PDF "${pdfFile.name}" uploaded.`);
       }
@@ -254,17 +211,11 @@ const FileUploadForm: React.FC<FileUploadFormProps> = ({ leadId, leadName }) => 
         const imageFilePath = `public/images/${sanitizedUserName}/${sanitizedLeadName}/${Date.now()}-${imageFile.name.replace(/\s+/g, '_')}`;
         console.log('Attempting to upload Image to:', imageFilePath);
 
-        const { data, error } = await supabase.storage
-          .from(BUCKET_NAME!)
-          .upload(imageFilePath, imageFile, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: imageFile.type 
-          });
-
-        if (error) {
-          throw new Error(`Image Upload Error: ${error.message}`);
+        const response = await apiService.uploadFile(imageFile, imageFilePath);
+        if (!response.success) {
+          throw new Error(`Image Upload Error: ${response.error}`);
         }
+        const data = response.data;
         console.log('Image Upload Success:', data);
         currentMessages.push(`Image "${imageFile.name}" uploaded.`);
       }
@@ -274,29 +225,22 @@ const FileUploadForm: React.FC<FileUploadFormProps> = ({ leadId, leadName }) => 
         try {
           // Create a text file with the link
           const linkFileName = `link_${Date.now()}.txt`;
-          const linkContent = new Blob([link], { type: 'text/plain' });
+          const linkContent = new File([link], linkFileName, { type: 'text/plain' });
           const linkFilePath = `public/links/${sanitizedUserName}/${sanitizedLeadName}/${linkFileName}`;
           
           console.log('Storing link in storage:', linkFilePath);
           
-          const { data: linkData, error: linkError } = await supabase.storage
-            .from(BUCKET_NAME!)
-            .upload(linkFilePath, linkContent, {
-              cacheControl: '3600',
-              upsert: false,
-              contentType: 'text/plain'
-            });
-
-          if (linkError) {
-            throw new Error(`Link Storage Error: ${linkError.message}`);
+          const response = await apiService.uploadFile(linkContent, linkFilePath);
+          if (!response.success) {
+            throw new Error(`Link Storage Error: ${response.error}`);
           }
 
           // Get the public URL for the stored link
-          const { data: { publicUrl } } = supabase.storage
-            .from(BUCKET_NAME!)
-            .getPublicUrl(linkFilePath);
-
-          console.log('Link stored successfully at:', publicUrl);
+          const urlResponse = await apiService.getFileUrl(linkFilePath);
+          if (urlResponse.success) {
+            const publicUrl = urlResponse.data;
+            console.log('Link stored successfully at:', publicUrl);
+          }
           currentMessages.push(`Link "${link}" stored.`);
         } catch (linkErr: any) {
           console.error('Error storing link:', linkErr);

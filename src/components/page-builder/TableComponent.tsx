@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { EditableDataTable } from '@/components/ui/EditableDataTable';
 
 interface TableComponentProps {
@@ -15,12 +15,12 @@ export const TableComponent: React.FC<TableComponentProps> = ({ tableId }) => {
     if (!tableId) return;
     setLoading(true);
     Promise.all([
-      supabase.from('custom_columns').select('*').eq('table_id', tableId).order('ordinal_position', { ascending: true }),
-      supabase.from('custom_rows').select('*').eq('table_id', tableId).order('created_at', { ascending: true })
+      apiService.getCustomColumns(tableId),
+      apiService.getCustomRows(tableId)
     ]).then(([colRes, rowRes]) => {
       console.log("columns Krover",colRes.data);
-      setColumns(colRes.data || []);
-      setRows(rowRes.data || []);
+      setColumns(colRes.success ? colRes.data || [] : []);
+      setRows(rowRes.success ? rowRes.data || [] : []);
       setLoading(false);
     });
   }, [tableId]);

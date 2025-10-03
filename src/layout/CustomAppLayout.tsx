@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
+import { authService } from '@/lib/authService';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
@@ -34,10 +35,10 @@ const CustomAppLayout: React.FC = () => {
         return;
       }
       
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
     
-      if (sessionError || !sessionData.session) {
-        console.error('No session found:', sessionError);
+      if (!sessionResponse.success || !sessionResponse.data) {
+        console.error('No session found:', sessionResponse.error);
         return;
       }
     

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { supabase } from "@/lib/supabase";
+import { authService } from "@/lib/authService";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -276,7 +276,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   // Fetching the lead stats
   const fetchLeadStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       if (!session) return;
 
       // Use configured status data API endpoint or fallback to default
@@ -354,7 +355,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   
       const nextLeadUrl = `${import.meta.env.VITE_RENDER_API_URL}${config?.apiEndpoint || "/api/leads"}`;
     
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -442,7 +444,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       }
 
       const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/crm/leads/take-break/`;
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -516,7 +519,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       }
 
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       if (!session) {
         throw new Error("Authentication required");
       }
@@ -595,7 +599,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       setLoading(true);
       const endpoint = config?.apiEndpoint || "/api/leads";
       const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}?assign=false`;
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
