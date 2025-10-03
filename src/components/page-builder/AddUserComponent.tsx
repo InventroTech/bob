@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { apiService } from '@/lib/apiService';
+import { authService } from '@/lib/authService';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
@@ -53,7 +55,8 @@ const AddUserComponent: React.FC = () => {
     const fetchRoles = async () => {
       // Always try to fetch roles from renderer API first, regardless of tenantId
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const sessionResponse = await authService.getSession();
+        const session = sessionResponse.success ? sessionResponse.data : null;
         const token = session?.access_token;
 
         if (!token) {
@@ -130,7 +133,8 @@ const AddUserComponent: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -191,23 +195,11 @@ const AddUserComponent: React.FC = () => {
       // Fallback to Supabase if renderer API fails (only if tenantId is available)
       if (tenantId) {
         try {
-          const { data, error: supabaseError } = await supabase
-            .from('users')
-            .select(`
-              uid,
-              name,
-              email,
-              role_id,
-              created_at,
-              roles (
-                id,
-                name
-              )
-            `)
-            .eq('tenant_id', tenantId)
-            .order('created_at', { ascending: false });
-
-          if (supabaseError) throw supabaseError;
+          const response = await apiService.getUsers(tenantId);
+          if (!response.success) {
+            throw new Error(response.error || 'Failed to fetch users');
+          }
+          const data = response.data;
 
           // Transform the data without filtering out users
           const transformedUsers: User[] = ((data as unknown) as DatabaseUser[])
@@ -247,7 +239,8 @@ const AddUserComponent: React.FC = () => {
     if (!newRoleName || !newRoleKey) return toast.error('Role name and key are required');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -299,7 +292,8 @@ const AddUserComponent: React.FC = () => {
       // Refresh the roles list by re-running the fetch logic
       const fetchRolesAgain = async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const sessionResponse = await authService.getSession();
+        const session = sessionResponse.success ? sessionResponse.data : null;
           const token = session?.access_token;
 
           if (token) {
@@ -376,7 +370,8 @@ const AddUserComponent: React.FC = () => {
       return;
     }
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -434,7 +429,8 @@ const AddUserComponent: React.FC = () => {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {

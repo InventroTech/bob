@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { Button } from '@/components/ui/button';
 import { EditableTable, EditableTableColumn } from '@/components/ui/EditableTable';
 import { EditableDataTable } from '@/components/ui/EditableDataTable';
@@ -42,20 +42,19 @@ const TableDetailsPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const { data: cols, error: colErr } = await supabase
-          .from('custom_columns')
-          .select('*')
-          .eq('table_id', tableId)
-          .order('ordinal_position', { ascending: true });
-        if (colErr) throw colErr;
-        setColumns(cols || []);
-        const { data: rowsData, error: rowErr } = await supabase
-          .from('custom_rows')
-          .select('*')
-          .eq('table_id', tableId)
-          .order('created_at', { ascending: true });
-        if (rowErr) throw rowErr;
-        setRows(rowsData || []);
+        // Fetch columns
+        const colsResponse = await apiService.getCustomColumns(tableId);
+        if (!colsResponse.success) {
+          throw new Error(colsResponse.error || 'Failed to fetch columns');
+        }
+        setColumns(colsResponse.data || []);
+        
+        // Fetch rows
+        const rowsResponse = await apiService.getCustomRows(tableId);
+        if (!rowsResponse.success) {
+          throw new Error(rowsResponse.error || 'Failed to fetch rows');
+        }
+        setRows(rowsResponse.data || []);
       } catch (err: any) {
         setError(err.message || 'Failed to load table data.');
       } finally {
@@ -72,20 +71,22 @@ const TableDetailsPage = () => {
     setColActionLoading(true);
     try {
       if (!colAdd.name.trim()) throw new Error('Column name required');
-      await supabase.from('custom_columns').insert({
-        table_id: tableId,
+      const response = await apiService.createCustomColumn(tableId!, {
         name: colAdd.name.trim(),
         type: colAdd.type,
-        ordinal_position: columns.length + 1,
       });
+      
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to add column');
+      }
+      
       setColAdd({ name: '', type: 'text' });
-      // refetch columns
-      const { data: cols } = await supabase
-        .from('custom_columns')
-        .select('*')
-        .eq('table_id', tableId)
-        .order('ordinal_position', { ascending: true });
-      setColumns(cols || []);
+      
+      // Refetch columns
+      const colsResponse = await apiService.getCustomColumns(tableId!);
+      if (colsResponse.success) {
+        setColumns(colsResponse.data || []);
+      }
     } catch (err: any) {
       setColActionError(err.message || 'Failed to add column.');
     } finally {
@@ -97,14 +98,16 @@ const TableDetailsPage = () => {
     setColActionError(null);
     setColActionLoading(true);
     try {
-      await supabase.from('custom_columns').delete().eq('id', colId);
-      // refetch columns
-      const { data: cols } = await supabase
-        .from('custom_columns')
-        .select('*')
-        .eq('table_id', tableId)
-        .order('ordinal_position', { ascending: true });
-      setColumns(cols || []);
+      const response = await apiService.deleteCustomColumn(colId);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to delete column');
+      }
+      
+      // Refetch columns
+      const colsResponse = await apiService.getCustomColumns(tableId!);
+      if (colsResponse.success) {
+        setColumns(colsResponse.data || []);
+      }
     } catch (err: any) {
       setColActionError(err.message || 'Failed to delete column.');
     } finally {
@@ -122,18 +125,22 @@ const TableDetailsPage = () => {
     setColActionError(null);
     setColActionLoading(true);
     try {
-      await supabase.from('custom_columns').update({
+      const response = await apiService.updateCustomColumn(colEdit.id, {
         name: colEdit.name,
         type: colEdit.type,
-      }).eq('id', colEdit.id);
+      });
+      
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update column');
+      }
+      
       setColEdit(null);
-      // refetch columns
-      const { data: cols } = await supabase
-        .from('custom_columns')
-        .select('*')
-        .eq('table_id', tableId)
-        .order('ordinal_position', { ascending: true });
-      setColumns(cols || []);
+      
+      // Refetch columns
+      const colsResponse = await apiService.getCustomColumns(tableId!);
+      if (colsResponse.success) {
+        setColumns(colsResponse.data || []);
+      }
     } catch (err: any) {
       setColActionError(err.message || 'Failed to update column.');
     } finally {
@@ -147,18 +154,18 @@ const TableDetailsPage = () => {
     setRowActionError(null);
     setRowActionLoading(true);
     try {
-      await supabase.from('custom_rows').insert({
-        table_id: tableId,
-        data: addRowData,
-      });
+      const response = await apiService.createCustomRow(tableId!, addRowData);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to add row');
+      }
+      
       setAddRowData({});
-      // refetch rows
-      const { data: rowsData } = await supabase
-        .from('custom_rows')
-        .select('*')
-        .eq('table_id', tableId)
-        .order('created_at', { ascending: true });
-      setRows(rowsData || []);
+      
+      // Refetch rows
+      const rowsResponse = await apiService.getCustomRows(tableId!);
+      if (rowsResponse.success) {
+        setRows(rowsResponse.data || []);
+      }
     } catch (err: any) {
       setRowActionError(err.message || 'Failed to add row.');
     } finally {
@@ -180,18 +187,19 @@ const TableDetailsPage = () => {
     setRowActionError(null);
     setRowActionLoading(true);
     try {
-      await supabase.from('custom_rows').update({
-        data: editRowData,
-      }).eq('id', editRowId);
+      const response = await apiService.updateCustomRow(editRowId, editRowData);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update row');
+      }
+      
       setEditRowId(null);
       setEditRowData({});
-      // refetch rows
-      const { data: rowsData } = await supabase
-        .from('custom_rows')
-        .select('*')
-        .eq('table_id', tableId)
-        .order('created_at', { ascending: true });
-      setRows(rowsData || []);
+      
+      // Refetch rows
+      const rowsResponse = await apiService.getCustomRows(tableId!);
+      if (rowsResponse.success) {
+        setRows(rowsResponse.data || []);
+      }
     } catch (err: any) {
       setRowActionError(err.message || 'Failed to update row.');
     } finally {
@@ -203,14 +211,16 @@ const TableDetailsPage = () => {
     setRowActionError(null);
     setRowActionLoading(true);
     try {
-      await supabase.from('custom_rows').delete().eq('id', rowId);
-      // refetch rows
-      const { data: rowsData } = await supabase
-        .from('custom_rows')
-        .select('*')
-        .eq('table_id', tableId)
-        .order('created_at', { ascending: true });
-      setRows(rowsData || []);
+      const response = await apiService.deleteCustomRow(rowId);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to delete row');
+      }
+      
+      // Refetch rows
+      const rowsResponse = await apiService.getCustomRows(tableId!);
+      if (rowsResponse.success) {
+        setRows(rowsResponse.data || []);
+      }
     } catch (err: any) {
       setRowActionError(err.message || 'Failed to delete row.');
     } finally {
@@ -244,32 +254,32 @@ const TableDetailsPage = () => {
             <EditableTable
               columns={columns}
               onColumnEdit={async (col) => {
-                await supabase.from('custom_columns').update({
+                const response = await apiService.updateCustomColumn(col.id, {
                   name: col.name,
                   type: col.type,
-                }).eq('id', col.id);
-                const { data: cols } = await supabase
-                  .from('custom_columns')
-                  .select('*')
-                  .eq('table_id', tableId)
-                  .order('ordinal_position', { ascending: true });
-                setColumns(cols || []);
+                });
+                if (response.success) {
+                  const colsResponse = await apiService.getCustomColumns(tableId!);
+                  if (colsResponse.success) {
+                    setColumns(colsResponse.data || []);
+                  }
+                }
               }}
               onColumnDelete={async (colId) => {
-                await supabase.from('custom_columns').delete().eq('id', colId);
-                const { data: cols } = await supabase
-                  .from('custom_columns')
-                  .select('*')
-                  .eq('table_id', tableId)
-                  .order('ordinal_position', { ascending: true });
-                setColumns(cols || []);
+                const response = await apiService.deleteCustomColumn(colId);
+                if (response.success) {
+                  const colsResponse = await apiService.getCustomColumns(tableId!);
+                  if (colsResponse.success) {
+                    setColumns(colsResponse.data || []);
+                  }
+                }
               }}
               onColumnReorder={async (newOrder) => {
-                // Update ordinal_position in DB
-                await Promise.all(newOrder.map((col, idx) =>
-                  supabase.from('custom_columns').update({ ordinal_position: idx + 1 }).eq('id', col.id)
-                ));
-                setColumns(newOrder);
+                const columnIds = newOrder.map(col => col.id);
+                const response = await apiService.reorderCustomColumns(columnIds);
+                if (response.success) {
+                  setColumns(newOrder);
+                }
               }}
             />
             <form onSubmit={handleAddColumn} className="flex gap-2 items-end mt-2 bg-muted/30 p-4 rounded-lg shadow-sm">
@@ -304,31 +314,31 @@ const TableDetailsPage = () => {
             columns={columns}
             rows={rows.map(row => ({ id: row.id, data: row.data }))}
             onRowEdit={async (rowId, data) => {
-              await supabase.from('custom_rows').update({ data }).eq('id', rowId);
-              const { data: rowsData } = await supabase
-                .from('custom_rows')
-                .select('*')
-                .eq('table_id', tableId)
-                .order('created_at', { ascending: true });
-              setRows(rowsData || []);
+              const response = await apiService.updateCustomRow(rowId, data);
+              if (response.success) {
+                const rowsResponse = await apiService.getCustomRows(tableId!);
+                if (rowsResponse.success) {
+                  setRows(rowsResponse.data || []);
+                }
+              }
             }}
             onRowDelete={async (rowId) => {
-              await supabase.from('custom_rows').delete().eq('id', rowId);
-              const { data: rowsData } = await supabase
-                .from('custom_rows')
-                .select('*')
-                .eq('table_id', tableId)
-                .order('created_at', { ascending: true });
-              setRows(rowsData || []);
+              const response = await apiService.deleteCustomRow(rowId);
+              if (response.success) {
+                const rowsResponse = await apiService.getCustomRows(tableId!);
+                if (rowsResponse.success) {
+                  setRows(rowsResponse.data || []);
+                }
+              }
             }}
             onRowAdd={async (data) => {
-              await supabase.from('custom_rows').insert({ table_id: tableId, data });
-              const { data: rowsData } = await supabase
-                .from('custom_rows')
-                .select('*')
-                .eq('table_id', tableId)
-                .order('created_at', { ascending: true });
-              setRows(rowsData || []);
+              const response = await apiService.createCustomRow(tableId!, data);
+              if (response.success) {
+                const rowsResponse = await apiService.getCustomRows(tableId!);
+                if (rowsResponse.success) {
+                  setRows(rowsResponse.data || []);
+                }
+              }
             }}
           />
         )}

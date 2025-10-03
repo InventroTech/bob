@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { componentMap } from '@/pages/PageBuilder';
@@ -16,21 +16,19 @@ const CustomAppPage: React.FC = () => {
     const tenantId = localStorage.getItem('tenant_id');
     if (!tenantId || !pageId) return;
     setLoading(true);
-    supabase
-      .from('pages')
-      .select('name, config')
-      .eq('id', pageId)
-      .eq('tenant_id', tenantId)
-      .single()
-      .then(({ data, error }) => {
-        if (error) {
-          setError(error.message);
-          toast.error('Failed to load page');
-        } else if (data) {
-          setPage({ name: data.name, config: data.config });
-        }
-        setLoading(false);
-      });
+    
+    const fetchPage = async () => {
+      const response = await apiService.getPage(pageId);
+      if (!response.success) {
+        setError(response.error || 'Failed to load page');
+        toast.error('Failed to load page');
+      } else if (response.data) {
+        setPage({ name: response.data.name, config: response.data.config });
+      }
+      setLoading(false);
+    };
+    
+    fetchPage();
   }, [pageId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;

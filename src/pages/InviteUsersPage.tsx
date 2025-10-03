@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/hooks/useTenant';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
+// Removed direct supabase import - using apiService instead
 import { toast } from 'sonner';
 import type { Database } from '@/types/supabase';
 
@@ -18,11 +19,10 @@ const InviteUsersPage: React.FC = () => {
 
   const fetchTeam = async () => {
     if (!tenantId) return;
-    const { data, error } = await supabase
-      .from('tenant_users')
-      .select('tenant_id, user_id, role, created_at')
-      .eq('tenant_id', tenantId);
-    if (!error && data) setTeam(data);
+    const response = await apiService.getTenantUsers(tenantId);
+    if (response.success && response.data) {
+      setTeam(response.data);
+    }
   };
 
   const handleInvite = async () => {
@@ -31,11 +31,9 @@ const InviteUsersPage: React.FC = () => {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.functions.invoke('invite_user', {
-      body: { email, tenantId, role },
-    });
-    if (error) {
-      toast.error(error.message);
+    const response = await apiService.inviteUser(email, tenantId, role);
+    if (!response.success) {
+      toast.error(response.error || 'Failed to send invitation');
     } else {
       toast.success('Invitation sent');
       setEmail('');
@@ -93,8 +91,12 @@ const InviteUsersPage: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={async () => {
-                        await supabase.from('tenant_users').delete().eq('user_id', u.user_id).eq('tenant_id', tenantId);
-                        fetchTeam();
+                        const response = await apiService.removeTenantUser(u.user_id, tenantId!);
+                        if (response.success) {
+                          fetchTeam();
+                        } else {
+                          toast.error('Failed to remove user');
+                        }
                       }}
                     >Remove</Button>
                   </td>

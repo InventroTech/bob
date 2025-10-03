@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,16 +21,12 @@ const TablesPage = () => {
   useEffect(() => {
     const fetchTenant = async () => {
       if (!user) return;
-      const { data, error } = await supabase
-        .from('tenant_users')
-        .select('tenant_id')
-        .eq('user_id', user.id)
-        .single();
-      if (error) {
+      const response = await apiService.getTenantUser(user.id);
+      if (!response.success) {
         setError('Could not fetch tenant.');
         setTenantId(null);
       } else {
-        setTenantId(data?.tenant_id || null);
+        setTenantId(response.data?.tenant_id || null);
       }
     };
     fetchTenant();
@@ -43,13 +39,11 @@ const TablesPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const { data, error } = await supabase
-          .from('custom_tables')
-          .select('id, name')
-          .eq('tenant_id', tenantId)
-          .order('created_at', { ascending: true });
-        if (error) throw error;
-        setTables(data || []);
+        const response = await apiService.getCustomTables(tenantId);
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to load tables');
+        }
+        setTables(response.data || []);
       } catch (err: any) {
         setError(err.message || 'Failed to load tables.');
       } finally {
@@ -69,19 +63,17 @@ const TablesPage = () => {
         setCreating(false);
         return;
       }
-      const { error } = await supabase
-        .from('custom_tables')
-        .insert({ name: newTableName.trim(), tenant_id: tenantId });
-      if (error) throw error;
+      const response = await apiService.createCustomTable(newTableName.trim(), tenantId);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to create table');
+      }
       setShowCreate(false);
       setNewTableName('');
       // Refresh tables
-      const { data } = await supabase
-        .from('custom_tables')
-        .select('id, name')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: true });
-      setTables(data || []);
+      const refreshResponse = await apiService.getCustomTables(tenantId);
+      if (refreshResponse.success) {
+        setTables(refreshResponse.data || []);
+      }
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create table.');
     } finally {

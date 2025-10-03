@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
 import { LeadFormComponent } from './LeadsTableForm';
@@ -169,10 +169,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       const confirm = window.confirm('Are you sure you want to delete this lead?');
       if (!confirm) return;
 
-      const { error } = await supabase.from('leads').delete().eq('id', id);
+      const response = await apiService.deleteLead(id.toString());
 
-      if (error) {
-        throw error;
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to delete lead');
       }
 
       setData(prev => prev.filter(lead => lead.id !== id));

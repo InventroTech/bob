@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { supabase } from "@/lib/supabase";
+import { authService } from "@/lib/authService";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -314,7 +314,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the ticket stats
   const fetchTicketStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       if (!session) return;
 
       // Use renderer URL with analytics endpoint
@@ -420,7 +421,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Fetching next ticket from:', nextTicketUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -509,7 +511,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Taking break from:', apiUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
@@ -586,7 +589,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
 
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       if (!session) {
         throw new Error("Authentication required");
       }
@@ -688,7 +692,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Fetching first ticket from:', apiUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {

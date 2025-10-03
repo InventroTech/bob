@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { authService } from '@/lib/authService';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -24,22 +24,23 @@ const CustomAppAuthPage: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const response = await authService.signInWithPassword(email, password);
   
-    if (error) {
-      setError(error.message);
+    if (!response.success) {
+      setError(response.error || 'Login failed');
       return;
     }
   
     // Get user and save email to localStorage
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.email && user?.id) {
+    const userResponse = await authService.getUser();
+    if (userResponse.success && userResponse.data?.email && userResponse.data?.id) {
+      const user = userResponse.data;
       localStorage.setItem('user_email', user.email);
 
       try {
         // Call renderer API to link user UID with email
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
+        const sessionResponse = await authService.getSession();
+        const token = sessionResponse.success ? sessionResponse.data?.access_token : null;
 
         if (token) {
           const baseUrl = import.meta.env.VITE_RENDER_API_URL;
@@ -84,16 +85,16 @@ const CustomAppAuthPage: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/app/${tenantSlug}/auth/callback`
-      }
-    });
+    const response = await authService.signInWithOAuth('google');
   
-    if (error) {
-      setError(error.message);
+    if (!response.success) {
+      setError(response.error || 'OAuth login failed');
       return;
+    }
+    
+    if (response.data) {
+      // Redirect to OAuth URL
+      window.location.href = response.data;
     }
   
     // Email will be fetched and stored in callback page

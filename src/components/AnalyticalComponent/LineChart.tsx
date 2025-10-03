@@ -12,7 +12,7 @@ import {
 } from "chart.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/lib/supabase";
+import { authService } from "@/lib/authService";
 import { TrendingUp, Calendar } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -237,7 +237,8 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       setLoading(true);
       setError(null);
       
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionResponse = await authService.getSession();
+      const session = sessionResponse.success ? sessionResponse.data : null;
       const token = session?.access_token;
 
       if (!token) {
