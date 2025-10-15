@@ -138,7 +138,6 @@ const defaultColumns: Column[] = [
   { header: 'Company', accessor: 'company', type: 'text' },
   { header: 'Lead Score', accessor: 'lead_score', type: 'text' },
   { header: 'Resolution Status', accessor: 'resolution_status', type: 'chip' },
-  { header: 'Lead Status', accessor: 'lead_status', type: 'chip' },
   { header: 'Source', accessor: 'source', type: 'text' },
   { header: 'Created At', accessor: 'created_at', type: 'text' },
 ];
@@ -278,22 +277,26 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       // Add date range filters
       if (dateRangeFilter.startDate) {
         const startDateTime = new Date(dateRangeFilter.startDate);
-        startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
+        const [startHour, startMinute] = dateRangeFilter.startTime.split(':').map(Number);
+        startDateTime.setHours(startHour, startMinute, 0, 0);
+        // Convert to ISO string for backend
         params.append('created_at__gte', startDateTime.toISOString());
       }
       if (dateRangeFilter.endDate) {
         const endDateTime = new Date(dateRangeFilter.endDate);
-        endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
+        const [endHour, endMinute] = dateRangeFilter.endTime.split(':').map(Number);
+        endDateTime.setHours(endHour, endMinute, 59, 999);
+        // Convert to ISO string for backend
         params.append('created_at__lte', endDateTime.toISOString());
       }
       
-      // Add search filter
+      // Add search filter - backend searches across name, phone_no, and email
       const currentSearchTerm = latestSearchValueRef.current;
       if (currentSearchTerm.trim() !== '') {
-        params.append('name', currentSearchTerm.trim());
+        params.append('search', currentSearchTerm.trim());
       }
       
-      // Add pagination
+      // Always use same pagination
       params.append('page', '1');
       params.append('page_size', '10');
       
@@ -351,10 +354,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         created_at: lead.created_at ? formatRelativeTime(lead.created_at) : 'N/A',
       }));
 
+      // Backend handles search filtering - no client-side filtering needed
       setFilteredData(transformedData);
       setFiltersApplied(true);
       
-      // Update pagination
+      // Update pagination from server response
       if (pageMeta) {
         setPagination({
           totalCount: pageMeta.total_count || 0,
@@ -378,7 +382,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   };
 
   // Reset filters
-  const resetFilters = () => {
+  const resetFilters = async () => {
+    // Clear all filter states
     setLeadStatusFilter(config?.defaultFilters?.lead_status || []);
     setSourceFilter('all');
     setDateRangeFilter({
@@ -389,12 +394,86 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     });
     setSearchTerm('');
     setDisplaySearchTerm('');
+    latestSearchValueRef.current = '';
+    
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = null;
     }
-    setFilteredData(data);
-    setFiltersApplied(false);
+    
+    // Re-fetch initial data to reset everything properly
+    try {
+      setTableLoading(true);
+      const authToken = session?.access_token;
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const endpoint = config?.apiEndpoint || '/crm-records/records/';
+      
+      const params = new URLSearchParams();
+      
+      if (endpoint.includes('/crm-records/records')) {
+        params.append('entity_type', 'lead');
+      }
+      
+      // Apply default filters if provided
+      if (config?.defaultFilters?.lead_status && config.defaultFilters.lead_status.length > 0) {
+        params.append('lead_status', config.defaultFilters.lead_status.join(','));
+      }
+      
+      params.append('page', '1');
+      params.append('page_size', '10');
+      
+      const apiUrl = `${baseUrl}${endpoint}${params.toString() ? '?' + params.toString() : ''}`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch leads: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      let leads = responseData.data || responseData.results || [];
+      let pageMeta = responseData.page_meta;
+
+      const transformedData = leads.map((lead: any) => ({
+        ...lead,
+        phone_no: lead.data?.phone_no || 'N/A',
+        email: lead.data?.email || 'N/A',
+        company: lead.data?.company || 'N/A',
+        lead_score: lead.data?.lead_score || 'N/A',
+        lead_status: lead.data?.lead_status || 'in_queue',
+        resolution_status: lead.data?.resolution_status || 'Open',
+        source: lead.data?.source || 'N/A',
+        badge: lead.data?.badge || 'N/A',
+        created_at: lead.created_at ? formatRelativeTime(lead.created_at) : 'N/A',
+      }));
+
+      setData(transformedData);
+      setFilteredData(transformedData);
+      setFiltersApplied(false);
+      
+      if (pageMeta) {
+        setPagination({
+          totalCount: pageMeta.total_count || 0,
+          numberOfPages: pageMeta.number_of_pages || 0,
+          currentPage: pageMeta.current_page || 1,
+          pageSize: pageMeta.page_size || 10,
+          nextPageLink: pageMeta.next_page_link || null,
+          previousPageLink: pageMeta.previous_page_link || null
+        });
+      }
+    } catch (error) {
+      console.error('Error resetting filters:', error);
+      toast.error('Failed to reset filters');
+    } finally {
+      setTableLoading(false);
+    }
   };
 
   // Store the latest search value
@@ -435,19 +514,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         
         const apiSequence = ++requestSequenceRef.current;
         
-        if (searchValue.trim() === '') {
-          if (leadStatusFilter.length === 0 && 
-              sourceFilter === 'all' && 
-              !dateRangeFilter.startDate && 
-              !dateRangeFilter.endDate) {
-            setFilteredData(data);
-            setFiltersApplied(false);
-          } else {
-            applyFilters(apiSequence);
-          }
-        } else {
-          applyFilters(apiSequence);
-        }
+        // Always call applyFilters to refresh data and pagination
+        // This ensures pagination works correctly after clearing search
+        applyFilters(apiSequence);
       }
     }, 1000);
   }, [applyFilters, data, leadStatusFilter, sourceFilter, dateRangeFilter]);
@@ -462,7 +531,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     React.memo(({ searchTerm, onChange }: { searchTerm: string; onChange: (value: string) => void }) => (
       <input
         type="text"
-        placeholder="Search leads..."
+        placeholder="Search by name, phone, or email..."
         value={searchTerm}
         onChange={(e) => onChange(e.target.value)}
         className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -943,7 +1012,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
-                Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} leads
+                Showing {filteredData.length} of {pagination.totalCount} leads
                 {filtersApplied && (leadStatusFilter.length > 0 || sourceFilter !== 'all' || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2">
                     (Filtered by: 
@@ -970,6 +1039,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         </div>
 
         {/* Table Section */}
+        {/* Always use server-side pagination - backend handles search */}
         <PrajaTable 
           columns={tableColumns} 
           data={filteredData} 
@@ -978,7 +1048,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           loading={tableLoading}
         />
         
-        {/* Server-side pagination controls */}
+        {/* Server-side pagination controls - works for both search and normal view */}
         {pagination.totalCount > 0 && filteredData.length > 0 && (
           <div className="flex justify-between items-center mt-4 p-4 border-t">
             <div className="text-sm text-gray-600">
