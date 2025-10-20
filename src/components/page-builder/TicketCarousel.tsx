@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { convertGMTtoIST } from "@/lib/timeUtils";
 import { Badge } from "@/components/ui/badge";
 import {
   Calendar,
@@ -803,9 +804,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     );
   }
 
-  //formatting the ticket date
+  //formatting the ticket date in IST
   const formattedDate = currentTicket?.dumped_at
-    ? new Date(currentTicket.dumped_at).toLocaleDateString("en-US", {
+    ? convertGMTtoIST(currentTicket.dumped_at, 'date', {
         year: "numeric",
         month: "short",
         day: "numeric",
@@ -867,7 +868,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   <div className="space-y-1">
                     <div className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
                     <span className="font-medium text-sm">
-                  {currentTicket?.dumped_at ? new Date(currentTicket.dumped_at).toLocaleDateString("en-US", {
+                  {currentTicket?.dumped_at ? convertGMTtoIST(currentTicket.dumped_at, 'date', {
                     year: "numeric",
                     month: "short",
                     day: "numeric",
