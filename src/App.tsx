@@ -31,8 +31,6 @@ import { CardComponent } from "./layout/CardEditLayout";
 import { LeadFormComponent } from "./components/page-builder/LeadsTableForm";
 import AddUserPage from "./pages/AddUserPage";
 import AuthCallbackPage from "./pages/AuthCallBackPage";
-import AllLeadsPage from "./pages/AllLeadsPage";
-import ScheduledWIPLeadsPage from "./pages/ScheduledWIPLeadsPage";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -59,8 +57,6 @@ const App = () => (
             <Route path="/profile-settings" element={<ProfileSettings />} />
             <Route path="/tables" element={<TablesPage />} />
             <Route path="/leads" element={<LeadFormComponent />} />
-            <Route path="/leads/all" element={<AllLeadsPage />} />
-            <Route path="/leads/scheduled-wip" element={<ScheduledWIPLeadsPage />} />
             <Route path="/cards" element={<CardComponent />} />
             <Route path="/tables/:tableName" element={<TableDetailsPage />} />
             <Route path="/builder/templates/lead-card" element={<LeadCardTemplate attributes={{}} />} />

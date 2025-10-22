@@ -6,7 +6,7 @@ import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Filter, Calendar } from 'lucide-react';
+import { Filter, Calendar, User, MessageCircle, ExternalLink } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,11 +23,15 @@ interface Column {
   type: 'text' | 'chip' | 'link';
 }
 
-// Status color mapping for leads
-const getStatusColor = (status: string) => {
+// Status color mapping - configurable
+const getStatusColor = (status: string, statusColors?: Record<string, string>) => {
+  if (statusColors && statusColors[status]) {
+    return statusColors[status];
+  }
+  
+  // Default fallback colors
   const statusLower = status.toLowerCase();
   switch (statusLower) {
-    // Lead statuses
     case 'in_queue':
       return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     case 'assigned':
@@ -42,15 +46,12 @@ const getStatusColor = (status: string) => {
       return 'bg-red-100 text-red-800 border-red-200';
     case 'closed':
       return 'bg-gray-100 text-gray-800 border-gray-200';
-    
-    // Resolution statuses
     case 'resolved':
       return 'bg-green-100 text-green-800 border-green-200';
     case 'wip':
       return 'bg-blue-100 text-blue-800 border-blue-200';
     case 'open':
       return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    
     default:
       return 'bg-gray-100 text-gray-800 border-gray-200';
   }
@@ -131,15 +132,52 @@ const formatRelativeTime = (dateString: string): string => {
   }
 };
 
-// Default columns
+// Helper function to transform lead data based on configuration
+const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
+  // If configuration is provided, use it to transform data
+  if (config?.columns) {
+    const transformedLead: any = { ...lead };
+    
+    // Apply transformations for configured columns
+    config.columns.forEach(col => {
+      const value = lead.data?.[col.key] || lead[col.key];
+      
+      // Use custom transform if provided
+      if (col.transform) {
+        transformedLead[col.key] = col.transform(value, lead);
+      } else {
+        // Apply default transformations based on field type
+        switch (col.type) {
+          case 'date':
+            transformedLead[col.key] = value ? formatRelativeTime(value) : 'N/A';
+            break;
+          default:
+            transformedLead[col.key] = value || 'N/A';
+        }
+      }
+    });
+    
+    return transformedLead;
+  }
+  
+  // Fallback: minimal transformation for default columns only
+  return {
+    ...lead,
+    lead_stage: lead.data?.lead_stage || lead.data?.lead_status || lead.lead_stage || 'in_queue',
+    customer_full_name: lead.data?.customer_full_name || lead.name || lead.data?.name || 'N/A',
+    user_id: lead.data?.user_id || lead.id || 'N/A',
+    affiliated_party: lead.data?.affiliated_party || 'N/A',
+    phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
+  };
+};
+
+// Default columns - minimal fallback when no configuration is provided
 const defaultColumns: Column[] = [
-  { header: 'Name', accessor: 'name', type: 'text' },
-  { header: 'Phone No', accessor: 'phone_no', type: 'text' },
-  { header: 'Company', accessor: 'company', type: 'text' },
-  { header: 'Lead Score', accessor: 'lead_score', type: 'text' },
-  { header: 'Resolution Status', accessor: 'resolution_status', type: 'chip' },
-  { header: 'Source', accessor: 'source', type: 'text' },
-  { header: 'Created At', accessor: 'created_at', type: 'text' },
+  { header: 'Stage', accessor: 'lead_stage', type: 'chip' },
+  { header: 'Customer Name', accessor: 'customer_full_name', type: 'text' },
+  { header: 'User ID', accessor: 'user_id', type: 'text' },
+  { header: 'Party', accessor: 'affiliated_party', type: 'text' },
+  { header: 'Phone No', accessor: 'phone_number', type: 'text' },
 ];
 
 interface LeadTableProps {
@@ -149,12 +187,20 @@ interface LeadTableProps {
       key: string;
       label: string;
       type: 'text' | 'chip' | 'date' | 'number' | 'link';
+      transform?: (value: any, row: any) => any;
+      width?: string;
     }>;
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
     defaultFilters?: {
       lead_status?: string[];
+      lead_stage?: string[];
     };
+    entityType?: string;
+    statusOptions?: string[];
+    statusColors?: Record<string, string>;
+    tableLayout?: 'auto' | 'fixed';
+    emptyMessage?: string;
   };
 }
 
@@ -205,10 +251,46 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     lead_statuses: string[];
     sources: string[];
   }>({
-    lead_statuses: ['in_queue', 'assigned', 'call_later', 'scheduled', 'won', 'lost', 'closed'],
+    lead_statuses: config?.statusOptions || [],
     sources: []
   });
   const { session, user } = useAuth();
+
+  // Custom cell renderer - completely generic
+  const renderCell = useCallback((row: any, column: Column) => {
+    const value = row[column.accessor];
+    
+    // Render link type columns
+    if (column.type === 'link') {
+      if (!value || value === '#' || value === 'N/A') {
+        return <span className="text-gray-400 text-xs">-</span>;
+      }
+      return (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLink className="h-4 w-4" />
+          <span className="text-xs">Link</span>
+        </a>
+      );
+    }
+    
+    // Render chip/badge for chip type columns
+    if (column.type === 'chip') {
+      return (
+        <Badge className={`${getStatusColor(value, config?.statusColors)} text-xs px-2 py-0.5`}>
+          {value}
+        </Badge>
+      );
+    }
+    
+    // Default text rendering
+    return <span className="text-xs truncate block" title={value}>{value}</span>;
+  }, [config?.statusColors]);
 
   // Memoize table columns
   const tableColumns: Column[] = useMemo(() => 
@@ -259,14 +341,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       // Build query parameters
       const params = new URLSearchParams();
       
-      // Only add entity_type if using generic records endpoint
-      if (endpoint.includes('/crm-records/records')) {
-        params.append('entity_type', 'lead');
+      // Only add entity_type if using generic records endpoint and entityType is configured
+      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+        params.append('entity_type', config.entityType);
       }
       
-      // Add lead status filters
+      // Add lead stage filters
       if (leadStatusFilter.length > 0) {
-        params.append('lead_status', leadStatusFilter.join(','));
+        params.append('lead_stage', leadStatusFilter.join(','));
       }
       
       // Add source filter
@@ -340,19 +422,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       }
 
       // Transform the data
-      const transformedData = leads.map((lead: any) => ({
-        ...lead,
-        // Extract fields from data JSON
-        phone_no: lead.data?.phone_no || 'N/A',
-        email: lead.data?.email || 'N/A',
-        company: lead.data?.company || 'N/A',
-        lead_score: lead.data?.lead_score || 'N/A',
-        lead_status: lead.data?.lead_status || 'in_queue',
-        resolution_status: lead.data?.resolution_status || 'Open',
-        source: lead.data?.source || 'N/A',
-        badge: lead.data?.badge || 'N/A',
-        created_at: lead.created_at ? formatRelativeTime(lead.created_at) : 'N/A',
-      }));
+      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 
       // Backend handles search filtering - no client-side filtering needed
       setFilteredData(transformedData);
@@ -406,17 +476,17 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       setTableLoading(true);
       const authToken = session?.access_token;
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const endpoint = config?.apiEndpoint || '/crm-records/records/';
+      const endpoint = config?.apiEndpoint || '/api/records/';
       
       const params = new URLSearchParams();
       
-      if (endpoint.includes('/crm-records/records')) {
-        params.append('entity_type', 'lead');
+      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+        params.append('entity_type', config.entityType);
       }
       
       // Apply default filters if provided
-      if (config?.defaultFilters?.lead_status && config.defaultFilters.lead_status.length > 0) {
-        params.append('lead_status', config.defaultFilters.lead_status.join(','));
+      if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
+        params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
       }
       
       params.append('page', '1');
@@ -441,18 +511,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       let leads = responseData.data || responseData.results || [];
       let pageMeta = responseData.page_meta;
 
-      const transformedData = leads.map((lead: any) => ({
-        ...lead,
-        phone_no: lead.data?.phone_no || 'N/A',
-        email: lead.data?.email || 'N/A',
-        company: lead.data?.company || 'N/A',
-        lead_score: lead.data?.lead_score || 'N/A',
-        lead_status: lead.data?.lead_status || 'in_queue',
-        resolution_status: lead.data?.resolution_status || 'Open',
-        source: lead.data?.source || 'N/A',
-        badge: lead.data?.badge || 'N/A',
-        created_at: lead.created_at ? formatRelativeTime(lead.created_at) : 'N/A',
-      }));
+      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 
       setData(transformedData);
       setFilteredData(transformedData);
@@ -531,7 +590,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     React.memo(({ searchTerm, onChange }: { searchTerm: string; onChange: (value: string) => void }) => (
       <input
         type="text"
-        placeholder="Search by name, phone, or email..."
+        placeholder="Search by customer name, phone, user ID..."
         value={searchTerm}
         onChange={(e) => onChange(e.target.value)}
         className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -570,18 +629,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         let leads = responseData.data || responseData.results || [];
         let pageMeta = responseData.page_meta;
 
-        const transformedData = leads.map((lead: any) => ({
-          ...lead,
-          phone_no: lead.data?.phone_no || 'N/A',
-          email: lead.data?.email || 'N/A',
-          company: lead.data?.company || 'N/A',
-          lead_score: lead.data?.lead_score || 'N/A',
-          lead_status: lead.data?.lead_status || 'in_queue',
-          resolution_status: lead.data?.resolution_status || 'Open',
-          source: lead.data?.source || 'N/A',
-          badge: lead.data?.badge || 'N/A',
-          created_at: lead.created_at ? formatRelativeTime(lead.created_at) : 'N/A',
-        }));
+        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 
         setData(transformedData);
         setFilteredData(transformedData);
@@ -628,18 +676,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         let leads = responseData.data || responseData.results || [];
         let pageMeta = responseData.page_meta;
 
-        const transformedData = leads.map((lead: any) => ({
-          ...lead,
-          phone_no: lead.data?.phone_no || 'N/A',
-          email: lead.data?.email || 'N/A',
-          company: lead.data?.company || 'N/A',
-          lead_score: lead.data?.lead_score || 'N/A',
-          lead_status: lead.data?.lead_status || 'in_queue',
-          resolution_status: lead.data?.resolution_status || 'Open',
-          source: lead.data?.source || 'N/A',
-          badge: lead.data?.badge || 'N/A',
-          created_at: lead.created_at ? formatRelativeTime(lead.created_at) : 'N/A',
-        }));
+        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 
         setData(transformedData);
         setFilteredData(transformedData);
@@ -684,19 +721,19 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         setLoading(true);
         const authToken = session?.access_token;
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-        const endpoint = config?.apiEndpoint || '/crm-records/records/';
+        const endpoint = config?.apiEndpoint || '/api/records/';
         
         // Build initial query parameters
         const params = new URLSearchParams();
         
-        // Only add entity_type if using generic records endpoint
-        if (endpoint.includes('/crm-records/records')) {
-          params.append('entity_type', 'lead');
+        // Only add entity_type if using generic records endpoint and entityType is configured
+        if (endpoint.includes('/crm-records/records') && config?.entityType) {
+          params.append('entity_type', config.entityType);
         }
         
         // Apply default filters if provided
-        if (config?.defaultFilters?.lead_status && config.defaultFilters.lead_status.length > 0) {
-          params.append('lead_status', config.defaultFilters.lead_status.join(','));
+        if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
+          params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
         }
         
         const apiUrl = `${baseUrl}${endpoint}${params.toString() ? '?' + params.toString() : ''}`;
@@ -712,7 +749,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch leads: ${response.status}`);
+          console.error('API Error:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('Error response:', errorText);
+          throw new Error(`Failed to fetch leads: ${response.status} - ${response.statusText}`);
         }
 
         const responseData = await response.json();
@@ -730,18 +770,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
 
         // Transform the data
-        const transformedData = leads.map((lead: any) => ({
-          ...lead,
-          phone_no: lead.data?.phone_no || 'N/A',
-          email: lead.data?.email || 'N/A',
-          company: lead.data?.company || 'N/A',
-          lead_score: lead.data?.lead_score || 'N/A',
-          lead_status: lead.data?.lead_status || 'in_queue',
-          resolution_status: lead.data?.resolution_status || 'Open',
-          source: lead.data?.source || 'N/A',
-          badge: lead.data?.badge || 'N/A',
-          created_at: lead.created_at ? formatRelativeTime(lead.created_at) : 'N/A',
-        }));
+        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 
         setData(transformedData);
         setFilteredData(transformedData);
@@ -758,7 +787,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
         
         // Extract unique sources for filter
-        const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.source).filter(Boolean))];
+        const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.lead_source).filter(Boolean))];
         setFilterOptions(prev => ({
           ...prev,
           sources: uniqueSources as string[]
@@ -800,22 +829,27 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
   return (
     <>
-    <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
+    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
         {/* Filter Section */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-gray-800">
               {config?.title || "Leads"}
             </h2>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2"
-            >
-              <Filter className="h-4 w-4" />
-              {showFilters ? 'Hide Filters' : 'Show Filters'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowFilters(!showFilters);
+                }}
+                className="flex items-center gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                {showFilters ? 'Hide Filters' : 'Show Filters'}
+              </Button>
+            </div>
           </div>
 
           {showFilters && (
@@ -1028,6 +1062,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           )}
         </div>
 
+
         {/* Search Bar Section */}
         <div className="mb-6">
           <div className="flex justify-end items-center">
@@ -1040,13 +1075,97 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         {/* Table Section */}
         {/* Always use server-side pagination - backend handles search */}
-        <PrajaTable 
-          columns={tableColumns} 
-          data={filteredData} 
-          onRowClick={handleRowClick}
-          disablePagination={true}
-          loading={tableLoading}
-        />
+        <div className="w-full">
+          <style>{`
+            .generic-table {
+              width: 100%;
+              font-size: 0.75rem;
+            }
+            .generic-table table {
+              width: 100% !important;
+              table-layout: ${config?.tableLayout || 'auto'};
+              border-collapse: separate;
+              border-spacing: 0;
+            }
+            .generic-table th {
+              background-color: #f8f9fa !important;
+              color: #495057 !important;
+              padding: 0.6rem 0.5rem !important;
+              font-size: 0.75rem !important;
+              font-weight: 600 !important;
+              text-transform: uppercase !important;
+              letter-spacing: 0.3px !important;
+              border-top: 2px solid #dee2e6 !important;
+              border-bottom: 2px solid #dee2e6 !important;
+              white-space: nowrap !important;
+              text-align: left !important;
+              position: sticky;
+              top: 0;
+              z-index: 10;
+            }
+            .generic-table td {
+              padding: 0.5rem 0.5rem !important;
+              font-size: 0.75rem !important;
+              border-bottom: 1px solid #e5e7eb !important;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              vertical-align: middle !important;
+            }
+            .generic-table tbody tr {
+              transition: all 0.2s ease;
+            }
+            .generic-table tbody tr:hover {
+              background-color: #f1f3f5 !important;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .generic-table tbody tr:nth-child(even) {
+              background-color: #fafafa;
+            }
+            ${config?.columns?.map((col, idx) => 
+              col.width ? `.generic-table th:nth-child(${idx + 1}), .generic-table td:nth-child(${idx + 1}) { width: ${col.width}; }` : ''
+            ).filter(Boolean).join('\n')}
+          `}</style>
+          <div className="generic-table">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  {tableColumns.map((col, idx) => (
+                    <th key={idx}>{col.header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tableLoading ? (
+                  <tr>
+                    <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                      {config?.emptyMessage || 'No data found'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredData.map((row: any, rowIdx: number) => (
+                    <tr 
+                      key={rowIdx} 
+                      onClick={() => handleRowClick(row)}
+                      className="cursor-pointer"
+                    >
+                      {tableColumns.map((col, colIdx) => (
+                        <td key={colIdx}>
+                          {renderCell(row, col)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
         
         {/* Server-side pagination controls - works for both search and normal view */}
         {pagination.totalCount > 0 && filteredData.length > 0 && (
@@ -1087,57 +1206,72 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex justify-between items-center">
-              <DialogTitle>Lead Details</DialogTitle>
+              <DialogTitle>{config?.title || 'Record'} Details</DialogTitle>
             </div>
           </DialogHeader>
           {selectedLead && (
             <div className="mt-2 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Name</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.name}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Phone</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.phone_no}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.email}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Company</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.company}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Lead Score</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.lead_score}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Status</label>
-                  <Badge className={`mt-1 ${getStatusColor(selectedLead.lead_status)}`}>
-                    {selectedLead.lead_status}
-                  </Badge>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Source</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.source}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Badge</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.badge}</p>
-                </div>
+                {config?.columns ? (
+                  // Show configured columns
+                  config.columns.map((col, idx) => (
+                    <div key={idx}>
+                      <label className="block text-sm font-medium text-gray-700">{col.label}</label>
+                      {col.type === 'link' ? (
+                        selectedLead[col.key] !== '#' && selectedLead[col.key] !== 'N/A' ? (
+                          <a 
+                            href={selectedLead[col.key]} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="mt-1 text-sm text-blue-600 hover:underline"
+                          >
+                            Open Link
+                          </a>
+                        ) : (
+                          <p className="mt-1 text-sm text-gray-900">N/A</p>
+                        )
+                      ) : col.type === 'chip' ? (
+                        <Badge className={`mt-1 ${getStatusColor(selectedLead[col.key], config?.statusColors)}`}>
+                          {selectedLead[col.key]}
+                        </Badge>
+                      ) : (
+                        <p className="mt-1 text-sm text-gray-900">{selectedLead[col.key] || 'N/A'}</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  // Show fallback columns only
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Stage</label>
+                      <Badge className={`mt-1 ${getStatusColor(selectedLead.lead_stage, config?.statusColors)}`}>
+                        {selectedLead.lead_stage || 'N/A'}
+                      </Badge>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Customer Name</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedLead.customer_full_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">User ID</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedLead.user_id || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Party</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedLead.affiliated_party || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Phone Number</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedLead.phone_number || 'N/A'}</p>
+                    </div>
+                  </>
+                )}
               </div>
-              {selectedLead.data?.lead_description && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Description</label>
-                  <p className="mt-1 text-sm text-gray-900">{selectedLead.data.lead_description}</p>
-                </div>
-      )}
-    </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
+
     </>
   );
 };
