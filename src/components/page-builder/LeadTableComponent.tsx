@@ -21,6 +21,7 @@ interface Column {
   header: string;
   accessor: string;
   type: 'text' | 'chip' | 'link';
+  linkField?: string; // Field to use as link for this column
 }
 
 // Status color mapping - configurable
@@ -140,7 +141,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     
     // Apply transformations for configured columns
     config.columns.forEach(col => {
-      const value = lead.data?.[col.key] || lead[col.key];
+      const value = lead.data?.[col.key] !== undefined ? lead.data?.[col.key] : lead[col.key];
       
       // Use custom transform if provided
       if (col.transform) {
@@ -149,13 +150,16 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
         // Apply default transformations based on field type
         switch (col.type) {
           case 'date':
-            transformedLead[col.key] = value ? formatRelativeTime(value) : 'N/A';
+            transformedLead[col.key] = value !== null && value !== undefined ? formatRelativeTime(value) : 'N/A';
             break;
           default:
-            transformedLead[col.key] = value || 'N/A';
+            transformedLead[col.key] = value !== null && value !== undefined ? value : 'N/A';
         }
       }
     });
+    
+    // Always include user_profile_link for User ID clickability
+    transformedLead.user_profile_link = lead.data?.user_profile_link || lead.user_profile_link || '#';
     
     return transformedLead;
   }
@@ -168,6 +172,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     user_id: lead.data?.user_id || lead.id || 'N/A',
     affiliated_party: lead.data?.affiliated_party || 'N/A',
     phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
+    user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
   };
 };
 
@@ -257,14 +262,93 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const { session, user } = useAuth();
 
   // Custom cell renderer - completely generic
-  const renderCell = useCallback((row: any, column: Column) => {
-    const value = row[column.accessor];
+  const renderCell = useCallback((row: any, column: Column, columnIndex: number) => {
+    let value = row[column.accessor];
+    
+    // Handle case where value is an object - extract the actual value
+    if (typeof value === 'object' && value !== null) {
+      // If it's an object, try to get a string representation
+      if (value.toString && typeof value.toString === 'function') {
+        value = value.toString();
+      } else {
+        // Fallback: try to get the first property value
+        const keys = Object.keys(value);
+        if (keys.length > 0) {
+          value = value[keys[0]];
+        } else {
+          value = 'N/A';
+        }
+      }
+    }
+    
+    // Ensure value is properly handled - don't convert 0 to N/A
+    if (value === null || value === undefined) {
+      value = 'N/A';
+    } else if (value === 0 || value === '0') {
+      value = '0'; // Keep 0 as 0, don't convert to N/A
+    }
+    
+    // Convert to string for display
+    const displayValue = String(value);
+    
+    // Helper function to truncate text based on column width
+    const truncateText = (text: string, columnIndex: number) => {
+      const totalColumns = config?.columns?.length || 5;
+      const columnWidthPercent = 100 / totalColumns;
+      
+      // If column takes more than 7% of screen, truncate
+      if (columnWidthPercent > 7) {
+        // Calculate max characters based on column width percentage
+        // Assuming average character width is about 8px, and screen width is ~1200px
+        const screenWidth = 1200; // Approximate screen width
+        const columnWidthPx = (columnWidthPercent / 100) * screenWidth;
+        const maxChars = Math.floor(columnWidthPx / 8); // 8px per character
+        
+        return text.length > maxChars ? text.substring(0, maxChars) + '...' : text;
+      }
+      
+      return text;
+    };
     
     // Render link type columns
     if (column.type === 'link') {
-      if (!value || value === '#' || value === 'N/A') {
+      if (!displayValue || displayValue === '#' || displayValue === 'N/A') {
         return <span className="text-gray-400 text-xs">-</span>;
       }
+      
+      // Check if it's a profile link
+      if (column.accessor === 'user_profile_link' || column.header.toLowerCase().includes('profile')) {
+        return (
+          <a
+            href={displayValue}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <User className="h-4 w-4" />
+            <span className="text-xs">{truncateText('Profile', columnIndex)}</span>
+          </a>
+        );
+      }
+      
+      // Check if it's a WhatsApp link
+      if (column.accessor === 'whatsapp_link' || column.header.toLowerCase().includes('whatsapp') || column.header.toLowerCase().includes('whats')) {
+        return (
+          <a
+            href={displayValue}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MessageCircle className="h-4 w-4" />
+            <span className="text-xs">{truncateText('WhatsApp', columnIndex)}</span>
+          </a>
+        );
+      }
+      
+      // Default link rendering
       return (
         <a
           href={value}
@@ -274,7 +358,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink className="h-4 w-4" />
-          <span className="text-xs">Link</span>
+            <span className="text-xs">{truncateText('Link', columnIndex)}</span>
         </a>
       );
     }
@@ -282,14 +366,46 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     // Render chip/badge for chip type columns
     if (column.type === 'chip') {
       return (
-        <Badge className={`${getStatusColor(value, config?.statusColors)} text-xs px-2 py-0.5`}>
-          {value}
+        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-xs px-2 py-0.5`} title={displayValue}>
+          {truncateText(displayValue, columnIndex)}
         </Badge>
       );
     }
     
+    // Special handling for columns with configured linkField
+    if (column.linkField && row[column.linkField] && row[column.linkField] !== '#' && row[column.linkField] !== 'N/A') {
+      return (
+        <a
+          href={row[column.linkField]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <User className="h-3 w-3" />
+          <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+        </a>
+      );
+    }
+    
+    // Fallback: Special handling for User ID - make it clickable if profile link exists
+    if (column.accessor === 'user_id' && row.user_profile_link && row.user_profile_link !== '#' && row.user_profile_link !== 'N/A') {
+      return (
+        <a
+          href={row.user_profile_link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <User className="h-3 w-3" />
+          <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+        </a>
+      );
+    }
+    
     // Default text rendering
-    return <span className="text-xs truncate block" title={value}>{value}</span>;
+    return <span className="text-xs block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
   }, [config?.statusColors]);
 
   // Memoize table columns
@@ -383,7 +499,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       params.append('page_size', '10');
       
       const fullUrl = `${apiUrl}?${params.toString()}`;
-      console.log('Filtered API URL:', fullUrl);
 
       const response = await fetch(fullUrl, {
         method: 'GET',
@@ -403,7 +518,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       
       // Check if this response is still relevant
       if (currentSequence !== requestSequenceRef.current) {
-        console.log(`Ignoring stale response for sequence ${currentSequence}`);
         return;
       }
       
@@ -441,7 +555,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        console.log('Request was aborted');
         return;
       }
       console.error('Error applying filters:', error);
@@ -737,7 +850,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
         
         const apiUrl = `${baseUrl}${endpoint}${params.toString() ? '?' + params.toString() : ''}`;
-        console.log('Initial API URL:', apiUrl);
         
         const response = await fetch(apiUrl, {
           method: 'GET',
@@ -1077,56 +1189,60 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         {/* Always use server-side pagination - backend handles search */}
         <div className="w-full">
           <style>{`
-            .generic-table {
+            /* Fixed width table - no horizontal scroll */
+            .table-container {
               width: 100%;
-              font-size: 0.75rem;
+              border: 1px solid #e5e7eb;
+              border-radius: 0.5rem;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+              overflow: hidden;
             }
-            .generic-table table {
-              width: 100% !important;
-              table-layout: ${config?.tableLayout || 'auto'};
-              border-collapse: separate;
-              border-spacing: 0;
+            
+            /* Table styles */
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed; /* Fixed layout for consistent column widths */
             }
-            .generic-table th {
-              background-color: #f8f9fa !important;
-              color: #495057 !important;
-              padding: 0.6rem 0.5rem !important;
-              font-size: 0.75rem !important;
-              font-weight: 600 !important;
-              text-transform: uppercase !important;
-              letter-spacing: 0.3px !important;
-              border-top: 2px solid #dee2e6 !important;
-              border-bottom: 2px solid #dee2e6 !important;
-              white-space: nowrap !important;
-              text-align: left !important;
-              position: sticky;
-              top: 0;
-              z-index: 10;
-            }
-            .generic-table td {
-              padding: 0.5rem 0.5rem !important;
-              font-size: 0.75rem !important;
-              border-bottom: 1px solid #e5e7eb !important;
+            
+            th, td {
+              padding: 8px 12px;
+              text-align: left;
+              border-bottom: 1px solid #e5e7eb;
               overflow: hidden;
               text-overflow: ellipsis;
-              vertical-align: middle !important;
+              white-space: nowrap;
             }
-            .generic-table tbody tr {
-              transition: all 0.2s ease;
+            
+            th {
+              background-color: #f9fafb;
+              font-weight: 600;
+              font-size: 0.875rem;
+              color: #374151;
             }
-            .generic-table tbody tr:hover {
-              background-color: #f1f3f5 !important;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            
+            td {
+              font-size: 0.875rem;
+              color: #111827;
             }
-            .generic-table tbody tr:nth-child(even) {
+            
+            tr:hover {
+              background-color: #f9fafb;
+            }
+            
+            tbody tr:nth-child(even) {
               background-color: #fafafa;
             }
+            
+            /* Equal column widths - distribute evenly */
             ${config?.columns?.map((col, idx) => 
-              col.width ? `.generic-table th:nth-child(${idx + 1}), .generic-table td:nth-child(${idx + 1}) { width: ${col.width}; }` : ''
+              col.width ? 
+                `table th:nth-child(${idx + 1}), table td:nth-child(${idx + 1}) { width: ${col.width}; }` : 
+                `table th:nth-child(${idx + 1}), table td:nth-child(${idx + 1}) { width: ${100 / (config?.columns?.length || 5)}%; }`
             ).filter(Boolean).join('\n')}
           `}</style>
-          <div className="generic-table">
-            <table className="w-full">
+          <div className="table-container">
+            <table className="w-full" style={{ tableLayout: 'fixed' }}>
               <thead>
                 <tr>
                   {tableColumns.map((col, idx) => (
@@ -1156,7 +1272,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                     >
                       {tableColumns.map((col, colIdx) => (
                         <td key={colIdx}>
-                          {renderCell(row, col)}
+                          {renderCell(row, col, colIdx)}
                         </td>
                       ))}
                     </tr>
