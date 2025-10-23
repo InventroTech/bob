@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface ColumnConfig {
   key: string;
   label: string;
-  type: 'text' | 'chip' | 'date' | 'number';
+  type: 'text' | 'chip' | 'date' | 'number' | 'link';
+  linkField?: string; // Field to use as link for this column
 }
 
 interface TableConfigProps {
@@ -47,7 +48,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           <Input
             type="number"
             min="1"
-            max="10"
+            max="20"
             value={numColumns}
             onChange={(e) => handleColumnCountChange(parseInt(e.target.value) || 0)}
             className="w-24"
@@ -80,7 +81,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                   <Label>Column Type</Label>
                   <Select
                     value={column.type}
-                    onValueChange={(value: 'text' | 'chip' | 'date' | 'number') => 
+                    onValueChange={(value: 'text' | 'chip' | 'date' | 'number' | 'link') => 
                       handleColumnFieldChange(index, 'type', value)
                     }
                   >
@@ -92,9 +93,23 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                       <SelectItem value="chip">Chip/Badge</SelectItem>
                       <SelectItem value="date">Date</SelectItem>
                       <SelectItem value="number">Number</SelectItem>
+                      <SelectItem value="link">Link</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {(column.type === 'text' || column.key === 'user_id') && (
+                  <div className="col-span-2">
+                    <Label>Link Field (Optional)</Label>
+                    <Input
+                      value={column.linkField || ''}
+                      onChange={(e) => handleColumnFieldChange(index, 'linkField', e.target.value)}
+                      placeholder="e.g., user_profile_link"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Field to use as link for this column (e.g., user_profile_link for User ID)
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           );
