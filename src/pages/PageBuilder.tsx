@@ -88,16 +88,18 @@ import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChar
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
 // Import configuration components
-import { 
-  DataCardConfig, 
-  TableConfig, 
-  CarouselConfig, 
-  BasicChartConfig, 
+import {
+  DataCardConfig,
+  TableConfig,
+  CarouselConfig,
+  BasicChartConfig,
   AdvancedChartConfig,
+  DynamicFilterConfig,
   TicketCarouselConfig,
   LeadCardCarouselConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
+import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 
 // Add configuration types
 interface ComponentConfig {
@@ -118,6 +120,12 @@ interface ComponentConfig {
   refreshInterval?: number;
   showFilters?: boolean;
   customFields?: Record<string, any>;
+  filters?: FilterConfig[];
+  filterOptions?: {
+    pageSize?: number;
+    showSummary?: boolean;
+    compact?: boolean;
+  };
 }
 
 // Update CanvasComponentData to include config
@@ -129,6 +137,7 @@ export interface CanvasComponentData {
 }
 
 // Map component types to actual components
+// Maps builder palette identifiers to actual React components rendered on the canvas
 export const componentMap: Record<string, React.FC<any>> = {
   container: ContainerComponent,
   split: SplitViewComponent,
@@ -199,6 +208,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   const [localColumns, setLocalColumns] = useState<ColumnConfig[]>(initialColumns);
   const [numColumns, setNumColumns] = useState<number>(initialColumns.length);
 
+  // Separate state for filters
+  const initialFilters = initialConfig.filters || [];
+  const [localFilters, setLocalFilters] = useState<FilterConfig[]>(initialFilters);
+  const [numFilters, setNumFilters] = useState<number>(initialFilters.length);
+
   // Separate state for datasets (for StackedBarChart)
   const [localDatasets, setLocalDatasets] = useState<Array<{label: string; backgroundColor: string}>>(initialDatasets);
   const [numDatasets, setNumDatasets] = useState<number>(initialDatasets.length || 1);
@@ -260,6 +274,66 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     debouncedUpdateWithDelay({ columns: newColumns });
   }, [localColumns, debouncedUpdateWithDelay]);
 
+  const handleFilterCountChange = useCallback((count: number) => {
+    setNumFilters(count);
+    if (count < localFilters.length) {
+      // Remove extra filters
+      const newFilters = localFilters.slice(0, count);
+      setLocalFilters(newFilters);
+    } else if (count > localFilters.length) {
+      // Add new filters
+      const newFilters = [...localFilters];
+      for (let i = localFilters.length; i < count; i++) {
+        newFilters.push({ key: '', label: '', type: 'select', options: [] });
+      }
+      setLocalFilters(newFilters);
+    }
+    debouncedUpdateWithDelay({ filters: localFilters });
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options']) => {
+    const newFilters = [...localFilters];
+    if (field === 'lookup' && value === 'auto') {
+      // Convert 'auto' back to undefined for the lookup field
+      newFilters[index] = { ...newFilters[index], [field]: undefined };
+    } else {
+      newFilters[index] = { ...newFilters[index], [field]: value };
+    }
+    setLocalFilters(newFilters);
+    debouncedUpdateWithDelay({ filters: newFilters });
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleAddFilterOption = useCallback((filterIndex: number) => {
+    const newFilters = [...localFilters];
+    if (!newFilters[filterIndex].options) {
+      newFilters[filterIndex].options = [];
+    }
+    newFilters[filterIndex].options!.push({ label: '', value: '' });
+    setLocalFilters(newFilters);
+    debouncedUpdateWithDelay({ filters: newFilters });
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleRemoveFilterOption = useCallback((filterIndex: number, optionIndex: number) => {
+    const newFilters = [...localFilters];
+    if (newFilters[filterIndex].options) {
+      newFilters[filterIndex].options!.splice(optionIndex, 1);
+      setLocalFilters(newFilters);
+      debouncedUpdateWithDelay({ filters: newFilters });
+    }
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleFilterOptionChange = useCallback((filterIndex: number, optionIndex: number, field: keyof FilterConfig['options'][0], value: string) => {
+    const newFilters = [...localFilters];
+    if (newFilters[filterIndex].options && newFilters[filterIndex].options![optionIndex]) {
+      newFilters[filterIndex].options![optionIndex] = {
+        ...newFilters[filterIndex].options![optionIndex],
+        [field]: value
+      };
+      setLocalFilters(newFilters);
+      debouncedUpdateWithDelay({ filters: newFilters });
+    }
+  }, [localFilters, debouncedUpdateWithDelay]);
+
   // Handle dataset count change
   const handleDatasetCountChange = useCallback((count: number) => {
     setNumDatasets(count);
@@ -297,13 +371,20 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
       case 'ticketTable':
         return (
-          <TicketTableConfig
+          <TableConfig
             localConfig={localConfig}
             localColumns={localColumns}
             numColumns={numColumns}
+            localFilters={localFilters}
+            numFilters={numFilters}
             handleInputChange={handleInputChange}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
+            handleFilterCountChange={handleFilterCountChange}
+            handleFilterFieldChange={handleFilterFieldChange}
+            handleAddFilterOption={handleAddFilterOption}
+            handleRemoveFilterOption={handleRemoveFilterOption}
+            handleFilterOptionChange={handleFilterOptionChange}
           />
         );
 
@@ -314,9 +395,16 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             localConfig={localConfig}
             localColumns={localColumns}
             numColumns={numColumns}
+            localFilters={localFilters}
+            numFilters={numFilters}
             handleInputChange={handleInputChange}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
+            handleFilterCountChange={handleFilterCountChange}
+            handleFilterFieldChange={handleFilterFieldChange}
+            handleAddFilterOption={handleAddFilterOption}
+            handleRemoveFilterOption={handleRemoveFilterOption}
+            handleFilterOptionChange={handleFilterOptionChange}
           />
         );
 
@@ -402,6 +490,7 @@ const PageBuilder = () => {
   );
 
   // Setup droppable canvas area
+  // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
     data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser'] }
@@ -412,18 +501,9 @@ const PageBuilder = () => {
 
   // Add these effects
   useEffect(() => {
-    // Log the droppable area dimensions for debugging
     const element = canvasRef.current;
     if (element) {
-      const rect = element.getBoundingClientRect();
-      console.log("Canvas Drop Area Dimensions:", {
-        top: rect.top,
-        left: rect.left,
-        bottom: rect.bottom,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height
-      });
+      element.getBoundingClientRect();
     }
   }, []);
 
@@ -431,7 +511,6 @@ const PageBuilder = () => {
     // If editing an existing page, fetch its data
     const fetchPageData = async () => {
       if (pageId && pageId !== 'new') {
-        console.log(`Fetching data for page ID: ${pageId}`);
         try {
           const { data, error } = await supabase
             .from('pages')
@@ -442,17 +521,16 @@ const PageBuilder = () => {
           if (error) throw error;
 
           if (data) {
-            console.log("Fetched page data:", data);
+            // Supabase `pages.config` stores the canvas components. Older rows might be arrays.
+            // Normalize to array of CanvasComponentData.
             setPageName(data.name || 'Untitled Page');
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
             if (data.role) setSelectedRole(data.role);
           } else {
-            console.warn(`Page with ID ${pageId} not found.`);
             toast.error("Page not found.");
             navigate('/'); // Redirect if page not found
           }
         } catch (error: any) {
-          console.error("Error fetching page data:", error);
           toast.error(`Error loading page: ${error.message}`);
           navigate('/'); // Redirect on error
         }
@@ -479,11 +557,9 @@ const PageBuilder = () => {
           .from('roles')
           .select('id, name')
           .eq('tenant_id', tenantId);
-        console.log("Roles:", data);
         if (error) throw error;
         if (data) setRoles(data);
       } catch (err) {
-        console.error('Error fetching roles:', err);
       }
     };
     
@@ -491,37 +567,36 @@ const PageBuilder = () => {
   }, [tenantId]);
 
   // Handler for when a drag operation starts
+  // Track the currently dragged palette item for overlay and canvas highlighting
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
-    console.log("Drag start:", active.id);
     setActiveDragId(String(active.id));
     setActiveComponent(String(active.id));
   };
 
   // New handler for when a drag operation moves over a droppable
+  // Currently used only to keep DnD-kit state fresh; no side-effects needed
   const handleDragOver = (event: DragOverEvent) => {
     const { over } = event;
-    console.log("Dragging over:", over?.id);
   };
 
   // New handler for when a drag operation moves
+  // Could be used for live feedback while dragging (kept minimal for readability)
   const handleDragMove = (event: DragMoveEvent) => {
-    // This is helpful for debugging
-    console.log("Drag move delta:", event.delta);
+    // Intentionally left blank
   };
 
   // Modify the handleDragEnd function with manual drop detection
+  // When dropping, either add a new component to the canvas or insert near an existing one
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveDragId(null);
     setActiveComponent(null);
 
-    console.log("Drag End Event: ", event);
-    console.log("Dragged Item ID (active):", active.id);
-    console.log("Dropped On Area ID (over):", over?.id);
-    console.log("Over data:", over?.data?.current);
+    
 
     // Manual drop detection if dnd-kit's detection fails
+    // Fallback heuristic when DnD-kit fails to detect drop over the canvas
     const manualDetection = () => {
       // Get the canvas element's boundaries
       const element = canvasRef.current;
@@ -532,20 +607,13 @@ const PageBuilder = () => {
       // Get the pointer position from the event
       const { clientX, clientY } = event.activatorEvent as PointerEvent;
       
-      console.log("Drop Position:", { clientX, clientY });
-      console.log("Canvas Boundaries:", { 
-        top: rect.top, 
-        right: rect.right, 
-        bottom: rect.bottom, 
-        left: rect.left 
-      });
       
-      // SOLUTION: Instead of strict position checking, determine if this was a dragging action 
-      // from the sidebar toward the canvas area
+      
+      // Determine if user dragged from sidebar toward the canvas area
       const deltaX = event.delta.x;
       const deltaY = event.delta.y;
       
-      console.log("Drag delta:", { deltaX, deltaY });
+      
       
       // If dragged significantly rightward (from sidebar toward canvas)
       // AND cursor is within reasonable vertical range of the canvas
@@ -554,11 +622,7 @@ const PageBuilder = () => {
       
       const isLikelyIntendedForCanvas = isDraggingTowardCanvas && isWithinVerticalRange;
       
-      console.log("Drag intent analysis:", { 
-        isDraggingTowardCanvas, 
-        isWithinVerticalRange,
-        isLikelyIntendedForCanvas
-      });
+      
       
       return isLikelyIntendedForCanvas;
     };
@@ -576,11 +640,10 @@ const PageBuilder = () => {
           config: {},
         };
 
-        console.log("Adding component to canvas: ", newComponent);
         // Add the new component to the canvas state
         setCanvasComponents((prev) => [...prev, newComponent]);
       } else {
-        console.warn(`Unknown component type dropped: ${componentType}`);
+        
       }
     } 
     // ADD THIS SECTION to handle drops onto existing components
@@ -588,7 +651,7 @@ const PageBuilder = () => {
       // This is likely a component ID (they have format like "container-1234567890")
       const componentType = String(active.id);
       if (!componentMap[componentType]) {
-        console.warn(`Unknown component type dropped: ${componentType}`);
+        
         return;
       }
 
@@ -604,7 +667,6 @@ const PageBuilder = () => {
       const targetIndex = canvasComponents.findIndex(comp => comp.id === targetId);
       
       if (targetIndex !== -1) {
-        console.log(`Inserting new component at index ${targetIndex}`);
         // Insert the new component at this index
         setCanvasComponents(prev => {
           const newList = [...prev];
@@ -612,13 +674,12 @@ const PageBuilder = () => {
           return newList;
         });
       } else {
-        console.warn(`Target component with ID ${targetId} not found`);
         // Fallback: Add to end
         setCanvasComponents(prev => [...prev, newComponent]);
       }
     }
     else {
-      console.log("Dropped outside canvas.");
+      
     }
   };
 
@@ -636,7 +697,6 @@ const PageBuilder = () => {
 
   // Function to handle component deletion
   const handleDeleteComponent = (idToDelete: string) => {
-    console.log(`Attempting to delete component: ${idToDelete}`);
     setCanvasComponents((prev) =>
       prev.filter(component => component.id !== idToDelete)
     );
@@ -665,15 +725,13 @@ const PageBuilder = () => {
 
       let response;
       if (pageId && pageId !== 'new') {
-        // Update existing page
-        console.log(`Updating page ID: ${pageId}`, pageData);
+        // Update existing page row by id
         response = await supabase
           .from('pages')
           .update(pageData)
           .eq('id', pageId);
       } else {
-        // Insert new page
-        console.log("Inserting new page:", pageData);
+        // Insert new page and return its id (used to navigate to the edit URL)
         response = await supabase
           .from('pages')
           .insert([pageData])
@@ -681,7 +739,6 @@ const PageBuilder = () => {
           .single();
       }
 
-      console.log("Save response:", response);
       if (response.error) throw response.error;
 
       toast.success("Page saved successfully!");
@@ -692,7 +749,6 @@ const PageBuilder = () => {
       }
 
     } catch (error: any) {
-      console.error("Error saving page:", error);
       toast.error(`Error saving page: ${error.message}`);
     } finally {
       setIsSaving(false);
@@ -997,7 +1053,7 @@ const PageBuilder = () => {
                   </div>
                 </div>
               ) : (
-                // Render the actual components from state, wrapped in DroppableCanvasItem
+                // Render the actual components from state, wrapped in DroppableCanvasItem to enable selection/deletion
                 canvasComponents.map((component) => {
                   const ComponentToRender = componentMap[component.type];
                   if (!ComponentToRender) return null;

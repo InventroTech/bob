@@ -2,20 +2,17 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { PrajaTable } from '../ui/prajaTable';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Filter, Calendar, User, MessageCircle, ExternalLink } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Filter, User, MessageCircle, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ChevronDown } from 'lucide-react';
-import { Calendar as CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { FilterConfig } from '@/component-config/DynamicFilterConfig';
+import { useFilters } from '@/hooks/useFilters';
+import { FilterService } from '@/services/filterService';
+import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
 
 interface Column {
   header: string;
@@ -24,7 +21,7 @@ interface Column {
   linkField?: string; // Field to use as link for this column
 }
 
-// Status color mapping - configurable
+// Status color mapping - configurable; falls back to defaults when no map provided
 const getStatusColor = (status: string, statusColors?: Record<string, string>) => {
   if (statusColors && statusColors[status]) {
     return statusColors[status];
@@ -58,7 +55,7 @@ const getStatusColor = (status: string, statusColors?: Record<string, string>) =
   }
 };
 
-// Function to convert email to display name
+// Convert raw email/id into a user-friendly display name
 const getDisplayName = (email: string | null): string => {
   if (!email) return 'Unassigned';
   
@@ -78,7 +75,7 @@ const getDisplayName = (email: string | null): string => {
   return displayName;
 };
 
-// Function to format relative time
+// Format UTC date string into relative time (IST timezone)
 const formatRelativeTime = (dateString: string): string => {
   if (!dateString) return 'N/A';
   
@@ -133,7 +130,7 @@ const formatRelativeTime = (dateString: string): string => {
   }
 };
 
-// Helper function to transform lead data based on configuration
+// Transform backend record to table row based on optional column config
 const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   // If configuration is provided, use it to transform data
   if (config?.columns) {
@@ -176,7 +173,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   };
 };
 
-// Default columns - minimal fallback when no configuration is provided
+// Default columns used if no custom columns are configured
 const defaultColumns: Column[] = [
   { header: 'Stage', accessor: 'lead_stage', type: 'chip' },
   { header: 'Customer Name', accessor: 'customer_full_name', type: 'text' },
@@ -206,6 +203,13 @@ interface LeadTableProps {
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
     emptyMessage?: string;
+    // New dynamic filter configuration
+    filters?: FilterConfig[];
+    filterOptions?: {
+      pageSize?: number;
+      showSummary?: boolean;
+      compact?: boolean;
+    };
   };
 }
 
@@ -217,6 +221,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Legacy filter state (for backward compatibility)
   const [leadStatusFilter, setLeadStatusFilter] = useState<string[]>(config?.defaultFilters?.lead_status || []);
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<{
@@ -230,6 +236,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     startTime: '00:00',
     endTime: '23:59'
   });
+
   const [apiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'renderer');
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -237,6 +244,99 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
+
+  // URL management hooks (must be declared early for navigation and URL sync)
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // New dynamic filter system: instantiate FilterService only when dynamic filters exist
+  const filterService = useMemo(() => {
+    if (config?.filters) {
+      return new FilterService(config.filters, {
+        apiEndpoint: config.apiEndpoint,
+        entityType: config.entityType,
+        pageSize: config.filterOptions?.pageSize || 10,
+        defaultParams: {
+          ...(config.defaultFilters?.lead_status?.length && { lead_status: config.defaultFilters.lead_status.join(',') }),
+          ...(config.defaultFilters?.lead_stage?.length && { lead_stage: config.defaultFilters.lead_stage.join(',') }),
+        }
+      });
+    }
+    return null;
+  }, [config?.filters, config?.apiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters]);
+
+  const {
+    filterState,
+    setFilterValue,
+    setFilterValues,
+    clearFilters,
+    applyFilters: applyFilterState,
+    isFilterActive,
+    getActiveFiltersCount,
+    getQueryParams,
+    getFilterDisplayValue,
+  } = useFilters();
+
+  // URL synchronization: keep query params in the address bar in sync with UI state
+  const updateURL = useCallback((params: URLSearchParams) => {
+    const currentPath = location.pathname;
+    const newUrl = params.toString() ? `${currentPath}?${params.toString()}` : currentPath;
+    navigate(newUrl, { replace: true });
+  }, [location.pathname, navigate]);
+
+  // Parse URL parameters and restore filter state for deep links/bookmarks
+  const parseURLFilters = useCallback((filters: FilterConfig[]): Record<string, any> => {
+    const urlParams = new URLSearchParams(location.search);
+    const filterValues: Record<string, any> = {};
+
+    filters.forEach(filter => {
+      const paramValue = urlParams.get(filter.accessor || filter.key);
+
+      if (paramValue !== null) {
+        switch (filter.type) {
+          case 'select':
+            // Handle multiple values (comma-separated)
+            if (paramValue.includes(',')) {
+              filterValues[filter.key] = paramValue.split(',');
+            } else {
+              filterValues[filter.key] = paramValue;
+            }
+            break;
+          case 'date_gte':
+          case 'date_lte':
+          case 'text':
+          case 'search':
+          case 'number_gte':
+          case 'number_lte':
+            filterValues[filter.key] = paramValue;
+            break;
+          case 'date_range':
+            // Date range might have both start and end dates
+            const startValue = urlParams.get(`${filter.accessor || filter.key}__gte`);
+            const endValue = urlParams.get(`${filter.accessor || filter.key}__lte`);
+            if (startValue || endValue) {
+              filterValues[filter.key] = {
+                start: startValue ? new Date(startValue) : undefined,
+                end: endValue ? new Date(endValue) : undefined
+              };
+            }
+            break;
+        }
+      }
+    });
+
+    return filterValues;
+  }, [location.search]);
+
+  // Initialize filters from URL on component mount
+  useEffect(() => {
+    if (config?.filters && config.filters.length > 0) {
+      const urlFilterValues = parseURLFilters(config.filters);
+      if (Object.keys(urlFilterValues).length > 0) {
+        setFilterValues(urlFilterValues);
+      }
+    }
+  }, [config?.filters, parseURLFilters, setFilterValues]);
   const [pagination, setPagination] = useState<{
     totalCount: number;
     numberOfPages: number;
@@ -436,69 +536,79 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   };
 
   // Apply filters using the records endpoint
-  const applyFilters = async (requestSequence?: number) => {
+  const fetchFilteredData = async (requestSequence?: number) => {
     try {
       setTableLoading(true);
-      
+
       // Cancel any previous request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      
+
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
-      
+
       const currentSequence = requestSequence || ++requestSequenceRef.current;
       const authToken = session?.access_token;
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       const endpoint = config?.apiEndpoint || '/crm-records/records/';
       const apiUrl = `${baseUrl}${endpoint}`;
-      
+
       // Build query parameters
-      const params = new URLSearchParams();
-      
-      // Only add entity_type if using generic records endpoint and entityType is configured
-      if (endpoint.includes('/crm-records/records') && config?.entityType) {
-        params.append('entity_type', config.entityType);
+      let params: URLSearchParams;
+
+      // Use new dynamic filter system if filters are configured
+      if (filterService && config?.filters) {
+        params = filterService.generateQueryParams(filterState.values);
+
+        // Only add entity_type if using generic records endpoint and entityType is configured
+        if (endpoint.includes('/crm-records/records') && config?.entityType) {
+          params.append('entity_type', config.entityType);
+        }
+      } else {
+        // Fallback to legacy filter system
+        params = new URLSearchParams();
+
+        // Only add entity_type if using generic records endpoint and entityType is configured
+        if (endpoint.includes('/crm-records/records') && config?.entityType) {
+          params.append('entity_type', config.entityType);
+        }
+
+        // Add lead stage filters
+        if (leadStatusFilter.length > 0) {
+          params.append('lead_stage', leadStatusFilter.join(','));
+        }
+
+        // Add source filter
+        if (sourceFilter !== 'all') {
+          params.append('source', sourceFilter);
+        }
+
+        // Add date range filters
+        if (dateRangeFilter.startDate) {
+          const startDateTime = new Date(dateRangeFilter.startDate);
+          const [startHour, startMinute] = dateRangeFilter.startTime.split(':').map(Number);
+          startDateTime.setHours(startHour, startMinute, 0, 0);
+          // Convert to ISO string for backend
+          params.append('created_at__gte', startDateTime.toISOString());
+        }
+        if (dateRangeFilter.endDate) {
+          const endDateTime = new Date(dateRangeFilter.endDate);
+          const [endHour, endMinute] = dateRangeFilter.endTime.split(':').map(Number);
+          endDateTime.setHours(endHour, endMinute, 59, 999);
+          // Convert to ISO string for backend
+          params.append('created_at__lte', endDateTime.toISOString());
+        }
+
+        // Note: Search is now handled through the dynamic filter system above
+        // No need to add search parameter here for legacy system
       }
-      
-      // Add lead stage filters
-      if (leadStatusFilter.length > 0) {
-        params.append('lead_stage', leadStatusFilter.join(','));
-      }
-      
-      // Add source filter
-      if (sourceFilter !== 'all') {
-        params.append('source', sourceFilter);
-      }
-      
-      // Add date range filters
-      if (dateRangeFilter.startDate) {
-        const startDateTime = new Date(dateRangeFilter.startDate);
-        const [startHour, startMinute] = dateRangeFilter.startTime.split(':').map(Number);
-        startDateTime.setHours(startHour, startMinute, 0, 0);
-        // Convert to ISO string for backend
-        params.append('created_at__gte', startDateTime.toISOString());
-      }
-      if (dateRangeFilter.endDate) {
-        const endDateTime = new Date(dateRangeFilter.endDate);
-        const [endHour, endMinute] = dateRangeFilter.endTime.split(':').map(Number);
-        endDateTime.setHours(endHour, endMinute, 59, 999);
-        // Convert to ISO string for backend
-        params.append('created_at__lte', endDateTime.toISOString());
-      }
-      
-      // Add search filter - backend searches across name, phone_no, and email
-      const currentSearchTerm = latestSearchValueRef.current;
-      if (currentSearchTerm.trim() !== '') {
-        params.append('search', currentSearchTerm.trim());
-      }
-      
-      // Always use same pagination
+
+      // Add pagination parameters for both systems
       params.append('page', '1');
       params.append('page_size', '10');
-      
-      const fullUrl = `${apiUrl}?${params.toString()}`;
+
+      const fullUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params.toString()}`;
 
       const response = await fetch(fullUrl, {
         method: 'GET',
@@ -515,16 +625,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       }
 
       const responseData = await response.json();
-      
+
       // Check if this response is still relevant
       if (currentSequence !== requestSequenceRef.current) {
         return;
       }
-      
+
       // Handle different response formats
       let leads = [];
       let pageMeta = null;
-      
+
       if (responseData.results && Array.isArray(responseData.results)) {
         leads = responseData.results;
         pageMeta = responseData.page_meta;
@@ -541,7 +651,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       // Backend handles search filtering - no client-side filtering needed
       setFilteredData(transformedData);
       setFiltersApplied(true);
-      
+
       // Update pagination from server response
       if (pageMeta) {
         setPagination({
@@ -578,35 +688,57 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     setSearchTerm('');
     setDisplaySearchTerm('');
     latestSearchValueRef.current = '';
-    
+
+    // Clear dynamic filter state
+    clearFilters();
+
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = null;
     }
-    
+
+    // Update URL to clear filter parameters
+    if (config?.filters && filterService) {
+      const params = filterService.generateQueryParams({});
+      // Add pagination parameters for complete URL state
+      params.append('page', '1');
+      params.append('page_size', '10');
+
+      // Only add entity_type if using generic records endpoint and entityType is configured
+      if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+        params.append('entity_type', config.entityType);
+      }
+
+      updateURL(params);
+    } else {
+      // For legacy filters, clear URL manually
+      const currentPath = location.pathname;
+      navigate(currentPath, { replace: true });
+    }
+
     // Re-fetch initial data to reset everything properly
     try {
       setTableLoading(true);
       const authToken = session?.access_token;
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       const endpoint = config?.apiEndpoint || '/api/records/';
-      
+
       const params = new URLSearchParams();
-      
+
       if (endpoint.includes('/crm-records/records') && config?.entityType) {
         params.append('entity_type', config.entityType);
       }
-      
+
       // Apply default filters if provided
       if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
         params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
       }
-      
+
       params.append('page', '1');
       params.append('page_size', '10');
-      
+
       const apiUrl = `${baseUrl}${endpoint}${params.toString() ? '?' + params.toString() : ''}`;
-      
+
       const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
@@ -629,7 +761,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       setData(transformedData);
       setFilteredData(transformedData);
       setFiltersApplied(false);
-      
+
       if (pageMeta) {
         setPagination({
           totalCount: pageMeta.total_count || 0,
@@ -683,15 +815,36 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       function makeApiCall(searchValue: string) {
         lastApiCallTimeRef.current = Date.now();
         setSearchTerm(searchValue);
-        
+
         const apiSequence = ++requestSequenceRef.current;
-        
-        // Always call applyFilters to refresh data and pagination
+
+        // Update URL with search parameter if using dynamic filters
+        if (config?.filters && filterService) {
+          const currentFilters = { ...filterState.values };
+          if (searchValue.trim()) {
+            currentFilters.search = searchValue.trim();
+          } else {
+            delete currentFilters.search;
+          }
+          const params = filterService.generateQueryParams(currentFilters);
+          // Add pagination parameters for complete URL state
+          params.append('page', '1');
+          params.append('page_size', '10');
+
+          // Only add entity_type if using generic records endpoint and entityType is configured
+          if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+            params.append('entity_type', config.entityType);
+          }
+
+          updateURL(params);
+        }
+
+        // Always call fetchFilteredData to refresh data and pagination
         // This ensures pagination works correctly after clearing search
-        applyFilters(apiSequence);
+        fetchFilteredData(apiSequence);
       }
     }, 1000);
-  }, [applyFilters, data, leadStatusFilter, sourceFilter, dateRangeFilter]);
+  }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter]);
 
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
@@ -820,7 +973,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     setData(updatedData);
     
     if (filtersApplied) {
-      applyFilters();
+      fetchFilteredData();
     } else {
       setFilteredData(updatedData);
     }
@@ -835,22 +988,42 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         const authToken = session?.access_token;
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         const endpoint = config?.apiEndpoint || '/api/records/';
-        
+
         // Build initial query parameters
-        const params = new URLSearchParams();
-        
-        // Only add entity_type if using generic records endpoint and entityType is configured
-        if (endpoint.includes('/crm-records/records') && config?.entityType) {
-          params.append('entity_type', config.entityType);
+        let params: URLSearchParams;
+
+        if (config?.filters && filterService) {
+          // Use dynamic filter system
+          params = filterService.generateQueryParams(filterState.values);
+
+          // Only add entity_type if using generic records endpoint and entityType is configured
+          if (endpoint.includes('/crm-records/records') && config?.entityType) {
+            params.append('entity_type', config.entityType);
+          }
+        } else {
+          // Fallback to legacy filter system
+          params = new URLSearchParams();
+
+          // Only add entity_type if using generic records endpoint and entityType is configured
+          if (endpoint.includes('/crm-records/records') && config?.entityType) {
+            params.append('entity_type', config.entityType);
+          }
+
+          // Apply default filters if provided
+          if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
+            params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
+          }
         }
-        
-        // Apply default filters if provided
-        if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
-          params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
-        }
-        
-        const apiUrl = `${baseUrl}${endpoint}${params.toString() ? '?' + params.toString() : ''}`;
-        
+
+        // Add pagination parameters for both systems
+        params.append('page', '1');
+        params.append('page_size', '10');
+
+        // Update URL with current parameters (including URL-restored filters)
+        updateURL(params);
+
+        const apiUrl = `${baseUrl}${endpoint}${endpoint.includes('?') ? '&' : '?'}${params.toString()}`;
+
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
@@ -870,7 +1043,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         const responseData = await response.json();
         let leads = [];
         let pageMeta = null;
-        
+
         if (responseData.data && Array.isArray(responseData.data)) {
           leads = responseData.data;
           pageMeta = responseData.page_meta;
@@ -886,7 +1059,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         setData(transformedData);
         setFilteredData(transformedData);
-        
+
         if (pageMeta) {
           setPagination({
             totalCount: pageMeta.total_count || 0,
@@ -897,7 +1070,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             previousPageLink: pageMeta.previous_page_link || null
           });
         }
-        
+
         // Extract unique sources for filter
         const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.lead_source).filter(Boolean))];
         setFilterOptions(prev => ({
@@ -915,9 +1088,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     };
 
     if (session?.access_token) {
-    fetchLeads();
+      fetchLeads();
     }
-  }, [session, config?.apiEndpoint, config?.defaultFilters]);
+  }, [session, config?.apiEndpoint, config?.defaultFilters, config?.filters, filterService, filterState.values, updateURL]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -966,210 +1139,44 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Lead Status
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between"
-                      >
-                        <span className="text-sm">
-                          {leadStatusFilter.length > 0
-                            ? `${leadStatusFilter.length} status(es) selected`
-                            : "All Lead Statuses"}
-                        </span>
-                        <ChevronDown className="h-3 w-3 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-60 p-4" align="start">
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-sm">Select Lead Statuses</h4>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                          {getUniqueLeadStatuses().map((status) => (
-                            <div key={status} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`lead-status-${status}`}
-                                checked={leadStatusFilter.includes(status)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setLeadStatusFilter(prev => [...prev, status]);
-                                  } else {
-                                    setLeadStatusFilter(prev => prev.filter(s => s !== status));
-                                  }
-                                }}
-                              />
-                              <label
-                                htmlFor={`lead-status-${status}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {status}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                        {leadStatusFilter.length > 0 && (
-                          <div className="pt-2 border-t">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setLeadStatusFilter([])}
-                              className="text-xs"
-                            >
-                              Clear All
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
+              {/* Use new dynamic filter system if filters are configured */}
+              {config?.filters && filterService ? (
+                <div className="space-y-4">
+                  <DynamicFilterBuilder
+                    filters={config.filters}
+                    onFiltersChange={(params) => {
+                      // Add pagination parameters to URL for complete bookmarkable state
+                      params.set('page', '1');
+                      params.set('page_size', '10');
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Source
-                  </label>
-                  <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Sources" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Sources</SelectItem>
-                      {getUniqueSources().map(source => (
-                        <SelectItem key={source} value={source}>
-                          {source}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                      // Only add entity_type if using generic records endpoint and entityType is configured
+                      if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+                        params.set('entity_type', config.entityType);
+                      }
 
-              {/* Date Range Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Date
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRangeFilter.startDate ? (
-                          format(dateRangeFilter.startDate, "PPP")
-                        ) : (
-                          <span className="text-muted-foreground">Pick a date</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <CalendarComponent
-                        mode="single"
-                        selected={dateRangeFilter.startDate}
-                        onSelect={(date) => setDateRangeFilter(prev => ({
-                          ...prev,
-                          startDate: date
-                        }))}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <div className="mt-2">
-                    <Input
-                      type="time"
-                      value={dateRangeFilter.startTime}
-                      onChange={(e) => setDateRangeFilter(prev => ({
-                        ...prev,
-                        startTime: e.target.value
-                      }))}
-                      className="w-full"
-                    />
+                      // Update the URL with complete parameters so users can bookmark/share
+                      updateURL(params);
+
+                      // Trigger API call with new parameters
+                      const currentSequence = ++requestSequenceRef.current;
+                      fetchFilteredData(currentSequence);
+                    }}
+                    className=""
+                    showSummary={config.filterOptions?.showSummary !== false}
+                    compact={config.filterOptions?.compact}
+                  />
+
+                  {/* Filter Summary */}
+                  <div className="mt-3 text-sm text-gray-600">
+                    Showing {filteredData.length} of {pagination.totalCount} leads
+                    {filtersApplied && getActiveFiltersCount() > 0 && (
+                      <span className="ml-2">
+                        (Filtered by: {filterService.getFilterDescription(filterState.values)})
+                      </span>
+                    )}
                   </div>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Date
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRangeFilter.endDate ? (
-                          format(dateRangeFilter.endDate, "PPP")
-                        ) : (
-                          <span className="text-muted-foreground">Pick a date</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <CalendarComponent
-                        mode="single"
-                        selected={dateRangeFilter.endDate}
-                        onSelect={(date) => setDateRangeFilter(prev => ({
-                          ...prev,
-                          endDate: date
-                        }))}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <div className="mt-2">
-                    <Input
-                      type="time"
-                      value={dateRangeFilter.endTime}
-                      onChange={(e) => setDateRangeFilter(prev => ({
-                        ...prev,
-                        endTime: e.target.value
-                      }))}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  onClick={resetFilters}
-                  className="flex-1"
-                >
-                  Reset Filters
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => applyFilters()}
-                  className="flex-1"
-                  disabled={tableLoading}
-                >
-                  {tableLoading ? 'Applying...' : 'Apply Filters'}
-                </Button>
-              </div>
-
-              {/* Filter Summary */}
-              <div className="mt-3 text-sm text-gray-600">
-                Showing {filteredData.length} of {pagination.totalCount} leads
-                {filtersApplied && (leadStatusFilter.length > 0 || sourceFilter !== 'all' || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
-                  <span className="ml-2">
-                    (Filtered by: 
-                    {leadStatusFilter.length > 0 && ` Lead Status: ${leadStatusFilter.join(', ')}`}
-                    {sourceFilter !== 'all' && ` ${leadStatusFilter.length > 0 ? ', ' : ''}Source: ${sourceFilter}`}
-                    {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(leadStatusFilter.length > 0 || sourceFilter !== 'all') ? ', ' : ''}Date Range`}
-                    {searchTerm.trim() !== '' && ` ${(leadStatusFilter.length > 0 || sourceFilter !== 'all' || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
-                    )
-                  </span>
-                )}
-              </div>
+              ) : (<h1>No filters configured</h1>)}
             </div>
           )}
         </div>
@@ -1178,10 +1185,22 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         {/* Search Bar Section */}
         <div className="mb-6">
           <div className="flex justify-end items-center">
-            <SearchInputComponent 
-              searchTerm={displaySearchTerm}
-              onChange={handleSearchChange}
-            />
+            {config?.filters && filterService ? (
+              // Dynamic filter system - search is handled through filters
+              <Input
+                type="text"
+                placeholder="Search..."
+                value={filterState.values.search || ''}
+                onChange={(e) => setFilterValue('search', e.target.value)}
+                className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            ) : (
+              // Legacy filter system - use original search component
+              <SearchInputComponent
+                searchTerm={displaySearchTerm}
+                onChange={handleSearchChange}
+              />
+            )}
           </div>
         </div>
 
