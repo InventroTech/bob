@@ -97,6 +97,11 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
 
       const accessor = filter.accessor || filter.key;
 
+      // Skip filters with empty accessor or key to prevent duplicate field mapping
+      if (!accessor || accessor.trim() === '') {
+        return;
+      }
+
       switch (filter.type) {
         case 'select':
           // Handle multiple selections as comma-separated values

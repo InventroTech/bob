@@ -58,6 +58,55 @@ export class FilterService {
   }
 
   /**
+   * Validate filter configuration for common issues
+   */
+  validateFilters(): { isValid: boolean; errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const accessors = new Set<string>();
+    const keys = new Set<string>();
+
+    this.filters.forEach((filter, index) => {
+      const accessor = filter.accessor || filter.key;
+
+      if (!accessor || accessor.trim() === '') {
+        errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Missing accessor field`);
+      } else if (accessors.has(accessor)) {
+        errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Duplicate accessor "${accessor}" - this will cause the same values to be sent to multiple fields`);
+      } else {
+        accessors.add(accessor);
+      }
+
+      if (!filter.key || filter.key.trim() === '') {
+        errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Missing key field`);
+      } else if (keys.has(filter.key)) {
+        errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Duplicate key "${filter.key}"`);
+      } else {
+        keys.add(filter.key);
+      }
+
+      if (!filter.label || filter.label.trim() === '') {
+        warnings.push(`Filter ${index + 1}: Missing label field`);
+      }
+
+      if (filter.type === 'select' && (!filter.options || filter.options.length === 0)) {
+        errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Select filters must have options`);
+      }
+
+      // Check if accessor and key are the same (which is good for consistency)
+      if (filter.accessor && filter.key && filter.accessor !== filter.key) {
+        warnings.push(`Filter ${index + 1} (${filter.label}): Accessor "${filter.accessor}" and key "${filter.key}" are different - this might cause confusion`);
+      }
+    });
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  /**
    * Generate query parameters from filter values
    */
   // Build URLSearchParams including default params and per-filter lookups
@@ -85,6 +134,12 @@ export class FilterService {
       if (this.isEmpty(value)) return;
 
       const accessor = filter.accessor || filter.key;
+
+      // Skip filters with empty accessor or key to prevent duplicate field mapping
+      if (!accessor || accessor.trim() === '') {
+        return;
+      }
+
       this.addFilterParam(params, accessor, filter, value);
     });
 
@@ -183,12 +238,12 @@ export class FilterService {
   /**
    * Add select filter parameter (supports multiple values)
    */
-  // Append select values; arrays use comma-join for IN lookups
+  // Append select values; arrays use multiple parameters for proper backend handling
   private addSelectParam(params: URLSearchParams, accessor: string, value: any, lookup: string = 'in'): void {
     if (Array.isArray(value)) {
       if (value.length > 0) {
+        // For IN lookup, join with commas, as requested by user
         if (lookup === 'in' || lookup === '') {
-          // For IN lookup, join with commas
           params.append(accessor, value.join(','));
         } else {
           // For other lookups, add multiple parameters
@@ -409,35 +464,4 @@ export class FilterService {
     }
   }
 
-  /**
-   * Validate filter configuration
-   */
-  validateFilters(): { isValid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    this.filters.forEach((filter, index) => {
-      if (!filter.key || filter.key.trim() === '') {
-        errors.push(`Filter ${index + 1}: Key is required`);
-      }
-
-      if (!filter.label || filter.label.trim() === '') {
-        errors.push(`Filter ${index + 1} (${filter.key}): Label is required`);
-      }
-
-      if (filter.type === 'select' && (!filter.options || filter.options.length === 0)) {
-        errors.push(`Filter ${index + 1} (${filter.key}): Select filters must have options`);
-      }
-
-      // Check for duplicate keys
-      const duplicateIndex = this.filters.findIndex((f, i) => i !== index && f.key === filter.key);
-      if (duplicateIndex !== -1) {
-        errors.push(`Filter ${index + 1} (${filter.key}): Duplicate key with filter ${duplicateIndex + 1}`);
-      }
-    });
-
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
-  }
 }

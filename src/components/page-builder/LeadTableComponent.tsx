@@ -248,26 +248,67 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
 
+  // Normalize filters to ensure non-empty, unique keys
+  const normalizedFilters = useMemo(() => {
+    if (!config?.filters || config.filters.length === 0) return [] as FilterConfig[];
+
+    const seenKeys = new Set<string>();
+    const slugify = (s: string) =>
+      s
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+
+    return config.filters.map((f, idx) => {
+      let key = (f.key || '').trim();
+      if (!key) key = (f.accessor || '').trim();
+      if (!key && f.label) key = slugify(f.label);
+      if (!key) key = `filter_${idx}`;
+      
+      let uniqueKey = key;
+      let n = 1;
+      while (seenKeys.has(uniqueKey)) {
+        uniqueKey = `${key}_${n++}`;
+      }
+      seenKeys.add(uniqueKey);
+      
+      return { ...f, key: uniqueKey };
+    });
+  }, [config?.filters]);
+
   // URL management hooks (must be declared early for navigation and URL sync)
   const navigate = useNavigate();
   const location = useLocation();
 
-  // New dynamic filter system: instantiate FilterService only when dynamic filters exist
+  // New dynamic filter system: instantiate FilterService only when dynamic filters exist and not in fallback mode
   const filterService = useMemo(() => {
-    if (config?.filters) {
-      return new FilterService(config.filters, {
+    if (normalizedFilters.length > 0 && !config?.showFallbackOnly) {
+      const service = new FilterService(normalizedFilters, {
         apiEndpoint: config.apiEndpoint,
         entityType: config.entityType,
         pageSize: config.filterOptions?.pageSize || 10,
         defaultParams: {
-          ...(config.defaultFilters?.lead_status?.length && { lead_status: config.defaultFilters.lead_status.join(',') }),
-          ...(config.defaultFilters?.lead_stage?.length && { lead_stage: config.defaultFilters.lead_stage.join(',') }),
+          ...(config.defaultFilters?.lead_status?.length && { lead_status: config.defaultFilters.lead_status }),
+          ...(config.defaultFilters?.lead_stage?.length && { lead_stage: config.defaultFilters.lead_stage }),
         }
       });
+
+      // Validate filter configuration
+      const validation = service.validateFilters();
+      if (!validation.isValid) {
+        console.error('FilterService validation failed:', validation.errors);
+      }
+      if (validation.warnings.length > 0) {
+        console.warn('FilterService validation warnings:', validation.warnings);
+      }
+
+      return service;
     }
     return null;
-  }, [config?.filters, config?.apiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters]);
+  }, [normalizedFilters, config?.apiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly]);
 
+  // Initialize filter hooks with proper reset when no filters are configured
   const {
     filterState,
     setFilterValue,
@@ -293,16 +334,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     const filterValues: Record<string, any> = {};
 
     filters.forEach(filter => {
-      const paramValue = urlParams.get(filter.accessor || filter.key);
+      const accessor = filter.accessor || filter.key;
+      const paramValue = urlParams.get(accessor);
 
       if (paramValue !== null) {
         switch (filter.type) {
           case 'select':
-            // Handle multiple values (comma-separated)
-            if (paramValue.includes(',')) {
-              filterValues[filter.key] = paramValue.split(',');
-            } else {
-              filterValues[filter.key] = paramValue;
+            // Handle multiple values (separate parameters with same name)
+            const allValues = urlParams.getAll(accessor);
+            if (allValues.length > 0) {
+              filterValues[filter.key] = allValues;
             }
             break;
           case 'date_gte':
@@ -315,8 +356,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             break;
           case 'date_range':
             // Date range might have both start and end dates
-            const startValue = urlParams.get(`${filter.accessor || filter.key}__gte`);
-            const endValue = urlParams.get(`${filter.accessor || filter.key}__lte`);
+            const startValue = urlParams.get(`${accessor}__gte`);
+            const endValue = urlParams.get(`${accessor}__lte`);
             if (startValue || endValue) {
               filterValues[filter.key] = {
                 start: startValue ? new Date(startValue) : undefined,
@@ -331,15 +372,31 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     return filterValues;
   }, [location.search]);
 
-  // Initialize filters from URL on component mount
+  // Initialize filters from URL on component mount and reset when no filters
   useEffect(() => {
-    if (config?.filters && config.filters.length > 0) {
-      const urlFilterValues = parseURLFilters(config.filters);
+    if (normalizedFilters.length > 0 && !config?.showFallbackOnly) {
+      const urlFilterValues = parseURLFilters(normalizedFilters);
       if (Object.keys(urlFilterValues).length > 0) {
         setFilterValues(urlFilterValues);
       }
+    } else {
+      // Clear any existing filter state when no filters are configured or in fallback mode
+      clearFilters();
+      // Also clear URL parameters to prevent persistent state
+      const currentPath = location.pathname;
+      navigate(currentPath, { replace: true });
     }
-  }, [config?.filters, parseURLFilters, setFilterValues]);
+  }, [normalizedFilters, config?.showFallbackOnly, parseURLFilters, setFilterValues, clearFilters, navigate, location.pathname]);
+
+  // Additional effect to ensure filter state is completely reset when no filters are configured
+  useEffect(() => {
+    if (normalizedFilters.length === 0 || config?.showFallbackOnly) {
+      // Force clear all filter state
+      clearFilters();
+      // Reset filters applied state
+      setFiltersApplied(false);
+    }
+  }, [normalizedFilters, config?.showFallbackOnly, clearFilters]);
   const [pagination, setPagination] = useState<{
     totalCount: number;
     numberOfPages: number;
@@ -530,6 +587,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     return statuses;
   };
 
+  // Check if filters are actually configured and active
+  const hasActiveFilters = useMemo(() => {
+    return normalizedFilters.length > 0 && !config?.showFallbackOnly && filterService;
+  }, [normalizedFilters, config?.showFallbackOnly, filterService]);
+
   const getUniqueSources = () => {
     if (filterOptions.sources.length > 0) {
       return filterOptions.sources;
@@ -561,13 +623,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       let params: URLSearchParams;
 
       // Use new dynamic filter system if filters are configured
-      if (filterService && config?.filters) {
+      if (hasActiveFilters) {
         params = filterService.generateQueryParams(filterState.values);
-
-        // Only add entity_type if using generic records endpoint and entityType is configured
-        if (endpoint.includes('/crm-records/records') && config?.entityType) {
-          params.append('entity_type', config.entityType);
-        }
       } else {
         // Fallback to legacy filter system
         params = new URLSearchParams();
@@ -701,7 +758,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     }
 
     // Update URL to clear filter parameters
-    if (config?.filters && filterService) {
+    if (hasActiveFilters) {
       const params = filterService.generateQueryParams({});
       // Add pagination parameters for complete URL state
       params.append('page', '1');
@@ -792,20 +849,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const debouncedSearch = useCallback((value: string) => {
     latestSearchValueRef.current = value;
     setDisplaySearchTerm(value);
-    
+
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    
+
     searchTimeoutRef.current = setTimeout(() => {
       const finalSearchValue = latestSearchValueRef.current;
       const now = Date.now();
       const timeSinceLastCall = now - lastApiCallTimeRef.current;
-      
+
       if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
         const remainingWait = MIN_TIME_BETWEEN_CALLS - timeSinceLastCall;
         setTimeout(() => {
@@ -814,7 +871,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       } else {
         makeApiCall(finalSearchValue);
       }
-      
+
       function makeApiCall(searchValue: string) {
         lastApiCallTimeRef.current = Date.now();
         setSearchTerm(searchValue);
@@ -822,7 +879,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         const apiSequence = ++requestSequenceRef.current;
 
         // Update URL with search parameter if using dynamic filters
-        if (config?.filters && filterService) {
+        if (hasActiveFilters) {
           const currentFilters = { ...filterState.values };
           if (searchValue.trim()) {
             currentFilters.search = searchValue.trim();
@@ -847,7 +904,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         fetchFilteredData(apiSequence);
       }
     }, 1000);
-  }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter]);
+  }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, config?.apiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
 
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
@@ -1004,7 +1061,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         // Build initial query parameters
         let params: URLSearchParams;
 
-        if (config?.filters && filterService) {
+        if (hasActiveFilters) {
           // Use dynamic filter system
           params = filterService.generateQueryParams(filterState.values);
 
@@ -1102,7 +1159,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     if (session?.access_token) {
       fetchLeads();
     }
-  }, [session, config?.apiEndpoint, config?.defaultFilters, config?.filters, filterService, filterState.values, updateURL]);
+  }, [session, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, filterState.values, updateURL, config?.showFallbackOnly, config?.entityType]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1152,10 +1209,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
               {/* Use new dynamic filter system if filters are configured */}
-              {config?.filters && filterService ? (
+              {hasActiveFilters ? (
                 <div className="space-y-4">
                   <DynamicFilterBuilder
-                    filters={config.filters}
+                    filters={normalizedFilters}
                     onFiltersChange={(params) => {
                       // Add pagination parameters to URL for complete bookmarkable state
                       params.set('page', '1');
@@ -1181,7 +1238,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                   {/* Filter Summary */}
                   <div className="mt-3 text-sm text-gray-600">
                     Showing {filteredData.length} of {pagination.totalCount} leads
-                    {filtersApplied && getActiveFiltersCount() > 0 && (
+                    {filtersApplied && getActiveFiltersCount() > 0 && hasActiveFilters && (
                       <span className="ml-2">
                         (Filtered by: {filterService.getFilterDescription(filterState.values)})
                       </span>
@@ -1197,7 +1254,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         {/* Search Bar Section */}
         <div className="mb-6">
           <div className="flex justify-end items-center">
-            {config?.filters && filterService ? (
+            {hasActiveFilters ? (
               // Dynamic filter system - search is handled through filters
               <Input
                 type="text"

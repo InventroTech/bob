@@ -276,29 +276,69 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   const handleFilterCountChange = useCallback((count: number) => {
     setNumFilters(count);
+    let newFilters: FilterConfig[];
+
     if (count < localFilters.length) {
       // Remove extra filters
-      const newFilters = localFilters.slice(0, count);
-      setLocalFilters(newFilters);
+      newFilters = localFilters.slice(0, count);
     } else if (count > localFilters.length) {
       // Add new filters
-      const newFilters = [...localFilters];
+      newFilters = [...localFilters];
       for (let i = localFilters.length; i < count; i++) {
-        newFilters.push({ key: '', label: '', type: 'select', options: [] });
+        const tempKey = `temp_filter_${i}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        newFilters.push({
+          key: tempKey,
+          label: '',
+          type: 'select',
+          accessor: '', // Will be set by user
+          options: []
+        });
       }
-      setLocalFilters(newFilters);
+    } else {
+      // No change in count
+      newFilters = localFilters;
     }
-    debouncedUpdateWithDelay({ filters: localFilters });
+
+    // Ensure all filters have proper keys
+    newFilters = newFilters.map((filter, index) => {
+      if (!filter.key || (typeof filter.key === 'string' && filter.key.trim() === '')) {
+        return {
+          ...filter,
+          key: `filter_${filter.accessor || 'unknown'}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+        };
+      }
+      return filter;
+    });
+
+    setLocalFilters(newFilters);
+    debouncedUpdateWithDelay({ filters: newFilters });
   }, [localFilters, debouncedUpdateWithDelay]);
 
   const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options']) => {
     const newFilters = [...localFilters];
-    if (field === 'lookup' && value === 'auto') {
+
+    // If changing the accessor, also update the key to match for consistency
+    if (field === 'accessor' && typeof value === 'string' && value.trim() !== '') {
+      newFilters[index] = {
+        ...newFilters[index],
+        [field]: value,
+        key: value // Set key to match accessor for consistency
+      };
+    } else if (field === 'lookup' && value === 'auto') {
       // Convert 'auto' back to undefined for the lookup field
       newFilters[index] = { ...newFilters[index], [field]: undefined };
     } else {
       newFilters[index] = { ...newFilters[index], [field]: value };
     }
+
+    // If key is still empty after changes, generate a unique key
+    if (!newFilters[index].key || (typeof newFilters[index].key === 'string' && newFilters[index].key.trim() === '')) {
+      newFilters[index] = {
+        ...newFilters[index],
+        key: `filter_${newFilters[index].accessor || 'unknown'}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+      };
+    }
+
     setLocalFilters(newFilters);
     debouncedUpdateWithDelay({ filters: newFilters });
   }, [localFilters, debouncedUpdateWithDelay]);
@@ -546,6 +586,40 @@ const PageBuilder = () => {
       if (data) setCollections(data);
     });
   }, [tenantId]);
+
+  // Ensure all filters in canvas components have proper unique keys
+  useEffect(() => {
+    if (canvasComponents.length > 0) {
+      const updatedComponents = canvasComponents.map(component => {
+        if (component.config?.filters && component.config.filters.length > 0) {
+          const updatedFilters = component.config.filters.map((filter: FilterConfig, index: number) => {
+            if (!filter.key || (typeof filter.key === 'string' && filter.key.trim() === '')) {
+              return {
+                ...filter,
+                key: `filter_${filter.accessor || 'unknown'}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+              };
+            }
+            return filter;
+          });
+
+          if (JSON.stringify(updatedFilters) !== JSON.stringify(component.config.filters)) {
+            return {
+              ...component,
+              config: {
+                ...component.config,
+                filters: updatedFilters
+              }
+            };
+          }
+        }
+        return component;
+      });
+
+      if (JSON.stringify(updatedComponents) !== JSON.stringify(canvasComponents)) {
+        setCanvasComponents(updatedComponents);
+      }
+    }
+  }, [canvasComponents]);
 
   // Add useEffect to fetch roles based on tenant_id
   useEffect(() => {

@@ -33,6 +33,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     setFilterValues,
     clearFilters,
     applyFilters,
+    resetFilters,
     isFilterActive,
     getActiveFiltersCount,
     getQueryParams,
@@ -50,20 +51,16 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     const params = getQueryParams(filters);
     onFiltersChange(params);
     applyFilters();
+    clearFilters(); // Reset the filter UI state after applying
   };
 
   // Do not auto-apply filters on change. Apply only when the user clicks the button.
 
   // Reset all filters to empty (selects -> []; text/date -> '') and emit params
   const handleClearFilters = () => {
-    // Clear all filters, ensuring select filters are cleared as empty arrays
-    const clearedValues: Record<string, any> = {};
-    filters.forEach(filter => {
-      clearedValues[filter.key] = filter.type === 'select' ? [] : '';
-    });
-    setFilterValues(clearedValues);
-    const params = getQueryParams(filters);
-    onFiltersChange(params);
+    resetFilters();
+    // Pass empty params to parent to trigger refetch of unfiltered data
+    onFiltersChange(new URLSearchParams());
   };
 
   const handleRemoveFilter = (key: string) => {
@@ -349,7 +346,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
           )}
         </Button>
 
-        {activeFiltersCount > 0 && (
+        {filterState.applied && (
           <Button
             variant="outline"
             onClick={handleClearFilters}
