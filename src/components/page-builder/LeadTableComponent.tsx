@@ -203,6 +203,7 @@ interface LeadTableProps {
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
     emptyMessage?: string;
+
     // New dynamic filter configuration
     filters?: FilterConfig[];
     filterOptions?: {
@@ -210,6 +211,8 @@ interface LeadTableProps {
       showSummary?: boolean;
       compact?: boolean;
     };
+
+    showFallbackOnly?: boolean; // New prop to show only fallback 
   };
 }
 
@@ -985,6 +988,15 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     const fetchLeads = async () => {
       try {
         setLoading(true);
+        
+        // If showFallbackOnly is true, skip API call and show empty state
+        if (config?.showFallbackOnly) {
+          setData([]);
+          setFilteredData([]);
+          setLoading(false);
+          return;
+        }
+        
         const authToken = session?.access_token;
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         const endpoint = config?.apiEndpoint || '/api/records/';
