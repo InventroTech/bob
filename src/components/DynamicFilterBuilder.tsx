@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar as CalendarIcon, X, ChevronDown } from 'lucide-react';
-import { Calendar } from '@/components/ui/calendar';
-import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 interface DynamicFilterBuilderProps {
@@ -175,101 +173,65 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
 
       case 'date_gte':
         return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500' : ''}`}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {value ? format(new Date(value), 'PPP') : `From ${filter.label}`}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={value ? new Date(value) : undefined}
-                onSelect={(date) => handleFilterChange(filter.key, date)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <div className="relative">
+            <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Input
+              type="date"
+              value={value ? new Date(value).toISOString().split('T')[0] : ''}
+              onChange={(e) => handleFilterChange(filter.key, e.target.value ? new Date(e.target.value) : '')}
+              className={`pl-10 ${isActive ? 'border-blue-500' : ''}`}
+              placeholder={`From ${filter.label}`}
+            />
+          </div>
         );
 
       case 'date_lte':
         return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500' : ''}`}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {value ? format(new Date(value), 'PPP') : `To ${filter.label}`}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={value ? new Date(value) : undefined}
-                onSelect={(date) => handleFilterChange(filter.key, date)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <div className="relative">
+            <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Input
+              type="date"
+              value={value ? new Date(value).toISOString().split('T')[0] : ''}
+              onChange={(e) => handleFilterChange(filter.key, e.target.value ? new Date(e.target.value) : '')}
+              className={`pl-10 ${isActive ? 'border-blue-500' : ''}`}
+              placeholder={`To ${filter.label}`}
+            />
+          </div>
         );
 
       case 'date_range':
         return (
           <div className="space-y-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500' : ''}`}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {value?.start ? format(new Date(value.start), 'PPP') : 'Start date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={value?.start ? new Date(value.start) : undefined}
-                  onSelect={(date) =>
-                    handleFilterChange(filter.key, {
-                      ...value,
-                      start: date
-                    })
-                  }
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500' : ''}`}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {value?.end ? format(new Date(value.end), 'PPP') : 'End date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={value?.end ? new Date(value.end) : undefined}
-                  onSelect={(date) =>
-                    handleFilterChange(filter.key, {
-                      ...value,
-                      end: date
-                    })
-                  }
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <div className="relative">
+              <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              <Input
+                type="date"
+                value={value?.start ? new Date(value.start).toISOString().split('T')[0] : ''}
+                onChange={(e) =>
+                  handleFilterChange(filter.key, {
+                    ...value,
+                    start: e.target.value ? new Date(e.target.value) : undefined
+                  })
+                }
+                className={`pl-10 ${isActive ? 'border-blue-500' : ''}`}
+                placeholder="Start date"
+              />
+            </div>
+            <div className="relative">
+              <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              <Input
+                type="date"
+                value={value?.end ? new Date(value.end).toISOString().split('T')[0] : ''}
+                onChange={(e) =>
+                  handleFilterChange(filter.key, {
+                    ...value,
+                    end: e.target.value ? new Date(e.target.value) : undefined
+                  })
+                }
+                className={`pl-10 ${isActive ? 'border-blue-500' : ''}`}
+                placeholder="End date"
+              />
+            </div>
           </div>
         );
 
