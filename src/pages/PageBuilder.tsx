@@ -68,12 +68,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
-import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
 import { CardComponent } from "@/layout/CardEditLayout";
-import { LeadCarousel } from "@/components/ui/leadCarousel";
 import { Carousel } from "@/components/ui/carousel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
@@ -139,12 +137,10 @@ export const componentMap: Record<string, React.FC<any>> = {
   text: TextComponent,
   button: ButtonComponent,
   image: ImageComponent,
-  leadCard: LeadCardComponent,
   dataCard:DataCardComponent,
   leadTable: LeadTableComponent,
   collapseCard: CollapseCard,
-  leadCarousel: LeadCarousel,
-  leadCardCarousel: LeadCardCarouselWrapper,
+  leadCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,
   progressBar: ProgressBar,
   ticketTable: TicketTableComponent,
@@ -331,7 +327,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
-      case 'leadCardCarousel':
+      case 'leadCarousel':
         return (
           <LeadCardCarouselConfig
             localConfig={localConfig}
@@ -407,7 +403,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -787,11 +783,6 @@ const PageBuilder = () => {
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
-                          id="leadCard"
-                          label="Lead Card"
-                          icon={<User className="h-8 w-8 mb-1 text-primary" />}
-                        />
-                        <DraggableSidebarItem
                           id="collapseCard"
                           label="Collapse Card"
                           icon={<ChevronDown className="h-8 w-8 mb-1 text-primary" />}
@@ -804,11 +795,6 @@ const PageBuilder = () => {
                         <DraggableSidebarItem
                           id="ticketCarousel"
                           label="Ticket Carousel"
-                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
-                        />
-                        <DraggableSidebarItem
-                          id="leadCardCarousel"
-                          label="Lead Card Carousel"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem

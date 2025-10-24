@@ -6,7 +6,7 @@ import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
 import { Badge } from '@/components/ui/badge';
 import { Trash2 } from 'lucide-react'; 
-import { demoMenuItems } from '../page-builder/LeadCardComponent';
+import { demoMenuItems } from './leadConstants';
 
 interface Column {
   header: string;
