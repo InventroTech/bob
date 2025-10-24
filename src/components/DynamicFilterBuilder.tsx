@@ -51,7 +51,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
   const handleApplyFilters = () => {
     const params = getQueryParams(filters);
     onFiltersChange(params);
-    applyFiltersAndClear();
+    applyFilters();
     // clearFilters(); // Reset the filter UI state after applying
   };
 

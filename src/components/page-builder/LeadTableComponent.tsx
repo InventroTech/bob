@@ -376,9 +376,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   useEffect(() => {
     if (normalizedFilters.length > 0 && !config?.showFallbackOnly) {
       const urlFilterValues = parseURLFilters(normalizedFilters);
-      if (Object.keys(urlFilterValues).length > 0) {
-        setFilterValues(urlFilterValues);
-      }
+      setFilterValues(urlFilterValues);
     } else {
       // Clear any existing filter state when no filters are configured or in fallback mode
       clearFilters();
@@ -386,7 +384,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       const currentPath = location.pathname;
       navigate(currentPath, { replace: true });
     }
-  }, [normalizedFilters, config?.showFallbackOnly, parseURLFilters, setFilterValues, clearFilters, navigate, location.pathname]);
+  }, [normalizedFilters, config?.showFallbackOnly, parseURLFilters, setFilterValues, clearFilters, navigate, location.pathname, location.search]);
 
   // Additional effect to ensure filter state is completely reset when no filters are configured
   useEffect(() => {
@@ -795,9 +793,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       }
 
       // Apply default filters if provided
-      if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
-        params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
-      }
+      // if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
+      //   params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
+      // }
 
       params.append('page', '1');
       params.append('page_size', '10');

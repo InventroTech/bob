@@ -45,10 +45,7 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
   const setFilterValues = useCallback((values: FilterValue) => {
     setFilterState(prev => ({
       ...prev,
-      values: {
-        ...prev.values,
-        ...values,
-      },
+      values,
     }));
   }, []);
 
