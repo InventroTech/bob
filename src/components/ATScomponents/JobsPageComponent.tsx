@@ -676,12 +676,12 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
                       </span>
                     </div>
                     
-                    <div className="flex items-center gap-3 mb-4">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTypeColor(job.type!)}`}>
+                    <div className="flex flex-col gap-2 mb-4">
+                      <span className={`px-4 py-2 rounded-xl text-sm font-medium w-fit ${getTypeColor(job.type!)}`}>
                         {job.type?.replace('-', ' ')}
                       </span>
                       {formatSalary(job.salary) && (
-                        <span className="px-3 py-1 border border-gray-300 rounded-full text-sm font-medium text-gray-700">
+                        <span className="px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 bg-white w-fit">
                           {formatSalary(job.salary)}
                         </span>
                       )}
