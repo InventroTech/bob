@@ -33,6 +33,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     setFilterValues,
     clearFilters,
     applyFilters,
+    applyFiltersAndClear,
     resetFilters,
     isFilterActive,
     getActiveFiltersCount,
@@ -50,8 +51,8 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
   const handleApplyFilters = () => {
     const params = getQueryParams(filters);
     onFiltersChange(params);
-    applyFilters();
-    clearFilters(); // Reset the filter UI state after applying
+    applyFiltersAndClear();
+    // clearFilters(); // Reset the filter UI state after applying
   };
 
   // Do not auto-apply filters on change. Apply only when the user clicks the button.

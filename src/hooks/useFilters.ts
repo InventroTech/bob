@@ -16,6 +16,7 @@ export interface UseFiltersReturn {
   setFilterValues: (values: FilterValue) => void;
   clearFilters: () => void;
   applyFilters: () => void;
+  applyFiltersAndClear: () => void;
   resetFilters: () => void;
   isFilterActive: (key: string) => boolean;
   getActiveFiltersCount: () => number;
@@ -61,6 +62,14 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
   const applyFilters = useCallback(() => {
     setFilterState(prev => ({
       ...prev,
+      applied: true,
+    }));
+  }, []);
+
+  const applyFiltersAndClear = useCallback(() => {
+    setFilterState(prev => ({
+      ...prev,
+      values: {},
       applied: true,
     }));
   }, []);
@@ -244,6 +253,7 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
     setFilterValues,
     clearFilters,
     applyFilters,
+    applyFiltersAndClear,
     resetFilters,
     isFilterActive,
     getActiveFiltersCount,

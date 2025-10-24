@@ -601,7 +601,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   };
 
   // Apply filters using the records endpoint
-  const fetchFilteredData = async (requestSequence?: number) => {
+  const fetchFilteredData = async (requestSequence?: number, queryParams?: URLSearchParams) => {
     try {
       setTableLoading(true);
 
@@ -623,8 +623,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       let params: URLSearchParams;
 
       // Use new dynamic filter system if filters are configured
-      if (hasActiveFilters) {
+      if (queryParams) {
+        params = queryParams;
+      } else if (hasActiveFilters) {
         params = filterService.generateQueryParams(filterState.values);
+        // Add pagination parameters for both systems
+        params.append('page', '1');
+        params.append('page_size', '10');
       } else {
         // Fallback to legacy filter system
         params = new URLSearchParams();
@@ -662,11 +667,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         // Note: Search is now handled through the dynamic filter system above
         // No need to add search parameter here for legacy system
+        
+        // Add pagination parameters for both systems
+        params.append('page', '1');
+        params.append('page_size', '10');
       }
-
-      // Add pagination parameters for both systems
-      params.append('page', '1');
-      params.append('page_size', '10');
 
       const fullUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params.toString()}`;
 
@@ -877,7 +882,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         setSearchTerm(searchValue);
 
         const apiSequence = ++requestSequenceRef.current;
-
+        let params: URLSearchParams | undefined;
         // Update URL with search parameter if using dynamic filters
         if (hasActiveFilters) {
           const currentFilters = { ...filterState.values };
@@ -886,7 +891,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           } else {
             delete currentFilters.search;
           }
-          const params = filterService.generateQueryParams(currentFilters);
+          params = filterService.generateQueryParams(currentFilters);
           // Add pagination parameters for complete URL state
           params.append('page', '1');
           params.append('page_size', '10');
@@ -901,7 +906,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         // Always call fetchFilteredData to refresh data and pagination
         // This ensures pagination works correctly after clearing search
-        fetchFilteredData(apiSequence);
+        fetchFilteredData(apiSequence, params);
       }
     }, 1000);
   }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, config?.apiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
@@ -1159,7 +1164,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     if (session?.access_token) {
       fetchLeads();
     }
-  }, [session, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, filterState.values, updateURL, config?.showFallbackOnly, config?.entityType]);
+  }, [session, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1228,7 +1233,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
                       // Trigger API call with new parameters
                       const currentSequence = ++requestSequenceRef.current;
-                      fetchFilteredData(currentSequence);
+                      fetchFilteredData(currentSequence, params);
                     }}
                     className=""
                     showSummary={config.filterOptions?.showSummary !== false}
