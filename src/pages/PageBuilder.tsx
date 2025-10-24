@@ -26,6 +26,7 @@ import {
   ChevronDown,
   LogOut,
   TrendingUp,
+  Target,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -58,6 +59,7 @@ import {
   ButtonComponent,
   ImageComponent,
   AddUserComponent,
+  LeadAssignmentComponent,
 } from "@/components/page-builder";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { supabase } from "@/lib/supabase";
@@ -153,6 +155,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   lineChart: LineChart,
   barGraph: BarGraph,
   addUser: AddUserComponent,
+  leadAssignment: LeadAssignmentComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -404,7 +407,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -819,6 +822,11 @@ const PageBuilder = () => {
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
+                          id="leadAssignment"
+                          label="Lead Assignment"
+                          icon={<Target className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
                           id="temporaryLogout"
                           label="Temporary Logout"
                           icon={<LogOut className="h-8 w-8 mb-1 text-red-500" />}
@@ -1008,7 +1016,7 @@ const PageBuilder = () => {
                       onDelete={handleDeleteComponent}
                       onSelect={setSelectedComponentId}
                     >
-                      <ComponentToRender {...component.props} config={component.config} />
+                      <ComponentToRender {...component.props} config={component.config} pageId={pageId} />
                     </DroppableCanvasItem>
                   );
                 })
