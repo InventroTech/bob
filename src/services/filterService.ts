@@ -9,6 +9,7 @@ export interface FilterServiceOptions {
   entityType?: string;
   pageSize?: number;
   defaultParams?: FilterQueryParams;
+  searchFields?: string;
 }
 
 /**
@@ -128,7 +129,7 @@ export class FilterService {
       });
     }
 
-    // Process each filter
+    // Process each configured filter
     this.filters.forEach(filter => {
       const value = filterValues[filter.key];
       if (this.isEmpty(value)) return;
@@ -143,6 +144,11 @@ export class FilterService {
       this.addFilterParam(params, accessor, filter, value);
     });
 
+    // Handle global search if present in filterValues but not as a configured filter
+    if (filterValues.search && !this.filters.some(f => f.key === 'search' || f.type === 'search')) {
+        this.addSearchParam(params, filterValues.search);
+    }
+    
     // Note: Pagination is handled separately by the component, not by the filter service
     // The filter service should only handle filter parameters
 
@@ -277,6 +283,9 @@ export class FilterService {
   private addSearchParam(params: URLSearchParams, value: string): void {
     if (typeof value === 'string' && value.trim() !== '') {
       params.append('search', value.trim());
+      if (this.options.searchFields) {
+        params.append('search_fields', this.options.searchFields);
+      }
     }
   }
 

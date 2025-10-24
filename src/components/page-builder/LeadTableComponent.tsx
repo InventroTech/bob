@@ -211,6 +211,7 @@ interface LeadTableProps {
       showSummary?: boolean;
       compact?: boolean;
     };
+    searchFields?: string;
 
     showFallbackOnly?: boolean; // New prop to show only fallback 
   };
@@ -288,6 +289,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         apiEndpoint: config.apiEndpoint,
         entityType: config.entityType,
         pageSize: config.filterOptions?.pageSize || 10,
+        searchFields: config.searchFields,
         defaultParams: {
           ...(config.defaultFilters?.lead_status?.length && { lead_status: config.defaultFilters.lead_status }),
           ...(config.defaultFilters?.lead_stage?.length && { lead_stage: config.defaultFilters.lead_stage }),
@@ -306,7 +308,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       return service;
     }
     return null;
-  }, [normalizedFilters, config?.apiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly]);
+  }, [normalizedFilters, config?.apiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, config?.searchFields]);
 
   // Initialize filter hooks with proper reset when no filters are configured
   const {
@@ -1257,22 +1259,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         {/* Search Bar Section */}
         <div className="mb-6">
           <div className="flex justify-end items-center">
-            {hasActiveFilters ? (
-              // Dynamic filter system - search is handled through filters
-              <Input
-                type="text"
-                placeholder="Search..."
-                value={filterState.values.search || ''}
-                onChange={(e) => setFilterValue('search', e.target.value)}
-                className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            ) : (
-              // Legacy filter system - use original search component
-              <SearchInputComponent
-                searchTerm={displaySearchTerm}
-                onChange={handleSearchChange}
-              />
-            )}
+            <Input
+              type="text"
+              placeholder="Search..."
+              value={displaySearchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
 

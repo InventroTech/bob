@@ -17,6 +17,7 @@ interface TableConfigProps {
   localConfig: {
     apiEndpoint: string;
     showFilters: boolean;
+    searchFields?: string;
   };
   localColumns: ColumnConfig[];
   numColumns: number;
@@ -56,6 +57,17 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
           placeholder="/api/tickets"
         />
+      </div>
+      <div>
+        <Label>Search Fields</Label>
+        <Input
+          value={localConfig.searchFields || ''}
+          onChange={(e) => handleInputChange('searchFields', e.target.value)}
+          placeholder="e.g., name,email,company"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Comma-separated fields to search in. Leave empty to search all fields.
+        </p>
       </div>
 
       <Tabs defaultValue="columns" className="w-full">

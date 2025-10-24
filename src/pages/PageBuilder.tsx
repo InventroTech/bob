@@ -126,6 +126,7 @@ interface ComponentConfig {
     showSummary?: boolean;
     compact?: boolean;
   };
+  searchFields?: string;
 }
 
 // Update CanvasComponentData to include config
@@ -191,6 +192,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     description: string;
     refreshInterval: number;
     showFilters: boolean;
+    searchFields: string;
   };
 
   // Local state for all input fields
@@ -202,6 +204,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     description: initialConfig.description || '',
     refreshInterval: initialConfig.refreshInterval || 0,
     showFilters: initialConfig.showFilters || false,
+    searchFields: initialConfig.searchFields || '',
   });
 
   // Separate state for columns
