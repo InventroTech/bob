@@ -31,6 +31,7 @@ import { CardComponent } from "./layout/CardEditLayout";
 import { LeadFormComponent } from "./components/page-builder/LeadsTableForm";
 import AddUserPage from "./pages/AddUserPage";
 import AuthCallbackPage from "./pages/AuthCallBackPage";
+import LeadTypeAssignmentPageWrapper from "./pages/LeadTypeAssignmentPageWrapper";
 import { JobsPage } from "./pages/JobsPage";
 const queryClient = new QueryClient();
 const App = () => (
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/tables/:tableName" element={<TableDetailsPage />} />
             <Route path="/builder/templates/lead-card" element={<LeadCardTemplate attributes={{}} />} />
             <Route path="/add-user" element={<AddUserPage />} />
+            <Route path="/lead-type-assignment" element={<LeadTypeAssignmentPageWrapper />} />
             <Route path="/jobs" element={<JobsPage />} />
           </Route>
 
