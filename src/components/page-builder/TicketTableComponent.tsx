@@ -17,6 +17,7 @@ import { ChevronDown } from 'lucide-react';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { convertGMTtoIST } from '@/lib/timeUtils';
 
 interface Column {
   header: string;
@@ -72,72 +73,7 @@ const getDisplayName = (email: string | null): string => {
 };
 
 // Function to format relative time
-const formatRelativeTime = (dateString: string): string => {
-  // Parse the UTC timestamp from Supabase (assume all timestamps are UTC)
-  let utcDate: Date;
-  
-  // Handle different date string formats - all assumed to be UTC
-  if (dateString.includes('T')) {
-    // ISO format like "2025-09-20T08:28:01.041432"
-    utcDate = new Date(dateString + 'Z'); // Force UTC parsing
-  } else if (dateString.includes(' ')) {
-    // Space format like "2025-09-20 08:28:01"
-    utcDate = new Date(dateString + ' UTC'); // Force UTC parsing
-  } else {
-    utcDate = new Date(dateString);
-  }
-  
-  // Validate the parsed date
-  if (isNaN(utcDate.getTime())) {
-    console.warn('Invalid date string:', dateString);
-    return 'Invalid date';
-  }
-  
-  // Convert UTC to IST (Mumbai) - IST is UTC+5:30
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-  const istDate = new Date(utcDate.getTime() + istOffset);
-  
-  // Get current time in IST
-  const nowUtc = new Date();
-  const nowIst = new Date(nowUtc.getTime() + istOffset);
-  
-  // Debug logging
-  console.log('Original date string:', dateString);
-  console.log('UTC date:', utcDate.toISOString());
-  console.log('IST date:', istDate.toLocaleString('en-IN'));
-  console.log('Current IST:', nowIst.toLocaleString('en-IN'));
-  
-  // Calculate difference using IST times
-  const diffInMilliseconds = nowIst.getTime() - istDate.getTime();
-  const diffInSeconds = Math.floor(diffInMilliseconds / 1000);
-  
-  console.log('Time difference in seconds:', diffInSeconds);
-  console.log('Time difference in hours:', (diffInSeconds / 3600).toFixed(2));
-  
-  // Handle negative differences
-  if (diffInSeconds < 0) {
-    return 'Just now';
-  }
-  
-  if (diffInSeconds < 60) {
-    return `${diffInSeconds} sec ago`;
-  } else if (diffInSeconds < 3600) {
-    const minutes = Math.floor(diffInSeconds / 60);
-    return `${minutes} min ago`;
-  } else if (diffInSeconds < 86400) {
-    const hours = Math.floor(diffInSeconds / 3600);
-    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-  } else if (diffInSeconds < 2592000) { // Less than 30 days
-    const days = Math.floor(diffInSeconds / 86400);
-    return `${days} day${days > 1 ? 's' : ''} ago`;
-  } else if (diffInSeconds < 31536000) { // Less than 365 days
-    const months = Math.floor(diffInSeconds / 2592000);
-    return `${months} month${months > 1 ? 's' : ''} ago`;
-  } else {
-    const years = Math.floor(diffInSeconds / 31536000);
-    return `${years} year${years > 1 ? 's' : ''} ago`;
-  }
-};
+// Using formatRelativeTimeIST from timeUtils for consistent GMT to IST conversion
 
 // Function to format poster status with better UI
 const formatPosterStatus = (poster: string): { label: string; color: string; bgColor: string } => {
@@ -601,7 +537,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const transformedData = tickets.map((ticket: any) => ({
         ...ticket,
         // Format created_at with relative time
-        created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
+        created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
         // Use cse_name for assigned to with display name
         cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
         // Combine first_name and last_name for name
@@ -829,7 +765,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Transform the data
         const transformedData = tickets.map(ticket => ({
           ...ticket,
-          created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
+          created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
           cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
           name: ticket.first_name && ticket.last_name 
             ? `${ticket.first_name} ${ticket.last_name}`
@@ -899,7 +835,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Transform the data
         const transformedData = tickets.map(ticket => ({
           ...ticket,
-          created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
+          created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
           cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
           name: ticket.first_name && ticket.last_name 
             ? `${ticket.first_name} ${ticket.last_name}`
@@ -1009,7 +945,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const transformedData = tickets.map(ticket => ({
           ...ticket,
           // Format created_at with relative time
-          created_at: ticket.created_at ? formatRelativeTime(ticket.created_at) : 'N/A',
+          created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
           // Use cse_name for assigned to with display name
           cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
           // Combine first_name and last_name for name
@@ -1033,6 +969,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Set the data (empty array if no tickets found)
         setData(transformedData);
         setFilteredData(transformedData);
+        console.log('Data loaded. FiltersApplied:', filtersApplied, 'Data count:', transformedData.length);
         
         // Set pagination data if available
         if (pageMeta) {
@@ -1045,11 +982,29 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             previousPageLink: pageMeta.previous_page_link || null
           });
         }
+        
+        // If filters were previously applied, reapply them after data loads
+        if (filtersApplied && (
+          resolutionStatusFilter.length > 0 || 
+          assignedToFilter !== 'all' || 
+          posterStatusFilter.length > 0 || 
+          dateRangeFilter.startDate || 
+          dateRangeFilter.endDate || 
+          searchTerm.trim() !== ''
+        )) {
+          console.log('Reapplying filters after data fetch...');
+          setTimeout(() => applyFilters(), 100); // Small delay to ensure state is updated
+        }
       } catch (error) {
         console.error('Error fetching tickets:', error);
         // Set empty data on error instead of using demo data
         setData([]);
         setFilteredData([]);
+        
+        // If filters were previously applied, we still need to maintain that state
+        if (filtersApplied) {
+          console.log('Filters were applied but data fetch failed');
+        }
       } finally {
         setLoading(false);
       }
