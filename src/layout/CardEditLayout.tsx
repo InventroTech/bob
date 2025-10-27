@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,26 +37,22 @@ export const CardComponent: React.FC = () => {
 
   const fetchCards = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('cards')
-      .select('*')
-      .eq('card_set_id', FIXED_CARD_SET_ID)
-      .order('created_at', { ascending: false });
+    const response = await apiService.getCards(FIXED_CARD_SET_ID);
 
-    if (error) {
+    if (!response.success) {
       toast.error('Failed to load cards');
-      console.error(error);
+      console.error(response.error);
     } else {
-      setCards(data || []);
+      setCards(response.data || []);
     }
     setLoading(false);
   };
 
   const handleDeleteCard = async (cardId: string) => {
-    const { error } = await supabase.from('cards').delete().eq('id', cardId);
-    if (error) {
+    const response = await apiService.deleteCard(cardId);
+    if (!response.success) {
       toast.error('Failed to delete card');
-      console.error('Delete error:', error);
+      console.error('Delete error:', response.error);
     } else {
       toast.success('Card deleted!');
       fetchCards();
@@ -71,18 +67,16 @@ export const CardComponent: React.FC = () => {
       return;
     }
 
-    const { error } = await supabase.from('cards').insert([
-      {
-        card_set_id: FIXED_CARD_SET_ID,
-        title,
-        description,
-        number: Number(number),
-      },
-    ]);
+    const response = await apiService.createCard({
+      card_set_id: FIXED_CARD_SET_ID,
+      title,
+      description,
+      number: Number(number),
+    });
 
-    if (error) {
+    if (!response.success) {
       toast.error('Failed to add card');
-      console.error(error);
+      console.error(response.error);
     } else {
       toast.success('Card added!');
       setTitle('');

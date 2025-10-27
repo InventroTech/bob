@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { authService } from '@/lib/authService';
+// Removed unused supabase import - using authService instead
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,16 +26,16 @@ const AuthPage = () => {
     try {
       let response;
       if (action === 'signIn') {
-        response = await supabase.auth.signInWithPassword({ email, password });
+        response = await authService.signInWithPassword(email, password);
         console.log("Sign In Response:", response);
-        if (response.error) throw response.error;
+        if (!response.success) throw new Error(response.error || 'Sign in failed');
         // No message needed on successful sign in, redirection handles it
       } else { // signUp
-        response = await supabase.auth.signUp({ email, password });
+        response = await authService.signUp(email, password);
         console.log("Sign Up Response:", response);
-        if (response.error) throw response.error;
+        if (!response.success) throw new Error(response.error || 'Sign up failed');
         // If user is auto-logged-in (session present), go straight to setup
-        if (response.data.session) {
+        if (response.data?.access_token) {
           window.location.replace('/');
           return;
         }
@@ -153,16 +154,26 @@ const PostLoginTenantSetup = () => {
       console.log('PostLoginTenantSetup: Starting setup for user:', userId, tenantName, tenantSlug);
       setStatus('Checking for existing tenant...');
       try {
-        const { data, error } = await supabase.rpc('setup_user_tenant', {
-          user_id: userId,
-          tenant_name: tenantName,
-          tenant_slug: tenantSlug,
+        // Call API endpoint instead of direct RPC
+        const response = await fetch(`${import.meta.env.VITE_RENDER_API_URL}/setup-user-tenant/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            tenant_name: tenantName,
+            tenant_slug: tenantSlug,
+          }),
         });
-        if (error) {
-          console.error('Error in setup_user_tenant RPC:', error);
-          setStatus(`Error: ${error.message}`);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: response.statusText }));
+          console.error('Error in setup_user_tenant API:', errorData);
+          setStatus(`Error: ${errorData.message}`);
           return;
         }
+        const data = await response.json();
         console.log('Tenant setup complete:', data);
         setStatus('Setup complete, redirecting...');
         setTimeout(() => {

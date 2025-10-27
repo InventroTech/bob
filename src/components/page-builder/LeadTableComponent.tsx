@@ -1,6 +1,12 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { apiService } from '@/lib/apiService';
+import StatusCard from '../ui/StatusCard';
+import ShortProfileCard from '../ui/ShortProfileCard';
+import { LeadFormComponent } from './LeadsTableForm';
+import { Trash2 } from 'lucide-react'; 
+import { PrajaTable } from '../ui/prajaTable';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';

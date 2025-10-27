@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { authService } from '@/lib/authService';
 import DonutPie from '../ui/donoutPie';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -64,7 +64,8 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
         const endpoint = config?.apiEndpoint || '/api/card-stats';
         const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
         
-        const { data: { session } } = await supabase.auth.getSession();
+        const sessionResponse = await authService.getSession();
+        const session = sessionResponse.success ? sessionResponse.data : null;
         const token = session?.access_token;
 
         const response = await fetch(apiUrl, {

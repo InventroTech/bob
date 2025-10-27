@@ -63,7 +63,7 @@ import {
   AddUserComponent,
 } from "@/components/page-builder";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
-import { supabase } from "@/lib/supabase";
+import { apiService } from "@/lib/apiService";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -528,13 +528,10 @@ const PageBuilder = () => {
       if (pageId && pageId !== 'new') {
         console.log(`Fetching data for page ID: ${pageId}`);
         try {
-          const { data, error } = await supabase
-            .from('pages')
-            .select('name, config, role')
-            .eq('id', pageId)
-            .single();
-
-          if (error) throw error;
+          const response = await apiService.getPage(pageId);
+          if (!response.success) throw new Error(response.error || 'Failed to fetch page');
+          
+          const data = response.data;
 
           if (data) {
             console.log("Fetched page data:", data);
@@ -559,8 +556,8 @@ const PageBuilder = () => {
 
   useEffect(() => {
     if (!tenantId) return;
-    supabase.from('custom_tables').select('id, name').eq('tenant_id', tenantId).then(({ data }) => {
-      if (data) setCollections(data);
+    apiService.getCustomTables(tenantId).then((response) => {
+      if (response.success && response.data) setCollections(response.data);
     });
   }, [tenantId]);
 
@@ -570,13 +567,10 @@ const PageBuilder = () => {
       if (!tenantId) return;
       
       try {
-        const { data, error } = await supabase
-          .from('roles')
-          .select('id, name')
-          .eq('tenant_id', tenantId);
-        console.log("Roles:", data);
-        if (error) throw error;
-        if (data) setRoles(data);
+        const response = await apiService.getRoles(tenantId);
+        console.log("Roles:", response);
+        if (!response.success) throw new Error(response.error || 'Failed to fetch roles');
+        if (response.data) setRoles(response.data);
       } catch (err) {
         console.error('Error fetching roles:', err);
       }
@@ -762,22 +756,15 @@ const PageBuilder = () => {
       if (pageId && pageId !== 'new') {
         // Update existing page
         console.log(`Updating page ID: ${pageId}`, pageData);
-        response = await supabase
-          .from('pages')
-          .update(pageData)
-          .eq('id', pageId);
+        response = await apiService.updatePage(pageId, pageData);
       } else {
         // Insert new page
         console.log("Inserting new page:", pageData);
-        response = await supabase
-          .from('pages')
-          .insert([pageData])
-          .select('id')
-          .single();
+        response = await apiService.createPage(pageData);
       }
 
       console.log("Save response:", response);
-      if (response.error) throw response.error;
+      if (!response.success) throw new Error(response.error || 'Failed to save page');
 
       toast.success("Page saved successfully!");
 

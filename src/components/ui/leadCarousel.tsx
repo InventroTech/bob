@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LeadCardComponent } from "../page-builder/LeadCardComponent";
-import { supabase } from "@/lib/supabase";
+import { apiService } from "@/lib/apiService";
 
 export const LeadCarousel = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -14,9 +14,10 @@ export const LeadCarousel = () => {
   useEffect(() => {
     const fetchLeads = async () => {
       try {
-        const { data, error } = await supabase.from('leads_table').select('*');
-        if (error) {
-          console.error('Error fetching leads:', error.message);
+        const response = await apiService.getLeads();
+        const data = response.success ? response.data : [];
+        if (!response.success) {
+          console.error('Error fetching leads:', response.error);
           return;
         }
         setLeads(data);
@@ -53,18 +54,13 @@ export const LeadCarousel = () => {
         return;
       }
 
-      const { data: result, error } = await supabase
-        .from('leads_table')
-        .update({
-          notes: notes,
-          status: status
-        })
-        .eq('id', currentLead.id)
-        .select()
-        .single();
+      const response = await apiService.updateLeadsTableRecord(currentLead.id, {
+        notes: notes,
+        status: status
+      });
 
-      if (error) {
-        console.error('Error updating lead:', error);
+      if (!response.success) {
+        console.error('Error updating lead:', response.error);
         alert('Failed to save changes. Please try again.');
         return;
       }

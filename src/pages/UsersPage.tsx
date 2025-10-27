@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -43,30 +43,16 @@ const UsersPage = () => {
     const fetchTenant = async () => {
       if (!user) return;
 
-      let { data, error } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (error || !data) {
-        const emailResponse = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('name', user.email)
-          .single();
-
-        data = { id: emailResponse.data?.id };
-        error = emailResponse.error;
-
-        if (error || !data) {
-          console.error("Error fetching tenant:", error);
-          toast.error('Failed to fetch tenant. Please contact support.');
-          return;
-        }
+      // Get tenant from user data or use user ID as fallback
+      const response = await apiService.getTenant(user.id);
+      
+      if (!response.success || !response.data) {
+        console.error("Error fetching tenant:", response.error);
+        toast.error('Failed to fetch tenant. Please contact support.');
+        return;
       }
 
-      setCompanyId(data.id);
+      setCompanyId(response.data.id);
     };
 
     fetchTenant();
@@ -78,18 +64,15 @@ const UsersPage = () => {
       if (!companyId) return;
 
       try {
-        const { data, error } = await supabase
-          .from('roles')
-          .select('id, name')
-          .eq('tenant_id', companyId);
-
-        if (error) {
-          console.error('Error fetching roles:', error);
+        const response = await apiService.getRoles(companyId);
+        
+        if (!response.success) {
+          console.error('Error fetching roles:', response.error);
           toast.error('Failed to fetch roles');
           return;
         }
 
-        setRoles(data || []);
+        setRoles(response.data || []);
       } catch (error) {
         console.error('Error:', error);
         toast.error('An unexpected error occurred while fetching roles');
@@ -105,26 +88,15 @@ const UsersPage = () => {
       if (!companyId) return;
 
       try {
-        const { data, error } = await supabase
-          .from('users')
-          .select(`
-            id,
-            name,
-            email,
-            created_at,
-            role_id,
-            role:roles!role_id(name)
-          `)
-          .eq('tenant_id', companyId)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching users:', error);
+        const response = await apiService.getUsers(companyId);
+        
+        if (!response.success) {
+          console.error('Error fetching users:', response.error);
           toast.error('Failed to fetch users');
           return;
         }
 
-        setUsers(data || []);
+        setUsers(response.data || []);
       } catch (error) {
         console.error('Error:', error);
         toast.error('An unexpected error occurred');
@@ -138,13 +110,10 @@ const UsersPage = () => {
 
   const handleRoleChange = async (userId: string, newRoleId: string) => {
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ role_id: newRoleId })
-        .eq('id', userId);
+      const response = await apiService.updateUserRole(userId, newRoleId);
 
-      if (error) {
-        console.error('Error updating user role:', error);
+      if (!response.success) {
+        console.error('Error updating user role:', response.error);
         toast.error('Failed to update user role');
         return;
       }

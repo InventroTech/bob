@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
 import { Badge } from '@/components/ui/badge';
@@ -85,10 +85,9 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
     const confirm = window.confirm('Are you sure you want to delete this lead?');
     if (!confirm) return;
 
-    const { error } = await supabase.from('leads').delete().eq('id', id);
-
-    if (error) {
-      console.error('Error deleting lead:', error.message);
+    const response = await apiService.deleteLead(id.toString());
+    if (!response.success) {
+      console.error('Error deleting lead:', response.error);
       alert('Failed to delete the lead.');
     } else {
       // Notify parent component about deletion

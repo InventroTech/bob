@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiService } from '@/lib/apiService';
 import { useAuth } from '@/hooks/useAuth';
 import StatusCard from '../ui/StatusCard';
 import ShortProfileCard from '../ui/ShortProfileCard';
@@ -146,10 +146,9 @@ export const OeLeadsTable: React.FC<OeLeadsTableProps> = ({ config }) => {
       const confirm = window.confirm('Are you sure you want to delete this lead?');
       if (!confirm) return;
 
-      const { error } = await supabase.from('leads').delete().eq('id', id);
-
-      if (error) {
-        throw error;
+      const response = await apiService.deleteLead(id.toString());
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to delete lead');
       }
 
       setData(prev => prev.filter(lead => lead.id !== id));
