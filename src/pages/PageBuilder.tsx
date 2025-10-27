@@ -26,6 +26,9 @@ import {
   ChevronDown,
   LogOut,
   TrendingUp,
+  MousePointer,
+  Briefcase,
+  Users,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -70,6 +73,14 @@ import { LeadCardComponent } from "@/components/page-builder/LeadCardComponent";
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
+import { OpenModalButton } from "@/components/ATScomponents/OpenModalButton";
+import { OpenModalButtonConfigComponent } from "@/components/ATScomponents/OpenModalButtonConfig";
+import { JobManagerComponent } from "@/components/ATScomponents/JobManagerComponent";
+import { JobManagerConfigComponent } from "@/components/ATScomponents/JobManagerConfig";
+import { JobsPageComponent } from "@/components/ATScomponents/JobsPageComponent";
+import { JobsPageConfigComponent } from "@/components/ATScomponents/JobsPageConfig";
+import { ApplicantTableComponent } from "@/components/ATScomponents/ApplicantTableComponent";
+import { ApplicantTableConfigComponent } from "@/components/ATScomponents/ApplicantTableConfig";
 import { CardComponent } from "@/layout/CardEditLayout";
 import { LeadCarousel } from "@/components/ui/leadCarousel";
 import { Carousel } from "@/components/ui/carousel";
@@ -118,6 +129,22 @@ interface ComponentConfig {
   refreshInterval?: number;
   showFilters?: boolean;
   customFields?: Record<string, any>;
+  // OpenModalButton specific fields
+  buttonTitle?: string;
+  buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+  buttonSize?: 'default' | 'sm' | 'lg' | 'icon';
+  modalTitle?: string;
+  selectedJobId?: string;
+  submitEndpoint?: string;
+  successMessage?: string;
+  width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+  // JobManager specific fields
+  showCreateButton?: boolean;
+  showStats?: boolean;
+  layout?: 'grid' | 'list';
+  maxJobs?: number;
+  // JobsPage specific fields
+  allowApplications?: boolean;
 }
 
 // Update CanvasComponentData to include config
@@ -153,6 +180,10 @@ export const componentMap: Record<string, React.FC<any>> = {
   lineChart: LineChart,
   barGraph: BarGraph,
   addUser: AddUserComponent,
+  openModalButton: OpenModalButton,
+  jobManager: JobManagerComponent,
+  jobsPage: JobsPageComponent,
+  applicantTable: ApplicantTableComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -175,13 +206,29 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   const initialDatasets = initialConfig.datasets || [];
 
   type LocalConfigType = {
-    apiEndpoint: string;
-    statusDataApiEndpoint: string;
-    apiPrefix: 'supabase' | 'renderer';
-    title: string;
-    description: string;
-    refreshInterval: number;
-    showFilters: boolean;
+    apiEndpoint?: string;
+    statusDataApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
+    title?: string;
+    description?: string;
+    refreshInterval?: number;
+    showFilters?: boolean;
+    // OpenModalButton specific fields
+    buttonTitle?: string;
+    buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+    buttonSize?: 'default' | 'sm' | 'lg' | 'icon';
+    modalTitle?: string;
+    selectedJobId?: string;
+    submitEndpoint?: string;
+    successMessage?: string;
+    width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+    // JobManager specific fields
+    showCreateButton?: boolean;
+    showStats?: boolean;
+    layout?: 'grid' | 'list';
+    maxJobs?: number;
+    // JobsPage specific fields
+    allowApplications?: boolean;
   };
 
   // Local state for all input fields
@@ -193,6 +240,22 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     description: initialConfig.description || '',
     refreshInterval: initialConfig.refreshInterval || 0,
     showFilters: initialConfig.showFilters || false,
+    // OpenModalButton fields
+    buttonTitle: initialConfig.buttonTitle || 'Apply Now',
+    buttonColor: initialConfig.buttonColor || 'default',
+    buttonSize: initialConfig.buttonSize || 'default',
+    modalTitle: initialConfig.modalTitle || 'Job Application',
+    selectedJobId: initialConfig.selectedJobId || '',
+    submitEndpoint: initialConfig.submitEndpoint || '/api/job-applications',
+    successMessage: initialConfig.successMessage || 'Application submitted successfully!',
+    width: initialConfig.width || 'lg',
+    // JobManager fields
+    showCreateButton: initialConfig.showCreateButton ?? true,
+    showStats: initialConfig.showStats ?? true,
+    layout: initialConfig.layout || 'grid',
+    maxJobs: initialConfig.maxJobs || 50,
+    // JobsPage fields
+    allowApplications: initialConfig.allowApplications ?? true,
   });
 
   // Separate state for columns
@@ -290,7 +353,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'dataCard':
         return (
           <DataCardConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
         );
@@ -311,7 +374,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'oeLeadsTable':
         return (
           <TableConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             handleInputChange={handleInputChange}
@@ -339,7 +402,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'barGraph':
         return (
           <BasicChartConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
         );
@@ -348,12 +411,44 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'stackedBarChart':
         return (
           <AdvancedChartConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             localDatasets={localDatasets}
             numDatasets={numDatasets}
             handleInputChange={handleInputChange}
             handleDatasetCountChange={handleDatasetCountChange}
             handleDatasetFieldChange={handleDatasetFieldChange}
+          />
+        );
+
+      case 'openModalButton':
+        return (
+          <OpenModalButtonConfigComponent
+            config={localConfig as any}
+            onConfigChange={handleInputChange}
+          />
+        );
+
+      case 'jobManager':
+        return (
+          <JobManagerConfigComponent
+            config={localConfig as any}
+            onConfigChange={handleInputChange}
+          />
+        );
+
+      case 'jobsPage':
+        return (
+          <JobsPageConfigComponent
+            config={localConfig as any}
+            onConfigChange={handleInputChange}
+          />
+        );
+
+      case 'applicantTable':
+        return (
+          <ApplicantTableConfigComponent
+            config={localConfig as any}
+            onConfigChange={(key: any, value: any) => handleInputChange(key, value)}
           />
         );
 
@@ -404,7 +499,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','openModalButton','jobManager','jobsPage','applicantTable'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -853,6 +948,26 @@ const PageBuilder = () => {
                           id="addUser"
                           label="Add User"
                           icon={<User className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="openModalButton"
+                          label="Modal Button"
+                          icon={<MousePointer className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="jobManager"
+                          label="Job Manager"
+                          icon={<Briefcase className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="jobsPage"
+                          label="Jobs Board"
+                          icon={<Users className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="applicantTable"
+                          label="Applicant Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
