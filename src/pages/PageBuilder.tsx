@@ -99,16 +99,18 @@ import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChar
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
 // Import configuration components
-import { 
-  DataCardConfig, 
-  TableConfig, 
-  CarouselConfig, 
-  BasicChartConfig, 
+import {
+  DataCardConfig,
+  TableConfig,
+  CarouselConfig,
+  BasicChartConfig,
   AdvancedChartConfig,
+  DynamicFilterConfig,
   TicketCarouselConfig,
   LeadCardCarouselConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
+import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 
 // Add configuration types
 interface ComponentConfig {
@@ -129,6 +131,13 @@ interface ComponentConfig {
   refreshInterval?: number;
   showFilters?: boolean;
   customFields?: Record<string, any>;
+  filters?: FilterConfig[];
+  filterOptions?: {
+    pageSize?: number;
+    showSummary?: boolean;
+    compact?: boolean;
+  };
+  searchFields?: string;
   // OpenModalButton specific fields
   buttonTitle?: string;
   buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -156,6 +165,7 @@ export interface CanvasComponentData {
 }
 
 // Map component types to actual components
+// Maps builder palette identifiers to actual React components rendered on the canvas
 export const componentMap: Record<string, React.FC<any>> = {
   container: ContainerComponent,
   split: SplitViewComponent,
@@ -205,13 +215,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   const initialDatasets = initialConfig.datasets || [];
 
   type LocalConfigType = {
-    apiEndpoint?: string;
+    apiEndpoint: string;
     statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
     title?: string;
     description?: string;
     refreshInterval?: number;
-    showFilters?: boolean;
+    showFilters: boolean;
+    searchFields: string;
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -239,6 +250,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     description: initialConfig.description || '',
     refreshInterval: initialConfig.refreshInterval || 0,
     showFilters: initialConfig.showFilters || false,
+    searchFields: initialConfig.searchFields || '',
     // OpenModalButton fields
     buttonTitle: initialConfig.buttonTitle || 'Apply Now',
     buttonColor: initialConfig.buttonColor || 'default',
@@ -260,6 +272,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   // Separate state for columns
   const [localColumns, setLocalColumns] = useState<ColumnConfig[]>(initialColumns);
   const [numColumns, setNumColumns] = useState<number>(initialColumns.length);
+
+  // Separate state for filters
+  const initialFilters = initialConfig.filters || [];
+  const [localFilters, setLocalFilters] = useState<FilterConfig[]>(initialFilters);
+  const [numFilters, setNumFilters] = useState<number>(initialFilters.length);
 
   // Separate state for datasets (for StackedBarChart)
   const [localDatasets, setLocalDatasets] = useState<Array<{label: string; backgroundColor: string}>>(initialDatasets);
@@ -322,6 +339,106 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     debouncedUpdateWithDelay({ columns: newColumns });
   }, [localColumns, debouncedUpdateWithDelay]);
 
+  const handleFilterCountChange = useCallback((count: number) => {
+    setNumFilters(count);
+    let newFilters: FilterConfig[];
+
+    if (count < localFilters.length) {
+      // Remove extra filters
+      newFilters = localFilters.slice(0, count);
+    } else if (count > localFilters.length) {
+      // Add new filters
+      newFilters = [...localFilters];
+      for (let i = localFilters.length; i < count; i++) {
+        const tempKey = `temp_filter_${i}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        newFilters.push({
+          key: tempKey,
+          label: '',
+          type: 'select',
+          accessor: '', // Will be set by user
+          options: []
+        });
+      }
+    } else {
+      // No change in count
+      newFilters = localFilters;
+    }
+
+    // Ensure all filters have proper keys
+    newFilters = newFilters.map((filter, index) => {
+      if (!filter.key || (typeof filter.key === 'string' && filter.key.trim() === '')) {
+        return {
+          ...filter,
+          key: `filter_${filter.accessor || 'unknown'}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+        };
+      }
+      return filter;
+    });
+
+    setLocalFilters(newFilters);
+    debouncedUpdateWithDelay({ filters: newFilters });
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options']) => {
+    const newFilters = [...localFilters];
+
+    // If changing the accessor, also update the key to match for consistency
+    if (field === 'accessor' && typeof value === 'string' && value.trim() !== '') {
+      newFilters[index] = {
+        ...newFilters[index],
+        [field]: value,
+        key: value // Set key to match accessor for consistency
+      };
+    } else if (field === 'lookup' && value === 'auto') {
+      // Convert 'auto' back to undefined for the lookup field
+      newFilters[index] = { ...newFilters[index], [field]: undefined };
+    } else {
+      newFilters[index] = { ...newFilters[index], [field]: value };
+    }
+
+    // If key is still empty after changes, generate a unique key
+    if (!newFilters[index].key || (typeof newFilters[index].key === 'string' && newFilters[index].key.trim() === '')) {
+      newFilters[index] = {
+        ...newFilters[index],
+        key: `filter_${newFilters[index].accessor || 'unknown'}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+      };
+    }
+
+    setLocalFilters(newFilters);
+    debouncedUpdateWithDelay({ filters: newFilters });
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleAddFilterOption = useCallback((filterIndex: number) => {
+    const newFilters = [...localFilters];
+    if (!newFilters[filterIndex].options) {
+      newFilters[filterIndex].options = [];
+    }
+    newFilters[filterIndex].options!.push({ label: '', value: '' });
+    setLocalFilters(newFilters);
+    debouncedUpdateWithDelay({ filters: newFilters });
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleRemoveFilterOption = useCallback((filterIndex: number, optionIndex: number) => {
+    const newFilters = [...localFilters];
+    if (newFilters[filterIndex].options) {
+      newFilters[filterIndex].options!.splice(optionIndex, 1);
+      setLocalFilters(newFilters);
+      debouncedUpdateWithDelay({ filters: newFilters });
+    }
+  }, [localFilters, debouncedUpdateWithDelay]);
+
+  const handleFilterOptionChange = useCallback((filterIndex: number, optionIndex: number, field: keyof FilterConfig['options'][0], value: string) => {
+    const newFilters = [...localFilters];
+    if (newFilters[filterIndex].options && newFilters[filterIndex].options![optionIndex]) {
+      newFilters[filterIndex].options![optionIndex] = {
+        ...newFilters[filterIndex].options![optionIndex],
+        [field]: value
+      };
+      setLocalFilters(newFilters);
+      debouncedUpdateWithDelay({ filters: newFilters });
+    }
+  }, [localFilters, debouncedUpdateWithDelay]);
+
   // Handle dataset count change
   const handleDatasetCountChange = useCallback((count: number) => {
     setNumDatasets(count);
@@ -359,13 +476,20 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
       case 'ticketTable':
         return (
-          <TicketTableConfig
+          <TableConfig
             localConfig={localConfig}
             localColumns={localColumns}
             numColumns={numColumns}
+            localFilters={localFilters}
+            numFilters={numFilters}
             handleInputChange={handleInputChange}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
+            handleFilterCountChange={handleFilterCountChange}
+            handleFilterFieldChange={handleFilterFieldChange}
+            handleAddFilterOption={handleAddFilterOption}
+            handleRemoveFilterOption={handleRemoveFilterOption}
+            handleFilterOptionChange={handleFilterOptionChange}
           />
         );
 
@@ -376,9 +500,16 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
+            localFilters={localFilters}
+            numFilters={numFilters}
             handleInputChange={handleInputChange}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
+            handleFilterCountChange={handleFilterCountChange}
+            handleFilterFieldChange={handleFilterFieldChange}
+            handleAddFilterOption={handleAddFilterOption}
+            handleRemoveFilterOption={handleRemoveFilterOption}
+            handleFilterOptionChange={handleFilterOptionChange}
           />
         );
 
@@ -496,6 +627,7 @@ const PageBuilder = () => {
   );
 
   // Setup droppable canvas area
+  // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
     data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable'] }
@@ -506,18 +638,9 @@ const PageBuilder = () => {
 
   // Add these effects
   useEffect(() => {
-    // Log the droppable area dimensions for debugging
     const element = canvasRef.current;
     if (element) {
-      const rect = element.getBoundingClientRect();
-      console.log("Canvas Drop Area Dimensions:", {
-        top: rect.top,
-        left: rect.left,
-        bottom: rect.bottom,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height
-      });
+      element.getBoundingClientRect();
     }
   }, []);
 
@@ -525,7 +648,6 @@ const PageBuilder = () => {
     // If editing an existing page, fetch its data
     const fetchPageData = async () => {
       if (pageId && pageId !== 'new') {
-        console.log(`Fetching data for page ID: ${pageId}`);
         try {
           const { data, error } = await supabase
             .from('pages')
@@ -536,17 +658,16 @@ const PageBuilder = () => {
           if (error) throw error;
 
           if (data) {
-            console.log("Fetched page data:", data);
+            // Supabase `pages.config` stores the canvas components. Older rows might be arrays.
+            // Normalize to array of CanvasComponentData.
             setPageName(data.name || 'Untitled Page');
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
             if (data.role) setSelectedRole(data.role);
           } else {
-            console.warn(`Page with ID ${pageId} not found.`);
             toast.error("Page not found.");
             navigate('/'); // Redirect if page not found
           }
         } catch (error: any) {
-          console.error("Error fetching page data:", error);
           toast.error(`Error loading page: ${error.message}`);
           navigate('/'); // Redirect on error
         }
@@ -563,6 +684,40 @@ const PageBuilder = () => {
     });
   }, [tenantId]);
 
+  // Ensure all filters in canvas components have proper unique keys
+  useEffect(() => {
+    if (canvasComponents.length > 0) {
+      const updatedComponents = canvasComponents.map(component => {
+        if (component.config?.filters && component.config.filters.length > 0) {
+          const updatedFilters = component.config.filters.map((filter: FilterConfig, index: number) => {
+            if (!filter.key || (typeof filter.key === 'string' && filter.key.trim() === '')) {
+              return {
+                ...filter,
+                key: `filter_${filter.accessor || 'unknown'}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+              };
+            }
+            return filter;
+          });
+
+          if (JSON.stringify(updatedFilters) !== JSON.stringify(component.config.filters)) {
+            return {
+              ...component,
+              config: {
+                ...component.config,
+                filters: updatedFilters
+              }
+            };
+          }
+        }
+        return component;
+      });
+
+      if (JSON.stringify(updatedComponents) !== JSON.stringify(canvasComponents)) {
+        setCanvasComponents(updatedComponents);
+      }
+    }
+  }, [canvasComponents]);
+
   // Add useEffect to fetch roles based on tenant_id
   useEffect(() => {
     const fetchRoles = async () => {
@@ -573,11 +728,9 @@ const PageBuilder = () => {
           .from('roles')
           .select('id, name')
           .eq('tenant_id', tenantId);
-        console.log("Roles:", data);
         if (error) throw error;
         if (data) setRoles(data);
       } catch (err) {
-        console.error('Error fetching roles:', err);
       }
     };
     
@@ -585,37 +738,36 @@ const PageBuilder = () => {
   }, [tenantId]);
 
   // Handler for when a drag operation starts
+  // Track the currently dragged palette item for overlay and canvas highlighting
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
-    console.log("Drag start:", active.id);
     setActiveDragId(String(active.id));
     setActiveComponent(String(active.id));
   };
 
   // New handler for when a drag operation moves over a droppable
+  // Currently used only to keep DnD-kit state fresh; no side-effects needed
   const handleDragOver = (event: DragOverEvent) => {
     const { over } = event;
-    console.log("Dragging over:", over?.id);
   };
 
   // New handler for when a drag operation moves
+  // Could be used for live feedback while dragging (kept minimal for readability)
   const handleDragMove = (event: DragMoveEvent) => {
-    // This is helpful for debugging
-    console.log("Drag move delta:", event.delta);
+    // Intentionally left blank
   };
 
   // Modify the handleDragEnd function with manual drop detection
+  // When dropping, either add a new component to the canvas or insert near an existing one
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveDragId(null);
     setActiveComponent(null);
 
-    console.log("Drag End Event: ", event);
-    console.log("Dragged Item ID (active):", active.id);
-    console.log("Dropped On Area ID (over):", over?.id);
-    console.log("Over data:", over?.data?.current);
+    
 
     // Manual drop detection if dnd-kit's detection fails
+    // Fallback heuristic when DnD-kit fails to detect drop over the canvas
     const manualDetection = () => {
       // Get the canvas element's boundaries
       const element = canvasRef.current;
@@ -626,20 +778,13 @@ const PageBuilder = () => {
       // Get the pointer position from the event
       const { clientX, clientY } = event.activatorEvent as PointerEvent;
       
-      console.log("Drop Position:", { clientX, clientY });
-      console.log("Canvas Boundaries:", { 
-        top: rect.top, 
-        right: rect.right, 
-        bottom: rect.bottom, 
-        left: rect.left 
-      });
       
-      // SOLUTION: Instead of strict position checking, determine if this was a dragging action 
-      // from the sidebar toward the canvas area
+      
+      // Determine if user dragged from sidebar toward the canvas area
       const deltaX = event.delta.x;
       const deltaY = event.delta.y;
       
-      console.log("Drag delta:", { deltaX, deltaY });
+      
       
       // If dragged significantly rightward (from sidebar toward canvas)
       // AND cursor is within reasonable vertical range of the canvas
@@ -648,11 +793,7 @@ const PageBuilder = () => {
       
       const isLikelyIntendedForCanvas = isDraggingTowardCanvas && isWithinVerticalRange;
       
-      console.log("Drag intent analysis:", { 
-        isDraggingTowardCanvas, 
-        isWithinVerticalRange,
-        isLikelyIntendedForCanvas
-      });
+      
       
       return isLikelyIntendedForCanvas;
     };
@@ -670,11 +811,10 @@ const PageBuilder = () => {
           config: {},
         };
 
-        console.log("Adding component to canvas: ", newComponent);
         // Add the new component to the canvas state
         setCanvasComponents((prev) => [...prev, newComponent]);
       } else {
-        console.warn(`Unknown component type dropped: ${componentType}`);
+        
       }
     } 
     // ADD THIS SECTION to handle drops onto existing components
@@ -682,7 +822,7 @@ const PageBuilder = () => {
       // This is likely a component ID (they have format like "container-1234567890")
       const componentType = String(active.id);
       if (!componentMap[componentType]) {
-        console.warn(`Unknown component type dropped: ${componentType}`);
+        
         return;
       }
 
@@ -698,7 +838,6 @@ const PageBuilder = () => {
       const targetIndex = canvasComponents.findIndex(comp => comp.id === targetId);
       
       if (targetIndex !== -1) {
-        console.log(`Inserting new component at index ${targetIndex}`);
         // Insert the new component at this index
         setCanvasComponents(prev => {
           const newList = [...prev];
@@ -706,13 +845,12 @@ const PageBuilder = () => {
           return newList;
         });
       } else {
-        console.warn(`Target component with ID ${targetId} not found`);
         // Fallback: Add to end
         setCanvasComponents(prev => [...prev, newComponent]);
       }
     }
     else {
-      console.log("Dropped outside canvas.");
+      
     }
   };
 
@@ -730,7 +868,6 @@ const PageBuilder = () => {
 
   // Function to handle component deletion
   const handleDeleteComponent = (idToDelete: string) => {
-    console.log(`Attempting to delete component: ${idToDelete}`);
     setCanvasComponents((prev) =>
       prev.filter(component => component.id !== idToDelete)
     );
@@ -759,15 +896,13 @@ const PageBuilder = () => {
 
       let response;
       if (pageId && pageId !== 'new') {
-        // Update existing page
-        console.log(`Updating page ID: ${pageId}`, pageData);
+        // Update existing page row by id
         response = await supabase
           .from('pages')
           .update(pageData)
           .eq('id', pageId);
       } else {
-        // Insert new page
-        console.log("Inserting new page:", pageData);
+        // Insert new page and return its id (used to navigate to the edit URL)
         response = await supabase
           .from('pages')
           .insert([pageData])
@@ -775,7 +910,6 @@ const PageBuilder = () => {
           .single();
       }
 
-      console.log("Save response:", response);
       if (response.error) throw response.error;
 
       toast.success("Page saved successfully!");
@@ -786,7 +920,6 @@ const PageBuilder = () => {
       }
 
     } catch (error: any) {
-      console.error("Error saving page:", error);
       toast.error(`Error saving page: ${error.message}`);
     } finally {
       setIsSaving(false);
@@ -1106,7 +1239,7 @@ const PageBuilder = () => {
                   </div>
                 </div>
               ) : (
-                // Render the actual components from state, wrapped in DroppableCanvasItem
+                // Render the actual components from state, wrapped in DroppableCanvasItem to enable selection/deletion
                 canvasComponents.map((component) => {
                   const ComponentToRender = componentMap[component.type];
                   if (!ComponentToRender) return null;

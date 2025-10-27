@@ -584,7 +584,13 @@ export const LeadFormComponent = () => {
         </div>
       )}
 
-      <LeadTableComponent/>
+      <LeadTableComponent 
+        config={{
+          showFallbackOnly: true,
+          emptyMessage: 'No leads data available. Please configure your data source.',
+          title: 'Leads Table'
+        }}
+      />
     </DashboardLayout>
   );
 }
