@@ -351,6 +351,44 @@ export type Database = {
         }
         Relationships: []
       }
+      user_settings: {
+        Row: {
+          id: number
+          tenant_id: string
+          user_id: string
+          key: string
+          value: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          tenant_id: string
+          user_id: string
+          key: string
+          value: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          tenant_id?: string
+          user_id?: string
+          key?: string
+          value?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
