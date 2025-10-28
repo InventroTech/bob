@@ -36,32 +36,36 @@ interface LeadData {
   created_at: string;
   name: string;
   email: string;
-  phone: string;
-  company: string;
-  position: string;
-  source: string;
-  status: string;
-  priority: string;
-  notes: string;
-  budget: number;
-  location: string;
-  tags: string[];
-  display_pic_url: string;
-  linkedin_profile: string;
-  website: string;
-  next_follow_up: string;
+  phone?: string;
+  phone_no?: string;
+  company?: string;
+  position?: string;
+  source?: string;
+  lead_source?: string;
+  status?: string;
+  priority?: string;
+  notes?: string;
+  budget?: number;
+  location?: string;
+  tags?: string[];
+  display_pic_url?: string;
+  linkedin_profile?: string;
+  website?: string;
+  next_follow_up?: string;
   // New fields as per requirements
-  lead_stage: string;
-  customer_full_name: string;
-  user_id: string;
-  affiliated_party: string;
-  rm_dashboard: string;
-  user_profile_link: string;
-  whatsapp_link: string;
-  package_to_pitch: string;
-  premium_poster_count: number;
-  last_active_date: string;
-  latest_remarks: string;
+  lead_stage?: string;
+  customer_full_name?: string;
+  user_id?: string;
+  affiliated_party?: string;
+  rm_dashboard?: string;
+  user_profile_link?: string;
+  whatsapp_link?: string;
+  package_to_pitch?: string;
+  premium_poster_count?: number;
+  last_active_date_time?: string;
+  last_active_date?: string;
+  latest_remarks?: string;
+  updated_at?: string;
 }
 
 interface LeadStats {
@@ -108,7 +112,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const isInitialized = useRef(false);
 
   // Utility functions
-  const formatPhoneNumber = (phone: string) => {
+  const formatPhoneNumber = (phone?: string) => {
     if (!phone) return "N/A";
     return phone.replace(/(\d{2})(\d{5})(\d{5})/, "$1 $2 $3");
   };
@@ -126,7 +130,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       if (!session) return;
 
       // Use configured status data API endpoint or fallback to default
-      const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
+      const statusEndpoint = config?.statusDataApiEndpoint || "/crm-records/leads/stats/";
       
       const response = await fetch(
         `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`,
@@ -155,8 +159,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     try {
       setLoading(true);
       
-      const endpoint = config?.apiEndpoint || "/api/leads";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}?assign=false`;
+      const endpoint = config?.apiEndpoint || "/crm-records/leads/next/";
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -209,9 +213,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setShowPendingCard(false);
       setLead(prev => ({
         ...prev,
-        leadStatus: leadData.status || "New",
+        leadStatus: leadData.status || leadData.lead_stage || "New",
         priority: leadData.priority || "Medium",
-        notes: leadData.notes || "",
+        notes: leadData.notes || leadData.latest_remarks || "",
         selectedTags: parseTags(leadData.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
         leadStartTime: new Date(),
@@ -299,11 +303,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  // Initialize component
+  // Initialize component - fetch stats only, don't fetch lead yet
   useEffect(() => {
-    if (!isInitialized.current) {
-      fetchFirstLead();
-    }
+    fetchLeadStats();
+    setShowPendingCard(true);
   }, []);
 
   // Pending card
@@ -452,7 +455,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             {/* Lead Source - Below Lead Stage */}
             <div className="text-center">
               <span className="text-sm text-muted-foreground">Source: </span>
-              <span className="text-sm font-medium">{currentLead?.source || "N/A"}</span>
+              <span className="text-sm font-medium">{currentLead?.lead_source || currentLead?.source || "N/A"}</span>
             </div>
 
             {/* Main Lead Information */}
@@ -536,15 +539,16 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   onClick={() => {
                     if (currentLead?.whatsapp_link) {
                       window.open(currentLead.whatsapp_link, '_blank');
-                    } else if (currentLead?.phone) {
-                      const cleanNumber = currentLead.phone.replace(/\D/g, '');
+                    } else if (currentLead?.phone_no || currentLead?.phone) {
+                      const phoneNumber = currentLead.phone_no || currentLead.phone;
+                      const cleanNumber = phoneNumber.replace(/\D/g, '');
                       const whatsappUrl = `https://wa.me/${cleanNumber}`;
                       window.open(whatsappUrl, '_blank');
                     }
                   }}
                 >
                   <Phone className="h-3 w-3 mr-2 text-primary" />
-                  <span className="font-medium text-sm">{formatPhoneNumber(currentLead?.phone) || "N/A"}</span>
+                  <span className="font-medium text-sm">{formatPhoneNumber(currentLead?.phone_no || currentLead?.phone) || "N/A"}</span>
                 </div>
 
                 {/* RM Dashboard Link */}
@@ -565,7 +569,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 <div className="text-sm bg-muted/50 p-2 rounded-md">
                   <span className="text-muted-foreground">Last Active: </span>
                   <span className="font-medium">
-                    {currentLead?.last_active_date ? new Date(currentLead.last_active_date).toLocaleDateString("en-US", {
+                    {currentLead?.last_active_date_time ? new Date(currentLead.last_active_date_time).toLocaleDateString("en-US", {
                       year: "numeric",
                       month: "short",
                       day: "numeric",

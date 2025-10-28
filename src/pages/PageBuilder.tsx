@@ -322,6 +322,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     debouncedUpdateWithDelay({ columns: newColumns });
   }, [localColumns, debouncedUpdateWithDelay]);
 
+  // Handle column deletion
+  const handleColumnDelete = useCallback((index: number) => {
+    const newColumns = localColumns.filter((_, i) => i !== index);
+    setLocalColumns(newColumns);
+    setNumColumns(newColumns.length);
+    debouncedUpdateWithDelay({ columns: newColumns });
+  }, [localColumns, debouncedUpdateWithDelay]);
+
   // Handle dataset count change
   const handleDatasetCountChange = useCallback((count: number) => {
     setNumDatasets(count);
@@ -379,6 +387,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             handleInputChange={handleInputChange}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
+            handleColumnDelete={handleColumnDelete}
           />
         );
 

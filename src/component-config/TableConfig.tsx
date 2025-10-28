@@ -2,6 +2,8 @@ import React from 'react';
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ColumnConfig {
@@ -21,6 +23,7 @@ interface TableConfigProps {
   handleInputChange: (field: string, value: string | number | boolean) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string) => void;
+  handleColumnDelete?: (index: number) => void;
 }
 
 export const TableConfig: React.FC<TableConfigProps> = ({ 
@@ -29,7 +32,8 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   numColumns, 
   handleInputChange, 
   handleColumnCountChange, 
-  handleColumnFieldChange 
+  handleColumnFieldChange,
+  handleColumnDelete 
 }) => {
   return (
     <div className="space-y-4">
@@ -58,8 +62,21 @@ export const TableConfig: React.FC<TableConfigProps> = ({
         {Array.from({ length: numColumns }).map((_, index) => {
           const column = localColumns[index] || { key: '', label: '', type: 'text' };
           return (
-            <div key={index} className="space-y-2 p-4 border rounded-lg">
-              <h4 className="font-medium">Column {index + 1}</h4>
+            <div key={index} className="space-y-2 p-4 border rounded-lg relative">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium">Column {index + 1}</h4>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleColumnDelete?.(index)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  disabled={!handleColumnDelete}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Column Name</Label>
@@ -97,16 +114,20 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                     </SelectContent>
                   </Select>
                 </div>
-                {(column.type === 'text' || column.key === 'user_id') && (
+                {(column.type === 'text' || column.key === 'user_id' || 
+                  column.key === 'phone_number' || column.key === 'phone_no' || column.key === 'phone' ||
+                  column.label.toLowerCase().includes('phone')) && (
                   <div className="col-span-2">
                     <Label>Link Field (Optional)</Label>
                     <Input
                       value={column.linkField || ''}
                       onChange={(e) => handleColumnFieldChange(index, 'linkField', e.target.value)}
-                      placeholder="e.g., user_profile_link"
+                      placeholder={column.label.toLowerCase().includes('phone') ? "e.g., whatsapp_link (auto-detected)" : "e.g., user_profile_link"}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Field to use as link for this column (e.g., user_profile_link for User ID)
+                      {column.label.toLowerCase().includes('phone') 
+                        ? "WhatsApp link will be automatically used for phone numbers"
+                        : "Field to use as link for this column (e.g., user_profile_link for User ID)"}
                     </p>
                   </div>
                 )}
