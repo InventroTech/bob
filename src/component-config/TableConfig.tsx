@@ -2,6 +2,8 @@ import React from 'react';
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DynamicFilterConfig, FilterConfig } from './DynamicFilterConfig';
@@ -26,6 +28,7 @@ interface TableConfigProps {
   handleInputChange: (field: string, value: string | number | boolean) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string) => void;
+  handleColumnDelete?: (index: number) => void;
   handleFilterCountChange: (count: number) => void;
   handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterConfig['options']) => void;
   handleAddFilterOption: (filterIndex: number) => void;
@@ -42,6 +45,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   handleInputChange,
   handleColumnCountChange,
   handleColumnFieldChange,
+  handleColumnDelete,
   handleFilterCountChange,
   handleFilterFieldChange,
   handleAddFilterOption,
@@ -92,8 +96,22 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           {Array.from({ length: numColumns }).map((_, index) => {
             const column = localColumns[index] || { key: '', label: '', type: 'text' };
             return (
-              <div key={index} className="space-y-2 p-4 border rounded-lg">
-                <h4 className="font-medium">Column {index + 1}</h4>
+              <div key={index} className="space-y-2 p-4 border rounded-lg relative">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium">Column {index + 1}</h4>
+                  {handleColumnDelete && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleColumnDelete(index)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Column Name</Label>
@@ -131,7 +149,9 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                       </SelectContent>
                     </Select>
                   </div>
-                  {(column.type === 'text' || column.key === 'user_id') && (
+                  {(column.type === 'text' || column.key === 'user_id' || 
+                    column.key === 'phone_number' || column.key === 'phone_no' || column.key === 'phone' ||
+                    column.label.toLowerCase().includes('phone')) && (
                     <div className="col-span-2">
                       <Label>Link Field (Optional)</Label>
                       <Input
