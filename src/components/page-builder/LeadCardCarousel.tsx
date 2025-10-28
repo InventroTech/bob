@@ -36,10 +36,12 @@ interface LeadData {
   created_at: string;
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
+  phone_no?: string;
   company: string;
   position: string;
-  source: string;
+  source?: string;
+  lead_source?: string;
   status: string;
   priority: string;
   notes: string;
@@ -60,7 +62,8 @@ interface LeadData {
   whatsapp_link: string;
   package_to_pitch: string;
   premium_poster_count: number;
-  last_active_date: string;
+  last_active_date?: string;
+  last_active_date_time?: string;
   latest_remarks: string;
 }
 
@@ -108,7 +111,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const isInitialized = useRef(false);
 
   // Utility functions
-  const formatPhoneNumber = (phone: string) => {
+  const formatPhoneNumber = (phone?: string) => {
     if (!phone) return "N/A";
     return phone.replace(/(\d{2})(\d{5})(\d{5})/, "$1 $2 $3");
   };
@@ -299,11 +302,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  // Initialize component
+  // Initialize component - fetch stats only, don't fetch lead yet
   useEffect(() => {
-    if (!isInitialized.current) {
-      fetchFirstLead();
-    }
+    fetchLeadStats();
+    setShowPendingCard(true);
   }, []);
 
   // Pending card
@@ -452,7 +454,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             {/* Lead Source - Below Lead Stage */}
             <div className="text-center">
               <span className="text-sm text-muted-foreground">Source: </span>
-              <span className="text-sm font-medium">{currentLead?.source || "N/A"}</span>
+              <span className="text-sm font-medium">{currentLead?.lead_source || currentLead?.source || "N/A"}</span>
             </div>
 
             {/* Main Lead Information */}
@@ -536,15 +538,19 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   onClick={() => {
                     if (currentLead?.whatsapp_link) {
                       window.open(currentLead.whatsapp_link, '_blank');
-                    } else if (currentLead?.phone) {
-                      const cleanNumber = currentLead.phone.replace(/\D/g, '');
-                      const whatsappUrl = `https://wa.me/${cleanNumber}`;
-                      window.open(whatsappUrl, '_blank');
+                    } else {
+                      // Support both phone and phone_no fields
+                      const phoneNumber = currentLead?.phone_no || currentLead?.phone;
+                      if (phoneNumber) {
+                        const cleanNumber = phoneNumber.replace(/\D/g, '');
+                        const whatsappUrl = `https://wa.me/${cleanNumber}`;
+                        window.open(whatsappUrl, '_blank');
+                      }
                     }
                   }}
                 >
                   <Phone className="h-3 w-3 mr-2 text-primary" />
-                  <span className="font-medium text-sm">{formatPhoneNumber(currentLead?.phone) || "N/A"}</span>
+                  <span className="font-medium text-sm">{formatPhoneNumber(currentLead?.phone_no || currentLead?.phone) || "N/A"}</span>
                 </div>
 
                 {/* RM Dashboard Link */}
@@ -565,7 +571,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 <div className="text-sm bg-muted/50 p-2 rounded-md">
                   <span className="text-muted-foreground">Last Active: </span>
                   <span className="font-medium">
-                    {currentLead?.last_active_date ? new Date(currentLead.last_active_date).toLocaleDateString("en-US", {
+                    {currentLead?.last_active_date_time || currentLead?.last_active_date ? new Date(currentLead.last_active_date_time || currentLead.last_active_date).toLocaleDateString("en-US", {
                       year: "numeric",
                       month: "short",
                       day: "numeric",

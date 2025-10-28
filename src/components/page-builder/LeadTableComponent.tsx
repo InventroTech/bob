@@ -158,6 +158,9 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     // Always include user_profile_link for User ID clickability
     transformedLead.user_profile_link = lead.data?.user_profile_link || lead.user_profile_link || '#';
     
+    // Always include whatsapp_link for phone number clickability
+    transformedLead.whatsapp_link = lead.data?.whatsapp_link || lead.whatsapp_link || '';
+    
     return transformedLead;
   }
   
@@ -169,6 +172,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     user_id: lead.data?.user_id || lead.id || 'N/A',
     affiliated_party: lead.data?.affiliated_party || 'N/A',
     phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
+    whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
     user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
   };
 };
@@ -532,6 +536,52 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       );
     }
     
+    // Special handling: Make phone_number/phone_no clickable if whatsapp_link exists
+    const isPhoneColumn = column.accessor === 'phone_number' || 
+                          column.accessor === 'phone_no' || 
+                          column.accessor === 'phone' ||
+                          column.header.toLowerCase().includes('phone');
+    
+    if (isPhoneColumn) {
+      // Check if whatsapp link exists
+      if (row.whatsapp_link && row.whatsapp_link !== 'N/A' && row.whatsapp_link !== '' && row.whatsapp_link !== '#') {
+        return (
+          <a
+            href={row.whatsapp_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+            title="Click to open WhatsApp"
+          >
+            <MessageCircle className="h-3 w-3" />
+            <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+          </a>
+        );
+      }
+      // If no whatsapp link, generate one from phone number
+      if (displayValue && displayValue !== 'N/A' && displayValue !== '') {
+        const cleanNumber = displayValue.replace(/\D/g, '');
+        if (cleanNumber.length >= 10) {
+          const whatsappUrl = `https://wa.me/${cleanNumber}`;
+          return (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors cursor-pointer"
+              onClick={(e) => e.stopPropagation()}
+              title="Click to open WhatsApp"
+            >
+              <MessageCircle className="h-3 w-3" />
+              <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+            </a>
+          );
+        }
+      }
+      // If no valid phone number, fall through to default text rendering below
+    }
+    
     // Special handling for columns with configured linkField
     if (column.linkField && row[column.linkField] && row[column.linkField] !== '#' && row[column.linkField] !== 'N/A') {
       return (
@@ -596,7 +646,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     if (filterOptions.sources.length > 0) {
       return filterOptions.sources;
     }
-    const sources = [...new Set(data.map(lead => lead.data?.source).filter(Boolean))];
+    const sources = [...new Set(data.map(lead => lead.data?.lead_source || lead.data?.source).filter(Boolean))];
     return sources;
   };
 
@@ -1146,7 +1196,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
 
         // Extract unique sources for filter
-        const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.lead_source).filter(Boolean))];
+        const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.lead_source || lead.source).filter(Boolean))];
         setFilterOptions(prev => ({
           ...prev,
           sources: uniqueSources as string[]
