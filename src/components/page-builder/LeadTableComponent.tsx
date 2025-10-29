@@ -161,6 +161,9 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     // Always include whatsapp_link for phone number clickability
     transformedLead.whatsapp_link = lead.data?.whatsapp_link || lead.whatsapp_link || '';
     
+    // Always include poster field from records JSONB data
+    transformedLead.poster = lead.data?.poster || lead.poster || null;
+    
     return transformedLead;
   }
   
@@ -174,6 +177,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
     whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
     user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
+    poster: lead.data?.poster || lead.poster || null, // Add poster field from records JSONB data
   };
 };
 

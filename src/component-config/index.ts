@@ -6,4 +6,5 @@ export { AdvancedChartConfig } from './AdvancedChartConfig';
 export { DynamicFilterConfig } from './DynamicFilterConfig';
 export { TicketCarouselConfig } from '../components/page-builder/component-config/TicketCarouselConfig';
 export { TicketTableConfig } from '../components/page-builder/component-config/TicketTableConfig';
-export { LeadCardCarouselConfig } from '../components/page-builder/component-config/LeadCardCarouselConfig'; 
+export { LeadCardCarouselConfig } from '../components/page-builder/component-config/LeadCardCarouselConfig';
+export { LeadAssignmentConfig } from '../components/page-builder/component-config/LeadAssignmentConfig'; 
