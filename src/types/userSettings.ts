@@ -38,19 +38,9 @@ export interface UserLeadTypes {
   lead_types: string[];
 }
 
-// Available Lead Types (you can customize these based on your business needs)
-export const AVAILABLE_LEAD_TYPES = [
-  'PREMIUM_LEADS',
-  'STANDARD_LEADS', 
-  'BASIC_LEADS',
-  'ENTERPRISE_LEADS',
-  'SME_LEADS',
-  'STARTUP_LEADS',
-  'RETAIL_LEADS',
-  'WHOLESALE_LEADS'
-] as const;
-
-export type LeadType = typeof AVAILABLE_LEAD_TYPES[number];
+// Lead types are now dynamically fetched from records' poster field
+// No hardcoded lead types - they are fetched from the backend
+export type LeadType = string;
 
 // API Response Types
 export interface ApiResponse<T> {

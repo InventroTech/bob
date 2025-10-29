@@ -33,23 +33,60 @@ export function useTenant(): TenantContext {
         setTenantId(tenantData.tenant_id);
         setRole(tenantData.role as 'owner' | 'editor' | 'viewer');
         
-        // Fetch custom role from users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select(`
-            role_id,
-            roles(name)
-          `)
-          .eq('uid', user.id)
-          .single();
+        // Fetch custom role from backend API (uses TenantMembership - source of truth)
+        // This ensures frontend role matches what backend permissions check against
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authToken = sessionData?.session?.access_token;
         
-        console.log('useTenant: User data:', userData, 'Error:', userError);
-        
-        if (!userError && userData?.roles) {
-          console.log('useTenant: Setting custom role:', (userData.roles as any).name);
-          setCustomRole((userData.roles as any).name);
-        } else {
-          console.log('useTenant: No custom role found or error occurred');
+        if (authToken) {
+          try {
+            const baseUrlClean = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+            const roleResponse = await fetch(`${baseUrlClean}/membership/me/role`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+                'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              }
+            });
+            
+            if (roleResponse.ok) {
+              const roleData = await roleResponse.json();
+              if (roleData.role_key) {
+                console.log('useTenant: Setting custom role from backend:', roleData.role_key);
+                setCustomRole(roleData.role_key);
+              } else {
+                console.log('useTenant: No role_key in backend response');
+              }
+            } else {
+              console.log('useTenant: Failed to fetch role from backend:', roleResponse.status);
+              // Fallback to Supabase if backend fails
+              const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select(`role_id, roles(name)`)
+                .eq('uid', user.id)
+                .single();
+              
+              if (!userError && userData?.roles) {
+                console.log('useTenant: Fallback - Setting custom role from Supabase:', (userData.roles as any).name);
+                setCustomRole((userData.roles as any).name);
+              }
+            }
+          } catch (error) {
+            console.error('useTenant: Error fetching role from backend:', error);
+            // Fallback to Supabase on error
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select(`role_id, roles(name)`)
+              .eq('uid', user.id)
+              .single();
+            
+            if (!userError && userData?.roles) {
+              console.log('useTenant: Fallback - Setting custom role from Supabase:', (userData.roles as any).name);
+              setCustomRole((userData.roles as any).name);
+            }
+          }
         }
       } else {
         console.log('useTenant: No tenant data found or error occurred');

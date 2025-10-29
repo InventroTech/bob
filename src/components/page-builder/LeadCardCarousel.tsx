@@ -217,7 +217,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setPopoverOpen(false);
       
       const endpoint = config?.apiEndpoint || "/api/leads";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}?assign=false`;
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
