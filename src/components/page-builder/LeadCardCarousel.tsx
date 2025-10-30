@@ -327,8 +327,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     // For Not Connected, send call_later event with user's notes
     if (action === "Not Connected") {
-      try {
-        setUpdating(true);
+    try {
+      setUpdating(true);
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (!token) throw new Error("Authentication required");
@@ -355,22 +355,22 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
         toast({ title: "Success", description: "Sent: Not Connected", variant: "default" });
-        await fetchFirstLead();
+      await fetchFirstLead();
       } catch (error: any) {
         console.error("Error sending not connected event:", error);
         toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
-      } finally {
-        setUpdating(false);
-      }
-      return;
+    } finally {
+      setUpdating(false);
     }
+        return;
+      }
 
     // For Won/Lost, send events to backend as specified
     if (action === "Won" || action === "Lost") {
       try {
-        setUpdating(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
         if (!token) throw new Error("Authentication required");
 
         const base = import.meta.env.VITE_RENDER_API_URL;
@@ -888,29 +888,29 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
           </div>
           
-          <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
-            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
-                onClick={() => handleActionButton("Not Connected")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={updating}
-              >
-                Not Connected
-              </Button>
-              
+            <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
+              <div className="flex justify-center items-center gap-3 mt-4 pt-3">
+                <Button
+                  onClick={() => handleActionButton("Not Connected")}
+                  size="sm"
+                  variant="outline"
+                  className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating}
+                >
+                  Not Connected
+                </Button>
+                
               {/* Call Later with DateTime Picker */}
               <Dialog open={popoverOpen} onOpenChange={setPopoverOpen}>
                 <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={updating}
-                  >
-                    Call Later
-                  </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating}
+                >
+                  Call Later
+                </Button>
                 </DialogTrigger>
                 <DialogContent className="w-auto p-4 max-w-fit">
                   <div className="space-y-6">
@@ -924,28 +924,40 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                           disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                           initialFocus
                         />
-                      </div>
+              </div>
                       <div className="space-y-3">
                       <Label className="text-base font-semibold">Select Time</Label>
-                      <div className="flex items-center justify-center p-4">
-                        <div className="relative w-64 h-64">
+                        <div className="flex items-center justify-center p-2">
+                          <div className="relative w-48 h-48">
                           {/* Analog Clock */}
-                          <svg className="w-64 h-64" viewBox="0 0 200 200">
+                            <svg className="w-48 h-48" viewBox="0 0 200 200">
                             {/* Clock circle - white background */}
-                            <circle cx="100" cy="100" r="95" fill="white" stroke="rgb(102, 51, 153)" strokeWidth="3"/>
+                              <circle cx="100" cy="100" r="95" fill="white" stroke="rgb(102, 51, 153)" strokeWidth="2"/>
                             
-                            {/* Hour marker dots */}
-                            {Array.from({ length: 12 }).map((_, i) => {
-                              const angle = (i * 30 - 90) * (Math.PI / 180);
-                              const x = 100 + 85 * Math.cos(angle);
-                              const y = 100 + 85 * Math.sin(angle);
-                              return (
-                                <circle key={i} cx={x} cy={y} r="3" fill="rgb(102, 51, 153)"/>
-                              );
-                            })}
+                              {/* Hour markers as numbers 1–12 */}
+                              {Array.from({ length: 12 }).map((_, i) => {
+                                const angle = (i * 30 - 90) * (Math.PI / 180);
+                                const radius = 78; // slightly inward from the circle edge
+                                const x = 100 + radius * Math.cos(angle);
+                                const y = 100 + radius * Math.sin(angle);
+                                const num = i === 0 ? 12 : i;
+                                return (
+                                  <text
+                                    key={i}
+                                    x={x}
+                                    y={y}
+                                    fontSize="10"
+                                    fill="rgb(102, 51, 153)"
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                  >
+                                    {num}
+                                  </text>
+                                );
+                              })}
                             
                             {/* Show only the active hand */}
-                            {clockMode === 'minute' && (
+                              {clockMode === 'minute' && (
                               /* Minute hand */
                               <line
                                 x1="100"
@@ -953,11 +965,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 x2={100 + 70 * Math.cos((selectedMinute * 6 - 90) * (Math.PI / 180))}
                                 y2={100 + 70 * Math.sin((selectedMinute * 6 - 90) * (Math.PI / 180))}
                                 stroke="rgb(102, 51, 153)"
-                                strokeWidth="4"
+                                  strokeWidth="3"
                                 strokeLinecap="round"
                               />
                             )}
-                            {clockMode === 'hour' && (
+                              {clockMode === 'hour' && (
                               /* Hour hand */
                               <line
                                 x1="100"
@@ -965,13 +977,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 x2={100 + 50 * Math.cos(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
                                 y2={100 + 50 * Math.sin(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
                                 stroke="rgb(102, 51, 153)"
-                                strokeWidth="6"
+                                  strokeWidth="4"
                                 strokeLinecap="round"
                               />
                             )}
                             
                             {/* Center dot */}
-                            <circle cx="100" cy="100" r="6" fill="rgb(102, 51, 153)"/>
+                              <circle cx="100" cy="100" r="4" fill="rgb(102, 51, 153)"/>
                           </svg>
                           
                           {/* Invisible overlay for dragging */}
@@ -1164,39 +1176,39 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 </DialogContent>
               </Dialog>
               
-              <Button
-                onClick={() => handleActionButton("Lost")}
-                size="sm"
-                variant="outline"
+                <Button
+                  onClick={() => handleActionButton("Lost")}
+                  size="sm"
+                  variant="outline"
                 className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
-              >
-                Lost
-              </Button>
-              
-              <Button
-                onClick={() => handleActionButton("Won")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                disabled={updating || fetchingNext}
-              >
-                {updating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Updating...
-                  </>
-                ) : fetchingNext ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Loading Next Lead...
-                  </>
-                ) : (
-                  "Won"
-                )}
-              </Button>
+                >
+                  Lost
+                </Button>
+                
+                <Button
+                  onClick={() => handleActionButton("Won")}
+                  size="sm"
+                  variant="outline"
+                  className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={updating || fetchingNext}
+                >
+                  {updating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                      Updating...
+                    </>
+                  ) : fetchingNext ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                      Loading Next Lead...
+                    </>
+                  ) : (
+                    "Won"
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
         </div>
       </div>
       
