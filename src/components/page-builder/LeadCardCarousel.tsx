@@ -466,6 +466,70 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
+  const buildNextCallISO = (): string | null => {
+    if (!selectedDate) return null;
+    let hour24 = selectedHour % 12;
+    hour24 = isAM ? hour24 : hour24 + 12;
+    const dt = new Date(selectedDate);
+    dt.setHours(hour24, selectedMinute, 0, 0);
+    try {
+      return dt.toISOString();
+    } catch {
+      return null;
+    }
+  };
+
+  const handleScheduleCall = async () => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
+    const nextCallIso = buildNextCallISO();
+    if (!nextCallIso) {
+      toast({ title: "Missing time", description: "Select date and time before scheduling.", variant: "destructive" });
+      return;
+    }
+    try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      const base = import.meta.env.VITE_RENDER_API_URL;
+      const url = `${base}/crm-records/records/events/`;
+      const body = {
+        event: "lead.call_scheduled",
+        record_id: currentLead.id,
+        payload: {
+          next_call_at: nextCallIso,
+        },
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      toast({ title: "Scheduled!", description: "Call scheduled successfully.", variant: "default" });
+      setPopoverOpen(false);
+      setSelectedDate(undefined);
+      setSelectedHour(12);
+      setSelectedMinute(0);
+      await fetchFirstLead();
+    } catch (error: any) {
+      console.error("Error sending schedule event:", error);
+      toast({ title: "Error", description: error.message || "Failed to schedule call", variant: "destructive" });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleCloseProfile = () => {
     setShowProfileModal(false);
   };
@@ -1080,22 +1144,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       </div>
                     )}
                     <Button
-                      onClick={() => {
-                        if (selectedDate) {
-                          const selectedDateTime = new Date(selectedDate);
-                          selectedDateTime.setHours(selectedHour, selectedMinute);
-                          setLead(prev => ({ ...prev, nextFollowUp: selectedDateTime.toISOString() }));
-                          handleActionButton("Call Later");
-                          toast({
-                            title: "Scheduled!",
-                            description: `Call scheduled for ${format(selectedDateTime, "PPP")} at ${format(selectedDateTime, "p")}`,
-                            variant: "default",
-                          });
-                          setSelectedDate(undefined);
-                          setSelectedHour(12);
-                          setSelectedMinute(0);
-                        }
-                      }}
+                      onClick={handleScheduleCall}
                       className="w-full"
                       disabled={!selectedDate}
                     >
