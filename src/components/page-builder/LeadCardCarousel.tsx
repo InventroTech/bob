@@ -319,6 +319,58 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     });
   };
 
+  // Reusable helper to post CRM events
+  const sendLeadEvent = async (
+    eventName: string,
+    payload: Record<string, any>,
+    options: { successTitle?: string; successDescription?: string } = {}
+  ): Promise<boolean> => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return false;
+    }
+    try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      const base = import.meta.env.VITE_RENDER_API_URL;
+      const url = `${base}/crm-records/records/events/`;
+      const body = {
+        event: eventName,
+        record_id: currentLead.id,
+        payload,
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      if (options.successTitle || options.successDescription) {
+        toast({
+          title: options.successTitle || "Success",
+          description: options.successDescription || "Event sent successfully.",
+          variant: "default",
+        });
+      }
+      return true;
+    } catch (error: any) {
+      console.error("Error sending event:", error);
+      toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
+      return false;
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
     if (!currentLead?.id) {
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
@@ -327,81 +379,33 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     // For Not Connected, send call_later event with user's notes
     if (action === "Not Connected") {
-    try {
-      setUpdating(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) throw new Error("Authentication required");
-
-        const base = import.meta.env.VITE_RENDER_API_URL;
-        const url = `${base}/crm-records/records/events/`;
-        const body = {
-          event: "lead.call_later_clicked",
-          record_id: currentLead.id,
-          payload: {
-            latest_remarks: lead.notes || "",
-          },
-        };
-
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-        toast({ title: "Success", description: "Sent: Not Connected", variant: "default" });
-      await fetchFirstLead();
-      } catch (error: any) {
-        console.error("Error sending not connected event:", error);
-        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
-    } finally {
-      setUpdating(false);
+      const ok = await sendLeadEvent(
+        "lead.call_later_clicked",
+        {
+          notes: lead.notes || "",
+          remarks: currentLead.latest_remarks,
+          lead_id: currentLead.id,
+          user_id: currentLead.user_id,
+        },
+        { successTitle: "Success", successDescription: "Sent: Not Connected" }
+      );
+      if (ok) await fetchFirstLead();
+      return;
     }
-        return;
-      }
 
     // For Won/Lost, send events to backend as specified
     if (action === "Won" || action === "Lost") {
-      try {
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-        if (!token) throw new Error("Authentication required");
-
-        const base = import.meta.env.VITE_RENDER_API_URL;
-        const url = `${base}/crm-records/records/events/`;
-        const body = {
-          event: action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
-          record_id: currentLead.id,
-          payload: {
-            latest_remarks: action === "Won" ? "I just love praja's product" : "I just hate praja's product",
-          },
-        };
-
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-        toast({ title: "Success", description: `Sent: ${action}`, variant: "default" });
-        await fetchFirstLead();
-      } catch (error: any) {
-        console.error("Error sending event:", error);
-        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
-      } finally {
-        setUpdating(false);
-      }
+      const ok = await sendLeadEvent(
+        action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
+        {
+          notes: lead.notes,
+          remarks: currentLead.latest_remarks,
+          lead_id: currentLead.id,
+          user_id: currentLead.user_id,
+        },
+        { successTitle: "Success", successDescription: `Sent: ${action}` }
+      );
+      if (ok) await fetchFirstLead();
       return;
     }
 
@@ -424,45 +428,18 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
       return;
     }
-    try {
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Authentication required");
-
-      const base = import.meta.env.VITE_RENDER_API_URL;
-      const url = `${base}/crm-records/records/events/`;
-      const body = {
-        event: "agent.take_break",
-        record_id: currentLead.id,
-        payload: {
-          latest_remarks: "Man i am taking break",
-        },
-      };
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      toast({ title: "Taking break!", description: "", variant: "default" });
+    const ok = await sendLeadEvent(
+      "agent.take_break",
+      { notes: lead.notes },
+      { successTitle: "Taking break!", successDescription: "" }
+    );
+    if (ok) {
       // Return to landing (pending) screen
       setShowPendingCard(true);
       setCurrentLead(null);
       resetLeadState();
       isInitialized.current = false;
       await fetchLeadStats();
-    } catch (error: any) {
-      console.error("Error sending break event:", error);
-      toast({ title: "Error", description: error.message || "Failed to send break event", variant: "destructive" });
-    } finally {
-      setUpdating(false);
     }
   };
 
@@ -489,44 +466,23 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       toast({ title: "Missing time", description: "Select date and time before scheduling.", variant: "destructive" });
       return;
     }
-    try {
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Authentication required");
-
-      const base = import.meta.env.VITE_RENDER_API_URL;
-      const url = `${base}/crm-records/records/events/`;
-      const body = {
-        event: "lead.call_scheduled",
-        record_id: currentLead.id,
-        payload: {
-          next_call_at: nextCallIso,
-        },
-      };
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      toast({ title: "Scheduled!", description: "Call scheduled successfully.", variant: "default" });
+    const ok = await sendLeadEvent(
+      "lead.call_scheduled",
+      {
+        next_call_at: nextCallIso,
+        notes: lead.notes,
+        remarks: currentLead.latest_remarks,
+        lead_id: currentLead.id,
+        user_id: currentLead.user_id,
+      },
+      { successTitle: "Scheduled!", successDescription: "Call scheduled successfully." }
+    );
+    if (ok) {
       setPopoverOpen(false);
       setSelectedDate(undefined);
       setSelectedHour(12);
       setSelectedMinute(0);
       await fetchFirstLead();
-    } catch (error: any) {
-      console.error("Error sending schedule event:", error);
-      toast({ title: "Error", description: error.message || "Failed to schedule call", variant: "destructive" });
-    } finally {
-      setUpdating(false);
     }
   };
 
@@ -855,35 +811,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   placeholder="Add notes or remarks about this lead..."
                   className="min-h-[80px]"
                 />
-                {lead.notes && (
-                  <Button
-                    onClick={async () => {
-                      try {
-                        setUpdating(true);
-                        // TODO: Implement API call to save notes
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        toast({
-                          title: "Success",
-                          description: "Notes saved successfully!",
-                          variant: "default",
-                        });
-                      } catch (error) {
-                        toast({
-                          title: "Error",
-                          description: "Failed to save notes",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setUpdating(false);
-                      }
-                    }}
-                    size="sm"
-                    className="w-full"
-                    disabled={updating}
-                  >
-                    {updating ? "Saving..." : "Save Notes"}
-                  </Button>
-                )}
               </div>
             </div>
           </div>
