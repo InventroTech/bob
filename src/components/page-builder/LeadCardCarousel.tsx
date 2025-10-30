@@ -992,6 +992,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 hour += isAM ? 0 : 12;
                                 if (hour === 12 && isAM) hour = 0;
                                 setSelectedHour(hour);
+                                // Auto-advance to minute selection after hour set
+                                setClockMode('minute');
                               } else {
                                 let minute = Math.round(angle / 6) % 60;
                                 if (minute < 0) minute += 60;
@@ -1020,6 +1022,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 }
                               }
                             }}
+                            onMouseUp={() => {
+                              if (clockMode === 'hour') setClockMode('minute');
+                            }}
                             onTouchStart={(e) => {
                               const rect = e.currentTarget.getBoundingClientRect();
                               const centerX = rect.left + rect.width / 2;
@@ -1035,6 +1040,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 hour += isAM ? 0 : 12;
                                 if (hour === 12 && isAM) hour = 0;
                                 setSelectedHour(hour);
+                                // Auto-advance to minute selection after hour set
+                                setClockMode('minute');
                               } else {
                                 let minute = Math.round(angle / 6) % 60;
                                 if (minute < 0) minute += 60;
@@ -1062,6 +1069,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 if (minute < 0) minute += 60;
                                 setSelectedMinute(minute);
                               }
+                            }}
+                            onTouchEnd={() => {
+                              if (clockMode === 'hour') setClockMode('minute');
                             }}
                           />
                         </div>
