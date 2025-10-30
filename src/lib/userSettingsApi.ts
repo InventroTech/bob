@@ -9,7 +9,7 @@ import {
   LeadTypeAssignmentResponse
 } from '../types/userSettings';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
 
 // User Settings API functions
 export const userSettingsApi = {
@@ -102,53 +102,88 @@ export const userSettingsApi = {
 // Lead Type Assignment API functions
 export const leadTypeAssignmentApi = {
   // Get all lead type assignments for the tenant (GM only)
-  async getAll(): Promise<LeadTypeAssignment[]> {
-    console.log('Fetching RMs from Supabase database...');
+  async getAll(rmsEndpoint?: string): Promise<LeadTypeAssignment[]> {
+    let rmUsers: any[] = [];
     
     try {
-      // Use direct Supabase query to see all available fields
-      const { data: allUsers, error } = await supabase
-        .from('users' as any)
-        .select('id, name, email, role_id, uid');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authToken = sessionData?.session?.access_token;
+      const baseUrl = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
+      
+      // Use the dedicated endpoint for fetching RMs
+      const endpoint = rmsEndpoint || '/accounts/users/assignees-by-role/?role=RM';
+      const apiUrl = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
 
-      console.log('All users data:', allUsers);
-      console.log('Sample user structure:', allUsers?.[0]);
+      console.log('Fetching RMs from API endpoint:', apiUrl);
 
-      // Get RM role ID first
-      const { data: rmRole, error: roleError } = await supabase
-        .from('roles' as any)
-        .select('id')
-        .eq('name', 'RM')
-        .single();
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        }
+      });
 
-      if (roleError) {
-        console.error('Error fetching RM role:', roleError);
-        throw new Error(`Failed to fetch RM role: ${roleError.message}`);
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Access denied: GM role required to access lead type assignments');
+        }
+        throw new Error(`Failed to fetch users: ${response.statusText}`);
       }
 
-      // Filter for RMs only using role_id
-      const rmUsers = (allUsers || []).filter((user: any) => user.role_id === rmRole?.id);
-
-      console.log('RM users found:', rmUsers.length);
-      console.log('RM users data:', rmUsers);
-
-      // Get existing lead type assignments from user_settings
-      const { data: settings, error: settingsError } = await supabase
-        .from('user_settings')
-        .select('user_id, value')
-        .eq('key', 'LEAD_TYPE_ASSIGNMENT');
-
-      if (settingsError) {
-        console.error('Error fetching lead type assignments:', settingsError);
-        // Continue without assignments - they'll be empty
+      const responseData = await response.json();
+      
+      // The endpoint returns { count: number, results: [...] }
+      let usersData = [];
+      if (responseData.results && Array.isArray(responseData.results)) {
+        usersData = responseData.results;
+      } else if (responseData.data && Array.isArray(responseData.data)) {
+        usersData = responseData.data;
+      } else if (Array.isArray(responseData)) {
+        usersData = responseData;
       }
 
-      // Create a map of user UUID to lead_types
+      // Transform API user format to match expected format
+      // The endpoint already filters for RM role, so all returned users are RMs
+      rmUsers = usersData.map((user: any) => ({
+        id: user.id,
+        name: user.name || '',
+        email: user.email || '',
+        role_id: user.role_id,
+        uid: user.uid || user.id // Use uid if available, fallback to id
+      }));
+
+      console.log('RM users found from API:', rmUsers.length);
+
+      // Get existing lead type assignments from backend API
       const assignmentsMap = new Map();
-      if (settings) {
-        settings.forEach((setting: any) => {
-          assignmentsMap.set(setting.user_id, setting.value || []);
+      try {
+        const baseUrlClean = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+        const assignmentsUrl = `${baseUrlClean}/user-settings/lead-type-assignments/`;
+        const assignmentsResponse = await fetch(assignmentsUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authToken ? `Bearer ${authToken}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          }
         });
+
+        if (assignmentsResponse.ok) {
+          const assignmentsData = await assignmentsResponse.json();
+          // The endpoint returns an array of assignments with user_id and lead_types
+          if (Array.isArray(assignmentsData)) {
+            assignmentsData.forEach((assignment: any) => {
+              assignmentsMap.set(assignment.user_id, assignment.lead_types || []);
+            });
+          }
+        } else {
+          console.warn('Failed to fetch lead type assignments from API, continuing without them');
+        }
+      } catch (error) {
+        console.error('Error fetching lead type assignments:', error);
+        // Continue without assignments - they'll be empty
       }
 
       // Transform to LeadTypeAssignment format
@@ -169,93 +204,45 @@ export const leadTypeAssignmentApi = {
   },
 
   // Assign lead types to a user (GM only)
-  async assign(data: LeadTypeAssignmentRequest): Promise<LeadTypeAssignmentResponse> {
-    console.log('Saving lead type assignment to Supabase...');
+  async assign(data: LeadTypeAssignmentRequest, endpoint?: string): Promise<LeadTypeAssignmentResponse> {
+    console.log('Saving lead type assignment via API...');
     
     try {
-      // Get the user data including tenant_id and uid
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('tenant_id, uid, id')
-        .eq('id', data.user_id)
-        .single();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authToken = sessionData?.session?.access_token;
+      const baseUrl = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
+      const assignmentsEndpoint = endpoint || '/user-settings/lead-type-assignments/';
+      const assignmentsUrl = `${baseUrl}${assignmentsEndpoint}`;
 
-      if (userError || !userData) {
-        console.error('Error fetching user data:', userError);
-        console.error('Looking for user with id:', data.user_id);
-        throw new Error(`Failed to get user data: ${userError?.message || 'User not found'}`);
+      const response = await fetch(assignmentsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        },
+        body: JSON.stringify({
+          user_id: data.user_id,
+          lead_types: data.lead_types
+        })
+      });
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Access denied: GM role required to assign lead types');
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Failed to save lead type assignment: ${errorData.error || response.statusText}`);
       }
 
-      console.log('User data:', userData);
-      
-      if (!userData.uid) {
-        console.error('No uid found for user:', data.user_id);
-        console.error('Available fields:', Object.keys(userData));
-        throw new Error('User UUID not found - uid field is missing');
-      }
-
-      console.log('Using uid:', userData.uid);
-      
-      // Check if the setting already exists
-      const { data: existingSetting, error: checkError } = await supabase
-        .from('user_settings')
-        .select('id')
-        .eq('user_id', userData.uid)
-        .eq('key', 'LEAD_TYPE_ASSIGNMENT')
-        .eq('tenant_id', userData.tenant_id)
-        .single();
-
-      let result, error;
-
-      if (existingSetting) {
-        // Update existing setting
-        const { data: updateResult, error: updateError } = await supabase
-          .from('user_settings')
-          .update({
-            value: data.lead_types,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingSetting.id);
-        
-        result = updateResult;
-        error = updateError;
-      } else {
-        // Insert new setting
-        const { data: insertResult, error: insertError } = await supabase
-          .from('user_settings')
-          .insert({
-            user_id: userData.uid,
-            key: 'LEAD_TYPE_ASSIGNMENT',
-            value: data.lead_types,
-            tenant_id: userData.tenant_id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        
-        result = insertResult;
-        error = insertError;
-      }
-
-      if (error) {
-        console.error('Error saving lead type assignment:', error);
-        throw new Error(`Failed to save lead type assignment: ${error.message}`);
-      }
-
+      const result = await response.json();
       console.log('Lead type assignment saved successfully:', result);
 
-      // Get user name for response
-      const { data: userNameData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', data.user_id)
-        .single();
-
-      // Return the assignment data
       return {
-        user_id: data.user_id,
-        user_name: userNameData?.name || 'Unknown',
-        lead_types: data.lead_types,
-        created: true
+        user_id: result.user_id || data.user_id,
+        user_name: result.user_name || 'Unknown',
+        lead_types: result.lead_types || data.lead_types,
+        created: result.created || false
       };
     } catch (error: any) {
       console.error('Error in assign:', error);
@@ -266,40 +253,79 @@ export const leadTypeAssignmentApi = {
   // Get lead types assigned to a specific user
   async getUserLeadTypes(userId: string): Promise<UserLeadTypes> {
     try {
-      // Get the user's uid first
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('uid')
-        .eq('id', userId)
-        .single();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authToken = sessionData?.session?.access_token;
+      const baseUrl = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
+      const userLeadTypesUrl = `${baseUrl}/user-settings/users/${userId}/lead-types/`;
 
-      if (userError || !userData) {
-        throw new Error(`User not found: ${userError?.message || 'Unknown error'}`);
+      const response = await fetch(userLeadTypesUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // User has no lead types assigned - return empty array
+          return {
+            user_id: userId,
+            lead_types: []
+          };
+        }
+        throw new Error(`Failed to fetch lead types: ${response.statusText}`);
       }
 
-      if (!userData.uid) {
-        throw new Error('User UUID not found - uid field is missing');
-      }
-
-      // Get lead types from user_settings using the uid
-      const { data: setting, error: settingError } = await supabase
-        .from('user_settings')
-        .select('value')
-        .eq('user_id', userData.uid)
-        .eq('key', 'LEAD_TYPE_ASSIGNMENT')
-        .single();
-
-      if (settingError && settingError.code !== 'PGRST116') { // PGRST116 = no rows returned
-        throw new Error(`Failed to fetch lead types: ${settingError.message}`);
-      }
-
+      const result = await response.json();
       return {
-        user_id: userId,
-        lead_types: setting?.value || []
+        user_id: result.user_id || userId,
+        lead_types: result.lead_types || []
       };
     } catch (error: any) {
       console.error('Error in getUserLeadTypes:', error);
       throw error;
+    }
+  },
+
+  // Get available lead types from records' poster field
+  async getAvailableLeadTypes(endpoint?: string): Promise<string[]> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authToken = sessionData?.session?.access_token;
+      const baseUrl = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
+      
+      // Use the dedicated lead types endpoint if no custom endpoint is provided
+      const leadTypesEndpoint = endpoint || '/user-settings/lead-types/';
+      const apiUrl = `${baseUrl}${leadTypesEndpoint}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch lead types: ${response.statusText}`);
+      }
+
+      const responseData = await response.json();
+      
+      // The endpoint returns { "lead_types": [...] }
+      if (responseData.lead_types && Array.isArray(responseData.lead_types)) {
+        return responseData.lead_types;
+      }
+      
+      // Fallback: return empty array if format is unexpected
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching available lead types:', error);
+      // Return empty array on error
+      return [];
     }
   },
 };

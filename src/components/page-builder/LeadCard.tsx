@@ -664,7 +664,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     try {
       setLoading(true);
       const endpoint = config?.apiEndpoint || "/api/leads";
-      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?assign=false`;
+      const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 

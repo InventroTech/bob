@@ -107,7 +107,8 @@ import {
   AdvancedChartConfig,
   DynamicFilterConfig,
   TicketCarouselConfig,
-  LeadCardCarouselConfig
+  LeadCardCarouselConfig,
+  LeadAssignmentConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
@@ -154,6 +155,9 @@ interface ComponentConfig {
   maxJobs?: number;
   // JobsPage specific fields
   allowApplications?: boolean;
+  // LeadAssignment specific fields
+  leadTypesEndpoint?: string;
+  rmsEndpoint?: string;
 }
 
 // Update CanvasComponentData to include config
@@ -589,6 +593,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           <ApplicantTableConfigComponent
             config={localConfig as any}
             onConfigChange={(key: any, value: any) => handleInputChange(key, value)}
+          />
+        );
+
+      case 'leadAssignment':
+        return (
+          <LeadAssignmentConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
           />
         );
 
