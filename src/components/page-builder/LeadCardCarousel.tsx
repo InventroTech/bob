@@ -325,6 +325,46 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       return;
     }
 
+    // For Not Connected, send call_later event with user's notes
+    if (action === "Not Connected") {
+      try {
+        setUpdating(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) throw new Error("Authentication required");
+
+        const base = import.meta.env.VITE_RENDER_API_URL;
+        const url = `${base}/crm-records/records/events/`;
+        const body = {
+          event: "lead.call_later_clicked",
+          record_id: currentLead.id,
+          payload: {
+            latest_remarks: lead.notes || "",
+          },
+        };
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        toast({ title: "Success", description: "Sent: Not Connected", variant: "default" });
+        await fetchFirstLead();
+      } catch (error: any) {
+        console.error("Error sending not connected event:", error);
+        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
+      } finally {
+        setUpdating(false);
+      }
+      return;
+    }
+
     // For Won/Lost, send events to backend as specified
     if (action === "Won" || action === "Lost") {
       try {
