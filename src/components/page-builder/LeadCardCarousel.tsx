@@ -290,11 +290,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       isInitialized.current = true;
       await fetchLeadStats();
-      toast({
-        title: "Success",
-        description: "Lead loaded successfully!",
-        variant: "default",
-      });
+      
     } catch (error) {
       console.error("Error fetching lead:", error);
       toast({
@@ -324,40 +320,214 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
   const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
-    if (!currentLead) return;
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
 
+    // For Not Connected, send call_later event with user's notes
+    if (action === "Not Connected") {
     try {
       setUpdating(true);
-      
-      // Simulate API call
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) throw new Error("Authentication required");
+
+        const base = import.meta.env.VITE_RENDER_API_URL;
+        const url = `${base}/crm-records/records/events/`;
+        const body = {
+          event: "lead.call_later_clicked",
+          record_id: currentLead.id,
+          payload: {
+            latest_remarks: lead.notes || "",
+          },
+        };
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        toast({ title: "Success", description: "Sent: Not Connected", variant: "default" });
+      await fetchFirstLead();
+      } catch (error: any) {
+        console.error("Error sending not connected event:", error);
+        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
+    } finally {
+      setUpdating(false);
+    }
+        return;
+      }
+
+    // For Won/Lost, send events to backend as specified
+    if (action === "Won" || action === "Lost") {
+      try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+        if (!token) throw new Error("Authentication required");
+
+        const base = import.meta.env.VITE_RENDER_API_URL;
+        const url = `${base}/crm-records/records/events/`;
+        const body = {
+          event: action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
+          record_id: currentLead.id,
+          payload: {
+            latest_remarks: action === "Won" ? "I just love praja's product" : "I just hate praja's product",
+          },
+        };
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        toast({ title: "Success", description: `Sent: ${action}`, variant: "default" });
+        await fetchFirstLead();
+      } catch (error: any) {
+        console.error("Error sending event:", error);
+        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
+      } finally {
+        setUpdating(false);
+      }
+      return;
+    }
+
+    // Default behavior for other actions stays as-is (simulated)
+    try {
+      setUpdating(true);
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Success",
-        description: `Lead marked as: ${action}`,
-        variant: "default",
-      });
-      
-      // Move to next lead
+      toast({ title: "Success", description: `Lead marked as: ${action}`, variant: "default" });
       await fetchFirstLead();
     } catch (error) {
       console.error("Error updating lead:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update lead. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update lead. Please try again.", variant: "destructive" });
     } finally {
       setUpdating(false);
     }
   };
 
-  const handleTakeBreak = () => {
-    toast({
-      title: "Info",
-      description: "Break time! Your progress has been saved.",
-      variant: "default",
-    });
+  const handleTakeBreak = async () => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
+    try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      const base = import.meta.env.VITE_RENDER_API_URL;
+      const url = `${base}/crm-records/records/events/`;
+      const body = {
+        event: "agent.take_break",
+        record_id: currentLead.id,
+        payload: {
+          latest_remarks: "Man i am taking break",
+        },
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      toast({ title: "Taking break!", description: "", variant: "default" });
+      // Return to landing (pending) screen
+      setShowPendingCard(true);
+      setCurrentLead(null);
+      resetLeadState();
+      isInitialized.current = false;
+      await fetchLeadStats();
+    } catch (error: any) {
+      console.error("Error sending break event:", error);
+      toast({ title: "Error", description: error.message || "Failed to send break event", variant: "destructive" });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const buildNextCallISO = (): string | null => {
+    if (!selectedDate) return null;
+    let hour24 = selectedHour % 12;
+    hour24 = isAM ? hour24 : hour24 + 12;
+    const dt = new Date(selectedDate);
+    dt.setHours(hour24, selectedMinute, 0, 0);
+    try {
+      return dt.toISOString();
+    } catch {
+      return null;
+    }
+  };
+
+  const handleScheduleCall = async () => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
+    const nextCallIso = buildNextCallISO();
+    if (!nextCallIso) {
+      toast({ title: "Missing time", description: "Select date and time before scheduling.", variant: "destructive" });
+      return;
+    }
+    try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      const base = import.meta.env.VITE_RENDER_API_URL;
+      const url = `${base}/crm-records/records/events/`;
+      const body = {
+        event: "lead.call_scheduled",
+        record_id: currentLead.id,
+        payload: {
+          next_call_at: nextCallIso,
+        },
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      toast({ title: "Scheduled!", description: "Call scheduled successfully.", variant: "default" });
+      setPopoverOpen(false);
+      setSelectedDate(undefined);
+      setSelectedHour(12);
+      setSelectedMinute(0);
+      await fetchFirstLead();
+    } catch (error: any) {
+      console.error("Error sending schedule event:", error);
+      toast({ title: "Error", description: error.message || "Failed to schedule call", variant: "destructive" });
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const handleCloseProfile = () => {
@@ -718,29 +888,29 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
           </div>
           
-          <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
-            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
-                onClick={() => handleActionButton("Not Connected")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={updating}
-              >
-                Not Connected
-              </Button>
-              
+            <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
+              <div className="flex justify-center items-center gap-3 mt-4 pt-3">
+                <Button
+                  onClick={() => handleActionButton("Not Connected")}
+                  size="sm"
+                  variant="outline"
+                  className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating}
+                >
+                  Not Connected
+                </Button>
+                
               {/* Call Later with DateTime Picker */}
               <Dialog open={popoverOpen} onOpenChange={setPopoverOpen}>
                 <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={updating}
-                  >
-                    Call Later
-                  </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating}
+                >
+                  Call Later
+                </Button>
                 </DialogTrigger>
                 <DialogContent className="w-auto p-4 max-w-fit">
                   <div className="space-y-6">
@@ -754,28 +924,40 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                           disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                           initialFocus
                         />
-                      </div>
+              </div>
                       <div className="space-y-3">
                       <Label className="text-base font-semibold">Select Time</Label>
-                      <div className="flex items-center justify-center p-4">
-                        <div className="relative w-64 h-64">
+                        <div className="flex items-center justify-center p-2">
+                          <div className="relative w-48 h-48">
                           {/* Analog Clock */}
-                          <svg className="w-64 h-64" viewBox="0 0 200 200">
+                            <svg className="w-48 h-48" viewBox="0 0 200 200">
                             {/* Clock circle - white background */}
-                            <circle cx="100" cy="100" r="95" fill="white" stroke="rgb(102, 51, 153)" strokeWidth="3"/>
+                              <circle cx="100" cy="100" r="95" fill="white" stroke="rgb(102, 51, 153)" strokeWidth="2"/>
                             
-                            {/* Hour marker dots */}
-                            {Array.from({ length: 12 }).map((_, i) => {
-                              const angle = (i * 30 - 90) * (Math.PI / 180);
-                              const x = 100 + 85 * Math.cos(angle);
-                              const y = 100 + 85 * Math.sin(angle);
-                              return (
-                                <circle key={i} cx={x} cy={y} r="3" fill="rgb(102, 51, 153)"/>
-                              );
-                            })}
+                              {/* Hour markers as numbers 1–12 */}
+                              {Array.from({ length: 12 }).map((_, i) => {
+                                const angle = (i * 30 - 90) * (Math.PI / 180);
+                                const radius = 78; // slightly inward from the circle edge
+                                const x = 100 + radius * Math.cos(angle);
+                                const y = 100 + radius * Math.sin(angle);
+                                const num = i === 0 ? 12 : i;
+                                return (
+                                  <text
+                                    key={i}
+                                    x={x}
+                                    y={y}
+                                    fontSize="10"
+                                    fill="rgb(102, 51, 153)"
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                  >
+                                    {num}
+                                  </text>
+                                );
+                              })}
                             
                             {/* Show only the active hand */}
-                            {clockMode === 'minute' && (
+                              {clockMode === 'minute' && (
                               /* Minute hand */
                               <line
                                 x1="100"
@@ -783,11 +965,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 x2={100 + 70 * Math.cos((selectedMinute * 6 - 90) * (Math.PI / 180))}
                                 y2={100 + 70 * Math.sin((selectedMinute * 6 - 90) * (Math.PI / 180))}
                                 stroke="rgb(102, 51, 153)"
-                                strokeWidth="4"
+                                  strokeWidth="3"
                                 strokeLinecap="round"
                               />
                             )}
-                            {clockMode === 'hour' && (
+                              {clockMode === 'hour' && (
                               /* Hour hand */
                               <line
                                 x1="100"
@@ -795,13 +977,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 x2={100 + 50 * Math.cos(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
                                 y2={100 + 50 * Math.sin(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
                                 stroke="rgb(102, 51, 153)"
-                                strokeWidth="6"
+                                  strokeWidth="4"
                                 strokeLinecap="round"
                               />
                             )}
                             
                             {/* Center dot */}
-                            <circle cx="100" cy="100" r="6" fill="rgb(102, 51, 153)"/>
+                              <circle cx="100" cy="100" r="4" fill="rgb(102, 51, 153)"/>
                           </svg>
                           
                           {/* Invisible overlay for dragging */}
@@ -822,6 +1004,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 hour += isAM ? 0 : 12;
                                 if (hour === 12 && isAM) hour = 0;
                                 setSelectedHour(hour);
+                                // Auto-advance to minute selection after hour set
+                                setClockMode('minute');
                               } else {
                                 let minute = Math.round(angle / 6) % 60;
                                 if (minute < 0) minute += 60;
@@ -850,6 +1034,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 }
                               }
                             }}
+                            onMouseUp={() => {
+                              if (clockMode === 'hour') setClockMode('minute');
+                            }}
                             onTouchStart={(e) => {
                               const rect = e.currentTarget.getBoundingClientRect();
                               const centerX = rect.left + rect.width / 2;
@@ -865,6 +1052,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 hour += isAM ? 0 : 12;
                                 if (hour === 12 && isAM) hour = 0;
                                 setSelectedHour(hour);
+                                // Auto-advance to minute selection after hour set
+                                setClockMode('minute');
                               } else {
                                 let minute = Math.round(angle / 6) % 60;
                                 if (minute < 0) minute += 60;
@@ -892,6 +1081,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                                 if (minute < 0) minute += 60;
                                 setSelectedMinute(minute);
                               }
+                            }}
+                            onTouchEnd={() => {
+                              if (clockMode === 'hour') setClockMode('minute');
                             }}
                           />
                         </div>
@@ -974,22 +1166,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       </div>
                     )}
                     <Button
-                      onClick={() => {
-                        if (selectedDate) {
-                          const selectedDateTime = new Date(selectedDate);
-                          selectedDateTime.setHours(selectedHour, selectedMinute);
-                          setLead(prev => ({ ...prev, nextFollowUp: selectedDateTime.toISOString() }));
-                          handleActionButton("Call Later");
-                          toast({
-                            title: "Scheduled!",
-                            description: `Call scheduled for ${format(selectedDateTime, "PPP")} at ${format(selectedDateTime, "p")}`,
-                            variant: "default",
-                          });
-                          setSelectedDate(undefined);
-                          setSelectedHour(12);
-                          setSelectedMinute(0);
-                        }
-                      }}
+                      onClick={handleScheduleCall}
                       className="w-full"
                       disabled={!selectedDate}
                     >
@@ -999,39 +1176,39 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 </DialogContent>
               </Dialog>
               
-              <Button
-                onClick={() => handleActionButton("Lost")}
-                size="sm"
-                variant="outline"
+                <Button
+                  onClick={() => handleActionButton("Lost")}
+                  size="sm"
+                  variant="outline"
                 className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
-              >
-                Lost
-              </Button>
-              
-              <Button
-                onClick={() => handleActionButton("Won")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                disabled={updating || fetchingNext}
-              >
-                {updating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Updating...
-                  </>
-                ) : fetchingNext ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Loading Next Lead...
-                  </>
-                ) : (
-                  "Won"
-                )}
-              </Button>
+                >
+                  Lost
+                </Button>
+                
+                <Button
+                  onClick={() => handleActionButton("Won")}
+                  size="sm"
+                  variant="outline"
+                  className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={updating || fetchingNext}
+                >
+                  {updating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                      Updating...
+                    </>
+                  ) : fetchingNext ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                      Loading Next Lead...
+                    </>
+                  ) : (
+                    "Won"
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
         </div>
       </div>
       
