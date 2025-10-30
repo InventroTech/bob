@@ -290,11 +290,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       isInitialized.current = true;
       await fetchLeadStats();
-      toast({
-        title: "Success",
-        description: "Lead loaded successfully!",
-        variant: "default",
-      });
+      
     } catch (error) {
       console.error("Error fetching lead:", error);
       toast({
@@ -324,40 +320,110 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
   const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
-    if (!currentLead) return;
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
 
+    // For Won/Lost, send events to backend as specified
+    if (action === "Won" || action === "Lost") {
+      try {
+        setUpdating(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) throw new Error("Authentication required");
+
+        const base = import.meta.env.VITE_RENDER_API_URL;
+        const url = `${base}/crm-records/records/events/`;
+        const body = {
+          event: action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
+          record_id: currentLead.id,
+          payload: {
+            latest_remarks: action === "Won" ? "I just love praja's product" : "I just hate praja's product",
+          },
+        };
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        toast({ title: "Success", description: `Sent: ${action}`, variant: "default" });
+        await fetchFirstLead();
+      } catch (error: any) {
+        console.error("Error sending event:", error);
+        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
+      } finally {
+        setUpdating(false);
+      }
+      return;
+    }
+
+    // Default behavior for other actions stays as-is (simulated)
     try {
       setUpdating(true);
-      
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Success",
-        description: `Lead marked as: ${action}`,
-        variant: "default",
-      });
-      
-      // Move to next lead
+      toast({ title: "Success", description: `Lead marked as: ${action}`, variant: "default" });
       await fetchFirstLead();
     } catch (error) {
       console.error("Error updating lead:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update lead. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update lead. Please try again.", variant: "destructive" });
     } finally {
       setUpdating(false);
     }
   };
 
-  const handleTakeBreak = () => {
-    toast({
-      title: "Info",
-      description: "Break time! Your progress has been saved.",
-      variant: "default",
-    });
+  const handleTakeBreak = async () => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
+    try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      const base = import.meta.env.VITE_RENDER_API_URL;
+      const url = `${base}/crm-records/records/events/`;
+      const body = {
+        event: "agent.take_break",
+        record_id: currentLead.id,
+        payload: {
+          latest_remarks: "Man i am taking break",
+        },
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      toast({ title: "Taking break!", description: "", variant: "default" });
+      // Return to landing (pending) screen
+      setShowPendingCard(true);
+      setCurrentLead(null);
+      resetLeadState();
+      isInitialized.current = false;
+      await fetchLeadStats();
+    } catch (error: any) {
+      console.error("Error sending break event:", error);
+      toast({ title: "Error", description: error.message || "Failed to send break event", variant: "destructive" });
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const handleCloseProfile = () => {
