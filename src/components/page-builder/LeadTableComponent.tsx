@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Filter, User, MessageCircle, ExternalLink } from 'lucide-react';
@@ -226,6 +226,7 @@ interface LeadTableProps {
 }
 
 export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
+  const { toast } = useToast();
   const [data, setData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -719,8 +720,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           params.append('created_at__lte', endDateTime.toISOString());
         }
 
-        // Note: Search is now handled through the dynamic filter system above
-        // No need to add search parameter here for legacy system
+        // Include search and search_fields even when dynamic filters are not configured
+        if (searchTerm && searchTerm.trim() !== '') {
+          params.append('search', searchTerm.trim());
+          if (config?.searchFields) {
+            params.append('search_fields', config.searchFields);
+          }
+        }
         
         // Add pagination parameters for both systems
         params.append('page', '1');
@@ -787,7 +793,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         return;
       }
       console.error('Error applying filters:', error);
-      toast.error('Failed to apply filters');
+      toast({ title: 'Error', description: 'Failed to apply filters', variant: 'destructive' });
     } finally {
       setTableLoading(false);
     }
@@ -893,7 +899,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       }
     } catch (error) {
       console.error('Error resetting filters:', error);
-      toast.error('Failed to reset filters');
+      toast({ title: 'Error', description: 'Failed to reset filters', variant: 'destructive' });
     } finally {
       setTableLoading(false);
     }
@@ -937,7 +943,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         const apiSequence = ++requestSequenceRef.current;
         let params: URLSearchParams | undefined;
-        // Update URL with search parameter if using dynamic filters
+        // Update URL with search parameter if using dynamic filters; otherwise include search directly
         if (hasActiveFilters) {
           const currentFilters = { ...filterState.values };
           if (searchValue.trim()) {
@@ -946,6 +952,25 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             delete currentFilters.search;
           }
           params = filterService.generateQueryParams(currentFilters);
+          // Add pagination parameters for complete URL state
+          params.append('page', '1');
+          params.append('page_size', '10');
+
+          // Only add entity_type if using generic records endpoint and entityType is configured
+          if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+            params.append('entity_type', config.entityType);
+          }
+
+          updateURL(params);
+        } else {
+          // No dynamic filters configured: still send search and search_fields
+          params = new URLSearchParams();
+          if (searchValue.trim()) {
+            params.append('search', searchValue.trim());
+            if (config?.searchFields) {
+              params.append('search_fields', config.searchFields);
+            }
+          }
           // Add pagination parameters for complete URL state
           params.append('page', '1');
           params.append('page_size', '10');
@@ -1031,7 +1056,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
       } catch (error) {
         console.error('Error fetching next page:', error);
-        toast.error('Failed to load next page');
+        toast({ title: 'Error', description: 'Failed to load next page', variant: 'destructive' });
       } finally {
         setTableLoading(false);
       }
@@ -1078,7 +1103,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
       } catch (error) {
         console.error('Error fetching previous page:', error);
-        toast.error('Failed to load previous page');
+        toast({ title: 'Error', description: 'Failed to load previous page', variant: 'destructive' });
       } finally {
         setTableLoading(false);
       }
@@ -1209,7 +1234,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         console.error('Error fetching leads:', error);
         setData([]);
         setFilteredData([]);
-        toast.error('Failed to fetch leads');
+        toast({ title: 'Error', description: 'Failed to fetch leads', variant: 'destructive' });
       } finally {
         setLoading(false);
       }
