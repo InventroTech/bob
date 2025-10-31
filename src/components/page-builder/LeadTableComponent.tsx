@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Filter, User, MessageCircle, ExternalLink } from 'lucide-react';
@@ -226,6 +226,7 @@ interface LeadTableProps {
 }
 
 export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
+  const { toast } = useToast();
   const [data, setData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -792,7 +793,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         return;
       }
       console.error('Error applying filters:', error);
-      toast.error('Failed to apply filters');
+      toast({ title: 'Error', description: 'Failed to apply filters', variant: 'destructive' });
     } finally {
       setTableLoading(false);
     }
@@ -898,7 +899,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       }
     } catch (error) {
       console.error('Error resetting filters:', error);
-      toast.error('Failed to reset filters');
+      toast({ title: 'Error', description: 'Failed to reset filters', variant: 'destructive' });
     } finally {
       setTableLoading(false);
     }
@@ -1055,7 +1056,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
       } catch (error) {
         console.error('Error fetching next page:', error);
-        toast.error('Failed to load next page');
+        toast({ title: 'Error', description: 'Failed to load next page', variant: 'destructive' });
       } finally {
         setTableLoading(false);
       }
@@ -1102,7 +1103,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
       } catch (error) {
         console.error('Error fetching previous page:', error);
-        toast.error('Failed to load previous page');
+        toast({ title: 'Error', description: 'Failed to load previous page', variant: 'destructive' });
       } finally {
         setTableLoading(false);
       }
@@ -1233,7 +1234,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         console.error('Error fetching leads:', error);
         setData([]);
         setFilteredData([]);
-        toast.error('Failed to fetch leads');
+        toast({ title: 'Error', description: 'Failed to fetch leads', variant: 'destructive' });
       } finally {
         setLoading(false);
       }

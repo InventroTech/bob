@@ -387,7 +387,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           lead_id: currentLead.id,
           user_id: currentLead.user_id,
         },
-        { successTitle: "Success", successDescription: "Sent: Not Connected" }
+        { successTitle: "Success", successDescription: "Marked as snoozed" }
       );
       if (ok) await fetchFirstLead();
       return;
@@ -403,7 +403,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           lead_id: currentLead.id,
           user_id: currentLead.user_id,
         },
-        { successTitle: "Success", successDescription: `Sent: ${action}` }
+        { successTitle: "Success", successDescription: `Marked as ${action}` }
       );
       if (ok) await fetchFirstLead();
       return;
@@ -431,7 +431,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     const ok = await sendLeadEvent(
       "agent.take_break",
       { notes: lead.notes },
-      { successTitle: "Taking break!", successDescription: "" }
+      { successTitle: "Taking break", successDescription: "Bye, Come back soon!" }
     );
     if (ok) {
       // Return to landing (pending) screen
