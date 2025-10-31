@@ -528,7 +528,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   if (showPendingCard) {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-        <div className="relative w-[70%] h-full">
+        <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
             {/* Header */}
             <div className="text-center mb-6">
@@ -603,7 +603,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   if (loading) {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-        <div className="mt-4 flex w-[70%] justify-end">
+        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
           <Button
             onClick={handleTakeBreak}
             variant="outline"
@@ -615,7 +615,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             Take a Break
           </Button>
         </div>
-        <div className="relative w-[70%] h-full">
+        <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
             <div className="flex flex-col items-center justify-center h-64 space-y-4">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -630,7 +630,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Showing the lead card
   return (
     <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-      <div className="mt-4 flex w-[70%] justify-end">
+      <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
         <Button
           onClick={handleTakeBreak}
           variant="outline"
@@ -642,7 +642,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           Take a Break
         </Button>
       </div>
-      <div className="relative w-[70%] h-full">
+      <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
         <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
           {fetchingNext && (
             <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
@@ -810,13 +810,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
           </div>
           
-            <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
-              <div className="flex justify-center items-center gap-3 mt-4 pt-3">
+            <div className="buttons flex flex-row flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-6 lg:gap-10 w-full max-w-full px-4">
+              <div className="flex flex-wrap justify-center items-center gap-3 mt-4 pt-3 w-full">
                 <Button
                   onClick={() => handleActionButton("Not Connected")}
                   size="sm"
                   variant="outline"
-                  className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full sm:w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={updating}
                 >
                   Not Connected
@@ -828,7 +828,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full sm:w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={updating}
                 >
                   Call Later
@@ -1102,7 +1102,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   onClick={() => handleActionButton("Lost")}
                   size="sm"
                   variant="outline"
-                className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="w-full sm:w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
                 >
                   Lost
@@ -1112,7 +1112,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   onClick={() => handleActionButton("Won")}
                   size="sm"
                   variant="outline"
-                  className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="w-full sm:w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   disabled={updating || fetchingNext}
                 >
                   {updating ? (
