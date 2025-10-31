@@ -282,7 +282,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         ...prev,
         leadStatus: leadData.status || "New",
         priority: leadData.priority || "Medium",
-        notes: leadData.notes || "",
+        notes: leadData.data.notes || "",
         selectedTags: parseTags(leadData.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
         leadStartTime: new Date(),
