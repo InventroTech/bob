@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { timePicker } from "analogue-time-picker";
-import Lottie from "lottie-react";
+import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import {
@@ -497,44 +497,23 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
 
-  // Load Lottie animation
+  // Load Lottie animation (idle + cached)
   useEffect(() => {
-    // Try multiple Lottie animation URLs for motivation/success themes
-    const animationUrls = [
+    const urls = [
       'https://lottie.host/embed/c7676df8-1c6b-4703-b6dd-3e861d2c90a2/tl7ZtL4MJc.json',
-      'https://assets5.lottiefiles.com/packages/lf20_jcikwtux.json', // Success/motivation animation
-      'https://assets5.lottiefiles.com/packages/lf20_qp1spzqv.json', // Celebration animation
+      'https://assets5.lottiefiles.com/packages/lf20_jcikwtux.json',
+      'https://assets5.lottiefiles.com/packages/lf20_qp1spzqv.json',
     ];
 
-    const loadAnimation = async (urlIndex = 0) => {
-      if (urlIndex >= animationUrls.length) {
-        console.warn('All Lottie animation URLs failed to load');
-        return;
-      }
-
-      try {
-        const response = await fetch(animationUrls[urlIndex], {
-          mode: 'cors',
-          headers: {
-            'Accept': 'application/json',
-          }
+    requestIdle(() => {
+      fetchLottieAnimation(urls)
+        .then((data) => {
+          if (data) setAnimationData(data);
+        })
+        .catch(() => {
+          // noop; we already show a lightweight fallback
         });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setAnimationData(data);
-        } else {
-          // Try next URL
-          loadAnimation(urlIndex + 1);
-        }
-      } catch (error) {
-        console.error(`Error loading Lottie animation from URL ${urlIndex + 1}:`, error);
-        // Try next URL
-        loadAnimation(urlIndex + 1);
-      }
-    };
-
-    loadAnimation();
+    });
   }, []);
 
   // Initialize component - fetch stats only, don't fetch lead yet
@@ -572,12 +551,28 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               {/* Lottie Animation */}
               <div className="flex justify-center items-center h-64">
                 {animationData ? (
-                  <Lottie
-                    animationData={animationData}
-                    loop={true}
-                    autoplay={true}
-                    style={{ height: 250, width: 250 }}
-                  />
+                  <React.Suspense
+                    fallback={
+                      <div className="flex flex-col items-center justify-center h-64">
+                        <div className="text-6xl mb-4">🎯</div>
+                        <p className="text-gray-500 text-sm">Loading animation...</p>
+                      </div>
+                    }
+                  >
+                    {/* Lazy import to avoid blocking initial render with lottie-web */}
+                    {(() => {
+                      const Lottie = React.lazy(() => import('lottie-react'));
+                      return (
+                        <Lottie
+                          animationData={animationData}
+                          loop={true}
+                          autoplay={true}
+                          rendererSettings={{ progressiveLoad: true, hideOnTransparent: true }}
+                          style={{ height: 250, width: 250 }}
+                        />
+                      );
+                    })()}
+                  </React.Suspense>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-64">
                     <div className="text-6xl mb-4">🎯</div>
