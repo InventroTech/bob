@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { timePicker } from "analogue-time-picker";
-import Lottie from "lottie-react";
+import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import {
@@ -282,7 +282,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         ...prev,
         leadStatus: leadData.status || "New",
         priority: leadData.priority || "Medium",
-        notes: leadData.notes || "",
+        notes: leadData.data.notes || "",
         selectedTags: parseTags(leadData.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
         leadStartTime: new Date(),
@@ -319,6 +319,58 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     });
   };
 
+  // Reusable helper to post CRM events
+  const sendLeadEvent = async (
+    eventName: string,
+    payload: Record<string, any>,
+    options: { successTitle?: string; successDescription?: string } = {}
+  ): Promise<boolean> => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return false;
+    }
+    try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      const base = import.meta.env.VITE_RENDER_API_URL;
+      const url = `${base}/crm-records/records/events/`;
+      const body = {
+        event: eventName,
+        record_id: currentLead.id,
+        payload,
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      if (options.successTitle || options.successDescription) {
+        toast({
+          title: options.successTitle || "Success",
+          description: options.successDescription || "Event sent successfully.",
+          variant: "default",
+        });
+      }
+      return true;
+    } catch (error: any) {
+      console.error("Error sending event:", error);
+      toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
+      return false;
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
     if (!currentLead?.id) {
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
@@ -327,81 +379,33 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     // For Not Connected, send call_later event with user's notes
     if (action === "Not Connected") {
-    try {
-      setUpdating(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) throw new Error("Authentication required");
-
-        const base = import.meta.env.VITE_RENDER_API_URL;
-        const url = `${base}/crm-records/records/events/`;
-        const body = {
-          event: "lead.call_later_clicked",
-          record_id: currentLead.id,
-          payload: {
-            latest_remarks: lead.notes || "",
-          },
-        };
-
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-        toast({ title: "Success", description: "Sent: Not Connected", variant: "default" });
-      await fetchFirstLead();
-      } catch (error: any) {
-        console.error("Error sending not connected event:", error);
-        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
-    } finally {
-      setUpdating(false);
+      const ok = await sendLeadEvent(
+        "lead.call_later_clicked",
+        {
+          notes: lead.notes || "",
+          remarks: currentLead.latest_remarks,
+          lead_id: currentLead.id,
+          user_id: currentLead.user_id,
+        },
+        { successTitle: "Success", successDescription: "Marked as snoozed" }
+      );
+      if (ok) await fetchFirstLead();
+      return;
     }
-        return;
-      }
 
     // For Won/Lost, send events to backend as specified
     if (action === "Won" || action === "Lost") {
-      try {
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-        if (!token) throw new Error("Authentication required");
-
-        const base = import.meta.env.VITE_RENDER_API_URL;
-        const url = `${base}/crm-records/records/events/`;
-        const body = {
-          event: action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
-          record_id: currentLead.id,
-          payload: {
-            latest_remarks: action === "Won" ? "I just love praja's product" : "I just hate praja's product",
-          },
-        };
-
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-        toast({ title: "Success", description: `Sent: ${action}`, variant: "default" });
-        await fetchFirstLead();
-      } catch (error: any) {
-        console.error("Error sending event:", error);
-        toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
-      } finally {
-        setUpdating(false);
-      }
+      const ok = await sendLeadEvent(
+        action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
+        {
+          notes: lead.notes,
+          remarks: currentLead.latest_remarks,
+          lead_id: currentLead.id,
+          user_id: currentLead.user_id,
+        },
+        { successTitle: "Success", successDescription: `Marked as ${action}` }
+      );
+      if (ok) await fetchFirstLead();
       return;
     }
 
@@ -424,45 +428,18 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
       return;
     }
-    try {
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Authentication required");
-
-      const base = import.meta.env.VITE_RENDER_API_URL;
-      const url = `${base}/crm-records/records/events/`;
-      const body = {
-        event: "agent.take_break",
-        record_id: currentLead.id,
-        payload: {
-          latest_remarks: "Man i am taking break",
-        },
-      };
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      toast({ title: "Taking break!", description: "", variant: "default" });
+    const ok = await sendLeadEvent(
+      "agent.take_break",
+      { notes: lead.notes },
+      { successTitle: "Taking break", successDescription: "Bye, Come back soon!" }
+    );
+    if (ok) {
       // Return to landing (pending) screen
       setShowPendingCard(true);
       setCurrentLead(null);
       resetLeadState();
       isInitialized.current = false;
       await fetchLeadStats();
-    } catch (error: any) {
-      console.error("Error sending break event:", error);
-      toast({ title: "Error", description: error.message || "Failed to send break event", variant: "destructive" });
-    } finally {
-      setUpdating(false);
     }
   };
 
@@ -489,44 +466,23 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       toast({ title: "Missing time", description: "Select date and time before scheduling.", variant: "destructive" });
       return;
     }
-    try {
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Authentication required");
-
-      const base = import.meta.env.VITE_RENDER_API_URL;
-      const url = `${base}/crm-records/records/events/`;
-      const body = {
-        event: "lead.call_scheduled",
-        record_id: currentLead.id,
-        payload: {
-          next_call_at: nextCallIso,
-        },
-      };
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      toast({ title: "Scheduled!", description: "Call scheduled successfully.", variant: "default" });
+    const ok = await sendLeadEvent(
+      "lead.call_scheduled",
+      {
+        next_call_at: nextCallIso,
+        notes: lead.notes,
+        remarks: currentLead.latest_remarks,
+        lead_id: currentLead.id,
+        user_id: currentLead.user_id,
+      },
+      { successTitle: "Scheduled!", successDescription: "Call scheduled successfully." }
+    );
+    if (ok) {
       setPopoverOpen(false);
       setSelectedDate(undefined);
       setSelectedHour(12);
       setSelectedMinute(0);
       await fetchFirstLead();
-    } catch (error: any) {
-      console.error("Error sending schedule event:", error);
-      toast({ title: "Error", description: error.message || "Failed to schedule call", variant: "destructive" });
-    } finally {
-      setUpdating(false);
     }
   };
 
@@ -541,44 +497,23 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
 
-  // Load Lottie animation
+  // Load Lottie animation (idle + cached)
   useEffect(() => {
-    // Try multiple Lottie animation URLs for motivation/success themes
-    const animationUrls = [
+    const urls = [
       'https://lottie.host/embed/c7676df8-1c6b-4703-b6dd-3e861d2c90a2/tl7ZtL4MJc.json',
-      'https://assets5.lottiefiles.com/packages/lf20_jcikwtux.json', // Success/motivation animation
-      'https://assets5.lottiefiles.com/packages/lf20_qp1spzqv.json', // Celebration animation
+      'https://assets5.lottiefiles.com/packages/lf20_jcikwtux.json',
+      'https://assets5.lottiefiles.com/packages/lf20_qp1spzqv.json',
     ];
 
-    const loadAnimation = async (urlIndex = 0) => {
-      if (urlIndex >= animationUrls.length) {
-        console.warn('All Lottie animation URLs failed to load');
-        return;
-      }
-
-      try {
-        const response = await fetch(animationUrls[urlIndex], {
-          mode: 'cors',
-          headers: {
-            'Accept': 'application/json',
-          }
+    requestIdle(() => {
+      fetchLottieAnimation(urls)
+        .then((data) => {
+          if (data) setAnimationData(data);
+        })
+        .catch(() => {
+          // noop; we already show a lightweight fallback
         });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setAnimationData(data);
-        } else {
-          // Try next URL
-          loadAnimation(urlIndex + 1);
-        }
-      } catch (error) {
-        console.error(`Error loading Lottie animation from URL ${urlIndex + 1}:`, error);
-        // Try next URL
-        loadAnimation(urlIndex + 1);
-      }
-    };
-
-    loadAnimation();
+    });
   }, []);
 
   // Initialize component - fetch stats only, don't fetch lead yet
@@ -593,7 +528,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   if (showPendingCard) {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-        <div className="relative w-[70%] h-full">
+        <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
             {/* Header */}
             <div className="text-center mb-6">
@@ -616,12 +551,28 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               {/* Lottie Animation */}
               <div className="flex justify-center items-center h-64">
                 {animationData ? (
-                  <Lottie
-                    animationData={animationData}
-                    loop={true}
-                    autoplay={true}
-                    style={{ height: 250, width: 250 }}
-                  />
+                  <React.Suspense
+                    fallback={
+                      <div className="flex flex-col items-center justify-center h-64">
+                        <div className="text-6xl mb-4">🎯</div>
+                        <p className="text-gray-500 text-sm">Loading animation...</p>
+                      </div>
+                    }
+                  >
+                    {/* Lazy import to avoid blocking initial render with lottie-web */}
+                    {(() => {
+                      const Lottie = React.lazy(() => import('lottie-react'));
+                      return (
+                        <Lottie
+                          animationData={animationData}
+                          loop={true}
+                          autoplay={true}
+                          rendererSettings={{ progressiveLoad: true, hideOnTransparent: true }}
+                          style={{ height: 250, width: 250 }}
+                        />
+                      );
+                    })()}
+                  </React.Suspense>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-64">
                     <div className="text-6xl mb-4">🎯</div>
@@ -652,7 +603,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   if (loading) {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-        <div className="mt-4 flex w-[70%] justify-end">
+        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
           <Button
             onClick={handleTakeBreak}
             variant="outline"
@@ -664,7 +615,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             Take a Break
           </Button>
         </div>
-        <div className="relative w-[70%] h-full">
+        <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
             <div className="flex flex-col items-center justify-center h-64 space-y-4">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -679,7 +630,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Showing the lead card
   return (
     <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-      <div className="mt-4 flex w-[70%] justify-end">
+      <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
         <Button
           onClick={handleTakeBreak}
           variant="outline"
@@ -691,7 +642,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           Take a Break
         </Button>
       </div>
-      <div className="relative w-[70%] h-full">
+      <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
         <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
           {fetchingNext && (
             <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
@@ -855,46 +806,17 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   placeholder="Add notes or remarks about this lead..."
                   className="min-h-[80px]"
                 />
-                {lead.notes && (
-                  <Button
-                    onClick={async () => {
-                      try {
-                        setUpdating(true);
-                        // TODO: Implement API call to save notes
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        toast({
-                          title: "Success",
-                          description: "Notes saved successfully!",
-                          variant: "default",
-                        });
-                      } catch (error) {
-                        toast({
-                          title: "Error",
-                          description: "Failed to save notes",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setUpdating(false);
-                      }
-                    }}
-                    size="sm"
-                    className="w-full"
-                    disabled={updating}
-                  >
-                    {updating ? "Saving..." : "Save Notes"}
-                  </Button>
-                )}
               </div>
             </div>
           </div>
           
-            <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
-              <div className="flex justify-center items-center gap-3 mt-4 pt-3">
+            <div className="buttons flex flex-row flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-6 lg:gap-10 w-full max-w-full px-4">
+              <div className="flex flex-wrap justify-center items-center gap-3 mt-4 pt-3 w-full">
                 <Button
                   onClick={() => handleActionButton("Not Connected")}
                   size="sm"
                   variant="outline"
-                  className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full sm:w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={updating}
                 >
                   Not Connected
@@ -906,7 +828,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full sm:w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={updating}
                 >
                   Call Later
@@ -1180,7 +1102,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   onClick={() => handleActionButton("Lost")}
                   size="sm"
                   variant="outline"
-                className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="w-full sm:w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
                 >
                   Lost
@@ -1190,7 +1112,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   onClick={() => handleActionButton("Won")}
                   size="sm"
                   variant="outline"
-                  className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="w-full sm:w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   disabled={updating || fetchingNext}
                 >
                   {updating ? (

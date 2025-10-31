@@ -7,11 +7,20 @@ import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
-import { Users, Settings, Filter, Eye, Download, Zap } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Users, Settings, Filter, Eye, Download, Zap, Database, Columns, Plus, Trash2 } from 'lucide-react';
 
 export interface ApplicantTableConfig {
+  // Basic Settings
   title?: string;
   description?: string;
+  
+  // API Configuration
+  apiEndpoint?: string;
+  apiPrefix?: 'supabase' | 'renderer';
+  statusDataApiEndpoint?: string;
+  
+  // Display Options
   showJobSelector?: boolean;
   showStats?: boolean;
   showFilters?: boolean;
@@ -29,17 +38,45 @@ export interface ApplicantTableConfig {
   highlightNewApplications?: boolean;
   autoRefresh?: boolean;
   refreshInterval?: number;
-  columns?: {
-    name: boolean;
-    email: boolean;
-    phone: boolean;
-    status: boolean;
-    submittedAt: boolean;
-    experience: boolean;
-    location: boolean;
-    salary: boolean;
-    rating: boolean;
-    actions: boolean;
+  
+  // Column Configuration
+  columns?: Array<{
+    key: string;
+    label: string;
+    type: 'text' | 'email' | 'phone' | 'status' | 'date' | 'number' | 'rating' | 'actions' | 'badge' | 'boolean';
+    accessor?: string;
+    sortable?: boolean;
+    filterable?: boolean;
+    width?: string;
+    align?: 'left' | 'center' | 'right';
+    visible?: boolean;
+    format?: 'currency' | 'percentage' | 'date' | 'datetime' | 'relative-time';
+    statusColors?: Record<string, string>;
+  }>;
+  
+  // Advanced Configuration
+  customFields?: Record<string, any>;
+  filterOptions?: {
+    statusOptions?: Array<{ value: string; label: string; color?: string }>;
+    experienceOptions?: Array<{ value: string; label: string }>;
+    locationOptions?: Array<{ value: string; label: string }>;
+    customFilters?: Array<{
+      key: string;
+      label: string;
+      type: 'select' | 'multiselect' | 'date-range' | 'text';
+      options?: Array<{ value: string; label: string }>;
+    }>;
+  };
+  
+  // Data Transformation
+  dataMapping?: {
+    idField?: string;
+    nameField?: string;
+    emailField?: string;
+    phoneField?: string;
+    statusField?: string;
+    dateField?: string;
+    customMappings?: Record<string, string>;
   };
 }
 
@@ -52,25 +89,6 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
   config,
   onConfigChange
 }) => {
-  const handleColumnChange = (column: keyof NonNullable<ApplicantTableConfig['columns']>, value: boolean) => {
-    const currentColumns = config.columns || {
-      name: true,
-      email: true,
-      phone: true,
-      status: true,
-      submittedAt: true,
-      experience: true,
-      location: true,
-      salary: true,
-      rating: true,
-      actions: true
-    };
-    
-    onConfigChange('columns', {
-      ...currentColumns,
-      [column]: value
-    });
-  };
 
   return (
     <div className="space-y-6 max-h-[80vh] overflow-y-auto">
@@ -102,6 +120,55 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
               onChange={(e) => onConfigChange('description', e.target.value)}
               placeholder="Manage and review job applications"
               rows={2}
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* API Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Database className="h-5 w-5" />
+            API Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="apiEndpoint" className="text-sm font-medium text-gray-700">API Endpoint</Label>
+            <Input
+              id="apiEndpoint"
+              value={config.apiEndpoint || ''}
+              onChange={(e) => onConfigChange('apiEndpoint', e.target.value)}
+              placeholder="/api/applications"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="apiPrefix" className="text-sm font-medium text-gray-700">API Prefix</Label>
+            <Select
+              value={config.apiPrefix || 'supabase'}
+              onValueChange={(value) => onConfigChange('apiPrefix', value)}
+            >
+              <SelectTrigger className="mt-2 border-gray-300">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="supabase">Supabase</SelectItem>
+                <SelectItem value="renderer">Renderer API</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div>
+            <Label htmlFor="statusDataApiEndpoint" className="text-sm font-medium text-gray-700">Status Data API Endpoint</Label>
+            <Input
+              id="statusDataApiEndpoint"
+              value={config.statusDataApiEndpoint || ''}
+              onChange={(e) => onConfigChange('statusDataApiEndpoint', e.target.value)}
+              placeholder="/api/application-stats"
               className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
             />
           </div>
@@ -275,88 +342,184 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
         </CardContent>
       </Card>
 
-      {/* Column Visibility */}
+      {/* Column Configuration */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
-            <Users className="h-5 w-5" />
-            Column Visibility
+            <Columns className="h-5 w-5" />
+            Column Configuration
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Applicant Name</Label>
-              <Switch
-                checked={config.columns?.name ?? true}
-                onCheckedChange={(checked) => handleColumnChange('name', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Email & Phone</Label>
-              <Switch
-                checked={config.columns?.email ?? true}
-                onCheckedChange={(checked) => handleColumnChange('email', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Status</Label>
-              <Switch
-                checked={config.columns?.status ?? true}
-                onCheckedChange={(checked) => handleColumnChange('status', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Applied Date</Label>
-              <Switch
-                checked={config.columns?.submittedAt ?? true}
-                onCheckedChange={(checked) => handleColumnChange('submittedAt', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Experience</Label>
-              <Switch
-                checked={config.columns?.experience ?? true}
-                onCheckedChange={(checked) => handleColumnChange('experience', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Location</Label>
-              <Switch
-                checked={config.columns?.location ?? true}
-                onCheckedChange={(checked) => handleColumnChange('location', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Expected Salary</Label>
-              <Switch
-                checked={config.columns?.salary ?? true}
-                onCheckedChange={(checked) => handleColumnChange('salary', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Rating</Label>
-              <Switch
-                checked={config.columns?.rating ?? true}
-                onCheckedChange={(checked) => handleColumnChange('rating', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-gray-700">Actions</Label>
-              <Switch
-                checked={config.columns?.actions ?? true}
-                onCheckedChange={(checked) => handleColumnChange('actions', checked)}
-              />
-            </div>
+          <div className="flex items-center justify-between mb-4">
+            <Label className="text-sm font-medium text-gray-700">Configure table columns</Label>
+            <Button
+              size="sm"
+              onClick={() => {
+                const newColumn = {
+                  key: `custom_${Date.now()}`,
+                  label: 'New Column',
+                  type: 'text' as const,
+                  accessor: '',
+                  visible: true,
+                  sortable: true,
+                  filterable: false
+                };
+                const currentColumns = config.columns || [];
+                onConfigChange('columns', [...currentColumns, newColumn]);
+              }}
+              className="bg-gray-900 text-white hover:bg-gray-800"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Column
+            </Button>
           </div>
+          
+          <div className="space-y-3 max-h-60 overflow-y-auto">
+            {(config.columns || []).map((column, index) => (
+              <div key={column.key} className="border border-gray-200 rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {column.type}
+                    </Badge>
+                    <span className="font-medium text-sm">{column.label}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const newColumns = config.columns?.filter((_, i) => i !== index) || [];
+                      onConfigChange('columns', newColumns);
+                    }}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-gray-600">Label</Label>
+                    <Input
+                      value={column.label}
+                      onChange={(e) => {
+                        const newColumns = [...(config.columns || [])];
+                        newColumns[index] = { ...column, label: e.target.value };
+                        onConfigChange('columns', newColumns);
+                      }}
+                      className="text-sm h-8"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs text-gray-600">Key/Accessor</Label>
+                    <Input
+                      value={column.accessor || column.key}
+                      onChange={(e) => {
+                        const newColumns = [...(config.columns || [])];
+                        newColumns[index] = { ...column, accessor: e.target.value, key: e.target.value };
+                        onConfigChange('columns', newColumns);
+                      }}
+                      placeholder="field_name"
+                      className="text-sm h-8"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs text-gray-600">Type</Label>
+                    <Select
+                      value={column.type}
+                      onValueChange={(value) => {
+                        const newColumns = [...(config.columns || [])];
+                        newColumns[index] = { ...column, type: value as any };
+                        onConfigChange('columns', newColumns);
+                      }}
+                    >
+                      <SelectTrigger className="text-sm h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Text</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="phone">Phone</SelectItem>
+                        <SelectItem value="status">Status</SelectItem>
+                        <SelectItem value="date">Date</SelectItem>
+                        <SelectItem value="number">Number</SelectItem>
+                        <SelectItem value="rating">Rating</SelectItem>
+                        <SelectItem value="badge">Badge</SelectItem>
+                        <SelectItem value="boolean">Boolean</SelectItem>
+                        <SelectItem value="actions">Actions</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs text-gray-600">Width</Label>
+                    <Input
+                      value={column.width || ''}
+                      onChange={(e) => {
+                        const newColumns = [...(config.columns || [])];
+                        newColumns[index] = { ...column, width: e.target.value };
+                        onConfigChange('columns', newColumns);
+                      }}
+                      placeholder="150px"
+                      className="text-sm h-8"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={column.visible ?? true}
+                      onCheckedChange={(checked) => {
+                        const newColumns = [...(config.columns || [])];
+                        newColumns[index] = { ...column, visible: checked };
+                        onConfigChange('columns', newColumns);
+                      }}
+                      className="scale-75"
+                    />
+                    <Label className="text-xs text-gray-600">Visible</Label>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={column.sortable ?? true}
+                      onCheckedChange={(checked) => {
+                        const newColumns = [...(config.columns || [])];
+                        newColumns[index] = { ...column, sortable: checked };
+                        onConfigChange('columns', newColumns);
+                      }}
+                      className="scale-75"
+                    />
+                    <Label className="text-xs text-gray-600">Sortable</Label>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={column.filterable ?? false}
+                      onCheckedChange={(checked) => {
+                        const newColumns = [...(config.columns || [])];
+                        newColumns[index] = { ...column, filterable: checked };
+                        onConfigChange('columns', newColumns);
+                      }}
+                      className="scale-75"
+                    />
+                    <Label className="text-xs text-gray-600">Filterable</Label>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {(!config.columns || config.columns.length === 0) && (
+            <div className="text-center py-8 text-gray-500">
+              <Columns className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+              <p className="text-sm">No columns configured</p>
+              <p className="text-xs text-gray-400">Click "Add Column" to get started</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -404,6 +567,103 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
         </CardContent>
       </Card>
 
+      {/* Data Mapping */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Database className="h-5 w-5" />
+            Data Mapping
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="idField" className="text-sm font-medium text-gray-700">ID Field</Label>
+              <Input
+                id="idField"
+                value={config.dataMapping?.idField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  idField: e.target.value 
+                })}
+                placeholder="id"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="nameField" className="text-sm font-medium text-gray-700">Name Field</Label>
+              <Input
+                id="nameField"
+                value={config.dataMapping?.nameField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  nameField: e.target.value 
+                })}
+                placeholder="applicant_name"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="emailField" className="text-sm font-medium text-gray-700">Email Field</Label>
+              <Input
+                id="emailField"
+                value={config.dataMapping?.emailField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  emailField: e.target.value 
+                })}
+                placeholder="email"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="statusField" className="text-sm font-medium text-gray-700">Status Field</Label>
+              <Input
+                id="statusField"
+                value={config.dataMapping?.statusField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  statusField: e.target.value 
+                })}
+                placeholder="status"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="dateField" className="text-sm font-medium text-gray-700">Date Field</Label>
+              <Input
+                id="dateField"
+                value={config.dataMapping?.dateField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  dateField: e.target.value 
+                })}
+                placeholder="created_at"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="phoneField" className="text-sm font-medium text-gray-700">Phone Field</Label>
+              <Input
+                id="phoneField"
+                value={config.dataMapping?.phoneField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  phoneField: e.target.value 
+                })}
+                placeholder="phone"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Preview */}
       <Card>
         <CardHeader>
@@ -413,44 +673,107 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {config.showJobSelector && <Badge variant="outline">Job Selector</Badge>}
-              {config.showStats && <Badge variant="outline">Statistics</Badge>}
-              {config.showFilters && <Badge variant="outline">Filters</Badge>}
-              {config.showSearch && <Badge variant="outline">Search</Badge>}
-              {config.showExport && <Badge variant="outline">Export</Badge>}
-              {config.showBulkActions && <Badge variant="outline">Bulk Actions</Badge>}
-              {config.showPagination && <Badge variant="outline">Pagination</Badge>}
-              {config.sortable && <Badge variant="outline">Sortable</Badge>}
-              {config.showStatusBadges && <Badge variant="outline">Status Badges</Badge>}
-              {config.showRatings && <Badge variant="outline">Ratings</Badge>}
-              {config.showActions && <Badge variant="outline">Actions</Badge>}
-              {config.compactView && <Badge variant="outline">Compact View</Badge>}
-              {config.highlightNewApplications && <Badge variant="outline">Highlight New</Badge>}
-              {config.autoRefresh && <Badge variant="outline">Auto Refresh</Badge>}
-            </div>
+          <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+            {/* API Configuration */}
+            {config.apiEndpoint && (
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">API Configuration:</p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="bg-green-100 text-green-800 text-xs">
+                    {config.apiPrefix || 'supabase'}: {config.apiEndpoint}
+                  </Badge>
+                  {config.statusDataApiEndpoint && (
+                    <Badge className="bg-green-100 text-green-800 text-xs">
+                      Stats: {config.statusDataApiEndpoint}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
             
-            <Separator className="my-3" />
-            
+            {/* Features */}
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Visible Columns:</p>
-              <div className="flex flex-wrap gap-1">
-                {config.columns?.name && <Badge className="bg-blue-100 text-blue-800 text-xs">Name</Badge>}
-                {config.columns?.email && <Badge className="bg-blue-100 text-blue-800 text-xs">Contact</Badge>}
-                {config.columns?.status && <Badge className="bg-blue-100 text-blue-800 text-xs">Status</Badge>}
-                {config.columns?.submittedAt && <Badge className="bg-blue-100 text-blue-800 text-xs">Applied</Badge>}
-                {config.columns?.experience && <Badge className="bg-blue-100 text-blue-800 text-xs">Experience</Badge>}
-                {config.columns?.location && <Badge className="bg-blue-100 text-blue-800 text-xs">Location</Badge>}
-                {config.columns?.salary && <Badge className="bg-blue-100 text-blue-800 text-xs">Salary</Badge>}
-                {config.columns?.rating && <Badge className="bg-blue-100 text-blue-800 text-xs">Rating</Badge>}
-                {config.columns?.actions && <Badge className="bg-blue-100 text-blue-800 text-xs">Actions</Badge>}
+              <p className="text-sm font-medium text-gray-700 mb-2">Enabled Features:</p>
+              <div className="flex flex-wrap gap-2">
+                {config.showJobSelector && <Badge variant="outline">Job Selector</Badge>}
+                {config.showStats && <Badge variant="outline">Statistics</Badge>}
+                {config.showFilters && <Badge variant="outline">Filters</Badge>}
+                {config.showSearch && <Badge variant="outline">Search</Badge>}
+                {config.showExport && <Badge variant="outline">Export</Badge>}
+                {config.showBulkActions && <Badge variant="outline">Bulk Actions</Badge>}
+                {config.showPagination && <Badge variant="outline">Pagination</Badge>}
+                {config.sortable && <Badge variant="outline">Sortable</Badge>}
+                {config.showStatusBadges && <Badge variant="outline">Status Badges</Badge>}
+                {config.showRatings && <Badge variant="outline">Ratings</Badge>}
+                {config.showActions && <Badge variant="outline">Actions</Badge>}
+                {config.compactView && <Badge variant="outline">Compact View</Badge>}
+                {config.highlightNewApplications && <Badge variant="outline">Highlight New</Badge>}
+                {config.autoRefresh && <Badge variant="outline">Auto Refresh</Badge>}
               </div>
             </div>
             
-            <div className="text-sm text-gray-600 mt-3">
-              Page Size: {config.pageSize || 10} items
-              {config.autoRefresh && ` • Auto Refresh: ${(config.refreshInterval || 30000) / 1000}s`}
+            <Separator />
+            
+            {/* Columns */}
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Configured Columns ({(config.columns || []).filter(col => col.visible !== false).length}):
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {(config.columns || []).filter(col => col.visible !== false).map((column, index) => (
+                  <Badge key={index} className="bg-blue-100 text-blue-800 text-xs">
+                    {column.label} ({column.type})
+                  </Badge>
+                ))}
+                {(!config.columns || config.columns.length === 0) && (
+                  <span className="text-xs text-gray-500">No columns configured</span>
+                )}
+              </div>
+            </div>
+            
+            {/* Data Mapping */}
+            {config.dataMapping && Object.values(config.dataMapping).some(val => val) && (
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Data Mapping:</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {config.dataMapping.idField && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">ID:</span>
+                      <code className="bg-gray-200 px-1 rounded">{config.dataMapping.idField}</code>
+                    </div>
+                  )}
+                  {config.dataMapping.nameField && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Name:</span>
+                      <code className="bg-gray-200 px-1 rounded">{config.dataMapping.nameField}</code>
+                    </div>
+                  )}
+                  {config.dataMapping.emailField && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Email:</span>
+                      <code className="bg-gray-200 px-1 rounded">{config.dataMapping.emailField}</code>
+                    </div>
+                  )}
+                  {config.dataMapping.statusField && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status:</span>
+                      <code className="bg-gray-200 px-1 rounded">{config.dataMapping.statusField}</code>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            <Separator />
+            
+            {/* Settings Summary */}
+            <div className="text-sm text-gray-600">
+              <div className="flex justify-between items-center">
+                <span>Page Size: {config.pageSize || 10} items</span>
+                {config.autoRefresh && (
+                  <span>Auto Refresh: {(config.refreshInterval || 30000) / 1000}s</span>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>
