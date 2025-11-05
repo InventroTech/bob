@@ -20,7 +20,8 @@ import {
   Calendar,
   MapPin,
   Building,
-  Clock
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DynamicForm, DynamicFormData, FormQuestion, QUESTION_TYPES, QuestionType } from './DynamicForm';
@@ -42,11 +43,30 @@ export interface Job {
 }
 
 interface JobManagerComponentConfig {
+  // Basic Settings
   title?: string;
   showCreateButton?: boolean;
   showStats?: boolean;
   layout?: 'grid' | 'list';
   maxJobs?: number;
+  
+  // API Configuration
+  apiEndpoint?: string;
+  apiPrefix?: 'supabase' | 'renderer';
+  useDemoData?: boolean;
+  
+  // Data Mapping
+  dataMapping?: {
+    idField?: string;
+    titleField?: string;
+    descriptionField?: string;
+    departmentField?: string;
+    locationField?: string;
+    typeField?: string;
+    statusField?: string;
+    deadlineField?: string;
+    createdAtField?: string;
+  };
 }
 
 interface JobManagerComponentProps {
@@ -59,6 +79,8 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   className = ''
 }) => {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
@@ -71,7 +93,11 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     showCreateButton = true,
     showStats = true,
     layout = 'grid',
-    maxJobs = 50
+    maxJobs = 50,
+    apiEndpoint,
+    apiPrefix = 'supabase',
+    useDemoData = false,
+    dataMapping = {}
   } = config;
 
   // New job form state
@@ -85,8 +111,167 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     requireResume: false
   });
 
-  // Load jobs from localStorage on mount
-  useEffect(() => {
+  // Data mapping helper
+  const mapApiDataToJob = (apiData: any): Job => {
+    const {
+      idField = 'id',
+      titleField = 'title',
+      descriptionField = 'description',
+      departmentField = 'department',
+      locationField = 'location',
+      typeField = 'type',
+      statusField = 'status',
+      deadlineField = 'deadline',
+      createdAtField = 'createdAt'
+    } = dataMapping;
+
+    // Create a default form if none provided
+    const defaultForm: DynamicFormData = createDefaultForm(
+      apiData[titleField] || apiData.title || 'Job Application',
+      apiData.requireResume || false
+    );
+
+    return {
+      id: apiData[idField] || apiData.id || '',
+      title: apiData[titleField] || apiData.title || '',
+      description: apiData[descriptionField] || apiData.description || '',
+      department: apiData[departmentField] || apiData.department,
+      location: apiData[locationField] || apiData.location,
+      type: apiData[typeField] || apiData.type || 'full-time',
+      status: apiData[statusField] || apiData.status || 'draft',
+      deadline: apiData[deadlineField] || apiData.deadline,
+      requireResume: apiData.requireResume || false,
+      form: apiData.form || apiData.application_form || defaultForm,
+      createdAt: apiData[createdAtField] || apiData.createdAt || apiData.created_at || new Date().toISOString(),
+      applicationsCount: apiData.applicationsCount || apiData.applications_count || 0
+    };
+  };
+
+  // Map Job to API format for POST requests
+  const mapJobToApiFormat = (job: Job): any => {
+    const {
+      idField = 'id',
+      titleField = 'title',
+      descriptionField = 'description',
+      departmentField = 'department',
+      locationField = 'location',
+      typeField = 'type',
+      statusField = 'status',
+      deadlineField = 'deadline',
+      createdAtField = 'createdAt'
+    } = dataMapping;
+
+    return {
+      [idField]: job.id,
+      [titleField]: job.title,
+      [descriptionField]: job.description,
+      [departmentField]: job.department,
+      [locationField]: job.location,
+      [typeField]: job.type,
+      [statusField]: job.status,
+      [deadlineField]: job.deadline,
+      [createdAtField]: job.createdAt,
+      requireResume: job.requireResume,
+      form: job.form,
+      applicationsCount: job.applicationsCount
+    };
+  };
+
+  // API fetching function
+  const fetchJobs = async () => {
+    if (!apiEndpoint || useDemoData) {
+      // Use localStorage if no API endpoint or demo mode
+      console.log('Using localStorage data:', useDemoData ? 'Demo mode enabled' : 'No API endpoint configured');
+      loadLocalJobs();
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      let url = apiEndpoint;
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      // Add API prefix specific logic
+      if (apiPrefix === 'renderer') {
+        headers['X-API-Source'] = 'renderer';
+      }
+
+      console.log('Fetching jobs from:', url);
+      console.log('Request headers:', headers);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
+      });
+
+      console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error('Response text:', responseText);
+        
+        if (responseText.includes('<!DOCTYPE')) {
+          throw new Error(`API endpoint returned HTML instead of JSON. This usually means the endpoint doesn't exist or requires authentication. Status: ${response.status}`);
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status} - ${responseText}`);
+      }
+
+      // Check content type
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text();
+        console.error('Non-JSON response:', responseText);
+        
+        if (responseText.includes('<!DOCTYPE')) {
+          throw new Error('API endpoint returned HTML instead of JSON. Please check if the endpoint exists and is accessible.');
+        }
+        
+        throw new Error(`Expected JSON response but got: ${contentType || 'unknown'}`);
+      }
+
+      const data = await response.json();
+      console.log('API response data:', data);
+      
+      // Handle different response structures
+      const jobsData = Array.isArray(data) ? data : (data.data || data.jobs || []);
+      
+      if (!Array.isArray(jobsData)) {
+        console.warn('API response is not an array:', jobsData);
+        throw new Error('API response does not contain a valid jobs array');
+      }
+      
+      // Map API data to our Job interface
+      const mappedJobs = jobsData.map(mapApiDataToJob);
+      console.log('Mapped jobs:', mappedJobs);
+      
+      // Apply maxJobs limit
+      const limitedJobs = mappedJobs.slice(0, maxJobs);
+      
+      setJobs(limitedJobs);
+    } catch (err) {
+      console.error('Error fetching jobs:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch jobs';
+      setError(errorMessage);
+      
+      // Show detailed error for debugging
+      if (errorMessage.includes('<!DOCTYPE')) {
+        setError('API endpoint returned HTML instead of JSON. Please check:\n1. The endpoint URL is correct\n2. The API server is running\n3. Authentication is not required\n4. CORS is properly configured');
+      }
+      
+      // Fallback to local jobs on error
+      loadLocalJobs();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load local jobs (localStorage)
+  const loadLocalJobs = () => {
     const savedJobs = localStorage.getItem('ats-jobs');
     if (savedJobs) {
       try {
@@ -96,7 +281,57 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         console.error('Error loading jobs:', error);
       }
     }
-  }, [maxJobs]);
+  };
+
+  // Post job to API
+  const postJobToAPI = async (job: Job): Promise<boolean> => {
+    if (!apiEndpoint || useDemoData) {
+      // Skip API call if no endpoint or demo mode
+      return true;
+    }
+
+    try {
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      // Add API prefix specific logic
+      if (apiPrefix === 'renderer') {
+        headers['X-API-Source'] = 'renderer';
+      }
+
+      const apiData = mapJobToApiFormat(job);
+      console.log('Posting job to API:', apiData);
+
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(apiData)
+      });
+
+      console.log('POST response status:', response.status);
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error('POST response text:', responseText);
+        throw new Error(`Failed to create job: ${response.status} - ${responseText}`);
+      }
+
+      const result = await response.json();
+      console.log('Job created successfully:', result);
+      
+      return true;
+    } catch (err) {
+      console.error('Error posting job to API:', err);
+      toast.error(`Failed to sync job to API: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      return false;
+    }
+  };
+
+  // Load jobs on component mount and when API config changes
+  useEffect(() => {
+    fetchJobs();
+  }, [apiEndpoint, apiPrefix, useDemoData, maxJobs]);
 
   // Save jobs to localStorage whenever jobs change
   useEffect(() => {
@@ -178,7 +413,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   });
 
   // Create new job
-  const handleCreateJob = () => {
+  const handleCreateJob = async () => {
     if (!newJobData.title.trim()) {
       toast.error('Job title is required');
       return;
@@ -199,7 +434,19 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       applicationsCount: 0
     };
 
+    // Add to local state first
     setJobs(prev => [newJob, ...prev]);
+    
+    // Try to post to API
+    const apiSuccess = await postJobToAPI(newJob);
+    
+    if (apiSuccess) {
+      toast.success('Job created successfully!');
+    } else {
+      toast.success('Job created locally (API sync failed)');
+    }
+
+    // Reset form and close modal
     setNewJobData({
       title: '',
       description: '',
@@ -210,7 +457,6 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       requireResume: false
     });
     setIsCreateModalOpen(false);
-    toast.success('Job created successfully');
   };
 
   // Update job
@@ -451,8 +697,43 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         )}
       </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <span className="ml-3 text-gray-600">Loading jobs...</span>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mx-4">
+            <div className="flex items-start">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-semibold text-red-800 mb-2">API Error</h4>
+                <div className="text-red-700 text-sm whitespace-pre-line">{error}</div>
+                {apiEndpoint && (
+                  <div className="mt-3 p-3 bg-red-100 rounded border text-xs">
+                    <strong>Debug Info:</strong><br />
+                    Endpoint: <code className="bg-red-200 px-1 rounded">{apiEndpoint}</code><br />
+                    API Type: <code className="bg-red-200 px-1 rounded">{apiPrefix}</code><br />
+                    <br />
+                    <strong>Common Solutions:</strong><br />
+                    • Check if the API endpoint exists and is accessible<br />
+                    • Verify the API server is running<br />
+                    • Ensure CORS is configured for your domain<br />
+                    • Check if authentication headers are required<br />
+                    • Verify the endpoint returns JSON, not HTML
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Jobs List */}
-        {jobs.length === 0 ? (
+        {!loading && jobs.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm text-center py-16">
             <Briefcase className="h-20 w-20 text-gray-400 mx-auto mb-6" />
             <h3 className="text-2xl font-semibold text-gray-900 mb-4">No jobs created yet</h3>

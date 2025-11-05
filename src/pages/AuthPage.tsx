@@ -62,7 +62,7 @@ const AuthPage = () => {
       <Tabs defaultValue="signin" className="w-full max-w-sm">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">Sign In</TabsTrigger>
-          <TabsTrigger value="signup">Sign Up</TabsTrigger>
+          <TabsTrigger value="signup" disabled>Sign Up</TabsTrigger>
         </TabsList>
         <TabsContent value="signin">
           <Card className="shadow-lg animate-fade-in">

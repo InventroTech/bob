@@ -19,6 +19,7 @@ export interface ApplicantTableConfig {
   apiEndpoint?: string;
   apiPrefix?: 'supabase' | 'renderer';
   statusDataApiEndpoint?: string;
+  useDemoData?: boolean;
   
   // Display Options
   showJobSelector?: boolean;
@@ -135,6 +136,15 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="useDemoData" className="text-sm font-medium text-gray-700">Use Demo Data</Label>
+            <Switch
+              id="useDemoData"
+              checked={config.useDemoData || false}
+              onCheckedChange={(checked) => onConfigChange('useDemoData', checked)}
+            />
+          </div>
+          
           <div>
             <Label htmlFor="apiEndpoint" className="text-sm font-medium text-gray-700">API Endpoint</Label>
             <Input
@@ -143,7 +153,11 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
               onChange={(e) => onConfigChange('apiEndpoint', e.target.value)}
               placeholder="/api/applications"
               className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
             />
+            {config.useDemoData && (
+              <p className="text-xs text-gray-500 mt-1">Demo data mode is enabled. API endpoint is disabled.</p>
+            )}
           </div>
           
           <div>
@@ -151,6 +165,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
             <Select
               value={config.apiPrefix || 'supabase'}
               onValueChange={(value) => onConfigChange('apiPrefix', value)}
+              disabled={config.useDemoData}
             >
               <SelectTrigger className="mt-2 border-gray-300">
                 <SelectValue />
@@ -170,6 +185,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
               onChange={(e) => onConfigChange('statusDataApiEndpoint', e.target.value)}
               placeholder="/api/application-stats"
               className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
             />
           </div>
         </CardContent>

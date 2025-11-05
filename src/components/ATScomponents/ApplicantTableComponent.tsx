@@ -36,7 +36,8 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Users
+  Users,
+  FileText
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -83,8 +84,17 @@ export interface Job {
 }
 
 export interface ApplicantTableConfig {
+  // Basic Settings
   title?: string;
   description?: string;
+  
+  // API Configuration
+  apiEndpoint?: string;
+  apiPrefix?: 'supabase' | 'renderer';
+  statusDataApiEndpoint?: string;
+  useDemoData?: boolean; // Force use demo data instead of API
+  
+  // Display Options
   showJobSelector?: boolean;
   showStats?: boolean;
   showFilters?: boolean;
@@ -102,17 +112,45 @@ export interface ApplicantTableConfig {
   highlightNewApplications?: boolean;
   autoRefresh?: boolean;
   refreshInterval?: number;
-  columns?: {
-    name: boolean;
-    email: boolean;
-    phone: boolean;
-    status: boolean;
-    submittedAt: boolean;
-    experience: boolean;
-    location: boolean;
-    salary: boolean;
-    rating: boolean;
-    actions: boolean;
+  
+  // Column Configuration
+  columns?: Array<{
+    key: string;
+    label: string;
+    type: 'text' | 'email' | 'phone' | 'status' | 'date' | 'number' | 'rating' | 'actions' | 'badge' | 'boolean';
+    accessor?: string;
+    sortable?: boolean;
+    filterable?: boolean;
+    width?: string;
+    align?: 'left' | 'center' | 'right';
+    visible?: boolean;
+    format?: 'currency' | 'percentage' | 'date' | 'datetime' | 'relative-time';
+    statusColors?: Record<string, string>;
+  }>;
+  
+  // Advanced Configuration
+  customFields?: Record<string, any>;
+  filterOptions?: {
+    statusOptions?: Array<{ value: string; label: string; color?: string }>;
+    experienceOptions?: Array<{ value: string; label: string }>;
+    locationOptions?: Array<{ value: string; label: string }>;
+    customFilters?: Array<{
+      key: string;
+      label: string;
+      type: 'select' | 'multiselect' | 'date-range' | 'text';
+      options?: Array<{ value: string; label: string }>;
+    }>;
+  };
+  
+  // Data Transformation
+  dataMapping?: {
+    idField?: string;
+    nameField?: string;
+    emailField?: string;
+    phoneField?: string;
+    statusField?: string;
+    dateField?: string;
+    customMappings?: Record<string, string>;
   };
 }
 
@@ -244,6 +282,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   const {
     title = 'Job Applications',
     description = 'Manage and review job applications',
+    apiEndpoint,
+    apiPrefix = 'supabase',
+    statusDataApiEndpoint,
+    useDemoData = false,
     showJobSelector = true,
     showStats = true,
     showFilters = true,
@@ -261,24 +303,32 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     highlightNewApplications = true,
     autoRefresh = false,
     refreshInterval = 30000,
-    columns = {
-      name: true,
-      email: true,
-      phone: true,
-      status: true,
-      submittedAt: true,
-      experience: true,
-      location: true,
-      salary: true,
-      rating: true,
-      actions: true
-    }
+    columns = [],
+    dataMapping = {},
+    filterOptions = {}
   } = config;
+
+  // Default columns if none configured
+  const defaultColumns = [
+    { key: 'applicantName', label: 'Applicant', type: 'text' as const, visible: true, sortable: true },
+    { key: 'applicantEmail', label: 'Contact', type: 'email' as const, visible: true, sortable: false },
+    { key: 'status', label: 'Status', type: 'status' as const, visible: true, sortable: true },
+    { key: 'submittedAt', label: 'Applied', type: 'date' as const, visible: true, sortable: true },
+    { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: true },
+    { key: 'location', label: 'Location', type: 'text' as const, visible: true, sortable: false },
+    { key: 'expectedSalary', label: 'Expected Salary', type: 'text' as const, visible: true, sortable: false },
+    { key: 'rating', label: 'Rating', type: 'rating' as const, visible: true, sortable: true },
+    { key: 'actions', label: 'Actions', type: 'actions' as const, visible: true, sortable: false }
+  ];
+
+  const visibleColumns = (columns && columns.length > 0 ? columns : defaultColumns).filter(col => col.visible !== false);
 
   // State
   const [selectedJobId, setSelectedJobId] = useState<string>('all');
-  const [applications, setApplications] = useState<Application[]>(demoApplications);
-  const [jobs] = useState<Job[]>(demoJobs);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [jobs, setJobs] = useState<Job[]>(demoJobs);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [experienceFilter, setExperienceFilter] = useState<string>('all');
@@ -290,16 +340,148 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
 
+  // Data mapping helper
+  const mapApiDataToApplication = (apiData: any): Application => {
+    const {
+      idField = 'id',
+      nameField = 'applicantName',
+      emailField = 'applicantEmail',
+      phoneField = 'applicantPhone',
+      statusField = 'status',
+      dateField = 'submittedAt'
+    } = dataMapping;
+
+    return {
+      id: apiData[idField] || apiData.id || '',
+      jobId: apiData.jobId || apiData.job_id || '',
+      jobTitle: apiData.jobTitle || apiData.job_title || '',
+      applicantName: apiData[nameField] || apiData.applicantName || apiData.name || '',
+      applicantEmail: apiData[emailField] || apiData.applicantEmail || apiData.email || '',
+      applicantPhone: apiData[phoneField] || apiData.applicantPhone || apiData.phone,
+      status: apiData[statusField] || apiData.status || 'pending',
+      submittedAt: apiData[dateField] || apiData.submittedAt || apiData.created_at || new Date().toISOString(),
+      experience: apiData.experience || apiData.years_experience,
+      location: apiData.location || apiData.city,
+      expectedSalary: apiData.expectedSalary || apiData.expected_salary,
+      noticePeriod: apiData.noticePeriod || apiData.notice_period,
+      resumeUrl: apiData.resumeUrl || apiData.resume_url,
+      coverLetter: apiData.coverLetter || apiData.cover_letter,
+      responses: apiData.responses || apiData.form_responses || {},
+      rating: apiData.rating || apiData.score,
+      notes: apiData.notes || apiData.internal_notes,
+      interviewDate: apiData.interviewDate || apiData.interview_date,
+      source: apiData.source || apiData.application_source
+    };
+  };
+
+  // API fetching functions
+  const fetchApplications = async () => {
+    if (!apiEndpoint || useDemoData) {
+      // Use demo data if no API endpoint configured or demo mode enabled
+      console.log('Using demo data:', useDemoData ? 'Demo mode enabled' : 'No API endpoint configured');
+      setApplications(demoApplications);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      let url = apiEndpoint;
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      // Add API prefix specific logic
+      if (apiPrefix === 'renderer') {
+        // Add renderer-specific headers if needed
+        headers['X-API-Source'] = 'renderer';
+      }
+
+      console.log('Fetching applications from:', url);
+      console.log('Request headers:', headers);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        // Get response text to see what was returned
+        const responseText = await response.text();
+        console.error('Response text:', responseText);
+        
+        if (responseText.includes('<!DOCTYPE')) {
+          throw new Error(`API endpoint returned HTML instead of JSON. This usually means the endpoint doesn't exist or requires authentication. Status: ${response.status}`);
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status} - ${responseText}`);
+      }
+
+      // Check content type
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text();
+        console.error('Non-JSON response:', responseText);
+        
+        if (responseText.includes('<!DOCTYPE')) {
+          throw new Error('API endpoint returned HTML instead of JSON. Please check if the endpoint exists and is accessible.');
+        }
+        
+        throw new Error(`Expected JSON response but got: ${contentType || 'unknown'}`);
+      }
+
+      const data = await response.json();
+      console.log('API response data:', data);
+      
+      // Handle different response structures
+      const applicationsData = Array.isArray(data) ? data : (data.data || data.applications || []);
+      
+      if (!Array.isArray(applicationsData)) {
+        console.warn('API response is not an array:', applicationsData);
+        throw new Error('API response does not contain a valid applications array');
+      }
+      
+      // Map API data to our Application interface
+      const mappedApplications = applicationsData.map(mapApiDataToApplication);
+      console.log('Mapped applications:', mappedApplications);
+      
+      setApplications(mappedApplications);
+    } catch (err) {
+      console.error('Error fetching applications:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch applications';
+      setError(errorMessage);
+      
+      // Show detailed error for debugging
+      if (errorMessage.includes('<!DOCTYPE')) {
+        setError('API endpoint returned HTML instead of JSON. Please check:\n1. The endpoint URL is correct\n2. The API server is running\n3. Authentication is not required\n4. CORS is properly configured');
+      }
+      
+      // Fallback to demo data on error
+      setApplications(demoApplications);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch data on component mount and when API config changes
+  useEffect(() => {
+    fetchApplications();
+  }, [apiEndpoint, apiPrefix]);
+
   // Auto refresh
   useEffect(() => {
     if (autoRefresh && refreshInterval > 0) {
       const interval = setInterval(() => {
-        // In real app, this would fetch fresh data
-        console.log('Auto refreshing applications...');
+        fetchApplications();
       }, refreshInterval);
       return () => clearInterval(interval);
     }
-  }, [autoRefresh, refreshInterval]);
+  }, [autoRefresh, refreshInterval, apiEndpoint]);
 
   // Filter and sort applications
   const filteredAndSortedApplications = useMemo(() => {
@@ -478,6 +660,165 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     const now = new Date();
     const diffHours = (now.getTime() - submitted.getTime()) / (1000 * 60 * 60);
     return diffHours <= 24;
+  };
+
+  // Helper function to render cell content based on column type
+  const renderCellContent = (column: any, application: Application) => {
+    const fieldValue = application[column.accessor || column.key as keyof Application];
+    
+    switch (column.type) {
+      case 'text':
+        if (column.key === 'applicantName') {
+          return (
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
+                <User className="h-4 w-4 text-gray-600" />
+              </div>
+              <div>
+                <div className="font-semibold text-gray-900">{application.applicantName}</div>
+                <div className="text-sm text-gray-600">{application.jobTitle}</div>
+              </div>
+              {isNewApplication(application.submittedAt) && (
+                <Badge className="bg-blue-100 text-blue-800 text-xs">New</Badge>
+              )}
+            </div>
+          );
+        }
+        return <span className="text-sm text-gray-900">{fieldValue || 'Not specified'}</span>;
+        
+      case 'email':
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm">
+              <Mail className="h-3 w-3 text-gray-400" />
+              <a href={`mailto:${application.applicantEmail}`} className="text-blue-600 hover:underline">
+                {application.applicantEmail}
+              </a>
+            </div>
+            {application.applicantPhone && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Phone className="h-3 w-3 text-gray-400" />
+                {application.applicantPhone}
+              </div>
+            )}
+          </div>
+        );
+        
+      case 'phone':
+        return application.applicantPhone ? (
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Phone className="h-3 w-3 text-gray-400" />
+            {application.applicantPhone}
+          </div>
+        ) : <span className="text-sm text-gray-400">Not provided</span>;
+        
+      case 'status':
+        return showStatusBadges ? (
+          <Badge className={`${getStatusColor(application.status)} flex items-center gap-1 w-fit`}>
+            {getStatusIcon(application.status)}
+            {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+          </Badge>
+        ) : (
+          <Select
+            value={application.status}
+            onValueChange={(value) => handleStatusChange(application.id, value as Application['status'])}
+          >
+            <SelectTrigger className="w-32 h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="reviewing">Reviewing</SelectItem>
+              <SelectItem value="interviewed">Interviewed</SelectItem>
+              <SelectItem value="shortlisted">Shortlisted</SelectItem>
+              <SelectItem value="accepted">Accepted</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
+        );
+        
+      case 'date':
+        if (column.format === 'relative-time') {
+          // Use relative time format
+          const date = new Date(fieldValue as string);
+          const now = new Date();
+          const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+          if (diffHours < 24) return `${Math.floor(diffHours)} hours ago`;
+          const diffDays = Math.floor(diffHours / 24);
+          return `${diffDays} days ago`;
+        }
+        return (
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Clock className="h-3 w-3" />
+            {formatDate(fieldValue as string)}
+          </div>
+        );
+        
+      case 'rating':
+        return showRatings && application.rating ? (
+          <div className="flex items-center gap-1">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className={`h-3 w-3 rounded-full ${
+                  i < application.rating! ? 'bg-yellow-400' : 'bg-gray-200'
+                }`}
+              />
+            ))}
+            <span className="ml-2 text-sm text-gray-600">({application.rating}/5)</span>
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">Not rated</span>
+        );
+        
+      case 'number':
+        if (column.format === 'currency') {
+          return <span className="text-sm text-gray-900">${fieldValue}</span>;
+        }
+        return <span className="text-sm text-gray-900">{fieldValue}</span>;
+        
+      case 'badge':
+        return <Badge variant="outline">{fieldValue}</Badge>;
+        
+      case 'boolean':
+        return fieldValue ? (
+          <CheckCircle className="h-4 w-4 text-green-500" />
+        ) : (
+          <XCircle className="h-4 w-4 text-red-500" />
+        );
+        
+      case 'actions':
+        return showActions ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handleViewApplication(application)}>
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Mail className="h-4 w-4 mr-2" />
+                Send Email
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleStatusChange(application.id, 'shortlisted')}>
+                Shortlist
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusChange(application.id, 'rejected')}>
+                Reject
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null;
+        
+      default:
+        return <span className="text-sm text-gray-900">{fieldValue?.toString() || 'N/A'}</span>;
+    }
   };
 
   return (
@@ -690,6 +1031,39 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
 
         {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          {loading && (
+            <div className="flex items-center justify-center p-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              <span className="ml-3 text-gray-600">Loading applications...</span>
+            </div>
+          )}
+          
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 m-4">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-red-800 mb-2">API Error</h4>
+                  <div className="text-red-700 text-sm whitespace-pre-line">{error}</div>
+                  {apiEndpoint && (
+                    <div className="mt-3 p-3 bg-red-100 rounded border text-xs">
+                      <strong>Debug Info:</strong><br />
+                      Endpoint: <code className="bg-red-200 px-1 rounded">{apiEndpoint}</code><br />
+                      API Type: <code className="bg-red-200 px-1 rounded">{apiPrefix}</code><br />
+                      <br />
+                      <strong>Common Solutions:</strong><br />
+                      • Check if the API endpoint exists and is accessible<br />
+                      • Verify the API server is running<br />
+                      • Ensure CORS is configured for your domain<br />
+                      • Check if authentication headers are required<br />
+                      • Verify the endpoint returns JSON, not HTML
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
@@ -701,110 +1075,44 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                     />
                   </TableHead>
                 )}
-                {columns.name && (
+                {visibleColumns.map((column) => (
                   <TableHead 
-                    className={`font-semibold text-gray-900 ${sortable ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                    onClick={() => handleSort('applicantName')}
+                    key={column.key}
+                    className={`font-semibold text-gray-900 ${
+                      column.sortable && sortable ? 'cursor-pointer hover:bg-gray-100' : ''
+                    }`}
+                    onClick={() => column.sortable && sortable && handleSort(column.accessor || column.key)}
+                    style={{ width: column.width }}
                   >
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Applicant
-                      {sortable && sortField === 'applicantName' && (
+                    <div className={`flex items-center gap-2 ${column.align === 'center' ? 'justify-center' : column.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                      {column.type === 'text' && column.key === 'applicantName' && <User className="h-4 w-4" />}
+                      {column.type === 'email' && <Mail className="h-4 w-4" />}
+                      {column.type === 'date' && <Calendar className="h-4 w-4" />}
+                      {column.type === 'text' && column.key === 'experience' && <Briefcase className="h-4 w-4" />}
+                      {column.type === 'text' && column.key === 'location' && <MapPin className="h-4 w-4" />}
+                      {column.label}
+                      {column.sortable && sortable && sortField === (column.accessor || column.key) && (
                         sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
                       )}
                     </div>
                   </TableHead>
-                )}
-                {columns.email && (
-                  <TableHead className="font-semibold text-gray-900">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      Contact
-                    </div>
-                  </TableHead>
-                )}
-                {columns.status && (
-                  <TableHead 
-                    className={`font-semibold text-gray-900 ${sortable ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                    onClick={() => handleSort('status')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Status
-                      {sortable && sortField === 'status' && (
-                        sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
-                    </div>
-                  </TableHead>
-                )}
-                {columns.submittedAt && (
-                  <TableHead 
-                    className={`font-semibold text-gray-900 ${sortable ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                    onClick={() => handleSort('submittedAt')}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Applied
-                      {sortable && sortField === 'submittedAt' && (
-                        sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
-                    </div>
-                  </TableHead>
-                )}
-                {columns.experience && (
-                  <TableHead 
-                    className={`font-semibold text-gray-900 ${sortable ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                    onClick={() => handleSort('experience')}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="h-4 w-4" />
-                      Experience
-                      {sortable && sortField === 'experience' && (
-                        sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
-                    </div>
-                  </TableHead>
-                )}
-                {columns.location && (
-                  <TableHead className="font-semibold text-gray-900">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
-                      Location
-                    </div>
-                  </TableHead>
-                )}
-                {columns.salary && (
-                  <TableHead className="font-semibold text-gray-900">Expected Salary</TableHead>
-                )}
-                {columns.rating && showRatings && (
-                  <TableHead 
-                    className={`font-semibold text-gray-900 ${sortable ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                    onClick={() => handleSort('rating')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Rating
-                      {sortable && sortField === 'rating' && (
-                        sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                      )}
-                    </div>
-                  </TableHead>
-                )}
-                {columns.actions && showActions && (
-                  <TableHead className="font-semibold text-gray-900">Actions</TableHead>
-                )}
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedApplications.length === 0 ? (
                 <TableRow>
                   <TableCell 
-                    colSpan={Object.values(columns).filter(Boolean).length + (showBulkActions ? 1 : 0)} 
+                    colSpan={visibleColumns.length + (showBulkActions ? 1 : 0)} 
                     className="text-center py-12"
                   >
                     <div className="flex flex-col items-center gap-4">
                       <Users className="h-16 w-16 text-gray-400" />
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">No applications found</h3>
-                        <p className="text-gray-600">Try adjusting your filters or select a different job</p>
+                        <p className="text-gray-600">
+                          {loading ? 'Loading...' : error ? 'Error loading data' : 'Try adjusting your filters or select a different job'}
+                        </p>
                       </div>
                     </div>
                   </TableCell>
@@ -824,138 +1132,15 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                         />
                       </TableCell>
                     )}
-                    {columns.name && (
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
-                            <User className="h-4 w-4 text-gray-600" />
-                          </div>
-                          <div>
-                            <div className="font-semibold text-gray-900">{application.applicantName}</div>
-                            <div className="text-sm text-gray-600">{application.jobTitle}</div>
-                          </div>
-                          {isNewApplication(application.submittedAt) && (
-                            <Badge className="bg-blue-100 text-blue-800 text-xs">New</Badge>
-                          )}
-                        </div>
+                    {visibleColumns.map((column) => (
+                      <TableCell 
+                        key={column.key}
+                        onClick={(e) => (column.type === 'status' || column.type === 'actions') ? e.stopPropagation() : undefined}
+                        className={column.align === 'center' ? 'text-center' : column.align === 'right' ? 'text-right' : ''}
+                      >
+                        {renderCellContent(column, application)}
                       </TableCell>
-                    )}
-                    {columns.email && (
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm">
-                            <Mail className="h-3 w-3 text-gray-400" />
-                            <a href={`mailto:${application.applicantEmail}`} className="text-blue-600 hover:underline">
-                              {application.applicantEmail}
-                            </a>
-                          </div>
-                          {application.applicantPhone && (
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Phone className="h-3 w-3 text-gray-400" />
-                              {application.applicantPhone}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
-                    {columns.status && (
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        {showStatusBadges ? (
-                          <Badge className={`${getStatusColor(application.status)} flex items-center gap-1 w-fit`}>
-                            {getStatusIcon(application.status)}
-                            {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-                          </Badge>
-                        ) : (
-                          <Select
-                            value={application.status}
-                            onValueChange={(value) => handleStatusChange(application.id, value as Application['status'])}
-                          >
-                            <SelectTrigger className="w-32 h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="reviewing">Reviewing</SelectItem>
-                              <SelectItem value="interviewed">Interviewed</SelectItem>
-                              <SelectItem value="shortlisted">Shortlisted</SelectItem>
-                              <SelectItem value="accepted">Accepted</SelectItem>
-                              <SelectItem value="rejected">Rejected</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </TableCell>
-                    )}
-                    {columns.submittedAt && (
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Clock className="h-3 w-3" />
-                          {formatDate(application.submittedAt)}
-                        </div>
-                      </TableCell>
-                    )}
-                    {columns.experience && (
-                      <TableCell>
-                        <span className="text-sm text-gray-900">{application.experience || 'Not specified'}</span>
-                      </TableCell>
-                    )}
-                    {columns.location && (
-                      <TableCell>
-                        <span className="text-sm text-gray-600">{application.location || 'Not specified'}</span>
-                      </TableCell>
-                    )}
-                    {columns.salary && (
-                      <TableCell>
-                        <span className="text-sm text-gray-900">{application.expectedSalary || 'Not specified'}</span>
-                      </TableCell>
-                    )}
-                    {columns.rating && showRatings && (
-                      <TableCell>
-                        {application.rating ? (
-                          <div className="flex items-center gap-1">
-                            {[...Array(5)].map((_, i) => (
-                              <div
-                                key={i}
-                                className={`h-3 w-3 rounded-full ${
-                                  i < application.rating! ? 'bg-yellow-400' : 'bg-gray-200'
-                                }`}
-                              />
-                            ))}
-                            <span className="ml-2 text-sm text-gray-600">({application.rating}/5)</span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">Not rated</span>
-                        )}
-                      </TableCell>
-                    )}
-                    {columns.actions && showActions && (
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleViewApplication(application)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Mail className="h-4 w-4 mr-2" />
-                              Send Email
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleStatusChange(application.id, 'shortlisted')}>
-                              Shortlist
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(application.id, 'rejected')}>
-                              Reject
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    )}
+                    ))}
                   </TableRow>
                 ))
               )}

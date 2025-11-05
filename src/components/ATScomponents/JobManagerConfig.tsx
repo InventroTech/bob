@@ -4,14 +4,33 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, Database } from 'lucide-react';
 
 interface JobManagerComponentConfig {
+  // Basic Settings
   title?: string;
   showCreateButton?: boolean;
   showStats?: boolean;
   layout?: 'grid' | 'list';
   maxJobs?: number;
+  
+  // API Configuration
+  apiEndpoint?: string;
+  apiPrefix?: 'supabase' | 'renderer';
+  useDemoData?: boolean;
+  
+  // Data Mapping
+  dataMapping?: {
+    idField?: string;
+    titleField?: string;
+    descriptionField?: string;
+    departmentField?: string;
+    locationField?: string;
+    typeField?: string;
+    statusField?: string;
+    deadlineField?: string;
+    createdAtField?: string;
+  };
 }
 
 interface JobManagerConfigProps {
@@ -71,6 +90,168 @@ export const JobManagerConfigComponent: React.FC<JobManagerConfigProps> = ({
               onChange={(e) => onConfigChange('maxJobs', parseInt(e.target.value) || 50)}
               placeholder="50"
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* API Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            API Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="useDemoData" className="text-sm font-medium text-gray-700">Use Demo Data</Label>
+            <Switch
+              id="useDemoData"
+              checked={config.useDemoData || false}
+              onCheckedChange={(checked) => onConfigChange('useDemoData', checked)}
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="apiEndpoint" className="text-sm font-medium text-gray-700">API Endpoint</Label>
+            <Input
+              id="apiEndpoint"
+              value={config.apiEndpoint || ''}
+              onChange={(e) => onConfigChange('apiEndpoint', e.target.value)}
+              placeholder="/api/jobs"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
+            />
+            {config.useDemoData && (
+              <p className="text-xs text-gray-500 mt-1">Demo data mode is enabled. API endpoint is disabled.</p>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Used for both GET (fetch jobs) and POST (create jobs) requests
+            </p>
+          </div>
+          
+          <div>
+            <Label htmlFor="apiPrefix" className="text-sm font-medium text-gray-700">API Prefix</Label>
+            <Select
+              value={config.apiPrefix || 'supabase'}
+              onValueChange={(value) => onConfigChange('apiPrefix', value)}
+              disabled={config.useDemoData}
+            >
+              <SelectTrigger className="mt-2 border-gray-300">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="supabase">Supabase</SelectItem>
+                <SelectItem value="renderer">Renderer API</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Data Mapping */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Data Mapping
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Map your API response fields to the expected job data structure.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="idField" className="text-sm font-medium text-gray-700">ID Field</Label>
+              <Input
+                id="idField"
+                value={config.dataMapping?.idField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  idField: e.target.value 
+                })}
+                placeholder="id"
+                className="mt-1 text-sm"
+                disabled={config.useDemoData}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="titleField" className="text-sm font-medium text-gray-700">Title Field</Label>
+              <Input
+                id="titleField"
+                value={config.dataMapping?.titleField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  titleField: e.target.value 
+                })}
+                placeholder="title"
+                className="mt-1 text-sm"
+                disabled={config.useDemoData}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="descriptionField" className="text-sm font-medium text-gray-700">Description Field</Label>
+              <Input
+                id="descriptionField"
+                value={config.dataMapping?.descriptionField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  descriptionField: e.target.value 
+                })}
+                placeholder="description"
+                className="mt-1 text-sm"
+                disabled={config.useDemoData}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="departmentField" className="text-sm font-medium text-gray-700">Department Field</Label>
+              <Input
+                id="departmentField"
+                value={config.dataMapping?.departmentField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  departmentField: e.target.value 
+                })}
+                placeholder="department"
+                className="mt-1 text-sm"
+                disabled={config.useDemoData}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="locationField" className="text-sm font-medium text-gray-700">Location Field</Label>
+              <Input
+                id="locationField"
+                value={config.dataMapping?.locationField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  locationField: e.target.value 
+                })}
+                placeholder="location"
+                className="mt-1 text-sm"
+                disabled={config.useDemoData}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="statusField" className="text-sm font-medium text-gray-700">Status Field</Label>
+              <Input
+                id="statusField"
+                value={config.dataMapping?.statusField || ''}
+                onChange={(e) => onConfigChange('dataMapping', { 
+                  ...config.dataMapping, 
+                  statusField: e.target.value 
+                })}
+                placeholder="status"
+                className="mt-1 text-sm"
+                disabled={config.useDemoData}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

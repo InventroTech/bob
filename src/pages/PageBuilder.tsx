@@ -29,6 +29,7 @@ import {
   MousePointer,
   Briefcase,
   Users,
+  Upload,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -81,6 +82,8 @@ import { JobsPageComponent } from "@/components/ATScomponents/JobsPageComponent"
 import { JobsPageConfigComponent } from "@/components/ATScomponents/JobsPageConfig";
 import { ApplicantTableComponent } from "@/components/ATScomponents/ApplicantTableComponent";
 import { ApplicantTableConfigComponent } from "@/components/ATScomponents/ApplicantTableConfig";
+import { FileUploadPageComponent } from "@/components/page-builder/FileUploadPageComponent";
+import { FileUploadPageConfig } from "@/components/page-builder/FileUploadPageConfig";
 import { CardComponent } from "@/layout/CardEditLayout";
 import { LeadCarousel } from "@/components/ui/leadCarousel";
 import { Carousel } from "@/components/ui/carousel";
@@ -145,6 +148,10 @@ interface ComponentConfig {
   maxJobs?: number;
   // JobsPage specific fields
   allowApplications?: boolean;
+  // FileUpload specific fields
+  acceptedFileTypes?: string;
+  maxFileSize?: number;
+  multiple?: boolean;
 }
 
 // Update CanvasComponentData to include config
@@ -184,6 +191,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   jobManager: JobManagerComponent,
   jobsPage: JobsPageComponent,
   applicantTable: ApplicantTableComponent,
+  fileUpload: FileUploadPageComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -229,6 +237,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     maxJobs?: number;
     // JobsPage specific fields
     allowApplications?: boolean;
+    // FileUpload specific fields
+    acceptedFileTypes?: string;
+    maxFileSize?: number;
+    multiple?: boolean;
   };
 
   // Local state for all input fields
@@ -256,6 +268,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     maxJobs: initialConfig.maxJobs || 50,
     // JobsPage fields
     allowApplications: initialConfig.allowApplications ?? true,
+    // FileUpload fields
+    acceptedFileTypes: initialConfig.acceptedFileTypes || '*',
+    maxFileSize: initialConfig.maxFileSize || 10,
+    multiple: initialConfig.multiple ?? true,
   });
 
   // Separate state for columns
@@ -452,6 +468,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'fileUpload':
+        return (
+          <FileUploadPageConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -499,7 +523,7 @@ const PageBuilder = () => {
   // Setup droppable canvas area
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','openModalButton','jobManager','jobsPage','applicantTable'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'leadCard', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','leadCardCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','openModalButton','jobManager','jobsPage','applicantTable','fileUpload'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -981,6 +1005,11 @@ const PageBuilder = () => {
                           id="applicantTable"
                           label="Applicant Table"
                           icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="fileUpload"
+                          label="File Upload"
+                          icon={<Upload className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
