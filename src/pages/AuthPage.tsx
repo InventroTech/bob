@@ -17,7 +17,7 @@ const AuthPage = () => {
   const [error, setError] = useState(''); // State for error messages
   const { session, loading: authLoading } = useAuth();
 
-  const handleAuthAction = async (event: React.FormEvent<HTMLFormElement>, action: 'signIn' | 'signUp') => {
+  const handleAuthAction = async (event: React.FormEvent<HTMLFormElement>, action: 'signIn') => {
     event.preventDefault();
     setMessage('');
     setError('');
@@ -60,10 +60,7 @@ const AuthPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
       <Tabs defaultValue="signin" className="w-full max-w-sm">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="signin">Sign In</TabsTrigger>
-          <TabsTrigger value="signup">Sign Up</TabsTrigger>
-        </TabsList>
+        
         <TabsContent value="signin">
           <Card className="shadow-lg animate-fade-in">
             <CardHeader className="text-center">
@@ -88,30 +85,7 @@ const AuthPage = () => {
             </CardContent>
           </Card>
         </TabsContent>
-        <TabsContent value="signup">
-           <Card className="shadow-lg animate-fade-in">
-             <CardHeader className="text-center">
-               <UserPlus className="mx-auto h-10 w-10 text-primary mb-2" />
-               <CardTitle className="text-2xl">Create Account</CardTitle>
-               <CardDescription>Enter your email and password to create a new account.</CardDescription>
-             </CardHeader>
-             <CardContent>
-               <form onSubmit={(e) => handleAuthAction(e, 'signUp')} className="space-y-4">
-                 <div className="space-y-1">
-                   <Label htmlFor="signup-email">Email Address</Label>
-                   <Input id="signup-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={loading} />
-                 </div>
-                 <div className="space-y-1">
-                   <Label htmlFor="signup-password">Password</Label>
-                   <Input id="signup-password" type="password" placeholder="Choose a strong password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} minLength={6}/> {/* Add minLength */} 
-                 </div>
-                 <Button type="submit" className="w-full" disabled={loading}>
-                   {loading ? 'Creating Account...' : 'Sign Up'}
-                 </Button>
-               </form>
-             </CardContent>
-           </Card>
-        </TabsContent>
+        
          {(message || error) && (
            <CardFooter className="text-center text-sm pt-4">
              {message && <p className="text-green-600">{message}</p>}
