@@ -7,6 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { FileText, PlusCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery, SUPABASE_CACHE_KEYS, clearSupabaseCache } from '@/lib/supabaseCache';
+import { getCachedRoles } from '@/lib/sessionCache';
 
 interface PageRecord {
   id: string;
@@ -33,12 +35,22 @@ const MyPages = () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch all roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
-        .select('id, name');
+      // Check cache for roles first
+      const cachedRoles = getCachedRoles();
+      let rolesData = null;
+      
+      if (cachedRoles && cachedRoles.length > 0) {
+        console.log('[MyPages] Using cached roles');
+        rolesData = cachedRoles.map((r: any) => ({ id: r.id, name: r.name }));
+      } else {
+        // Fetch all roles from Supabase
+        const { data: rolesDataFromSupabase, error: rolesError } = await supabase
+          .from('roles')
+          .select('id, name');
 
-      if (rolesError) throw rolesError;
+        if (rolesError) throw rolesError;
+        rolesData = rolesDataFromSupabase || [];
+      }
 
       const rolesLookup: Record<string, string> = {};
       (rolesData || []).forEach((role) => {
@@ -47,14 +59,28 @@ const MyPages = () => {
       console.log("rolesLookup", rolesLookup);
       setRolesMap(rolesLookup);
 
-      // Fetch pages
-      const { data: pagesData, error: pagesError } = await supabase
-        .from('pages')
-        .select('id, name, updated_at, role')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
+      // Check cache for pages
+      const pagesCacheKey = SUPABASE_CACHE_KEYS.PAGES(user.id);
+      const cachedPages = getCachedSupabaseQuery<any[]>(pagesCacheKey);
+      
+      let pagesData = null;
+      if (cachedPages && cachedPages.length > 0) {
+        console.log('[MyPages] Using cached pages');
+        pagesData = cachedPages;
+      } else {
+        // Fetch pages
+        const { data: pagesDataFromSupabase, error: pagesError } = await supabase
+          .from('pages')
+          .select('id, name, updated_at, role')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false });
 
-      if (pagesError) throw pagesError;
+        if (pagesError) throw pagesError;
+        pagesData = pagesDataFromSupabase || [];
+        
+        // Cache the pages
+        setCachedSupabaseQuery(pagesCacheKey, pagesData);
+      }
 
       // Group pages by role name
       const grouped: Record<string, PageRecord[]> = {};
@@ -83,6 +109,16 @@ const MyPages = () => {
   useEffect(() => {
     if (!user) return;
     (async () => {
+      // Check cache first
+      const cacheKey = SUPABASE_CACHE_KEYS.TENANT_SLUG(user.id);
+      const cached = getCachedSupabaseQuery<{ slug: string }>(cacheKey);
+      
+      if (cached?.slug) {
+        console.log('[MyPages] Using cached tenant slug');
+        setTenantSlug(cached.slug);
+        return;
+      }
+      
       const { data: tu } = await supabase
         .from('tenant_users')
         .select('tenant_id')
@@ -94,7 +130,10 @@ const MyPages = () => {
         .select('slug')
         .eq('id', tu.tenant_id)
         .single();
-      if (t?.slug) setTenantSlug(t.slug);
+      if (t?.slug) {
+        setTenantSlug(t.slug);
+        setCachedSupabaseQuery(cacheKey, { slug: t.slug });
+      }
     })();
   }, [user]);
 

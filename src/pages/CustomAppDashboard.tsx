@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery } from '@/lib/supabaseCache';
 
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -22,26 +23,35 @@ const CustomAppDashboard: React.FC = () => {
       console.log('Fetching data for user:', user.email);
 
       try {
-        // Get tenant_id and role_id for the user
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('tenant_id, role_id')
-          .eq('email', user.email)
-          .single();
+        // Get tenant_id and role_id for the user (check cache first)
+        const userCacheKey = `supabase_cache:user_data:${user.email}`;
+        let userData = getCachedSupabaseQuery<{ tenant_id: string; role_id: string }>(userCacheKey);
+        
+        if (!userData) {
+          const { data: userDataResponse, error: userError } = await supabase
+            .from('users')
+            .select('tenant_id, role_id')
+            .eq('email', user.email)
+            .single();
 
-        console.log('User data result:', { userData, userError });
+          console.log('User data result:', { userDataResponse, userError });
 
-        if (userError) {
-          console.error('Error fetching user data:', userError);
-          toast.error('Failed to load user data');
-          setLoading(false);
-          return;
-        }
+          if (userError) {
+            console.error('Error fetching user data:', userError);
+            toast.error('Failed to load user data');
+            setLoading(false);
+            return;
+          }
 
-        if (!userData?.tenant_id) {
-          console.log('No tenant_id found for user');
-          setLoading(false);
-          return;
+          if (!userDataResponse?.tenant_id) {
+            console.log('No tenant_id found for user');
+            setLoading(false);
+            return;
+          }
+
+          userData = userDataResponse;
+          // Cache the user data
+          setCachedSupabaseQuery(userCacheKey, userData);
         }
 
         const tenantId = userData.tenant_id;
@@ -50,21 +60,30 @@ const CustomAppDashboard: React.FC = () => {
 
         console.log('Tenant ID:', tenantId, 'Role ID:', roleId);
 
-        // Fetch pages for this tenant and role
-        const { data: pages, error: pagesError } = await supabase
-          .from('pages')
-          .select('id, name')
-          .eq('tenant_id', tenantId)
-          .eq('role', roleId)
-          .order('updated_at', { ascending: false });
+        // Fetch pages for this tenant and role (check cache first)
+        const pagesCacheKey = `supabase_cache:pages_by_tenant_role:${tenantId}:${roleId}`;
+        let pages = getCachedSupabaseQuery<{ id: string; name: string }[]>(pagesCacheKey);
+        
+        if (!pages) {
+          const { data: pagesData, error: pagesError } = await supabase
+            .from('pages')
+            .select('id, name')
+            .eq('tenant_id', tenantId)
+            .eq('role', roleId)
+            .order('updated_at', { ascending: false });
 
-        console.log('Pages query result:', { pages, pagesError });
+          console.log('Pages query result:', { pagesData, pagesError });
 
-        if (pagesError) {
-          console.error('Error fetching pages:', pagesError);
-          toast.error('Failed to load pages');
-          setLoading(false);
-          return;
+          if (pagesError) {
+            console.error('Error fetching pages:', pagesError);
+            toast.error('Failed to load pages');
+            setLoading(false);
+            return;
+          }
+
+          pages = pagesData || [];
+          // Cache the pages
+          setCachedSupabaseQuery(pagesCacheKey, pages);
         }
 
         if (pages && pages.length > 0) {

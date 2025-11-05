@@ -2,6 +2,9 @@ import React, { createContext, useState, useEffect, useContext, ReactNode } from
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
+import { preloadSessionData, invalidateSessionCache } from '@/lib/sessionCache';
+import { clearApiCache } from '@/lib/apiCache';
+import { clearSupabaseCache } from '@/lib/supabaseCache';
 
 interface AuthContextType {
   session: Session | null;
@@ -32,6 +35,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Clear session storage items
       sessionStorage.removeItem('ticketCarouselState');
+      
+      // Clear session cache
+      try {
+        invalidateSessionCache();
+      } catch (error) {
+        console.error('Failed to clear session cache:', error);
+      }
+      
+      // Clear Supabase cache
+      try {
+        clearSupabaseCache();
+      } catch (error) {
+        console.error('Failed to clear Supabase cache:', error);
+      }
+      
+      // Clear API cache
+      try {
+        clearApiCache();
+      } catch (error) {
+        console.error('Failed to clear API cache:', error);
+      }
+      
       console.log('Session storage cleared');
       
       const { error } = await supabase.auth.signOut();
@@ -59,10 +84,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Set loading to false immediately - don't wait for preloading
       setLoading(false);
+      
+      // Pre-fetch session data in the background (non-blocking)
+      if (session?.access_token && session.user) {
+        // Don't await - let it run in the background
+        import('@/lib/sessionCache').then(({ preloadSessionData }) => 
+          preloadSessionData(
+            session.access_token,
+            session.user.id,
+            'bibhab-thepyro-ai'
+          ).catch(err => 
+            console.error('Failed to pre-load session data:', err)
+          )
+        ).catch(err => {
+          console.error('Error in background preloading:', err);
+        });
+      }
     });
 
     // Listen for auth changes
@@ -71,7 +114,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('Supabase auth state changed:', _event, session);
         setSession(session);
         setUser(session?.user ?? null);
-        setLoading(false); // Ensure loading is false after update
+        
+        // Set loading to false immediately
+        setLoading(false);
+        
+        // Pre-fetch session data when session is available (non-blocking)
+        if (session?.access_token && _event === 'SIGNED_IN' && session.user) {
+          // Don't await - let it run in the background
+          import('@/lib/sessionCache').then(({ preloadSessionData }) => 
+            preloadSessionData(
+              session.access_token,
+              session.user.id,
+              'bibhab-thepyro-ai'
+            ).catch(err => 
+              console.error('Failed to pre-load session data:', err)
+            )
+          ).catch(err => {
+            console.error('Error in background preloading:', err);
+          });
+        }
+        
+        // Clear caches on logout
+        if (_event === 'SIGNED_OUT') {
+          try {
+            // Clear session cache on logout
+            invalidateSessionCache();
+            
+            // Clear Supabase cache on logout
+            clearSupabaseCache();
+            
+            // Clear API cache on logout
+            clearApiCache();
+          } catch (error) {
+            console.error('Failed to clear caches:', error);
+          }
+        }
       }
     );
 

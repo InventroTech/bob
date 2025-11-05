@@ -2,8 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-import { useTenant } from "@/hooks/useTenant";
-import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { convertGMTtoIST } from "@/lib/timeUtils";
 import { Badge } from "@/components/ui/badge";
@@ -192,7 +190,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   initialTicket,
   onUpdate,
 }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const isInitialized = React.useRef(false);
@@ -315,8 +313,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the ticket stats
   const fetchTicketStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session?.access_token) return;
 
       // Use renderer URL with analytics endpoint
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
@@ -421,10 +418,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Fetching next ticket from:', nextTicketUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
@@ -432,7 +426,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${session.access_token}`,
           "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });
@@ -510,10 +504,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Taking break from:', apiUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
@@ -521,7 +512,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${session.access_token}`,
           "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
         body: JSON.stringify({
@@ -587,8 +578,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
 
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
@@ -650,16 +640,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       console.log('Processing action from:', apiUrl);
 
-      const token = session?.access_token;
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(payload)
       });
@@ -689,10 +674,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Fetching first ticket from:', apiUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
@@ -700,7 +682,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${session.access_token}`,
           "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
         },
       });

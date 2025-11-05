@@ -289,15 +289,36 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     return statuses.filter(status => status && status !== 'N/A');
   };
 
-  // Fetch filter options from API
+  // Fetch filter options from API (cached)
   const fetchFilterOptions = async () => {
+    // Check cache first
+    const cacheKey = 'filter_options_cache';
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const cachedData = JSON.parse(cached);
+        const cacheTime = cachedData.timestamp || 0;
+        const now = Date.now();
+        // Cache valid for 5 minutes
+        if (now - cacheTime < 5 * 60 * 1000) {
+          console.log('Using cached filter options');
+          setFilterOptions({
+            resolution_statuses: cachedData.resolution_statuses || [],
+            poster_statuses: cachedData.poster_statuses || []
+          });
+          return;
+        }
+      } catch (e) {
+        console.error('Error reading cached filter options:', e);
+      }
+    }
+
     try {
       const authToken = session?.access_token;
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       const apiUrl = `${baseUrl}/analytics/support-tickets/filter-options/`;
       
       console.log('Fetching filter options from:', apiUrl);
-      console.log('Auth token:', authToken ? 'Present' : 'Missing');
       
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -307,9 +328,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           'Content-Type': 'application/json'
         }
       });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -321,6 +339,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       console.log('Filter options response:', responseData);
       
       if (responseData.resolution_statuses && responseData.poster_statuses) {
+        const filterData = {
+          resolution_statuses: responseData.resolution_statuses,
+          poster_statuses: responseData.poster_statuses,
+          timestamp: Date.now()
+        };
+        // Cache the data
+        sessionStorage.setItem(cacheKey, JSON.stringify(filterData));
         setFilterOptions({
           resolution_statuses: responseData.resolution_statuses,
           poster_statuses: responseData.poster_statuses
@@ -341,18 +366,33 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
   };
 
-  // Debounced function to fetch filter options with search
-  
-
-  // Fetch assignees from API
+  // Fetch assignees from API (cached)
   const fetchAssignees = async () => {
+    // Check cache first
+    const cacheKey = 'assignees_cache';
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const cachedData = JSON.parse(cached);
+        const cacheTime = cachedData.timestamp || 0;
+        const now = Date.now();
+        // Cache valid for 5 minutes
+        if (now - cacheTime < 5 * 60 * 1000) {
+          console.log('Using cached assignees');
+          setAssignees(cachedData.assignees || []);
+          return;
+        }
+      } catch (e) {
+        console.error('Error reading cached assignees:', e);
+      }
+    }
+
     try {
       const authToken = session?.access_token;
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       const apiUrl = `${baseUrl}/accounts/users/assignees-by-role/?role=CSE`;
       
       console.log('Fetching assignees from:', apiUrl);
-      console.log('Auth token:', authToken ? 'Present' : 'Missing');
       
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -362,9 +402,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           'Content-Type': 'application/json'
         }
       });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -376,6 +413,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       console.log('Assignees response:', responseData);
       
       if (responseData.results && Array.isArray(responseData.results)) {
+        const assigneesData = {
+          assignees: responseData.results,
+          timestamp: Date.now()
+        };
+        // Cache the data
+        sessionStorage.setItem(cacheKey, JSON.stringify(assigneesData));
         setAssignees(responseData.results);
       } else {
         console.error('Invalid assignees data format:', responseData);
@@ -1013,11 +1056,41 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     fetchTickets();
   }, [session, config?.apiEndpoint, apiPrefix]);
 
-  // Fetch filter options and assignees when component mounts
+  // Fetch filter options and assignees when component mounts (only once per session)
   useEffect(() => {
     if (session?.access_token) {
-      fetchFilterOptions();
-      fetchAssignees();
+      // Only fetch if not already cached
+      const filterCacheKey = 'filter_options_cache';
+      const assigneesCacheKey = 'assignees_cache';
+      const hasFilterCache = sessionStorage.getItem(filterCacheKey);
+      const hasAssigneesCache = sessionStorage.getItem(assigneesCacheKey);
+      
+      if (!hasFilterCache) {
+        fetchFilterOptions();
+      } else {
+        // Load from cache
+        try {
+          const cached = JSON.parse(hasFilterCache);
+          setFilterOptions({
+            resolution_statuses: cached.resolution_statuses || [],
+            poster_statuses: cached.poster_statuses || []
+          });
+        } catch (e) {
+          fetchFilterOptions();
+        }
+      }
+      
+      if (!hasAssigneesCache) {
+        fetchAssignees();
+      } else {
+        // Load from cache
+        try {
+          const cached = JSON.parse(hasAssigneesCache);
+          setAssignees(cached.assignees || []);
+        } catch (e) {
+          fetchAssignees();
+        }
+      }
     }
   }, [session?.access_token]);
 

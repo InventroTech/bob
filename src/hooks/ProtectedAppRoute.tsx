@@ -3,6 +3,7 @@ import { useNavigate, Outlet, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery } from '@/lib/supabaseCache';
 
 const UnauthorizedPage: React.FC<{ onLogout: () => void }> = ({ onLogout }) => (
   <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -38,61 +39,101 @@ const ProtectedAppRoute: React.FC = () => {
       if (!session?.user?.email || !tenantSlug) return;
 
       try {
-        // 1. Get tenant by slug
-        const { data: tenant, error: tenantError } = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('slug', tenantSlug)
-          .single();
+        // 1. Get tenant by slug (check cache first)
+        const tenantCacheKey = `supabase_cache:tenant_by_slug:${tenantSlug}`;
+        let tenant = getCachedSupabaseQuery<{ id: string }>(tenantCacheKey);
+        
+        if (!tenant) {
+          const { data: tenantData, error: tenantError } = await supabase
+            .from('tenants')
+            .select('id')
+            .eq('slug', tenantSlug)
+            .single();
 
-        if (tenantError || !tenant) {
-          if (isMounted) {
-            setErrorMessage('Tenant not found');
-            setAllowed(false);
+          if (tenantError || !tenantData) {
+            if (isMounted) {
+              setErrorMessage('Tenant not found');
+              setAllowed(false);
+            }
+            return;
           }
-          return;
+          
+          tenant = tenantData;
+          // Cache the tenant
+          setCachedSupabaseQuery(tenantCacheKey, tenant);
         }
 
-        // 2. Get user role_id using email and tenant ID
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('role_id')
-          .eq('email', session.user.email)
-          .eq('tenant_id', tenant.id)
-          .single();
+        // 2. Get user role_id using email and tenant ID (check cache first)
+        const userCacheKey = `supabase_cache:user_role:${session.user.email}:${tenant.id}`;
+        let user = getCachedSupabaseQuery<{ role_id: string; uid?: string }>(userCacheKey);
+        
+        if (!user) {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('role_id, uid')
+            .eq('email', session.user.email)
+            .eq('tenant_id', tenant.id)
+            .single();
 
-        if (userError || !user) {
-          if (isMounted) {
-            setErrorMessage('User not found in this organization');
-            setAllowed(false);
+          if (userError || !userData) {
+            if (isMounted) {
+              setErrorMessage('User not found in this organization');
+              setAllowed(false);
+            }
+            return;
           }
-          return;
+          
+          user = userData;
+          // Cache the user
+          setCachedSupabaseQuery(userCacheKey, user);
         }
 
-        // Link the user's UID from auth.users to our users table
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ uid: session.user.id })
-          .eq('email', session.user.email)
-          .eq('tenant_id', tenant.id);
+        // Link the user's UID from auth.users to our users table (only if needed)
+        // Check cache to see if we've already done this update
+        const uidLinkCacheKey = `supabase_cache:uid_linked:${session.user.email}:${tenant.id}:${session.user.id}`;
+        const uidAlreadyLinked = getCachedSupabaseQuery<boolean>(uidLinkCacheKey);
+        
+        if (session.user.id && !uidAlreadyLinked && user.uid !== session.user.id) {
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ uid: session.user.id })
+            .eq('email', session.user.email)
+            .eq('tenant_id', tenant.id);
 
-        if (updateError) {
-          console.error('Failed to link user UID:', updateError);
-          // Don't block access if linking fails
+          if (!updateError) {
+            // Cache that we've linked the UID (cache for 24 hours)
+            const LONG_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+            setCachedSupabaseQuery(uidLinkCacheKey, true, LONG_CACHE_TTL);
+            // Update the cached user object
+            user = { ...user, uid: session.user.id };
+            setCachedSupabaseQuery(userCacheKey, user);
+          } else {
+            console.error('Failed to link user UID:', updateError);
+            // Don't block access if linking fails
+          }
         }
 
-        // 3. Get the roles for the tenant
-        const { data: roles, error: rolesError } = await supabase
-          .from('roles')
-          .select('id')
-          .eq('tenant_id', tenant.id);
+        // 3. Get the roles for the tenant (check cache first)
+        const rolesCacheKey = `supabase_cache:roles_by_tenant:${tenant.id}`;
+        let roles = getCachedSupabaseQuery<{ id: string }[]>(rolesCacheKey);
+        
+        if (!roles) {
+          const { data: rolesData, error: rolesError } = await supabase
+            .from('roles')
+            .select('id')
+            .eq('tenant_id', tenant.id);
 
-        if (rolesError || !roles) {
-          if (isMounted) {
-            setErrorMessage('Unable to verify user role');
-            setAllowed(false);
+          if (rolesError || !rolesData) {
+            if (isMounted) {
+              setErrorMessage('Unable to verify user role');
+              setAllowed(false);
+            }
+            return;
           }
-          return;
+          
+          roles = rolesData;
+          // Cache the roles
+          setCachedSupabaseQuery(rolesCacheKey, roles);
         }
 
         // 4. Check if the user's role_id exists in the roles array

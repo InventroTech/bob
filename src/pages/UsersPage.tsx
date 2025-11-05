@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { getCachedTenant, getCachedRoles } from '@/lib/sessionCache';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery } from '@/lib/supabaseCache';
 import {
   Select,
   SelectContent,
@@ -43,6 +45,24 @@ const UsersPage = () => {
     const fetchTenant = async () => {
       if (!user) return;
 
+      // Check if we have tenant from session cache first
+      const cachedTenant = getCachedTenant();
+      if (cachedTenant?.id) {
+        console.log('[UsersPage] Using cached tenant');
+        setCompanyId(cachedTenant.id);
+        return;
+      }
+
+      // Check Supabase cache for tenant by user id
+      const tenantCacheKey = `supabase_cache:tenant_by_user_id:${user.id}`;
+      const cachedTenantId = getCachedSupabaseQuery<{ id: string }>(tenantCacheKey);
+      
+      if (cachedTenantId?.id) {
+        console.log('[UsersPage] Using cached tenant ID');
+        setCompanyId(cachedTenantId.id);
+        return;
+      }
+
       let { data, error } = await supabase
         .from('tenants')
         .select('id')
@@ -66,7 +86,11 @@ const UsersPage = () => {
         }
       }
 
-      setCompanyId(data.id);
+      if (data?.id) {
+        setCompanyId(data.id);
+        // Cache the tenant ID
+        setCachedSupabaseQuery(tenantCacheKey, { id: data.id });
+      }
     };
 
     fetchTenant();
@@ -76,6 +100,14 @@ const UsersPage = () => {
   useEffect(() => {
     const fetchRoles = async () => {
       if (!companyId) return;
+
+      // Check session cache first
+      const cachedRoles = getCachedRoles();
+      if (cachedRoles && cachedRoles.length > 0) {
+        console.log('[UsersPage] Using cached roles');
+        setRoles(cachedRoles);
+        return;
+      }
 
       try {
         const { data, error } = await supabase

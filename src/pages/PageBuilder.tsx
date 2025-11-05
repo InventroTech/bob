@@ -71,6 +71,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery } from '@/lib/supabaseCache';
+import { getCachedRoles, fetchAndCacheRoles } from '@/lib/sessionCache';
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
@@ -671,6 +673,18 @@ const PageBuilder = () => {
     const fetchPageData = async () => {
       if (pageId && pageId !== 'new') {
         try {
+          // Check cache first
+          const pageCacheKey = `supabase_cache:page_builder:${pageId}`;
+          const cachedPage = getCachedSupabaseQuery<{ name: string; config: any; role: string }>(pageCacheKey);
+          
+          if (cachedPage) {
+            console.log('[PageBuilder] Using cached page');
+            setPageName(cachedPage.name || 'Untitled Page');
+            setCanvasComponents(Array.isArray(cachedPage.config) ? (cachedPage.config as unknown as CanvasComponentData[]) : []);
+            if (cachedPage.role) setSelectedRole(cachedPage.role);
+            return;
+          }
+          
           const { data, error } = await supabase
             .from('pages')
             .select('name, config, role')
@@ -685,6 +699,13 @@ const PageBuilder = () => {
             setPageName(data.name || 'Untitled Page');
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
             if (data.role) setSelectedRole(data.role);
+            
+            // Cache the page data
+            setCachedSupabaseQuery(pageCacheKey, {
+              name: data.name,
+              config: data.config,
+              role: data.role
+            });
           } else {
             toast.error("Page not found.");
             navigate('/'); // Redirect if page not found
@@ -745,6 +766,14 @@ const PageBuilder = () => {
     const fetchRoles = async () => {
       if (!tenantId) return;
       
+      // Check session cache first
+      const cachedRoles = getCachedRoles();
+      if (cachedRoles && cachedRoles.length > 0) {
+        console.log('[PageBuilder] Using cached roles');
+        setRoles(cachedRoles);
+        return;
+      }
+      
       try {
         const { data, error } = await supabase
           .from('roles')
@@ -753,6 +782,7 @@ const PageBuilder = () => {
         if (error) throw error;
         if (data) setRoles(data);
       } catch (err) {
+        console.error('Error fetching roles:', err);
       }
     };
     

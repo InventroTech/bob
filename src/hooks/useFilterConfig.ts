@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/hooks/useTenant';
 import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { toast } from 'sonner';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery } from '@/lib/supabaseCache';
 
 export interface ComponentConfig {
   id: string;
@@ -54,6 +55,17 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
     setError(null);
 
     try {
+      // Check cache first
+      const configCacheKey = `supabase_cache:page_config:${targetPageId}:${tenantId}`;
+      const cachedConfig = getCachedSupabaseQuery<{ config: PageConfig }>(configCacheKey);
+      
+      if (cachedConfig?.config) {
+        console.log('[useFilterConfig] Using cached page config');
+        setComponentConfigs(cachedConfig.config.components || []);
+        setLoading(false);
+        return cachedConfig.config;
+      }
+      
       const { data, error: fetchError } = await supabase
         .from('pages')
         .select('config')
@@ -67,6 +79,10 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
 
       const pageConfig: PageConfig = data?.config || { components: [] };
       setComponentConfigs(pageConfig.components || []);
+      
+      // Cache the config
+      setCachedSupabaseQuery(configCacheKey, { config: pageConfig });
+      
       return pageConfig;
     } catch (err: any) {
       console.error('Error loading page config:', err);
@@ -104,6 +120,17 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
       }
 
       setComponentConfigs(config.components || []);
+      
+      // Update cache after successful save
+      const configCacheKey = `supabase_cache:page_config:${targetPageId}:${tenantId}`;
+      setCachedSupabaseQuery(configCacheKey, { config });
+      
+      // Also invalidate the page cache since config changed
+      const pageCacheKey = `supabase_cache:page:${targetPageId}:${tenantId}`;
+      const pageBuilderCacheKey = `supabase_cache:page_builder:${targetPageId}`;
+      sessionStorage.removeItem(pageCacheKey);
+      sessionStorage.removeItem(pageBuilderCacheKey);
+      
       toast.success('Page configuration saved successfully');
       return true;
     } catch (err: any) {

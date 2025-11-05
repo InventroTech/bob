@@ -9,6 +9,8 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { Trash2 } from 'lucide-react';
+import { getCachedRoles, getCachedUsers, fetchAndCacheRoles, fetchAndCacheUsers, refreshSessionCache, getCachedTenant } from '@/lib/sessionCache';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery } from '@/lib/supabaseCache';
 
 interface Role {
   id: string;
@@ -37,7 +39,7 @@ interface DatabaseUser {
 }
 
 const AddUserPage = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -51,6 +53,24 @@ const AddUserPage = () => {
   useEffect(() => {
     const fetchTenant = async () => {
       if (!user) return;
+
+      // Check if we have tenant from session cache first
+      const cachedTenant = getCachedTenant();
+      if (cachedTenant?.id) {
+        console.log('[AddUserPage] Using cached tenant');
+        setCompanyId(cachedTenant.id);
+        return;
+      }
+
+      // Check Supabase cache for tenant by user id
+      const tenantCacheKey = `supabase_cache:tenant_by_user_id:${user.id}`;
+      const cachedTenantId = getCachedSupabaseQuery<{ id: string }>(tenantCacheKey);
+      
+      if (cachedTenantId?.id) {
+        console.log('[AddUserPage] Using cached tenant ID');
+        setCompanyId(cachedTenantId.id);
+        return;
+      }
 
       let { data, error } = await supabase
         .from('tenants')
@@ -75,7 +95,11 @@ const AddUserPage = () => {
         }
       }
 
-      setCompanyId(data.id);
+      if (data?.id) {
+        setCompanyId(data.id);
+        // Cache the tenant ID
+        setCachedSupabaseQuery(tenantCacheKey, { id: data.id });
+      }
     };
 
     fetchTenant();
@@ -83,51 +107,23 @@ const AddUserPage = () => {
 
   useEffect(() => {
     const fetchRoles = async () => {
-      // Always try to fetch roles from renderer API first, regardless of companyId
+      // Check session cache first (fetched on login)
+      const cachedRoles = getCachedRoles();
+      if (cachedRoles && cachedRoles.length > 0) {
+        console.log('[AddUserPage] Using cached roles');
+        setRoles(cachedRoles);
+        return;
+      }
+
+      // If not cached, fetch and cache
+      if (!session?.access_token) {
+        console.error('No authentication token available');
+        toast.error('Authentication required to fetch roles');
+        return;
+      }
+
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-
-        if (!token) {
-          console.error('No authentication token available');
-          toast.error('Authentication required to fetch roles');
-          return;
-        }
-
-        // Use renderer URL for roles
-        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-        const apiUrl = `${baseUrl}/membership/roles`;
-        
-        console.log('Fetching roles from:', apiUrl);
-
-        const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
-          }
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('Error response:', errorData);
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-        }
-
-        const responseData = await response.json();
-        console.log('Roles response:', responseData);
-        
-        // Handle different response formats
-        let rolesData = [];
-        if (responseData.results && Array.isArray(responseData.results)) {
-          rolesData = responseData.results;
-        } else if (Array.isArray(responseData)) {
-          rolesData = responseData;
-        } else if (responseData.data && Array.isArray(responseData.data)) {
-          rolesData = responseData.data;
-        }
-
+        const rolesData = await fetchAndCacheRoles(session.access_token, 'bibhab-thepyro-ai');
         setRoles(rolesData || []);
       } catch (error: any) {
         console.error('Error fetching roles:', error);
@@ -155,56 +151,42 @@ const AddUserPage = () => {
     };
 
     fetchRoles();
-  }, [companyId]); // Keep dependency but don't block API call
+  }, [session?.access_token, companyId]);
 
   const fetchUsers = async () => {
-    // Always try to fetch users from renderer API first, regardless of companyId
     setIsLoading(true);
 
+    // Check session cache first (fetched on login)
+    const cachedUsers = getCachedUsers();
+    if (cachedUsers && cachedUsers.length > 0) {
+      console.log('[AddUserPage] Using cached users');
+      
+      // Transform the data to match expected format
+      const transformedUsers: User[] = cachedUsers.map((user: any, index: number) => ({
+        uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
+        name: user.name || user.full_name || 'Unnamed User',
+        email: user.email || 'No Email',
+        role_id: user.role_id || user.role?.id || '',
+        created_at: user.created_at || user.date_joined || new Date().toISOString(),
+        role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined)
+      }));
+
+      setUsers(transformedUsers);
+      setIsLoading(false);
+      return;
+    }
+
+    // If not cached, fetch and cache
+    if (!session?.access_token) {
+      console.error('No authentication token available');
+      toast.error('Authentication required to fetch users');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        console.error('No authentication token available');
-        toast.error('Authentication required to fetch users');
-        return;
-      }
-
-      // Use renderer URL for users
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/membership/users`;
+      const usersData = await fetchAndCacheUsers(session.access_token, 'bibhab-thepyro-ai');
       
-      console.log('Fetching users from:', apiUrl);
-
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error response:', errorData);
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const responseData = await response.json();
-      console.log('Users response:', responseData);
-      
-      // Handle different response formats
-      let usersData = [];
-      if (responseData.results && Array.isArray(responseData.results)) {
-        usersData = responseData.results;
-      } else if (Array.isArray(responseData)) {
-        usersData = responseData;
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        usersData = responseData.data;
-      }
-
       // Transform the data to match expected format
       const transformedUsers: User[] = usersData.map((user: any, index: number) => ({
         uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
@@ -269,7 +251,7 @@ const AddUserPage = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [companyId]);
+  }, [session?.access_token]); // Removed companyId dependency - only fetch when session changes
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));

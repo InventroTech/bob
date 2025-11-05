@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { Bell } from 'lucide-react';
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
+import { getCachedSupabaseQuery, setCachedSupabaseQuery, SUPABASE_CACHE_KEYS } from '@/lib/supabaseCache';
+import { getCachedTenant as getCachedTenantFromSession } from '@/lib/sessionCache';
 
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -34,6 +36,22 @@ const CustomAppLayout: React.FC = () => {
         return;
       }
       
+      // Try to get tenant from session cache first
+      const cachedTenant = getCachedTenantFromSession();
+      if (cachedTenant) {
+        console.log('[CustomAppLayout] Using cached tenant');
+        setTenantId(cachedTenant.id || null);
+        localStorage.setItem('tenant_id', cachedTenant.id || null);
+        
+        // Try to get role_id from cache
+        const cacheKey = SUPABASE_CACHE_KEYS.TENANT(user.id);
+        const cached = getCachedSupabaseQuery<{ role_id: string }>(cacheKey);
+        if (cached?.role_id) {
+          setUserRoleId(cached.role_id);
+          return;
+        }
+      }
+      
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     
       if (sessionError || !sessionData.session) {
@@ -41,30 +59,55 @@ const CustomAppLayout: React.FC = () => {
         return;
       }
     
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('email', user.email)
-        .single();
+      // Check cache for tenant_id
+      const tenantCacheKey = SUPABASE_CACHE_KEYS.TENANT(user.id);
+      const cachedTenantId = getCachedSupabaseQuery<{ tenant_id: string }>(tenantCacheKey);
       
-      console.log("tenantData", tenantData)
-      setTenantId(tenantData?.tenant_id || null);
-      localStorage.setItem('tenant_id', tenantData?.tenant_id || null);
-    
-      const { data, error } = await supabase
-        .from('users')
-        .select('role_id')
-        .eq('email', user.email)
-        .single();
-    
-      console.log("data", data)
-      if (error) {
-        console.error('Failed to fetch user role:', error);
-        toast.error('Could not load user role');
-        return;
+      if (cachedTenantId?.tenant_id) {
+        console.log('[CustomAppLayout] Using cached tenant_id');
+        setTenantId(cachedTenantId.tenant_id);
+        localStorage.setItem('tenant_id', cachedTenantId.tenant_id);
+      } else {
+        const { data: tenantData, error: tenantError } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('email', user.email)
+          .single();
+        
+        console.log("tenantData", tenantData)
+        if (tenantData?.tenant_id) {
+          setTenantId(tenantData.tenant_id);
+          localStorage.setItem('tenant_id', tenantData.tenant_id);
+          setCachedSupabaseQuery(tenantCacheKey, { tenant_id: tenantData.tenant_id });
+        }
       }
     
-      setUserRoleId(data?.role_id || null);
+      // Check cache for role_id
+      const roleCacheKey = SUPABASE_CACHE_KEYS.TENANT(user.id);
+      const cachedRole = getCachedSupabaseQuery<{ role_id: string }>(roleCacheKey);
+      
+      if (cachedRole?.role_id) {
+        console.log('[CustomAppLayout] Using cached role_id');
+        setUserRoleId(cachedRole.role_id);
+      } else {
+        const { data, error } = await supabase
+          .from('users')
+          .select('role_id')
+          .eq('email', user.email)
+          .single();
+        
+        console.log("data", data)
+        if (error) {
+          console.error('Failed to fetch user role:', error);
+          toast.error('Could not load user role');
+          return;
+        }
+        
+        if (data?.role_id) {
+          setUserRoleId(data.role_id);
+          setCachedSupabaseQuery(roleCacheKey, { role_id: data.role_id });
+        }
+      }
     };
     
     fetchUserRole();
@@ -73,7 +116,17 @@ const CustomAppLayout: React.FC = () => {
   // Step 2: Fetch pages that match the user's role
   useEffect(() => {
     const fetchPages = async () => {
-      if (!tenantId || !userRoleId) return;
+      if (!tenantId || !userRoleId || !user?.id) return;
+
+      // Check cache first
+      const cacheKey = SUPABASE_CACHE_KEYS.PAGES(user.id, tenantId, userRoleId);
+      const cachedPages = getCachedSupabaseQuery<{ id: string; name: string }[]>(cacheKey);
+      
+      if (cachedPages && cachedPages.length > 0) {
+        console.log('[CustomAppLayout] Using cached pages');
+        setPages(cachedPages);
+        return;
+      }
 
       const { data : pagesData, error } = await supabase 
         .from('pages')
@@ -81,6 +134,7 @@ const CustomAppLayout: React.FC = () => {
         .eq('tenant_id', tenantId)
         .eq('role', userRoleId)
         .order('updated_at', { ascending: false });
+      
       console.log("tenantId", tenantId)
       console.log("userRoleId", userRoleId)
       console.log("pages data", pagesData)
@@ -89,12 +143,15 @@ const CustomAppLayout: React.FC = () => {
         toast.error('Failed to load pages');
         console.error('Pages fetch error:', error);
       } else {
-        setPages(pagesData || []);
+        const pages = pagesData || [];
+        setPages(pages);
+        // Cache the pages
+        setCachedSupabaseQuery(cacheKey, pages);
       }
     };
 
     fetchPages();
-  }, [tenantId, userRoleId]);
+  }, [tenantId, userRoleId, user?.id]);
 
   const handleLogout = async () => {
     try {
