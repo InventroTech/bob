@@ -8,7 +8,6 @@ export interface EnrichedTokenClaims {
   tenant_id?: string;
   role_id?: string;
   role_key?: string;
-  tenant_slug?: string;
   email?: string;
   exp?: number;
   iat?: number;
@@ -58,9 +57,8 @@ export function isTokenExpired(token: string): boolean {
 }
 
 /**
- * Extract tenant_id, user_id, and role_id from JWT token
- * Note: Supabase tokens don't contain tenant/role info by default.
- * The backend enriches claims automatically in request.jwt_claims.
+ * Extract tenant_id, user_id, role_id, and role_key from JWT token
+ * Note: The backend now enriches tokens at login time with tenant and role information.
  * This function extracts what's available from the token itself.
  */
 export function extractUserInfo(token: string): {
@@ -68,7 +66,6 @@ export function extractUserInfo(token: string): {
   user_id: string | null;
   role_id: string | null;
   role_key: string | null;
-  tenant_slug: string | null;
 } {
   const claims = decodeJWT(token);
   if (!claims) {
@@ -77,7 +74,6 @@ export function extractUserInfo(token: string): {
       user_id: null,
       role_id: null,
       role_key: null,
-      tenant_slug: null,
     };
   }
 
@@ -86,6 +82,5 @@ export function extractUserInfo(token: string): {
     user_id: claims.user_id || claims.sub || null,
     role_id: claims.role_id || null,
     role_key: claims.role_key || null,
-    tenant_slug: claims.tenant_slug || null,
   };
 }

@@ -45,13 +45,14 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   // Strictly check: must be exactly 'GM', not null, undefined, or any other value
   const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
   
-  // Track when role has been checked (after a short delay to allow useTenant to fetch)
+  // Track when role has been checked (after a short delay to allow useTenant to extract from token)
   useEffect(() => {
     if (user) {
-      // Give useTenant hook time to fetch role data
+      // useTenant now extracts from token synchronously, so we can check immediately
+      // But add a small delay to ensure token is processed
       const timer = setTimeout(() => {
         setRoleChecked(true);
-      }, 500); // 500ms delay to allow role to be fetched
+      }, 100); // Reduced delay since token extraction is now synchronous
       
       return () => clearTimeout(timer);
     }
@@ -232,21 +233,35 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   // Once role is checked and user is not GM, show access denied
   // Also block if we have a non-GM role explicitly set
   if (user && roleChecked && !isGM) {
+    // Check if customRole is null (token might not be enriched)
+    const tokenNotEnriched = customRole === null;
+    
     return (
       <div className={`flex items-center justify-center h-64 ${className}`}>
         <Card className="max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
-                    <p className="text-muted-foreground text-center">
-                      You need GM (General Manager) role to access this page.
-                    </p>
-                    <div className="mt-4 p-3 bg-muted rounded text-sm">
-                      <p><strong>Current Role:</strong> {role || 'None'}</p>
-                      <p><strong>Custom Role:</strong> {customRole || 'None'}</p>
-                      <p><strong>User ID:</strong> {user?.id}</p>
-                      <p><strong>Is GM Check:</strong> {String(isGM)}</p>
-                    </div>
+            <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
+            {tokenNotEnriched ? (
+              <>
+                <p className="text-muted-foreground text-center mb-4">
+                  Your session token doesn't contain role information. Please log out and log back in to refresh your token.
+                </p>
+                <div className="mt-4 p-3 bg-muted rounded text-sm">
+                  <p><strong>Note:</strong> This usually happens if you logged in before the latest update. Logging out and back in will fix this.</p>
+                </div>
+              </>
+            ) : (
+              <p className="text-muted-foreground text-center">
+                You need GM (General Manager) role to access this page.
+              </p>
+            )}
+            <div className="mt-4 p-3 bg-muted rounded text-sm">
+              <p><strong>Current Role:</strong> {role || 'None'}</p>
+              <p><strong>Custom Role:</strong> {customRole || 'None'}</p>
+              <p><strong>User ID:</strong> {user?.id}</p>
+              <p><strong>Is GM Check:</strong> {String(isGM)}</p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -276,7 +291,8 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   }
 
   // Show loading if user is not authenticated, or if we're still checking the role
-  if (loading || !user || (!roleChecked && !customRole)) {
+  // Also check if customRole is null but we haven't finished checking yet
+  if (loading || !user || (!roleChecked && customRole === null)) {
     return (
       <div className={`flex items-center justify-center h-64 ${className}`}>
         <Loader2 className="h-8 w-8 animate-spin" />
