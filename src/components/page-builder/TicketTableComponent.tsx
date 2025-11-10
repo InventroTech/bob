@@ -891,6 +891,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   };
 
   useEffect(() => {
+    // Abort controller for initial fetch
+    const abortController = new AbortController();
+
     const fetchTickets = async () => {
       try {
         setLoading(true);
@@ -915,7 +918,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
         const response = await fetch(apiUrl, {
           method: 'GET',
-          headers
+          headers,
+          signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -1011,7 +1015,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     };
 
     fetchTickets();
-  }, [session, config?.apiEndpoint, apiPrefix]);
+
+    return () => {
+      abortController.abort();
+    };
+  }, [session?.access_token, config?.apiEndpoint, apiPrefix]);
 
   // Fetch filter options and assignees when component mounts
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -81,12 +81,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     session,
     user,
     loading,
     logout,
-  };
+  }), [session?.access_token, user?.id, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

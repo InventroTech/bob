@@ -1,172 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { membershipService, User } from '@/lib/api';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  created_at: string;
-  role_id: string;
-  role: {
-    name: string;
-  } | null;
-}
 
-interface Role {
-  id: string;
-  name: string;
-}
 
 const UsersPage = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const navigate = useNavigate();
-  const [companyId, setCompanyId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
-  // Fetch tenant (company) ID
-  useEffect(() => {
-    const fetchTenant = async () => {
-      if (!user) return;
 
-      let { data, error } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (error || !data) {
-        const emailResponse = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('name', user.email)
-          .single();
-
-        data = { id: emailResponse.data?.id };
-        error = emailResponse.error;
-
-        if (error || !data) {
-          console.error("Error fetching tenant:", error);
-          toast.error('Failed to fetch tenant. Please contact support.');
-          return;
-        }
-      }
-
-      setCompanyId(data.id);
-    };
-
-    fetchTenant();
-  }, [user]);
-
-  // Fetch roles for the tenant
-  useEffect(() => {
-    const fetchRoles = async () => {
-      if (!companyId) return;
-
-      try {
-        const { data, error } = await supabase
-          .from('roles')
-          .select('id, name')
-          .eq('tenant_id', companyId);
-
-        if (error) {
-          console.error('Error fetching roles:', error);
-          toast.error('Failed to fetch roles');
-          return;
-        }
-
-        setRoles(data || []);
-      } catch (error) {
-        console.error('Error:', error);
-        toast.error('An unexpected error occurred while fetching roles');
-      }
-    };
-
-    fetchRoles();
-  }, [companyId]);
-
-  // Fetch users for the tenant
+  // Fetch users using centralized membership service
   useEffect(() => {
     const fetchUsers = async () => {
-      if (!companyId) return;
+      if (!session?.access_token) return;
 
       try {
-        const { data, error } = await supabase
-          .from('users')
-          .select(`
-            id,
-            name,
-            email,
-            created_at,
-            role_id,
-            role:roles!role_id(name)
-          `)
-          .eq('tenant_id', companyId)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching users:', error);
-          toast.error('Failed to fetch users');
-          return;
-        }
-
-        setUsers(data || []);
-      } catch (error) {
-        console.error('Error:', error);
-        toast.error('An unexpected error occurred');
+        const usersData = await membershipService.getUsers();
+        setUsers(usersData);
+      } catch (error: any) {
+        console.error('Error fetching users:', error);
+        toast.error(`Failed to fetch users: ${error.message || 'An unexpected error occurred'}`);
+        setUsers([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchUsers();
-  }, [companyId]);
+  }, [session]);
 
-  const handleRoleChange = async (userId: string, newRoleId: string) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ role_id: newRoleId })
-        .eq('id', userId);
-
-      if (error) {
-        console.error('Error updating user role:', error);
-        toast.error('Failed to update user role');
-        return;
-      }
-
-      // Update the local state
-      setUsers(users.map(user => 
-        user.id === userId 
-          ? { 
-              ...user, 
-              role_id: newRoleId,
-              role: roles.find(r => r.id === newRoleId) || null
-            }
-          : user
-      ));
-
-      toast.success('User role updated successfully');
-      setEditingUserId(null);
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('An unexpected error occurred while updating role');
-    }
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -224,30 +92,9 @@ const UsersPage = () => {
                     <div className="text-sm text-gray-500">{user.email}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {editingUserId === user.id ? (
-                      <Select
-                        defaultValue={user.role_id}
-                        onValueChange={(value) => handleRoleChange(user.id, value)}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select a role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roles.map((role) => (
-                            <SelectItem key={role.id} value={role.id}>
-                              {role.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div 
-                        className="text-sm text-gray-500 cursor-pointer hover:text-gray-700"
-                        onClick={() => setEditingUserId(user.id)}
-                      >
-                        {user.role?.name || 'No Role'}
-                      </div>
-                    )}
+                    <div className="text-sm text-gray-500">
+                      {user.role?.name || 'No Role'}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{formatDate(user.created_at)}</div>
