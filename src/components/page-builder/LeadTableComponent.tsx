@@ -6,13 +6,14 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Filter, User, MessageCircle, ExternalLink } from 'lucide-react';
+import { Filter, User, MessageCircle, ExternalLink, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
+import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
 
 interface Column {
   header: string;
@@ -429,6 +430,292 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     sources: []
   });
   const { session, user } = useAuth();
+  const [assignmentLoading, setAssignmentLoading] = useState<boolean>(true);
+  const [assignedLeadTypes, setAssignedLeadTypes] = useState<string[]>([]);
+  const [serverData, setServerData] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAssignments = async () => {
+      if (!user?.id) {
+        if (!isMounted) return;
+        setAssignedLeadTypes([]);
+        setAssignmentLoading(false);
+        return;
+      }
+
+      try {
+        setAssignmentLoading(true);
+        setData([]);
+        setFilteredData([]);
+
+        const response = await leadTypeAssignmentApi.getUserLeadTypes(user.id);
+        if (!isMounted) return;
+
+        const leadTypes = Array.isArray(response?.lead_types)
+          ? response.lead_types.filter((type: string) => Boolean(type && String(type).trim()))
+          : [];
+
+        setAssignedLeadTypes(leadTypes);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error('Error fetching assigned lead types for current user:', error);
+        toast({ title: 'Error', description: 'Unable to load your lead assignments. Please contact an administrator.', variant: 'destructive' });
+        setAssignedLeadTypes([]);
+      } finally {
+        if (isMounted) {
+          setAssignmentLoading(false);
+        }
+      }
+    };
+
+    loadAssignments();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [toast, user?.id]);
+
+  const userIdentifiers = useMemo(() => {
+    const identifiers = new Set<string>();
+
+    const addIdentifier = (value: unknown) => {
+      if (value === null || value === undefined) return;
+
+      if (typeof value === 'string' || typeof value === 'number') {
+        const str = String(value).trim();
+        if (!str) return;
+
+        identifiers.add(str);
+        identifiers.add(str.toLowerCase());
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach(addIdentifier);
+        return;
+      }
+
+      if (typeof value === 'object') {
+        Object.values(value as Record<string, unknown>).forEach(addIdentifier);
+      }
+    };
+
+    addIdentifier(user?.id);
+    addIdentifier(user?.email);
+    addIdentifier(session?.user?.id);
+    addIdentifier(session?.user?.email);
+
+    const metadataSources = [
+      user?.user_metadata,
+      (user as any)?.app_metadata,
+      session?.user?.user_metadata,
+      session?.user?.app_metadata,
+    ];
+
+    metadataSources.forEach((meta) => {
+      if (meta && typeof meta === 'object') {
+        Object.values(meta as Record<string, unknown>).forEach(addIdentifier);
+      }
+    });
+
+    return identifiers;
+  }, [session?.user, user]);
+
+  const assignedLeadTypeSet = useMemo(() => {
+    return new Set(
+      assignedLeadTypes
+        .map((type) => String(type).trim().toLowerCase())
+        .filter(Boolean),
+    );
+  }, [assignedLeadTypes]);
+
+  const shouldIncludeLead = useCallback(
+    (lead: any) => {
+      if (!lead || typeof lead !== 'object') {
+        return false;
+      }
+
+      const posterCandidates = [
+        lead.poster,
+        lead.poster_name,
+        lead.lead_type,
+        lead.lead_category,
+        lead.data?.poster,
+        lead.data?.poster_name,
+        lead.data?.lead_type,
+        lead.data?.lead_category,
+      ];
+
+      if (assignedLeadTypeSet.size > 0) {
+        for (const candidate of posterCandidates) {
+          if (candidate === null || candidate === undefined) continue;
+          const normalized = String(candidate).trim().toLowerCase();
+          if (normalized && assignedLeadTypeSet.has(normalized)) {
+            return true;
+          }
+        }
+      }
+
+      const ownerKeyPatterns = [
+        'assigned_to',
+        'assignedto',
+        'assigned_rm',
+        'assignedrm',
+        'assignee',
+        'owner',
+        'lead_owner',
+        'leadowner',
+        'relationship_manager',
+        'relationshipmanager',
+        'rm_email',
+        'rmemail',
+        'rm_id',
+        'rmid',
+        'rm_uid',
+        'rmuid',
+        'rm_name',
+        'rmname',
+        'rm_user',
+        'rmuser',
+        'rm_contact',
+        'rmcontact',
+        'rm_phone',
+        'rmphone',
+        'rm_assignee',
+        'rmassignee',
+      ];
+
+      const ownerValues = new Set<string>();
+
+      const addOwnerValue = (value: unknown) => {
+        if (value === null || value === undefined) return;
+
+        if (typeof value === 'string' || typeof value === 'number') {
+          const raw = String(value).trim();
+          if (!raw) return;
+
+          ownerValues.add(raw);
+          ownerValues.add(raw.toLowerCase());
+
+          const emailMatches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+          if (emailMatches) {
+            emailMatches.forEach((email) => {
+              const cleaned = email.trim();
+              if (cleaned) {
+                ownerValues.add(cleaned);
+                ownerValues.add(cleaned.toLowerCase());
+              }
+            });
+          }
+          return;
+        }
+
+        if (Array.isArray(value)) {
+          value.forEach(addOwnerValue);
+          return;
+        }
+
+        if (typeof value === 'object') {
+          Object.values(value as Record<string, unknown>).forEach(addOwnerValue);
+        }
+      };
+
+      const inspectSource = (source: any) => {
+        if (!source || typeof source !== 'object') return;
+
+        Object.entries(source as Record<string, unknown>).forEach(([key, value]) => {
+          const keyLower = key.toLowerCase();
+
+          if (
+            ownerKeyPatterns.some((pattern) => keyLower.includes(pattern)) ||
+            keyLower === 'rm'
+          ) {
+            addOwnerValue(value);
+          }
+        });
+      };
+
+      inspectSource(lead);
+      if (lead.data && typeof lead.data === 'object') {
+        inspectSource(lead.data);
+      }
+      if (lead.metadata && typeof lead.metadata === 'object') {
+        inspectSource(lead.metadata);
+      }
+
+      if (ownerValues.size === 0) {
+        return false;
+      }
+
+      for (const candidate of ownerValues) {
+        if (userIdentifiers.has(candidate)) {
+          return true;
+        }
+      }
+
+      return false;
+    },
+    [assignedLeadTypeSet, userIdentifiers],
+  );
+
+  const applyLeadAssignmentFilter = useCallback(
+    (leads: any[]) => {
+      if (!Array.isArray(leads) || leads.length === 0) {
+        return [];
+      }
+      return leads.filter(shouldIncludeLead);
+    },
+    [shouldIncludeLead],
+  );
+
+  const handleServerData = useCallback(
+    (leads: any[], pageMeta?: any) => {
+      const transformed = Array.isArray(leads)
+        ? leads.map((lead: any) => transformLeadData(lead, config))
+        : [];
+
+      setServerData(transformed);
+
+      if (pageMeta) {
+        setPagination({
+          totalCount: pageMeta.total_count || 0,
+          numberOfPages: pageMeta.number_of_pages || 0,
+          currentPage: pageMeta.current_page || 1,
+          pageSize: pageMeta.page_size || 10,
+          nextPageLink: pageMeta.next_page_link || null,
+          previousPageLink: pageMeta.previous_page_link || null,
+        });
+      }
+
+      return transformed;
+    },
+    [config],
+  );
+
+  useEffect(() => {
+    if (assignmentLoading) {
+      return;
+    }
+
+    const restrictedData = applyLeadAssignmentFilter(serverData);
+    setData(restrictedData);
+    setFilteredData(restrictedData);
+
+    const uniqueSources = [
+      ...new Set(
+        restrictedData
+          .map((lead: any) => lead.lead_source || lead.source)
+          .filter(Boolean),
+      ),
+    ];
+
+    setFilterOptions((prev) => ({
+      ...prev,
+      sources: uniqueSources as string[],
+    }));
+  }, [assignmentLoading, applyLeadAssignmentFilter, serverData]);
 
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column, columnIndex: number) => {
@@ -541,44 +828,32 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       );
     }
     
-    // Special handling: Make phone_number/phone_no clickable if whatsapp_link exists
+    // Special handling: Make phone_number/phone_no clickable to open dialer
     const isPhoneColumn = column.accessor === 'phone_number' || 
                           column.accessor === 'phone_no' || 
                           column.accessor === 'phone' ||
                           column.header.toLowerCase().includes('phone');
     
     if (isPhoneColumn) {
-      // Check if whatsapp link exists
-      if (row.whatsapp_link && row.whatsapp_link !== 'N/A' && row.whatsapp_link !== '' && row.whatsapp_link !== '#') {
-        return (
-          <a
-            href={row.whatsapp_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors cursor-pointer"
-            onClick={(e) => e.stopPropagation()}
-            title="Click to open WhatsApp"
-          >
-            <MessageCircle className="h-3 w-3" />
-            <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
-          </a>
-        );
-      }
-      // If no whatsapp link, generate one from phone number
       if (displayValue && displayValue !== 'N/A' && displayValue !== '') {
-        const cleanNumber = displayValue.replace(/\D/g, '');
-        if (cleanNumber.length >= 10) {
-          const whatsappUrl = `https://wa.me/${cleanNumber}`;
+        const rawPhone = typeof displayValue === 'string' ? displayValue : String(displayValue ?? '');
+        const sanitizedPhone = rawPhone.trim();
+        const digitsWithPlus = sanitizedPhone.replace(/[^\d+]/g, '');
+
+        if (digitsWithPlus) {
+          const telNumber = digitsWithPlus.startsWith('+')
+            ? digitsWithPlus
+            : digitsWithPlus.replace(/^0+/, '') || digitsWithPlus;
+          const telHref = `tel:${telNumber}`;
+
           return (
             <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors cursor-pointer"
+              href={telHref}
+              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
               onClick={(e) => e.stopPropagation()}
-              title="Click to open WhatsApp"
+              title="Tap to call"
             >
-              <MessageCircle className="h-3 w-3" />
+              <Phone className="h-3 w-3" />
               <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
             </a>
           );
@@ -770,29 +1045,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         leads = responseData;
       }
 
-      // Transform the data
-      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
-
-      // Backend handles search filtering - no client-side filtering needed
-      setFilteredData(transformedData);
+      handleServerData(leads, pageMeta);
       setFiltersApplied(true);
-
-      // Update pagination from server response
-      if (pageMeta) {
-        setPagination({
-          totalCount: pageMeta.total_count || 0,
-          numberOfPages: pageMeta.number_of_pages || 0,
-          currentPage: pageMeta.current_page || 1,
-          pageSize: pageMeta.page_size || 10,
-          nextPageLink: pageMeta.next_page_link || null,
-          previousPageLink: pageMeta.previous_page_link || null
-        });
-      }
     } catch (error: any) {
       if (error.name === 'AbortError') {
         return;
       }
       console.error('Error applying filters:', error);
+      setServerData([]);
+      setData([]);
+      setFilteredData([]);
       toast({ title: 'Error', description: 'Failed to apply filters', variant: 'destructive' });
     } finally {
       setTableLoading(false);
@@ -881,22 +1143,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       let leads = responseData.data || responseData.results || [];
       let pageMeta = responseData.page_meta;
 
-      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
-
-      setData(transformedData);
-      setFilteredData(transformedData);
+      handleServerData(leads, pageMeta);
       setFiltersApplied(false);
-
-      if (pageMeta) {
-        setPagination({
-          totalCount: pageMeta.total_count || 0,
-          numberOfPages: pageMeta.number_of_pages || 0,
-          currentPage: pageMeta.current_page || 1,
-          pageSize: pageMeta.page_size || 10,
-          nextPageLink: pageMeta.next_page_link || null,
-          previousPageLink: pageMeta.previous_page_link || null
-        });
-      }
     } catch (error) {
       console.error('Error resetting filters:', error);
       toast({ title: 'Error', description: 'Failed to reset filters', variant: 'destructive' });
@@ -1039,21 +1287,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         let leads = responseData.data || responseData.results || [];
         let pageMeta = responseData.page_meta;
 
-        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
-
-        setData(transformedData);
-        setFilteredData(transformedData);
-        
-        if (pageMeta) {
-          setPagination({
-            totalCount: pageMeta.total_count || 0,
-            numberOfPages: pageMeta.number_of_pages || 0,
-            currentPage: pageMeta.current_page || 1,
-            pageSize: pageMeta.page_size || 10,
-            nextPageLink: pageMeta.next_page_link || null,
-            previousPageLink: pageMeta.previous_page_link || null
-          });
-        }
+        handleServerData(leads, pageMeta);
       } catch (error) {
         console.error('Error fetching next page:', error);
         toast({ title: 'Error', description: 'Failed to load next page', variant: 'destructive' });
@@ -1086,21 +1320,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         let leads = responseData.data || responseData.results || [];
         let pageMeta = responseData.page_meta;
 
-        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
-
-        setData(transformedData);
-        setFilteredData(transformedData);
-        
-        if (pageMeta) {
-          setPagination({
-            totalCount: pageMeta.total_count || 0,
-            numberOfPages: pageMeta.number_of_pages || 0,
-            currentPage: pageMeta.current_page || 1,
-            pageSize: pageMeta.page_size || 10,
-            nextPageLink: pageMeta.next_page_link || null,
-            previousPageLink: pageMeta.previous_page_link || null
-          });
-        }
+        handleServerData(leads, pageMeta);
       } catch (error) {
         console.error('Error fetching previous page:', error);
         toast({ title: 'Error', description: 'Failed to load previous page', variant: 'destructive' });
@@ -1111,17 +1331,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   };
 
   const handleLeadUpdate = (updatedLead: any) => {
-    const updatedData = data.map(lead => 
-      lead.id === updatedLead.id ? updatedLead : lead
+    setServerData((prev) =>
+      prev.map((lead: any) => (lead.id === updatedLead.id ? updatedLead : lead)),
     );
-    setData(updatedData);
-    
+
     if (filtersApplied) {
       fetchFilteredData();
-    } else {
-      setFilteredData(updatedData);
     }
-    
+
     setIsLeadModalOpen(false);
   };
 
@@ -1207,31 +1424,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           leads = responseData;
         }
 
-        // Transform the data
-        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
-
-        setData(transformedData);
-        setFilteredData(transformedData);
-
-        if (pageMeta) {
-          setPagination({
-            totalCount: pageMeta.total_count || 0,
-            numberOfPages: pageMeta.number_of_pages || 0,
-            currentPage: pageMeta.current_page || 1,
-            pageSize: pageMeta.page_size || 10,
-            nextPageLink: pageMeta.next_page_link || null,
-            previousPageLink: pageMeta.previous_page_link || null
-          });
-        }
-
-        // Extract unique sources for filter
-        const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.lead_source || lead.source).filter(Boolean))];
-        setFilterOptions(prev => ({
-          ...prev,
-          sources: uniqueSources as string[]
-        }));
+        handleServerData(leads, pageMeta);
       } catch (error) {
         console.error('Error fetching leads:', error);
+        setServerData([]);
         setData([]);
         setFilteredData([]);
         toast({ title: 'Error', description: 'Failed to fetch leads', variant: 'destructive' });
@@ -1243,7 +1439,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     if (session?.access_token) {
       fetchLeads();
     }
-  }, [session, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType]);
+  }, [session, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, handleServerData]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1257,10 +1453,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     };
   }, []);
 
-  if (loading) {
+  if (loading || assignmentLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-gray-600">Loading leads data...</div>
+        <div className="text-gray-600">
+          {assignmentLoading ? 'Loading your lead assignments...' : 'Loading leads data...'}
+        </div>
       </div>
     );
   }
@@ -1423,7 +1621,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                 ) : filteredData.length === 0 ? (
                   <tr>
                     <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
-                      {config?.emptyMessage || 'No data found'}
+                      {config?.emptyMessage ||
+                        (assignmentLoading
+                          ? 'Loading your lead assignments...'
+                          : serverData.length > 0
+                          ? 'No leads match your assignments.'
+                          : 'No leads have been assigned to you yet.')}
                     </td>
                   </tr>
                 ) : (
