@@ -13,7 +13,6 @@ import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
-import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
 
 interface Column {
   header: string;
@@ -430,53 +429,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     sources: []
   });
   const { session, user } = useAuth();
-  const [assignmentLoading, setAssignmentLoading] = useState<boolean>(true);
-  const [assignedLeadTypes, setAssignedLeadTypes] = useState<string[]>([]);
-  const [serverData, setServerData] = useState<any[]>([]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadAssignments = async () => {
-      if (!user?.id) {
-        if (!isMounted) return;
-        setAssignedLeadTypes([]);
-        setAssignmentLoading(false);
-        return;
-      }
-
-      try {
-        setAssignmentLoading(true);
-        setData([]);
-        setFilteredData([]);
-
-        const response = await leadTypeAssignmentApi.getUserLeadTypes(user.id);
-        if (!isMounted) return;
-
-        const leadTypes = Array.isArray(response?.lead_types)
-          ? response.lead_types.filter((type: string) => Boolean(type && String(type).trim()))
-          : [];
-
-        setAssignedLeadTypes(leadTypes);
-      } catch (error) {
-        if (!isMounted) return;
-        console.error('Error fetching assigned lead types for current user:', error);
-        toast({ title: 'Error', description: 'Unable to load your lead assignments. Please contact an administrator.', variant: 'destructive' });
-        setAssignedLeadTypes([]);
-      } finally {
-        if (isMounted) {
-          setAssignmentLoading(false);
-        }
-      }
-    };
-
-    loadAssignments();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [toast, user?.id]);
-
   const userIdentifiers = useMemo(() => {
     const identifiers = new Set<string>();
 
@@ -523,160 +475,119 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     return identifiers;
   }, [session?.user, user]);
 
-  const assignedLeadTypeSet = useMemo(() => {
-    return new Set(
-      assignedLeadTypes
-        .map((type) => String(type).trim().toLowerCase())
-        .filter(Boolean),
-    );
-  }, [assignedLeadTypes]);
-
-  const shouldIncludeLead = useCallback(
-    (lead: any) => {
-      if (!lead || typeof lead !== 'object') {
-        return false;
-      }
-
-      const posterCandidates = [
-        lead.poster,
-        lead.poster_name,
-        lead.lead_type,
-        lead.lead_category,
-        lead.data?.poster,
-        lead.data?.poster_name,
-        lead.data?.lead_type,
-        lead.data?.lead_category,
-      ];
-
-      if (assignedLeadTypeSet.size > 0) {
-        for (const candidate of posterCandidates) {
-          if (candidate === null || candidate === undefined) continue;
-          const normalized = String(candidate).trim().toLowerCase();
-          if (normalized && assignedLeadTypeSet.has(normalized)) {
-            return true;
-          }
-        }
-      }
-
-      const ownerKeyPatterns = [
-        'assigned_to',
-        'assignedto',
-        'assigned_rm',
-        'assignedrm',
-        'assignee',
-        'owner',
-        'lead_owner',
-        'leadowner',
-        'relationship_manager',
-        'relationshipmanager',
-        'rm_email',
-        'rmemail',
-        'rm_id',
-        'rmid',
-        'rm_uid',
-        'rmuid',
-        'rm_name',
-        'rmname',
-        'rm_user',
-        'rmuser',
-        'rm_contact',
-        'rmcontact',
-        'rm_phone',
-        'rmphone',
-        'rm_assignee',
-        'rmassignee',
-      ];
-
-      const ownerValues = new Set<string>();
-
-      const addOwnerValue = (value: unknown) => {
-        if (value === null || value === undefined) return;
-
-        if (typeof value === 'string' || typeof value === 'number') {
-          const raw = String(value).trim();
-          if (!raw) return;
-
-          ownerValues.add(raw);
-          ownerValues.add(raw.toLowerCase());
-
-          const emailMatches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
-          if (emailMatches) {
-            emailMatches.forEach((email) => {
-              const cleaned = email.trim();
-              if (cleaned) {
-                ownerValues.add(cleaned);
-                ownerValues.add(cleaned.toLowerCase());
-              }
-            });
-          }
-          return;
-        }
-
-        if (Array.isArray(value)) {
-          value.forEach(addOwnerValue);
-          return;
-        }
-
-        if (typeof value === 'object') {
-          Object.values(value as Record<string, unknown>).forEach(addOwnerValue);
-        }
-      };
-
-      const inspectSource = (source: any) => {
-        if (!source || typeof source !== 'object') return;
-
-        Object.entries(source as Record<string, unknown>).forEach(([key, value]) => {
-          const keyLower = key.toLowerCase();
-
-          if (
-            ownerKeyPatterns.some((pattern) => keyLower.includes(pattern)) ||
-            keyLower === 'rm'
-          ) {
-            addOwnerValue(value);
-          }
-        });
-      };
-
-      inspectSource(lead);
-      if (lead.data && typeof lead.data === 'object') {
-        inspectSource(lead.data);
-      }
-      if (lead.metadata && typeof lead.metadata === 'object') {
-        inspectSource(lead.metadata);
-      }
-
-      if (ownerValues.size === 0) {
-        return false;
-      }
-
-      for (const candidate of ownerValues) {
-        if (userIdentifiers.has(candidate)) {
-          return true;
-        }
-      }
-
+  const isLeadAssignedToCurrentUser = useCallback((lead: any) => {
+    if (!lead || typeof lead !== 'object') {
       return false;
-    },
-    [assignedLeadTypeSet, userIdentifiers],
-  );
+    }
 
-  const applyLeadAssignmentFilter = useCallback(
-    (leads: any[]) => {
-      if (!Array.isArray(leads) || leads.length === 0) {
-        return [];
+    const entityTypeCandidates = [
+      lead.entity_type,
+      lead.entityType,
+      lead.entity?.type,
+      lead.data?.entity_type,
+      lead.data?.entityType,
+      lead.data?.entity?.type,
+    ];
+
+    const entityType = entityTypeCandidates
+      .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : null))
+      .find((value) => value);
+
+    const configEntityType = typeof config?.entityType === 'string'
+      ? config.entityType.trim().toLowerCase()
+      : null;
+
+    const isLeadRecord = entityType
+      ? entityType === 'lead'
+      : configEntityType === 'lead';
+
+    if (!isLeadRecord) {
+      return true;
+    }
+
+    const candidateValues = new Set<string>();
+
+    const addCandidate = (value: unknown) => {
+      if (value === null || value === undefined) return;
+
+      if (typeof value === 'string' || typeof value === 'number') {
+        const raw = String(value).trim();
+        if (!raw) return;
+
+        candidateValues.add(raw);
+        candidateValues.add(raw.toLowerCase());
+
+        const emailMatches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+        if (emailMatches) {
+          emailMatches.forEach((email) => {
+            const cleaned = email.trim();
+            if (cleaned) {
+              candidateValues.add(cleaned);
+              candidateValues.add(cleaned.toLowerCase());
+            }
+          });
+        }
+        return;
       }
-      return leads.filter(shouldIncludeLead);
-    },
-    [shouldIncludeLead],
-  );
+
+      if (Array.isArray(value)) {
+        value.forEach(addCandidate);
+        return;
+      }
+
+      if (typeof value === 'object') {
+        const record = value as Record<string, unknown>;
+        addCandidate(record.id);
+        addCandidate(record.uid);
+        addCandidate(record.user_id);
+        addCandidate(record.email);
+        addCandidate(record.email_id);
+
+        Object.values(record).forEach(addCandidate);
+      }
+    };
+
+    const assignedFields = [
+      lead.assigned_to,
+      lead.data?.assigned_to,
+      lead.assigned_user_id,
+      lead.data?.assigned_user_id,
+      lead.assigned_user,
+      lead.data?.assigned_user,
+      lead.assignee,
+      lead.data?.assignee,
+      lead.owner,
+      lead.data?.owner,
+      lead.assigned_to_id,
+      lead.data?.assigned_to_id,
+      lead.assigned_to_email,
+      lead.data?.assigned_to_email,
+      lead.relationship_manager,
+      lead.data?.relationship_manager,
+    ];
+
+    assignedFields.forEach(addCandidate);
+
+    if (candidateValues.size === 0) {
+      return false;
+    }
+
+    for (const candidate of candidateValues) {
+      if (userIdentifiers.has(candidate)) {
+        return true;
+      }
+    }
+
+    return false;
+  }, [config?.entityType, userIdentifiers]);
 
   const handleServerData = useCallback(
     (leads: any[], pageMeta?: any) => {
-      const transformed = Array.isArray(leads)
-        ? leads.map((lead: any) => transformLeadData(lead, config))
+      const filteredLeads = Array.isArray(leads)
+        ? leads.filter(isLeadAssignedToCurrentUser)
         : [];
 
-      setServerData(transformed);
+      const transformed = filteredLeads.map((lead: any) => transformLeadData(lead, config));
 
       if (pageMeta) {
         setPagination({
@@ -689,33 +600,26 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         });
       }
 
+      setData(transformed);
+      setFilteredData(transformed);
+
+      const uniqueSources = [
+        ...new Set(
+          transformed
+            .map((lead: any) => lead.lead_source || lead.source)
+            .filter(Boolean),
+        ),
+      ];
+
+      setFilterOptions((prev) => ({
+        ...prev,
+        sources: uniqueSources as string[],
+      }));
+
       return transformed;
     },
-    [config],
+    [config, isLeadAssignedToCurrentUser],
   );
-
-  useEffect(() => {
-    if (assignmentLoading) {
-      return;
-    }
-
-    const restrictedData = applyLeadAssignmentFilter(serverData);
-    setData(restrictedData);
-    setFilteredData(restrictedData);
-
-    const uniqueSources = [
-      ...new Set(
-        restrictedData
-          .map((lead: any) => lead.lead_source || lead.source)
-          .filter(Boolean),
-      ),
-    ];
-
-    setFilterOptions((prev) => ({
-      ...prev,
-      sources: uniqueSources as string[],
-    }));
-  }, [assignmentLoading, applyLeadAssignmentFilter, serverData]);
 
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column, columnIndex: number) => {
@@ -1052,7 +956,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         return;
       }
       console.error('Error applying filters:', error);
-      setServerData([]);
       setData([]);
       setFilteredData([]);
       toast({ title: 'Error', description: 'Failed to apply filters', variant: 'destructive' });
@@ -1331,11 +1234,23 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   };
 
   const handleLeadUpdate = (updatedLead: any) => {
-    setServerData((prev) =>
+    let updated = false;
+
+    setData((prev) =>
+      prev.map((lead: any) => {
+        if (lead.id === updatedLead.id) {
+          updated = true;
+          return updatedLead;
+        }
+        return lead;
+      }),
+    );
+
+    setFilteredData((prev) =>
       prev.map((lead: any) => (lead.id === updatedLead.id ? updatedLead : lead)),
     );
 
-    if (filtersApplied) {
+    if (!updated && filtersApplied) {
       fetchFilteredData();
     }
 
@@ -1427,7 +1342,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         handleServerData(leads, pageMeta);
       } catch (error) {
         console.error('Error fetching leads:', error);
-        setServerData([]);
         setData([]);
         setFilteredData([]);
         toast({ title: 'Error', description: 'Failed to fetch leads', variant: 'destructive' });
@@ -1453,12 +1367,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     };
   }, []);
 
-  if (loading || assignmentLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-gray-600">
-          {assignmentLoading ? 'Loading your lead assignments...' : 'Loading leads data...'}
-        </div>
+        <div className="text-gray-600">Loading leads data...</div>
       </div>
     );
   }
@@ -1621,12 +1533,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                 ) : filteredData.length === 0 ? (
                   <tr>
                     <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
-                      {config?.emptyMessage ||
-                        (assignmentLoading
-                          ? 'Loading your lead assignments...'
-                          : serverData.length > 0
-                          ? 'No leads match your assignments.'
-                          : 'No leads have been assigned to you yet.')}
+                      {config?.emptyMessage || 'No leads assigned to you yet.'}
                     </td>
                   </tr>
                 ) : (
