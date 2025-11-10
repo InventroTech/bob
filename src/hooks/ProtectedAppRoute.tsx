@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Outlet, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
+import { authService, membershipService } from '@/lib/api';
 
 const UnauthorizedPage: React.FC<{ onLogout: () => void }> = ({ onLogout }) => (
   <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -30,15 +32,37 @@ const ProtectedAppRoute: React.FC = () => {
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
+  const accessCheckedRef = useRef<string | null>(null); // Track checked session/tenant combination
 
   useEffect(() => {
     let isMounted = true;
 
     const checkAccess = async () => {
-      if (!session?.user?.email || !tenantSlug) return;
+      if (!session?.user?.email || !tenantSlug || !session?.access_token) return;
+
+      // Create a unique key for this session/tenant combination
+      const checkKey = `${session.user.id}-${tenantSlug}`;
+      
+      // Prevent redundant checks when session changes (e.g., on page focus)
+      if (accessCheckedRef.current === checkKey && allowed !== null) {
+        return;
+      }
 
       try {
-        // 1. Get tenant by slug
+        // Extract tenant_id and role_id from JWT token (no API call needed)
+        const token = session.access_token;
+        const jwtTenantId = getTenantIdFromJWT(token);
+        const jwtRoleId = getRoleIdFromJWT(token);
+
+        if (!jwtTenantId || !jwtRoleId) {
+          if (isMounted) {
+            setErrorMessage('Unable to verify user credentials');
+            setAllowed(false);
+          }
+          return;
+        }
+
+        // 1. Get tenant by slug to validate the slug exists and matches JWT tenant_id
         const { data: tenant, error: tenantError } = await supabase
           .from('tenants')
           .select('id')
@@ -53,41 +77,35 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
-        // 2. Get user role_id using email and tenant ID
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('role_id')
-          .eq('email', session.user.email)
-          .eq('tenant_id', tenant.id)
-          .single();
-
-        if (userError || !user) {
+        // Verify that the JWT tenant_id matches the tenant from slug
+        if (tenant.id !== jwtTenantId) {
           if (isMounted) {
-            setErrorMessage('User not found in this organization');
+            setErrorMessage('User does not have access to this organization');
             setAllowed(false);
           }
           return;
         }
 
-        // Link the user's UID from auth.users to our users table
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ uid: session.user.id })
-          .eq('email', session.user.email)
-          .eq('tenant_id', tenant.id);
+        // Link the user's UID from auth.users to our users table (non-blocking)
+        // Only do this once per session to avoid redundant updates
+        if (accessCheckedRef.current !== checkKey) {
+          const result = await authService.linkUserUid(
+            { uid: session.user.id, email: session.user.email },
+            tenantSlug
+          );
 
-        if (updateError) {
-          console.error('Failed to link user UID:', updateError);
-          // Don't block access if linking fails
+          if (result.success === false || result.error) {
+            console.error('Failed to link user UID:', result.error);
+            // Don't block access if linking fails
+          }
         }
 
-        // 3. Get the roles for the tenant
-        const { data: roles, error: rolesError } = await supabase
-          .from('roles')
-          .select('id')
-          .eq('tenant_id', tenant.id);
-
-        if (rolesError || !roles) {
+        // 2. Get the roles for the tenant to validate role_id exists using API
+        let roles;
+        try {
+          roles = await membershipService.getRoles();
+        } catch (error) {
+          console.error('Error fetching roles:', error);
           if (isMounted) {
             setErrorMessage('Unable to verify user role');
             setAllowed(false);
@@ -95,11 +113,12 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
-        // 4. Check if the user's role_id exists in the roles array
-        const isValidRole = roles.some(role => role.id === user.role_id);
+        // 3. Check if the user's role_id (from JWT) exists in the roles array
+        const isValidRole = roles.some(role => role.id === jwtRoleId);
 
         if (isMounted) {
           setAllowed(isValidRole);
+          accessCheckedRef.current = checkKey;
           if (!isValidRole) {
             setErrorMessage('User does not have access to this organization');
           }

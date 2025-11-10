@@ -71,6 +71,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { membershipService } from '@/lib/api';
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
@@ -740,19 +741,16 @@ const PageBuilder = () => {
     }
   }, [canvasComponents]);
 
-  // Add useEffect to fetch roles based on tenant_id
+  // Add useEffect to fetch roles based on tenant_id using API
   useEffect(() => {
     const fetchRoles = async () => {
       if (!tenantId) return;
       
       try {
-        const { data, error } = await supabase
-          .from('roles')
-          .select('id, name')
-          .eq('tenant_id', tenantId);
-        if (error) throw error;
-        if (data) setRoles(data);
+        const rolesData = await membershipService.getRoles();
+        setRoles(rolesData);
       } catch (err) {
+        console.error('Error fetching roles:', err);
       }
     };
     

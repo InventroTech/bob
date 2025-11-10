@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { Trash2, UserPlus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTenant } from '@/hooks/useTenant';
+import { membershipService } from '@/lib/api';
 
 interface Role {
   id: string;
@@ -51,74 +52,13 @@ const AddUserComponent: React.FC = () => {
 
   useEffect(() => {
     const fetchRoles = async () => {
-      // Always try to fetch roles from renderer API first, regardless of tenantId
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-
-        if (!token) {
-          console.error('No authentication token available');
-          toast.error('Authentication required to fetch roles');
-          return;
-        }
-
-        // Use renderer URL for roles
-        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-        const apiUrl = `${baseUrl}/membership/roles`;
-        
-        console.log('Fetching roles from:', apiUrl);
-
-        const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
-          }
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('Error response:', errorData);
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-        }
-
-        const responseData = await response.json();
-        console.log('Roles response:', responseData);
-        
-        // Handle different response formats
-        let rolesData = [];
-        if (responseData.results && Array.isArray(responseData.results)) {
-          rolesData = responseData.results;
-        } else if (Array.isArray(responseData)) {
-          rolesData = responseData;
-        } else if (responseData.data && Array.isArray(responseData.data)) {
-          rolesData = responseData.data;
-        }
-
-        setRoles(rolesData || []);
+        const rolesData = await membershipService.getRoles();
+        setRoles(rolesData);
       } catch (error: any) {
         console.error('Error fetching roles:', error);
         toast.error(`Failed to fetch roles: ${error.message}`);
-        
-        // Fallback to Supabase if renderer API fails (only if tenantId is available)
-        if (tenantId) {
-          try {
-            const { data, error: supabaseError } = await supabase
-              .from('roles')
-              .select('id, name')
-              .eq('tenant_id', tenantId);
-              
-            if (supabaseError) throw supabaseError;
-            setRoles(data || []);
-          } catch (fallbackError: any) {
-            console.error('Fallback error:', fallbackError);
-            toast.error('Failed to fetch roles from fallback');
-          }
-        } else {
-          console.log('No tenantId available for Supabase fallback');
-          setRoles([]);
-        }
+        setRoles([]);
       }
     };
 
@@ -187,49 +127,7 @@ const AddUserComponent: React.FC = () => {
     } catch (error: any) {
       console.error('Error fetching users:', error);
       toast.error(`Failed to fetch users: ${error.message}`);
-      
-      // Fallback to Supabase if renderer API fails (only if tenantId is available)
-      if (tenantId) {
-        try {
-          const { data, error: supabaseError } = await supabase
-            .from('users')
-            .select(`
-              uid,
-              name,
-              email,
-              role_id,
-              created_at,
-              roles (
-                id,
-                name
-              )
-            `)
-            .eq('tenant_id', tenantId)
-            .order('created_at', { ascending: false });
-
-          if (supabaseError) throw supabaseError;
-
-          // Transform the data without filtering out users
-          const transformedUsers: User[] = ((data as unknown) as DatabaseUser[])
-            .map((user, index) => ({
-              uid: user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
-              name: user.name || 'Unnamed User',
-              email: user.email || 'No Email',
-              role_id: user.role_id || '',
-              created_at: user.created_at || new Date().toISOString(),
-              role: user.roles || undefined
-            }));
-
-          setUsers(transformedUsers);
-        } catch (fallbackError: any) {
-          console.error('Fallback error:', fallbackError);
-          toast.error('Failed to fetch users from fallback');
-          setUsers([]);
-        }
-      } else {
-        console.log('No tenantId available for Supabase fallback');
-        setUsers([]);
-      }
+      setUsers([]);
     } finally {
       setIsLoading(false);
     }
@@ -247,126 +145,32 @@ const AddUserComponent: React.FC = () => {
     if (!newRoleName || !newRoleKey) return toast.error('Role name and key are required');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const createdRole = await membershipService.createRole(newRoleKey, newRoleName);
 
-      if (!token) {
-        toast.error('Authentication required');
-        return;
-      }
-
-      // Use renderer URL for adding role
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/membership/roles`;
-      
-      console.log('Adding role via:', apiUrl);
-      console.log('Payload:', { key: newRoleKey, name: newRoleName });
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        },
-        body: JSON.stringify({
-          key: newRoleKey,
-          name: newRoleName
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error response:', errorData);
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const responseData = await response.json();
-      console.log('Role creation response:', responseData);
-
-      toast.success('Role added successfully');
+      // Clear form fields first
       setNewRoleName('');
       setNewRoleKey('');
       setShowRoleFields(false);
       
-      // Set the newly created role as selected
-      if (responseData.id) {
-        setSelectedRoleId(responseData.id);
-      } else if (responseData.data?.id) {
-        setSelectedRoleId(responseData.data.id);
+      // Set the newly created role as selected if we have an ID
+      if (createdRole.id) {
+        setSelectedRoleId(createdRole.id);
       }
 
-      // Refresh the roles list by re-running the fetch logic
-      const fetchRolesAgain = async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const token = session?.access_token;
+      // Show success toast
+      toast.success('Role added successfully');
 
-          if (token) {
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-            const apiUrl = `${baseUrl}/membership/roles`;
-            
-            const response = await fetch(apiUrl, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
-              }
-            });
-
-            if (response.ok) {
-              const responseData = await response.json();
-              let rolesData = [];
-              if (responseData.results && Array.isArray(responseData.results)) {
-                rolesData = responseData.results;
-              } else if (Array.isArray(responseData)) {
-                rolesData = responseData;
-              } else if (responseData.data && Array.isArray(responseData.data)) {
-                rolesData = responseData.data;
-              }
-              setRoles(rolesData || []);
-            }
-          }
-        } catch (error) {
-          console.error('Error refreshing roles:', error);
-        }
-      };
-      
-      await fetchRolesAgain();
-
+      // Refresh the roles list (don't block on this)
+      try {
+        const rolesData = await membershipService.getRoles();
+        setRoles(rolesData);
+      } catch (refreshError) {
+        console.error('Error refreshing roles list:', refreshError);
+        // Don't show error toast for refresh failure, role was already created
+      }
     } catch (error: any) {
       console.error('Error adding role:', error);
-      toast.error(`Error adding role: ${error.message}`);
-      
-      // Fallback to Supabase if renderer API fails (only if tenantId is available)
-      if (tenantId) {
-        try {
-          const { data, error: supabaseError } = await supabase
-            .from('roles')
-            .insert([{ name: newRoleName, tenant_id: tenantId }])
-            .select()
-            .single();
-
-          if (supabaseError) throw supabaseError;
-          
-          toast.success('Role added (via fallback)');
-          setNewRoleName('');
-          setNewRoleKey('');
-          setShowRoleFields(false);
-          setSelectedRoleId(data.id);
-          
-          // Refresh roles list
-          const updated = await supabase
-            .from('roles')
-            .select('id, name')
-            .eq('tenant_id', tenantId);
-          setRoles(updated.data || []);
-        } catch (fallbackError: any) {
-          console.error('Fallback error:', fallbackError);
-          toast.error(`Failed to add role: ${fallbackError.message}`);
-        }
-      }
+      toast.error(`Error adding role: ${error.message || 'Failed to create role'}`);
     }
   };
 
