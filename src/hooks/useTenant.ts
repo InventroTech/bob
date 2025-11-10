@@ -61,31 +61,9 @@ export function useTenant(): TenantContext {
               }
             } else {
               console.log('useTenant: Failed to fetch role from backend:', roleResponse.status);
-              // Fallback to Supabase if backend fails
-              const { data: userData, error: userError } = await supabase
-                .from('users')
-                .select(`role_id, roles(name)`)
-                .eq('uid', user.id)
-                .single();
-              
-              if (!userError && userData?.roles) {
-                console.log('useTenant: Fallback - Setting custom role from Supabase:', (userData.roles as any).name);
-                setCustomRole((userData.roles as any).name);
-              }
             }
           } catch (error) {
             console.error('useTenant: Error fetching role from backend:', error);
-            // Fallback to Supabase on error
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select(`role_id, roles(name)`)
-              .eq('uid', user.id)
-              .single();
-            
-            if (!userError && userData?.roles) {
-              console.log('useTenant: Fallback - Setting custom role from Supabase:', (userData.roles as any).name);
-              setCustomRole((userData.roles as any).name);
-            }
           }
         }
       } else {
