@@ -12,4 +12,6 @@ export { TicketTableConfig } from './component-config/TicketTableConfig';
 export { LeadTableComponent } from './LeadTableComponent';
 export { default as LeadCardCarousel } from './LeadCardCarousel';
 export { LeadCardCarouselWrapper } from './LeadCardCarouselWrapper';
-export { LeadCardCarouselConfig } from './component-config/LeadCardCarouselConfig'; 
+export { LeadCardCarouselConfig } from './component-config/LeadCardCarouselConfig';
+export { FileUploadPageComponent } from './FileUploadPageComponent';
+export { FileUploadPageConfig } from './FileUploadPageConfig'; 
