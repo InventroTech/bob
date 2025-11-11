@@ -116,8 +116,8 @@ import {
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
+import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 
-// Add configuration types
 interface ComponentConfig {
   apiEndpoint?: string;
   statusDataApiEndpoint?: string;
@@ -622,6 +622,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'fileUpload':
         return (
           <FileUploadPageConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       case 'leadAssignment':
         return (
           <LeadAssignmentConfig
