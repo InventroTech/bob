@@ -6,13 +6,19 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+// Time to keep a toast mounted after it is closed (for exit animation)
+const TOAST_REMOVE_DELAY = 1000
+// Default auto-dismiss duration for toasts (ms). Use 0/Infinity to make persistent.
+const DEFAULT_TOAST_DURATION_MS = 1700
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  // Optional duration in ms. If omitted, a sensible default is applied.
+  // If set to 0 or Infinity, the toast will be persistent until dismissed manually.
+  duration?: number
 }
 
 const actionTypes = {
@@ -160,6 +166,14 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+
+  // Auto-dismiss after duration unless explicitly persistent
+  const duration = typeof props.duration === "number" ? props.duration : DEFAULT_TOAST_DURATION_MS
+  if (Number.isFinite(duration) && duration > 0) {
+    setTimeout(() => {
+      dismiss()
+    }, duration)
+  }
 
   return {
     id: id,

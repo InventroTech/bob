@@ -1,10 +1,20 @@
-import React, { useEffect, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { useAuth } from "@/hooks/useAuth";
-import { useTenant } from "@/hooks/useTenant";
-import { supabase } from "@/lib/supabase";
-import { toast } from "sonner";
+import React, { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { timePicker } from "analogue-time-picker";
+import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 import {
   User,
   Phone,
@@ -12,265 +22,161 @@ import {
   MapPin,
   DollarSign,
   Coffee,
+  ChevronDown,
   X,
+  Clock,
+  Calendar as CalendarLucide,
+  ExternalLink,
 } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ChevronDown } from "lucide-react";
 
-interface Lead {
+interface LeadCardCarouselProps {
+  config?: {
+    title?: string;
+    apiEndpoint?: string;
+    statusDataApiEndpoint?: string;
+  };
+}
+
+interface LeadData {
   id: number;
   created_at: string;
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
+  phone_no?: string;
   company: string;
   position: string;
-  source: string;
+  source?: string;
+  lead_source?: string;
   status: string;
-  priority: "High" | "Medium" | "Low";
-  notes: string | null;
-  budget: number | null;
-  location: string | null;
-  tags: string[] | null;
-  display_pic_url: string | null;
-  linkedin_profile: string | null;
-  website: string | null;
+  priority: string;
+  notes: string;
+  budget: number;
+  location: string;
+  tags: string[];
+  display_pic_url: string;
+  linkedin_profile: string;
+  website: string;
+  next_follow_up: string;
+  // New fields as per requirements
+  lead_stage: string;
+  customer_full_name: string;
+  user_id: string;
+  affiliated_party: string;
+  rm_dashboard: string;
+  user_profile_link: string;
+  whatsapp_link: string;
+  package_to_pitch: string;
+  premium_poster_count: number;
+  last_active_date?: string;
+  last_active_date_time?: string;
+  latest_remarks: string;
 }
 
-const LEAD_SOURCES = [
-  "Website", "Referral", "Social Media", "Cold Call", 
-  "Trade Show", "Advertisement", "Partner", "Other"
-];
-
-const parseTags = (tags: any): string[] => {
-  if (!tags) return [];
-  if (Array.isArray(tags)) return tags;
-  if (typeof tags === "string") {
-    try {
-      return JSON.parse(tags);
-    } catch {
-      return tags.split(",").map((t: string) => t.trim()).filter(Boolean);
-    }
-  }
-  return [];
-};
-
-// Function to format phone number
-const formatPhoneNumber = (phone: string): string => {
-  if (!phone) return "N/A";
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
-    return `+91 ${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
-  }
-  if (cleaned.length === 12 && cleaned.startsWith('91')) {
-    return `+${cleaned.slice(0, 2)} ${cleaned.slice(2, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8)}`;
-  }
-  return phone;
-};
-
-// Function to handle WhatsApp action
-const handleWhatsApp = (phone: string) => {
-  const cleanNumber = phone.replace(/\D/g, '');
-  if (cleanNumber) {
-    const message = `Hi, I'm reaching out regarding your inquiry.`;
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  }
-};
-
-// Function to handle email action
-const handleEmail = (email: string) => {
-  if (email) {
-    const subject = "Follow up on your inquiry";
-    const body = "Hi, I wanted to follow up on your recent inquiry. Please let me know if you have any questions.";
-    const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailtoUrl);
-  }
-};
-
-// Function to format lead status with better UI
-const formatLeadStatus = (status: string): { label: string; color: string; bgColor: string } => {
-  switch (status.toLowerCase()) {
-    case 'new':
-      return { label: 'New', color: 'text-blue-600', bgColor: 'bg-blue-50' };
-    case 'contacted':
-      return { label: 'Contacted', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
-    case 'qualified':
-      return { label: 'Qualified', color: 'text-green-600', bgColor: 'bg-green-50' };
-    case 'proposal sent':
-      return { label: 'Proposal Sent', color: 'text-purple-600', bgColor: 'bg-purple-50' };
-    case 'negotiation':
-      return { label: 'Negotiation', color: 'text-indigo-600', bgColor: 'bg-indigo-50' };
-    case 'closed won':
-      return { label: 'Closed Won', color: 'text-emerald-600', bgColor: 'bg-emerald-50' };
-    case 'closed lost':
-      return { label: 'Closed Lost', color: 'text-red-600', bgColor: 'bg-red-50' };
-    case 'follow up':
-      return { label: 'Follow Up', color: 'text-orange-600', bgColor: 'bg-orange-50' };
-    default:
-      return { label: status || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
-  }
-};
-
-// Function to format priority with better UI
-const formatPriority = (priority: string): { label: string; color: string; bgColor: string } => {
-  switch (priority.toLowerCase()) {
-    case 'high':
-      return { label: 'High', color: 'text-red-600', bgColor: 'bg-red-50' };
-    case 'medium':
-      return { label: 'Medium', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
-    case 'low':
-      return { label: 'Low', color: 'text-green-600', bgColor: 'bg-green-50' };
-    default:
-      return { label: priority || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
-  }
-};
-
-interface LeadCardCarouselProps {
-  config?: {
-    apiEndpoint?: string;
-    statusDataApiEndpoint?: string;
-    title?: string;
-    apiPrefix?: 'supabase' | 'renderer';
-  };
-  initialLead?: any;
-  onUpdate?: (updatedLead: any) => void;
+interface LeadStats {
+  total: number;
+  fresh_leads: number;
+  leads_won: number;
+  wip_leads: number;
+  lost_leads: number;
 }
 
-export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
-  config,
-  initialLead,
-  onUpdate,
-}) => {
-  const { user } = useAuth();
-  const { tenantId } = useTenant();
+interface LeadState {
+  leadStatus: string;
+  priority: string;
+  notes: string;
+  selectedTags: string[];
+  nextFollowUp: string;
+  leadStartTime: Date;
+}
 
-  const isInitialized = React.useRef(false);
-
-  // Getting the persisted state from the session storage
-  const getPersistedState = () => {
-    try {
-      const persisted = sessionStorage.getItem("leadCardCarouselState");
-      return persisted ? JSON.parse(persisted) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  // Persisting the state to the session storage
-  const persistState = (state: any) => {
-    try {
-      sessionStorage.setItem("leadCardCarouselState", JSON.stringify(state));
-    } catch (error) {
-      console.error("Error persisting state:", error);
-    }
-  };
-
-  // Clearing the persisted state from the session storage
-  const clearPersistedState = () => {
-    try {
-      sessionStorage.removeItem("leadCardCarouselState");
-    } catch (error) {
-      console.error("Error clearing persisted state:", error);
-    }
-  };
-
-  // Getting the initial state from the initial lead
-  const getInitialState = () => {
-    if (initialLead) {
-      return {
-        currentLead: initialLead,
-        showPendingCard: false,
-        leadStatus: initialLead.status || "New",
-        priority: initialLead.priority || "Medium",
-        notes: initialLead.notes || "",
-        selectedTags: parseTags(initialLead.tags),
-        nextFollowUp: initialLead.next_follow_up || "",
-      };
-    }
-
-    const persisted = getPersistedState();
-    if (persisted) {
-      return persisted;
-    }
-
-    return {
-      currentLead: null,
-      showPendingCard: true,
-      leadStatus: "New" as const,
-      priority: "Medium" as const,
-      notes: "",
-      selectedTags: [],
-      nextFollowUp: "",
-    };
-  };
-
-  const initialState = getInitialState();
-
-  const [currentLead, setCurrentLead] = useState<any>(initialState.currentLead);
-  const [showPendingCard, setShowPendingCard] = useState(initialState.showPendingCard);
-  const [leadStats, setLeadStats] = useState({
+const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
+  const { toast } = useToast();
+  const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
+  const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
     fresh_leads: 0,
     leads_won: 0,
     wip_leads: 0,
     lost_leads: 0,
   });
-  const [lead, setLead] = useState({
-    leadStatus: initialState.leadStatus as string,
-    priority: initialState.priority as string,
-    notes: initialState.notes,
-    selectedTags: initialState.selectedTags,
-    nextFollowUp: initialState.nextFollowUp,
-    leadStartTime: null as Date | null,
-  });
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
+  const [showPendingCard, setShowPendingCard] = useState(true);
+  const [hasCheckedForLeads, setHasCheckedForLeads] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-
-  // Function to handle opening profile modal
-  const handleOpenProfile = () => {
-    if (currentLead?.linkedin_profile || currentLead?.website) {
-      setShowProfileModal(true);
-    }
-  };
-
-  // Function to close profile modal
-  const handleCloseProfile = () => {
-    setShowProfileModal(false);
-  };
-
+  const [selectedDate, setSelectedDate] = useState<Date>();
+  const [selectedHour, setSelectedHour] = useState<number>(12);
+  const [selectedMinute, setSelectedMinute] = useState<number>(0);
+  const [isAM, setIsAM] = useState<boolean>(true);
+  const [clockMode, setClockMode] = useState<'hour' | 'minute'>('hour'); // Toggle between hour and minute
+  const [inspirationalMessage, setInspirationalMessage] = useState<string>('');
+  const [showTime, setShowTime] = useState<any>(null);
+  const [animationData, setAnimationData] = useState<any>(null);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const clockRef = useRef<HTMLDivElement | null>(null);
+  
+  // Reset showTime when popover opens to ensure fresh initialization
   useEffect(() => {
-    if (isInitialized.current) {
-      persistState({
-        currentLead,
-        showPendingCard,
-        leadStatus: lead.leadStatus,
-        priority: lead.priority,
-        notes: lead.notes,
-        selectedTags: lead.selectedTags,
-        nextFollowUp: lead.nextFollowUp,
-      });
+    if (popoverOpen) {
+      setShowTime(null);
+      // Wait a bit for the DOM to be ready
+      setTimeout(() => {
+        if (clockRef.current) {
+          try {
+            const instance = timePicker({
+              element: clockRef.current,
+              mode: 12,
+              width: "300px",
+              time: { hour: selectedHour, minute: selectedMinute }
+            });
+            setShowTime(instance);
+          } catch (error) {
+            console.error('Error initializing clock:', error);
+          }
+        }
+      }, 200);
     }
-  }, [currentLead, showPendingCard, lead.leadStatus, lead.priority, lead.notes, lead.selectedTags, lead.nextFollowUp]);
+  }, [popoverOpen]);
+  
+  // Callback ref to set the ref
+  const setClockRef = (element: HTMLDivElement | null) => {
+    clockRef.current = element;
+  };
+  const [lead, setLead] = useState<LeadState>({
+    leadStatus: "New",
+    priority: "Medium",
+    notes: "",
+    selectedTags: [],
+    nextFollowUp: "",
+    leadStartTime: new Date(),
+  });
 
-  // Calculating the lead processing time
-  const calculateLeadTime = (): string => {
-    if (!lead.leadStartTime) return "";
-    const endTime = new Date();
-    const diffInSeconds = Math.floor((endTime.getTime() - lead.leadStartTime.getTime()) / 1000);
-    const minutes = Math.floor(diffInSeconds / 60);
-    const seconds = diffInSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  const isInitialized = useRef(false);
+
+  // Inspirational messages for workers
+  const inspirationalMessages = [
+    "Every call brings you closer to success! 💪",
+    "Your dedication drives results! 🚀",
+    "Turn challenges into opportunities! 🌟",
+    "Every lead is a chance to make a difference! 💎",
+    "You're building relationships that matter! 🤝",
+    "Success is calling - answer it! 📞",
+    "Each interaction creates value! ✨",
+    "You've got this! Keep pushing forward! 💯"
+  ];
+
+  // Utility functions
+  const formatPhoneNumber = (phone?: string) => {
+    if (!phone) return "N/A";
+    return phone.replace(/(\d{2})(\d{5})(\d{5})/, "$1 $2 $3");
+  };
+
+  const parseTags = (tags: string[] | string) => {
+    if (Array.isArray(tags)) return tags;
+    if (typeof tags === "string") return tags.split(",").map(tag => tag.trim());
+    return [];
   };
 
   // Fetching the lead stats
@@ -287,8 +193,8 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
         {
           method: "GET",
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
             "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
           },
         }
       );
@@ -298,294 +204,9 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
       }
 
       const data = await response.json();
-      
-      // Map the backend structure to our leadStats interface
-      const stats = {
-        total: data.total_leads || 0,
-        fresh_leads: data.fresh_leads || 0,
-        leads_won: data.leads_won || 0,
-        wip_leads: data.wip_leads || 0,
-        lost_leads: data.lost_leads || 0,
-      };
-
-      setLeadStats(stats);
+      setLeadStats(data);
     } catch (error) {
-      console.error("Error fetching lead statistics:", error);
-      setLeadStats({
-        total: 0,
-        fresh_leads: 0,
-        leads_won: 0,
-        wip_leads: 0,
-        lost_leads: 0,
-      });
-    }
-  };
-
-  // Helper function to reset lead state
-  const resetLeadState = () => {
-    setLead({
-      leadStatus: "New",
-      priority: "Medium",
-      notes: "",
-      selectedTags: [],
-      nextFollowUp: "",
-      leadStartTime: null,
-    });
-  };
-
-  // Helper function to set lead from API response
-  const setLeadFromResponse = (nextLead: any) => {
-    setCurrentLead(nextLead);
-    setLead({
-      leadStatus: nextLead.status || "New",
-      priority: nextLead.priority || "Medium",
-      notes: nextLead.notes || "",
-      selectedTags: parseTags(nextLead.tags),
-      nextFollowUp: nextLead.next_follow_up || "",
-      leadStartTime: new Date(),
-    });
-    setShowPendingCard(false);
-    isInitialized.current = true;
-  };
-
-  // Fetching the next lead
-  const fetchNextLead = async (currentLeadId: number) => {
-    try {
-  
-      const nextLeadUrl = `${import.meta.env.VITE_RENDER_API_URL}${config?.apiEndpoint || "/api/leads"}`;
-    
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-      
-      const nextLeadResponse = await fetch(nextLeadUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!nextLeadResponse.ok) {
-        if (nextLeadResponse.status === 404) {
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          resetLeadState();
-          isInitialized.current = false;
-          clearPersistedState();
-          await fetchLeadStats();
-          toast.info("No more leads available. Click 'Get First Lead' to continue.");
-          return;
-        }
-        throw new Error(`HTTP error! status: ${nextLeadResponse.status}`);
-      }
-
-      const leadData = await nextLeadResponse.json();
-
-      if (!leadData || (typeof leadData === "object" && !Object.keys(leadData).length)) {
-        setShowPendingCard(true);
-        setCurrentLead(null);
-        resetLeadState();
-        isInitialized.current = false;
-        clearPersistedState();
-        await fetchLeadStats();
-        toast.info("No more leads available. Click 'Get First Lead' to continue.");
-        return;
-      }
-
-      let nextLead = null;
-      if (leadData && typeof leadData === "object") {
-        if (leadData.id) {
-          nextLead = leadData;
-        } else if (leadData.lead && leadData.lead.id) {
-          nextLead = leadData.lead;
-        } else if (leadData.data && leadData.data.id) {
-          nextLead = leadData.data;
-        } else if (Array.isArray(leadData) && leadData.length > 0) {
-          nextLead = leadData[0];
-        }
-      }
-
-      if (nextLead && nextLead.id) {
-        setLeadFromResponse(nextLead);
-      } else {
-        setShowPendingCard(true);
-        setCurrentLead(null);
-        resetLeadState();
-        isInitialized.current = false;
-        clearPersistedState();
-        await fetchLeadStats();
-        toast.info("No more leads available. Click 'Get First Lead' to continue.");
-      }
-
-    } catch (error: any) {
-      console.error("Error fetching next lead:", error);
-      toast.error(error.message || "Failed to fetch next lead");
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      resetLeadState();
-      isInitialized.current = false;
-      clearPersistedState();
-      await fetchLeadStats();
-    }
-  };
-
-  // Taking a break
-  const handleTakeBreak = async () => {
-    try {
-      if (!currentLead?.id) {
-        toast.error("No lead ID available");
-        return;
-      }
-
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/crm/leads/take-break/`;
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          leadId: currentLead.id
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Navigate to pending card
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      resetLeadState();
-      isInitialized.current = false;
-      clearPersistedState();
-      await fetchLeadStats();
-      toast.info("Taking a break. Click 'Get Leads' when ready to continue.");
-    } catch (error) {
-      console.error("Error taking break:", error);
-      toast.error("Error taking break. Please try again.");
-    }
-  };
-
-  // Fetching the lead stats (initially)
-  useEffect(() => {
-    fetchLeadStats();
-  }, []);
-
-  // Fetching the lead stats (interval)
-  useEffect(() => {
-    if (!showPendingCard) return;
-    const interval = setInterval(() => {
-      fetchLeadStats();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [showPendingCard]);
-
-  // Handling the tag change
-  const handleTagChange = (tag: string, checked: boolean) => {
-    if (checked) {
-      setLead(prev => ({
-        ...prev,
-        selectedTags: [...prev.selectedTags, tag]
-      }));
-    } else {
-      setLead(prev => ({
-        ...prev,
-        selectedTags: prev.selectedTags.filter((t) => t !== tag)
-      }));
-    }
-  };
-
-  // Handling the action buttons
-  const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
-    try {
-      if (!currentLead?.id) {
-        toast.error("No lead ID available");
-        return;
-      }
-
-      setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error("Authentication required");
-      }
-
-      // Map action to outcome parameter
-      let outcome: string;
-      let actionMessage: string;
-      
-      switch (action) {
-        case "Not Connected":
-          outcome = "scheduled";
-          actionMessage = "Lead marked as scheduled for later contact";
-          break;
-        case "Call Later":
-          outcome = "call_later";
-          actionMessage = "Lead marked for later call";
-          break;
-        case "Lost":
-          outcome = "lost";
-          actionMessage = "Lead marked as lost";
-          break;
-        case "Won":
-          outcome = "won";
-          actionMessage = "Lead marked as won";
-          break;
-        default:
-          throw new Error("Invalid action");
-      }
-
-      // Prepare payload with outcome parameter
-      const payload = {
-        outcome: outcome
-      };
-
-      const token = session?.access_token;
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
-      // Use configured API prefix or default to renderer
-      const baseUrl = config?.apiPrefix === 'supabase' 
-        ? import.meta.env.VITE_API_URI 
-        : import.meta.env.VITE_RENDER_API_URL;
-      
-      const apiUrl = `${baseUrl}/crm/leads/${currentLead.id}/call-outcome/`;
-      
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      toast.success(actionMessage);
-
-      // After successful API call, fetch next lead
-      await fetchNextLead(currentLead?.id);
-
-    } catch (error: any) {
-      console.error("Error in handleActionButton:", error);
-      toast.error(error.message || "Failed to process action");
-    } finally {
-      setUpdating(false);
+      console.error("Error fetching lead stats:", error);
     }
   };
 
@@ -593,8 +214,10 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   const fetchFirstLead = async () => {
     try {
       setLoading(true);
+      setPopoverOpen(false);
+      
       const endpoint = config?.apiEndpoint || "/api/leads";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}?assign=false`;
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -612,13 +235,17 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
 
       if (!response.ok) {
         if (response.status === 404) {
+          setHasCheckedForLeads(true);
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
           isInitialized.current = false;
-          clearPersistedState();
           await fetchLeadStats();
-          toast.info("No leads available at the moment.");
+          toast({
+            title: "Info",
+            description: "No leads available at the moment.",
+            variant: "default",
+          });
           return;
         }
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -626,147 +253,376 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
 
       const leadData = await response.json();
 
-      if (!leadData || (typeof leadData === "object" && !Object.keys(leadData).length)) {
+      // Check if leadData is empty (handles null, undefined, empty object, empty array)
+      const isEmpty = !leadData || 
+                      (Array.isArray(leadData) && leadData.length === 0) ||
+                      (typeof leadData === "object" && !Array.isArray(leadData) && Object.keys(leadData).length === 0) ||
+                      (typeof leadData === "string" && leadData.trim() === "");
+
+      if (isEmpty) {
+        setHasCheckedForLeads(true);
         setShowPendingCard(true);
         setCurrentLead(null);
         resetLeadState();
         isInitialized.current = false;
-        clearPersistedState();
         await fetchLeadStats();
-        toast.info("No leads available.");
+        toast({
+          title: "Info",
+          description: "No leads available at the moment.",
+          variant: "default",
+        });
         return;
       }
 
-      let nextLead = null;
-      if (leadData && typeof leadData === "object") {
-        if (leadData.id) {
-          nextLead = leadData;
-        } else if (leadData.lead && leadData.lead.id) {
-          nextLead = leadData.lead;
-        } else if (leadData.data && leadData.data.id) {
-          nextLead = leadData.data;
-        } else if (Array.isArray(leadData) && leadData.length > 0) {
-          nextLead = leadData[0];
-        }
-      }
+      setHasCheckedForLeads(true);
 
-      if (nextLead && nextLead.id) {
-        setLeadFromResponse(nextLead);
-      } else {
-        setShowPendingCard(true);
-        setCurrentLead(null);
-        resetLeadState();
-        isInitialized.current = false;
-        clearPersistedState();
-        await fetchLeadStats();
-        toast.info("No leads available.");
-      }
+      setCurrentLead(leadData);
+      setShowPendingCard(false);
+      setLead(prev => ({
+        ...prev,
+        leadStatus: leadData.status || "New",
+        priority: leadData.priority || "Medium",
+        notes: leadData.data.notes || "",
+        selectedTags: parseTags(leadData.tags || []),
+        nextFollowUp: leadData.next_follow_up || "",
+        leadStartTime: new Date(),
+      }));
 
-    } catch (error: any) {
-      console.error("Error fetching first lead:", error);
-      toast.error(error.message || "Failed to fetch lead");
+      isInitialized.current = true;
+      await fetchLeadStats();
+      
+    } catch (error) {
+      console.error("Error fetching lead:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load lead. Please try again.",
+        variant: "destructive",
+      });
       setShowPendingCard(true);
       setCurrentLead(null);
       resetLeadState();
       isInitialized.current = false;
-      clearPersistedState();
       await fetchLeadStats();
     } finally {
       setLoading(false);
     }
   };
 
-  // Loading the page
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  const resetLeadState = () => {
+    setLead({
+      leadStatus: "New",
+      priority: "Medium",
+      notes: "",
+      selectedTags: [],
+      nextFollowUp: "",
+      leadStartTime: new Date(),
+    });
+  };
 
-  // Showing the pending leads card
+  // Reusable helper to post CRM events
+  const sendLeadEvent = async (
+    eventName: string,
+    payload: Record<string, any>,
+    options: { successTitle?: string; successDescription?: string } = {}
+  ): Promise<boolean> => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return false;
+    }
+    try {
+      setUpdating(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      const base = import.meta.env.VITE_RENDER_API_URL;
+      const url = `${base}/crm-records/records/events/`;
+      const body = {
+        event: eventName,
+        record_id: currentLead.id,
+        payload,
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      if (options.successTitle || options.successDescription) {
+        toast({
+          title: options.successTitle || "Success",
+          description: options.successDescription || "Event sent successfully.",
+          variant: "default",
+        });
+      }
+      return true;
+    } catch (error: any) {
+      console.error("Error sending event:", error);
+      toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
+      return false;
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
+
+    // For Not Connected, send call_later event with user's notes
+    if (action === "Not Connected") {
+      const ok = await sendLeadEvent(
+        "lead.call_later_clicked",
+        {
+          notes: lead.notes || "",
+          remarks: currentLead.latest_remarks,
+          lead_id: currentLead.id,
+          user_id: currentLead.user_id,
+        },
+        { successTitle: "Success", successDescription: "Marked as snoozed" }
+      );
+      if (ok) await fetchFirstLead();
+      return;
+    }
+
+    // For Won/Lost, send events to backend as specified
+    if (action === "Won" || action === "Lost") {
+      const ok = await sendLeadEvent(
+        action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
+        {
+          notes: lead.notes,
+          remarks: currentLead.latest_remarks,
+          lead_id: currentLead.id,
+          user_id: currentLead.user_id,
+        },
+        { successTitle: "Success", successDescription: `Marked as ${action}` }
+      );
+      if (ok) await fetchFirstLead();
+      return;
+    }
+
+    // Default behavior for other actions stays as-is (simulated)
+    try {
+      setUpdating(true);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast({ title: "Success", description: `Lead marked as: ${action}`, variant: "default" });
+      await fetchFirstLead();
+    } catch (error) {
+      console.error("Error updating lead:", error);
+      toast({ title: "Error", description: "Failed to update lead. Please try again.", variant: "destructive" });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleTakeBreak = async () => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
+    const ok = await sendLeadEvent(
+      "agent.take_break",
+      { notes: lead.notes },
+      { successTitle: "Taking break", successDescription: "Bye, Come back soon!" }
+    );
+    if (ok) {
+      // Return to landing (pending) screen
+      setShowPendingCard(true);
+      setCurrentLead(null);
+      resetLeadState();
+      isInitialized.current = false;
+      await fetchLeadStats();
+    }
+  };
+
+  const buildNextCallISO = (): string | null => {
+    if (!selectedDate) return null;
+    let hour24 = selectedHour % 12;
+    hour24 = isAM ? hour24 : hour24 + 12;
+    const dt = new Date(selectedDate);
+    dt.setHours(hour24, selectedMinute, 0, 0);
+    try {
+      return dt.toISOString();
+    } catch {
+      return null;
+    }
+  };
+
+  const handleScheduleCall = async () => {
+    if (!currentLead?.id) {
+      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
+      return;
+    }
+    const nextCallIso = buildNextCallISO();
+    if (!nextCallIso) {
+      toast({ title: "Missing time", description: "Select date and time before scheduling.", variant: "destructive" });
+      return;
+    }
+    const ok = await sendLeadEvent(
+      "lead.call_scheduled",
+      {
+        next_call_at: nextCallIso,
+        notes: lead.notes,
+        remarks: currentLead.latest_remarks,
+        lead_id: currentLead.id,
+        user_id: currentLead.user_id,
+      },
+      { successTitle: "Scheduled!", successDescription: "Call scheduled successfully." }
+    );
+    if (ok) {
+      setPopoverOpen(false);
+      setSelectedDate(undefined);
+      setSelectedHour(12);
+      setSelectedMinute(0);
+      await fetchFirstLead();
+    }
+  };
+
+  const handleCloseProfile = () => {
+    setShowProfileModal(false);
+  };
+
+  const handleOpenProfile = () => {
+    if (currentLead?.linkedin_profile || currentLead?.website) {
+      setShowProfileModal(true);
+    }
+  };
+
+
+  // Load Lottie animation (idle + cached)
+  useEffect(() => {
+    const urls = [
+      'https://lottie.host/embed/c7676df8-1c6b-4703-b6dd-3e861d2c90a2/tl7ZtL4MJc.json',
+      'https://assets5.lottiefiles.com/packages/lf20_jcikwtux.json',
+      'https://assets5.lottiefiles.com/packages/lf20_qp1spzqv.json',
+    ];
+
+    requestIdle(() => {
+      fetchLottieAnimation(urls)
+        .then((data) => {
+          if (data) setAnimationData(data);
+        })
+        .catch(() => {
+          // noop; we already show a lightweight fallback
+        });
+    });
+  }, []);
+
+  // Initialize component - fetch stats only, don't fetch lead yet
+  useEffect(() => {
+    fetchLeadStats();
+    setShowPendingCard(true);
+    // Set random inspirational message
+    setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
+  }, []);
+
+  // Pending card
   if (showPendingCard) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8">
-        <Card className="w-full max-w-md">
-          <CardContent className="p-6">
+      <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
+        <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
+          <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
+            {/* Header */}
             <div className="text-center mb-6">
-              <div className="flex items-center justify-center mb-4">
-                <User className="h-8 w-8 text-primary mr-2" />
-                <h2 className="text-2xl font-semibold text-gray-800">
-                  {config?.title || "Lead Management"}
-                </h2>
-              </div>
-              <p className="text-gray-600 mb-6">Click to start working on leads</p>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">
+                {config?.title || "Lead Management"}
+              </h3>
             </div>
 
-            <div className="mb-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-800">{leadStats.total}</div>
-                <div className="text-xs text-gray-600">Total Leads</div>
+            {/* Inspirational Messages for Workers */}
+            <div className="mb-6 space-y-3">
+              <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 rounded-lg text-center shadow-lg">
+                <p className="text-white text-xl font-semibold mb-2">
+                  {inspirationalMessage}
+                </p>
+                <p className="text-blue-100 text-sm">
+                  Ready to make your next call count?
+                </p>
+              </div>
+              
+              {/* Lottie Animation */}
+              <div className="flex justify-center items-center h-64">
+                {animationData ? (
+                  <React.Suspense
+                    fallback={
+                      <div className="flex flex-col items-center justify-center h-64">
+                        <div className="text-6xl mb-4">🎯</div>
+                        <p className="text-gray-500 text-sm">Loading animation...</p>
+                      </div>
+                    }
+                  >
+                    {/* Lazy import to avoid blocking initial render with lottie-web */}
+                    {(() => {
+                      const Lottie = React.lazy(() => import('lottie-react'));
+                      return (
+                        <Lottie
+                          animationData={animationData}
+                          loop={true}
+                          autoplay={true}
+                          rendererSettings={{ progressiveLoad: true, hideOnTransparent: true }}
+                          style={{ height: 250, width: 250 }}
+                        />
+                      );
+                    })()}
+                  </React.Suspense>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-64">
+                    <div className="text-6xl mb-4">🎯</div>
+                    <p className="text-gray-500 text-sm">Loading animation...</p>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-blue-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Fresh leads</span>
-                </div>
-                <span className="text-sm font-medium">{leadStats.fresh_leads}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-green-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Leads won today</span>
-                </div>
-                <span className="text-sm font-medium">{leadStats.leads_won}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Work In Progress</span>
-                </div>
-                <span className="text-sm font-medium">{leadStats.wip_leads}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-red-400 rounded-full mr-2"></div>
-                  <span className="text-sm text-gray-700">Leads lost today</span>
-                </div>
-                <span className="text-sm font-medium">{leadStats.lost_leads}</span>
-              </div>
+            {/* Action Button */}
+            <div className="text-center">
+              <Button 
+                onClick={fetchFirstLead} 
+                disabled={loading}
+                className="w-full max-w-xs"
+                size="lg"
+              >
+                {loading ? "Loading..." : "Get Leads"}
+              </Button>
             </div>
-
-            <Button 
-              onClick={fetchFirstLead} 
-              disabled={loading}
-              className="w-full"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Loading...
-                </>
-              ) : (
-                'Get Leads'
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // Showing the no lead available card
-  if (!currentLead) {
+  // Loading state
+  if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
-        <p>No lead available</p>
-        <Button onClick={fetchFirstLead} disabled={loading}>
-          Get Leads
-        </Button>
+      <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
+        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
+          <Button
+            onClick={handleTakeBreak}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            disabled={updating}
+          >
+            <Coffee className="h-3 w-3" />
+            Take a Break
+          </Button>
+        </div>
+        <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
+          <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="text-sm text-muted-foreground">Loading lead...</p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -774,7 +630,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
   // Showing the lead card
   return (
     <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-      <div className="mt-4 flex w-[70%] justify-end">
+      <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
         <Button
           onClick={handleTakeBreak}
           variant="outline"
@@ -786,7 +642,7 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
           Take a Break
         </Button>
       </div>
-      <div className="relative w-[70%] h-full">
+      <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
         <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
           {fetchingNext && (
             <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
@@ -797,291 +653,484 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
             </div>
           )}
           <div className="space-y-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-4 mt-1">
-                  {currentLead?.source && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Source:</span>
-                      <span className="text-xs font-medium">{currentLead.source}</span>
-                    </div>
-                  )}
-                  {currentLead?.industry && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Industry:</span>
-                      <span className="text-xs font-medium">{currentLead.industry}</span>
-                    </div>
-                  )}
-                </div>
+            {/* Lead Stage - Top */}
+            <div className="text-center">
+              <div className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                {currentLead?.lead_stage || "New Lead"}
               </div>
             </div>
 
-            <div className="flex flex-col gap-4">
-              <div className="space-y-2 flex flex-col gap-2">
-                <div className="space-y-2">
-                  <div className="space-y-1">
-                    <p className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
-                      <span className="font-medium text-sm">
-                        {currentLead?.created_at ? new Date(currentLead.created_at).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit"
-                        }) : "N/A"}
-                      </span>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-lg">{currentLead?.company || "No company provided"}</span>
-                        <span className="text-sm pt-2">{currentLead?.position || "N/A"}</span>
-                      </div>
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="">
-                  <div
-                    className={`flex items-center text-sm bg-muted/50 p-4 rounded-md ${
-                      currentLead?.linkedin_profile || currentLead?.website
-                        ? "cursor-pointer hover:bg-muted/70 transition-colors"
-                        : ""
-                    }`}
-                    onClick={handleOpenProfile}
-                  >
-                    {currentLead?.display_pic_url ? (
-                      <img
-                        src={currentLead.display_pic_url}
-                        alt={`${currentLead.name || "Lead"} profile`}
-                        className="h-12 w-12 rounded-full mr-2 object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                        }}
-                      />
-                    ) : null}
-                    <User
-                      className={`h-3 w-3 mr-2 text-primary ${
-                        currentLead?.display_pic_url ? "hidden" : ""
-                      }`}
+            {/* Lead Source - Below Lead Stage */}
+            <div className="text-center">
+              <span className="text-sm text-muted-foreground">Source: </span>
+              <span className="text-sm font-medium">{currentLead?.lead_source || currentLead?.source || "N/A"}</span>
+            </div>
+
+            {/* Main Lead Information */}
+            <div className="space-y-2">
+              {/* Date and Time */}
+              <div className="text-sm bg-muted/50 p-2 rounded-md">
+                <span className="font-medium text-sm">
+                  {currentLead?.created_at ? new Date(currentLead.created_at).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  }) : "N/A"}
+                </span>
+              </div>
+
+              {/* Customer Profile Section */}
+              <div className="bg-muted/50 p-4 rounded-md">
+                <div className="flex items-center gap-3">
+                  {currentLead?.display_pic_url ? (
+                    <img
+                      src={currentLead.display_pic_url}
+                      alt={`${currentLead.name || "Lead"} profile`}
+                      className="h-12 w-12 rounded-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                      }}
                     />
-                    <div className="flex flex-col w-full gap-2">
+                  ) : null}
+                  <User
+                    className={`h-12 w-12 text-primary ${currentLead?.display_pic_url ? "hidden" : ""}`}
+                  />
+                  
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-medium text-lg">{currentLead?.name || "N/A"}</p>
-                        <p className="text-xs text-muted-foreground pt-2">
+                        {/* Customer Full Name - Clickable to User Profile */}
+                        <a
+                          href={currentLead?.user_profile_link || "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-lg hover:text-blue-600 hover:underline cursor-pointer"
+                        >
+                          {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                        </a>
+                        <p className="text-xs text-muted-foreground pt-1">
                           ID: {currentLead?.user_id || "N/A"}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {currentLead?.status ? (
-                          (() => {
-                            const statusInfo = formatLeadStatus(currentLead.status);
-                            return (
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color} ${statusInfo.bgColor} border`}>
-                                {statusInfo.label}
-                              </span>
-                            );
-                          })()
-                        ) : (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
-                            No Status
-                          </span>
-                        )}
-                        {currentLead?.priority && (
-                          (() => {
-                            const priorityInfo = formatPriority(currentLead.priority);
-                            return (
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityInfo.color} ${priorityInfo.bgColor} border`}>
-                                {priorityInfo.label}
-                              </span>
-                            );
-                          })()
-                        )}
+                      
+                      {/* Affiliated Party - Next to Name */}
+                      <div className="text-right">
+                        <span className="text-sm font-medium text-orange-600">
+                          {currentLead?.affiliated_party || "N/A"}
+                        </span>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div 
-                    className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
-                    onClick={() => handleEmail(currentLead?.email)}
-                  >
-                    <Mail className="h-3 w-3 mr-2 text-primary" />
-                    <span className="font-medium text-sm">{currentLead?.email || "N/A"}</span>
-                  </div>
-                  
-                  <div 
-                    className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
-                    onClick={() => handleWhatsApp(currentLead?.phone)}
-                  >
-                    <Phone className="h-3 w-3 mr-2 text-primary" />
-                    <span className="font-medium text-sm">{formatPhoneNumber(currentLead?.phone) || "N/A"}</span>
-                  </div>
-                  
-                  {currentLead?.location && (
-                    <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
-                      <MapPin className="h-3 w-3 mr-2 text-primary" />
-                      <span className="font-medium text-sm">{currentLead.location}</span>
+                    
+                    {/* Premium Poster Count - Below Party */}
+                    <div className="mt-2">
+                      <span className="text-xs text-muted-foreground">Premium Count: </span>
+                      <span className="text-xs font-medium">{currentLead?.premium_poster_count || 0}</span>
                     </div>
-                  )}
-                  
-                  {currentLead?.budget && (
-                    <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md">
-                      <DollarSign className="h-3 w-3 mr-2 text-primary" />
-                      <span className="font-medium text-sm">₹{currentLead.budget.toLocaleString()}</span>
+                    
+                    {/* Package to Pitch - Below Premium Count */}
+                    <div className="mt-1">
+                      <span className="text-xs text-muted-foreground">Package: </span>
+                      <span className="text-xs font-medium">{currentLead?.package_to_pitch || "N/A"}</span>
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex flex-row gap-2 w-full items-start">
-                <div className="w-full">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full justify-between"
-                        disabled={updating}
-                      >
-                        <span className="text-sm">
-                          {lead.selectedTags.length > 0
-                            ? `${lead.selectedTags.length} tag(s) selected`
-                            : "Select tags"}
-                        </span>
-                        <ChevronDown className="h-3 w-3 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80 p-4" align="start">
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-sm">Select Tags</h4>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                          {LEAD_SOURCES.map((tag) => (
-                            <div key={tag} className="flex items-center gap-2">
-                              <Checkbox
-                                id={`tag-${tag}`}
-                                checked={lead.selectedTags.includes(tag)}
-                                onCheckedChange={(checked) =>
-                                  handleTagChange(tag, checked as boolean)
-                                }
-                                disabled={updating}
-                              />
-                              <label
-                                htmlFor={`tag-${tag}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {tag}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                        {lead.selectedTags.length > 0 && (
-                          <div className="pt-2 border-t">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setLead(prev => ({
-                                ...prev,
-                                selectedTags: []
-                              }))}
-                              disabled={updating}
-                              className="text-xs"
-                            >
-                              Clear All
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  {lead.selectedTags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {lead.selectedTags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
+              {/* Contact Information */}
+              <div className="space-y-2">
+                {/* Phone Number with WhatsApp */}
+                <div 
+                  className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
+                  onClick={() => {
+                    if (currentLead?.whatsapp_link) {
+                      window.open(currentLead.whatsapp_link, '_blank');
+                    } else {
+                      // Support both phone and phone_no fields
+                      const phoneNumber = currentLead?.phone_no || currentLead?.phone;
+                      if (phoneNumber) {
+                        const cleanNumber = phoneNumber.replace(/\D/g, '');
+                        const whatsappUrl = `https://wa.me/${cleanNumber}`;
+                        window.open(whatsappUrl, '_blank');
+                      }
+                    }
+                  }}
+                >
+                  <Phone className="h-3 w-3 mr-2 text-primary" />
+                  <span className="font-medium text-sm">{formatPhoneNumber(currentLead?.phone_no || currentLead?.phone) || "N/A"}</span>
                 </div>
-                <div className="w-full space-y-2">
-                  <Textarea
-                    value={lead.notes}
-                    onChange={(e) => setLead(prev => ({
-                      ...prev,
-                      notes: e.target.value
-                    }))}
-                    placeholder="Add your notes about this lead..."
-                    className="min-h-[100px]"
-                    disabled={updating}
-                  />
-                  <Input
-                    value={lead.nextFollowUp}
-                    onChange={(e) => setLead(prev => ({
-                      ...prev,
-                      nextFollowUp: e.target.value
-                    }))}
-                    placeholder="Next follow-up action..."
-                    disabled={updating}
-                  />
+
+                {/* RM Dashboard Link */}
+                {currentLead?.rm_dashboard && (
+                  <div 
+                    className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
+                    onClick={() => window.open(currentLead.rm_dashboard, '_blank')}
+                  >
+                    <ExternalLink className="h-3 w-3 mr-2 text-primary" />
+                    <span className="font-medium text-sm">RM Dashboard</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Additional Information */}
+              <div className="space-y-2">
+                {/* Last Active Date and Time */}
+                <div className="text-sm bg-muted/50 p-2 rounded-md">
+                  <span className="text-muted-foreground">Last Active: </span>
+                  <span className="font-medium">
+                    {currentLead?.last_active_date_time || currentLead?.last_active_date ? new Date(currentLead.last_active_date_time || currentLead.last_active_date).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    }) : "N/A"}
+                  </span>
                 </div>
+
+                {/* Latest Remarks */}
+                <div className="text-sm bg-muted/50 p-2 rounded-md">
+                  <span className="text-muted-foreground">Latest Remarks: </span>
+                  <span className="font-medium">{currentLead?.latest_remarks || "No remarks"}</span>
+                </div>
+              </div>
+
+              {/* Notes/Remarks Input */}
+              <div className="space-y-2">
+                <Label>Add Notes/Remarks</Label>
+                <Textarea
+                  value={lead.notes}
+                  onChange={(e) => setLead(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Add notes or remarks about this lead..."
+                  className="min-h-[80px]"
+                />
               </div>
             </div>
           </div>
           
-          <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
-            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
-                onClick={() => handleActionButton("Not Connected")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={updating}
-              >
-                Not Connected
-              </Button>
+            <div className="buttons flex flex-row flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-6 lg:gap-10 w-full max-w-full px-4">
+              <div className="flex flex-wrap justify-center items-center gap-3 mt-4 pt-3 w-full">
+                <Button
+                  onClick={() => handleActionButton("Not Connected")}
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating}
+                >
+                  Not Connected
+                </Button>
+                
+              {/* Call Later with DateTime Picker */}
+              <Dialog open={popoverOpen} onOpenChange={setPopoverOpen}>
+                <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating}
+                >
+                  Call Later
+                </Button>
+                </DialogTrigger>
+                <DialogContent className="w-auto p-4 max-w-fit">
+                  <div className="space-y-6">
+                    <div className="flex gap-6">
+                      <div className="space-y-3">
+                        <Label className="text-base font-semibold">Select Date</Label>
+                        <Calendar
+                          mode="single"
+                          selected={selectedDate}
+                          onSelect={setSelectedDate}
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                          initialFocus
+                        />
+              </div>
+                      <div className="space-y-3">
+                      <Label className="text-base font-semibold">Select Time</Label>
+                        <div className="flex items-center justify-center p-2">
+                          <div className="relative w-48 h-48">
+                          {/* Analog Clock */}
+                            <svg className="w-48 h-48" viewBox="0 0 200 200">
+                            {/* Clock circle - white background */}
+                              <circle cx="100" cy="100" r="95" fill="white" stroke="rgb(102, 51, 153)" strokeWidth="2"/>
+                            
+                              {/* Hour markers as numbers 1–12 */}
+                              {Array.from({ length: 12 }).map((_, i) => {
+                                const angle = (i * 30 - 90) * (Math.PI / 180);
+                                const radius = 78; // slightly inward from the circle edge
+                                const x = 100 + radius * Math.cos(angle);
+                                const y = 100 + radius * Math.sin(angle);
+                                const num = i === 0 ? 12 : i;
+                                return (
+                                  <text
+                                    key={i}
+                                    x={x}
+                                    y={y}
+                                    fontSize="10"
+                                    fill="rgb(102, 51, 153)"
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                  >
+                                    {num}
+                                  </text>
+                                );
+                              })}
+                            
+                            {/* Show only the active hand */}
+                              {clockMode === 'minute' && (
+                              /* Minute hand */
+                              <line
+                                x1="100"
+                                y1="100"
+                                x2={100 + 70 * Math.cos((selectedMinute * 6 - 90) * (Math.PI / 180))}
+                                y2={100 + 70 * Math.sin((selectedMinute * 6 - 90) * (Math.PI / 180))}
+                                stroke="rgb(102, 51, 153)"
+                                  strokeWidth="3"
+                                strokeLinecap="round"
+                              />
+                            )}
+                              {clockMode === 'hour' && (
+                              /* Hour hand */
+                              <line
+                                x1="100"
+                                y1="100"
+                                x2={100 + 50 * Math.cos(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
+                                y2={100 + 50 * Math.sin(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
+                                stroke="rgb(102, 51, 153)"
+                                  strokeWidth="4"
+                                strokeLinecap="round"
+                              />
+                            )}
+                            
+                            {/* Center dot */}
+                              <circle cx="100" cy="100" r="4" fill="rgb(102, 51, 153)"/>
+                          </svg>
+                          
+                          {/* Invisible overlay for dragging */}
+                          <div 
+                            className="absolute inset-0 rounded-full cursor-pointer"
+                            style={{ background: 'transparent' }}
+                            onMouseDown={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const centerX = rect.left + rect.width / 2;
+                              const centerY = rect.top + rect.height / 2;
+                              const x = e.clientX - centerX;
+                              const y = e.clientY - centerY;
+                              const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
+                              
+                              if (clockMode === 'hour') {
+                                let hour = Math.round(angle / 30) % 12;
+                                if (hour <= 0) hour = 12;
+                                hour += isAM ? 0 : 12;
+                                if (hour === 12 && isAM) hour = 0;
+                                setSelectedHour(hour);
+                                // Auto-advance to minute selection after hour set
+                                setClockMode('minute');
+                              } else {
+                                let minute = Math.round(angle / 6) % 60;
+                                if (minute < 0) minute += 60;
+                                setSelectedMinute(minute);
+                              }
+                            }}
+                            onMouseMove={(e) => {
+                              if (e.buttons === 1) {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const centerX = rect.left + rect.width / 2;
+                                const centerY = rect.top + rect.height / 2;
+                                const x = e.clientX - centerX;
+                                const y = e.clientY - centerY;
+                                const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
+                                
+                                if (clockMode === 'hour') {
+                                  let hour = Math.round(angle / 30) % 12;
+                                  if (hour <= 0) hour = 12;
+                                  hour += isAM ? 0 : 12;
+                                  if (hour === 12 && isAM) hour = 0;
+                                  setSelectedHour(hour);
+                                } else {
+                                  let minute = Math.round(angle / 6) % 60;
+                                  if (minute < 0) minute += 60;
+                                  setSelectedMinute(minute);
+                                }
+                              }
+                            }}
+                            onMouseUp={() => {
+                              if (clockMode === 'hour') setClockMode('minute');
+                            }}
+                            onTouchStart={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const centerX = rect.left + rect.width / 2;
+                              const centerY = rect.top + rect.height / 2;
+                              const touch = e.touches[0];
+                              const x = touch.clientX - centerX;
+                              const y = touch.clientY - centerY;
+                              const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
+                              
+                              if (clockMode === 'hour') {
+                                let hour = Math.round(angle / 30) % 12;
+                                if (hour <= 0) hour = 12;
+                                hour += isAM ? 0 : 12;
+                                if (hour === 12 && isAM) hour = 0;
+                                setSelectedHour(hour);
+                                // Auto-advance to minute selection after hour set
+                                setClockMode('minute');
+                              } else {
+                                let minute = Math.round(angle / 6) % 60;
+                                if (minute < 0) minute += 60;
+                                setSelectedMinute(minute);
+                              }
+                            }}
+                            onTouchMove={(e) => {
+                              e.preventDefault();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const centerX = rect.left + rect.width / 2;
+                              const centerY = rect.top + rect.height / 2;
+                              const touch = e.touches[0];
+                              const x = touch.clientX - centerX;
+                              const y = touch.clientY - centerY;
+                              const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
+                              
+                              if (clockMode === 'hour') {
+                                let hour = Math.round(angle / 30) % 12;
+                                if (hour <= 0) hour = 12;
+                                hour += isAM ? 0 : 12;
+                                if (hour === 12 && isAM) hour = 0;
+                                setSelectedHour(hour);
+                              } else {
+                                let minute = Math.round(angle / 6) % 60;
+                                if (minute < 0) minute += 60;
+                                setSelectedMinute(minute);
+                              }
+                            }}
+                            onTouchEnd={() => {
+                              if (clockMode === 'hour') setClockMode('minute');
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {/* Mode toggle and AM/PM selector */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setClockMode('hour')}
+                          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                            clockMode === 'hour'
+                              ? 'bg-[rgb(102,51,153)] text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          Hour
+                        </button>
+                        <button
+                          onClick={() => setClockMode('minute')}
+                          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                            clockMode === 'minute'
+                              ? 'bg-[rgb(102,51,153)] text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          Minute
+                        </button>
+                      </div>
+                      
+                      {/* Time display with AM/PM inline */}
+                      <div className="flex items-center justify-center gap-2 p-2 bg-gray-50 rounded-md">
+                        <span className="text-sm text-gray-600">Selected Time:</span>
+                        <span className="font-medium text-sm">
+                          {selectedHour % 12 === 0 ? 12 : selectedHour % 12}:{selectedMinute.toString().padStart(2, '0')}
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              setIsAM(true);
+                              if (selectedHour >= 12) {
+                                setSelectedHour(selectedHour - 12);
+                              }
+                            }}
+                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                              selectedHour < 12
+                                ? 'bg-[rgb(102,51,153)] text-white'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                          >
+                            AM
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsAM(false);
+                              if (selectedHour < 12) {
+                                setSelectedHour(selectedHour + 12);
+                              }
+                            }}
+                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                              selectedHour >= 12
+                                ? 'bg-[rgb(102,51,153)] text-white'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                          >
+                            PM
+                          </button>
+                        </div>
+                      </div>
+                      <div className="p-2 bg-gray-50 rounded-md text-sm text-center">
+                        <span className="text-gray-600">Selected Time = </span>
+                        <span className="font-medium">
+                          {selectedHour}:{selectedMinute.toString().padStart(2, '0')}
+                        </span>
+                      </div>
+                      </div>
+                    </div>
+                    {(selectedDate) && (
+                      <div className="p-2 bg-blue-50 rounded-md text-sm">
+                        <span className="font-medium">Scheduled for: </span>
+                        {format(selectedDate, "PPP")} at {selectedHour > 12 ? selectedHour - 12 : selectedHour}:{selectedMinute.toString().padStart(2, '0')} {selectedHour >= 12 ? 'PM' : 'AM'}
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleScheduleCall}
+                      className="w-full"
+                      disabled={!selectedDate}
+                    >
+                      Schedule Call
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
               
-              <Button
-                onClick={() => handleActionButton("Call Later")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={updating}
-              >
-                Call Later
-              </Button>
-            </div>
-            <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
-                onClick={() => handleActionButton("Lost")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={updating}
-              >
-                Lost
-              </Button>
-              
-              <Button
-                onClick={() => handleActionButton("Won")}
-                size="sm"
-                variant="outline"
-                className="w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                <Button
+                  onClick={() => handleActionButton("Lost")}
+                  size="sm"
+                  variant="outline"
+                className="w-full sm:w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
-              >
-                {updating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Updating...
-                  </>
-                ) : fetchingNext ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Loading Next Lead...
-                  </>
-                ) : (
-                  "Won"
-                )}
-              </Button>
+                >
+                  Lost
+                </Button>
+                
+                <Button
+                  onClick={() => handleActionButton("Won")}
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={updating || fetchingNext}
+                >
+                  {updating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                      Updating...
+                    </>
+                  ) : fetchingNext ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                      Loading Next Lead...
+                    </>
+                  ) : (
+                    "Won"
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
         </div>
       </div>
       
@@ -1109,27 +1158,46 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
                   }`}
                 />
                 <div>
-                  <h3 className="font-semibold text-lg">{currentLead?.name || "Lead Profile"}</h3>
-                  <p className="text-sm text-muted-foreground">Company: {currentLead?.company || "N/A"}</p>
+                  <h3 className="font-semibold">{currentLead?.name || "Lead Profile"}</h3>
+                  <p className="text-sm text-muted-foreground">Profile Information</p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCloseProfile}
-                className="h-8 w-8 p-0"
-              >
+              <Button variant="ghost" size="sm" onClick={handleCloseProfile}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
             
-            {/* Modal Content - Iframe */}
-            <div className="flex-1 p-4">
-              <iframe
-                src={currentLead.linkedin_profile || currentLead.website}
-                className="w-full h-full border-0 rounded-md"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-              />
+            {/* Modal Content */}
+            <div className="flex-1 p-4 overflow-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {currentLead?.linkedin_profile && (
+                  <div className="p-4 border rounded-lg">
+                    <h4 className="font-medium mb-2">LinkedIn Profile</h4>
+                    <a
+                      href={currentLead.linkedin_profile}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {currentLead.linkedin_profile}
+                    </a>
+                  </div>
+                )}
+                
+                {currentLead?.website && (
+                  <div className="p-4 border rounded-lg">
+                    <h4 className="font-medium mb-2">Website</h4>
+                    <a
+                      href={currentLead.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {currentLead.website}
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1137,3 +1205,5 @@ export const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({
     </div>
   );
 };
+
+export default LeadCardCarousel;

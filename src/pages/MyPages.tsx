@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { FileText, PlusCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { membershipService } from '@/lib/api';
 
 interface PageRecord {
   id: string;
@@ -33,12 +34,8 @@ const MyPages = () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch all roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('roles')
-        .select('id, name');
-
-      if (rolesError) throw rolesError;
+      // Fetch all roles using API
+      const rolesData = await membershipService.getRoles();
 
       const rolesLookup: Record<string, string> = {};
       (rolesData || []).forEach((role) => {
