@@ -160,33 +160,70 @@ const MyPages = () => {
         ) : (
           Object.entries(pagesByRole).map(([roleName, pages]) => (
             <div key={roleName}>
-              <h2 className="text-xl font-bold mt-6 mb-2">{roleName} Pages :-</h2>
+              <h2 className="text-xl font-bold mt-6 mb-2">
+                {roleName === 'public' || roleName === 'Unassigned' 
+                  ? '🌐 Open Access (No Login Required)' 
+                  : `${roleName} Pages :-`}
+              </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {pages.map((page) => (
-                  <Card key={page.id}>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-primary" />
-                        {page.name}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                      Last updated: {new Date(page.updated_at).toLocaleDateString()}
-                    </CardContent>
-                    <CardFooter className="flex justify-between">
-                      <Button variant="outline" size="sm" asChild>
-                        <Link to={`/builder/${page.id}`}>Edit Page</Link>
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeletePage(page.id)}
-                      >
-                        Delete
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                ))}
+                {pages.map((page) => {
+                  const isPublic = roleName === 'public' || roleName === 'Unassigned';
+                  const publicUrl = isPublic && tenantSlug 
+                    ? `${window.location.origin}/app/${tenantSlug}/public/${page.id}`
+                    : null;
+                  
+                  return (
+                    <Card key={page.id}>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-primary" />
+                          {page.name}
+                          {isPublic && (
+                            <span className="ml-auto text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                              Open Access
+                            </span>
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="text-sm text-muted-foreground space-y-2">
+                        <div>
+                          Last updated: {new Date(page.updated_at).toLocaleDateString()}
+                        </div>
+                        {publicUrl && (
+                          <div className="mt-2 p-2 bg-muted rounded">
+                            <p className="text-xs font-semibold mb-1">Public URL:</p>
+                            <div className="flex items-center gap-1">
+                              <code className="text-xs break-all">{publicUrl}</code>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="mt-1 h-6 text-xs"
+                              onClick={() => {
+                                navigator.clipboard.writeText(publicUrl);
+                                toast.success('Public URL copied!');
+                              }}
+                            >
+                              📋 Copy URL
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                      <CardFooter className="flex justify-between">
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/builder/${page.id}`}>Edit Page</Link>
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeletePage(page.id)}
+                        >
+                          Delete
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           ))
