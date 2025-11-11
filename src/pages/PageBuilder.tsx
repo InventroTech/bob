@@ -30,6 +30,7 @@ import {
   MousePointer,
   Briefcase,
   Users,
+  Upload,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -76,13 +77,15 @@ import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
 import { OpenModalButton } from "@/components/ATScomponents/OpenModalButton";
-import { OpenModalButtonConfigComponent } from "@/components/ATScomponents/OpenModalButtonConfig";
+import { OpenModalButtonConfigComponent } from "@/components/ATScomponents/configs/OpenModalButtonConfig";
 import { JobManagerComponent } from "@/components/ATScomponents/JobManagerComponent";
-import { JobManagerConfigComponent } from "@/components/ATScomponents/JobManagerConfig";
+import { JobManagerConfigComponent } from "@/components/ATScomponents/configs/JobManagerConfig";
 import { JobsPageComponent } from "@/components/ATScomponents/JobsPageComponent";
-import { JobsPageConfigComponent } from "@/components/ATScomponents/JobsPageConfig";
+import { JobsPageConfigComponent } from "@/components/ATScomponents/configs/JobsPageConfig";
 import { ApplicantTableComponent } from "@/components/ATScomponents/ApplicantTableComponent";
-import { ApplicantTableConfigComponent } from "@/components/ATScomponents/ApplicantTableConfig";
+import { ApplicantTableConfigComponent } from "@/components/ATScomponents/configs/ApplicantTableConfig";
+import { FileUploadPageComponent } from "@/components/page-builder/FileUploadPageComponent";
+import { FileUploadPageConfig } from "@/components/page-builder/FileUploadPageConfig";
 import { CardComponent } from "@/layout/CardEditLayout";
 import { Carousel } from "@/components/ui/carousel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -146,7 +149,6 @@ interface ComponentConfig {
   buttonSize?: 'default' | 'sm' | 'lg' | 'icon';
   modalTitle?: string;
   selectedJobId?: string;
-  submitEndpoint?: string;
   successMessage?: string;
   width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
   // JobManager specific fields
@@ -156,6 +158,13 @@ interface ComponentConfig {
   maxJobs?: number;
   // JobsPage specific fields
   allowApplications?: boolean;
+  // FileUpload specific fields
+  acceptedFileTypes?: string;
+  maxFileSize?: number;
+  multiple?: boolean;
+  // Shared fields for all ATS components
+  tenantSlug?: string;
+  submitEndpoint?: string; // Used by OpenModalButton and JobsPage
   // LeadAssignment specific fields
   leadTypesEndpoint?: string;
   rmsEndpoint?: string;
@@ -198,6 +207,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   jobManager: JobManagerComponent,
   jobsPage: JobsPageComponent,
   applicantTable: ApplicantTableComponent,
+  fileUpload: FileUploadPageComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -234,7 +244,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     buttonSize?: 'default' | 'sm' | 'lg' | 'icon';
     modalTitle?: string;
     selectedJobId?: string;
-    submitEndpoint?: string;
     successMessage?: string;
     width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
     // JobManager specific fields
@@ -244,6 +253,13 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     maxJobs?: number;
     // JobsPage specific fields
     allowApplications?: boolean;
+    // FileUpload specific fields
+    acceptedFileTypes?: string;
+    maxFileSize?: number;
+    multiple?: boolean;
+    // Shared fields for all ATS components
+    tenantSlug?: string;
+    submitEndpoint?: string; // Used by OpenModalButton and JobsPage
   };
 
   // Local state for all input fields
@@ -262,7 +278,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     buttonSize: initialConfig.buttonSize || 'default',
     modalTitle: initialConfig.modalTitle || 'Job Application',
     selectedJobId: initialConfig.selectedJobId || '',
-    submitEndpoint: initialConfig.submitEndpoint || '/api/job-applications',
     successMessage: initialConfig.successMessage || 'Application submitted successfully!',
     width: initialConfig.width || 'lg',
     // JobManager fields
@@ -272,6 +287,13 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     maxJobs: initialConfig.maxJobs || 50,
     // JobsPage fields
     allowApplications: initialConfig.allowApplications ?? true,
+    // FileUpload fields
+    acceptedFileTypes: initialConfig.acceptedFileTypes || '*',
+    maxFileSize: initialConfig.maxFileSize || 10,
+    multiple: initialConfig.multiple ?? true,
+    // Shared fields for all ATS components
+    tenantSlug: initialConfig.tenantSlug || '',
+    submitEndpoint: initialConfig.submitEndpoint || '/crm-records/records/',
   });
 
   // Separate state for columns
@@ -597,6 +619,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'fileUpload':
+        return (
+          <FileUploadPageConfig
       case 'leadAssignment':
         return (
           <LeadAssignmentConfig
@@ -653,7 +678,8 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable'] }
+
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1128,6 +1154,11 @@ const PageBuilder = () => {
                           id="applicantTable"
                           label="Applicant Table"
                           icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="fileUpload"
+                          label="File Upload"
+                          icon={<Upload className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>

@@ -60,7 +60,11 @@ const AuthPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
       <Tabs defaultValue="signin" className="w-full max-w-sm">
-        
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="signin">Sign In</TabsTrigger>
+          <TabsTrigger value="signup" disabled>Sign Up</TabsTrigger>
+        </TabsList>
+
         <TabsContent value="signin">
           <Card className="shadow-lg animate-fade-in">
             <CardHeader className="text-center">
