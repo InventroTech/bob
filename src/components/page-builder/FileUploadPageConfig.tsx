@@ -17,9 +17,11 @@ interface FileUploadPageConfigProps {
     title?: string;
     description?: string;
     apiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
     acceptedFileTypes?: string;
     maxFileSize?: number;
     multiple?: boolean;
+    tenantSlug?: string;
   };
   handleInputChange: (field: string, value: any) => void;
 }
@@ -78,6 +80,46 @@ export const FileUploadPageConfig: React.FC<FileUploadPageConfigProps> = ({
           className="text-sm"
         />
         <p className="text-xs text-gray-500">URL where files will be uploaded via POST request</p>
+      </div>
+
+      {/* API Prefix */}
+      <div className="space-y-2">
+        <Label htmlFor="fileUpload-apiPrefix" className="text-sm font-medium">
+          API Prefix
+        </Label>
+        <Select
+          value={localConfig.apiPrefix || 'renderer'}
+          onValueChange={(value) => handleInputChange('apiPrefix', value)}
+        >
+          <SelectTrigger className="text-sm">
+            <SelectValue placeholder="Select API type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="supabase">Supabase</SelectItem>
+            <SelectItem value="renderer">Renderer API</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-gray-500">
+          {localConfig.apiPrefix === 'renderer' 
+            ? 'Will use VITE_RENDER_API_URL as base URL' 
+            : 'Direct API endpoint call'}
+        </p>
+      </div>
+
+      {/* Tenant Slug */}
+      <div className="space-y-2">
+        <Label htmlFor="fileUpload-tenantSlug" className="text-sm font-medium">
+          Tenant Slug
+        </Label>
+        <Input
+          id="fileUpload-tenantSlug"
+          type="text"
+          value={localConfig.tenantSlug || ''}
+          onChange={(e) => handleInputChange('tenantSlug', e.target.value)}
+          placeholder="my-tenant-slug"
+          className="text-sm"
+        />
+        <p className="text-xs text-gray-500">Sent as X-Tenant-Slug header in the API request</p>
       </div>
 
       {/* Accepted File Types */}

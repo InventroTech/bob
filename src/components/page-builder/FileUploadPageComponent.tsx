@@ -12,9 +12,11 @@ export interface FileUploadPageComponentConfig {
   title?: string;
   description?: string;
   apiEndpoint?: string;
+  apiPrefix?: 'supabase' | 'renderer';
   acceptedFileTypes?: string;
   maxFileSize?: number;
   multiple?: boolean;
+  tenantSlug?: string;
 }
 
 interface FileUploadPageComponentProps {
@@ -28,9 +30,11 @@ export const FileUploadPageComponent: React.FC<FileUploadPageComponentProps> = (
     title = 'Upload Files',
     description = 'Drag and drop files here or click to browse',
     apiEndpoint = '/api/upload',
+    apiPrefix = 'renderer',
     acceptedFileTypes = '*',
     maxFileSize = 10,
-    multiple = true
+    multiple = true,
+    tenantSlug
   } = config;
 
   const handleUploadSuccess = (response: any) => {
@@ -52,9 +56,11 @@ export const FileUploadPageComponent: React.FC<FileUploadPageComponentProps> = (
         title={title}
         description={description}
         apiEndpoint={apiEndpoint}
+        apiPrefix={apiPrefix}
         acceptedFileTypes={acceptedFileTypes}
         maxFileSize={maxFileSize}
         multiple={multiple}
+        tenantSlug={tenantSlug}
         onUploadSuccess={handleUploadSuccess}
         onUploadError={handleUploadError}
       />

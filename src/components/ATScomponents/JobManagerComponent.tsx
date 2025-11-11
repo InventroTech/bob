@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DynamicForm, DynamicFormData, FormQuestion, QUESTION_TYPES, QuestionType } from './DynamicForm';
+import { supabase } from '@/lib/supabase';
+import { useTenant } from '@/hooks/useTenant';
 
 // Job interface with deadline
 export interface Job {
@@ -37,6 +39,9 @@ export interface Job {
   status: 'active' | 'inactive' | 'draft';
   deadline?: string; // Application deadline
   requireResume?: boolean;
+  salary?: string; // e.g., "55LPA" or "120000-150000 USD"
+  criteria?: string; // e.g., "2-3 Years of Experience"
+  skills?: string; // e.g., "HTML, C++, DSA"
   form: DynamicFormData;
   createdAt: string;
   applicationsCount?: number;
@@ -54,6 +59,7 @@ interface JobManagerComponentConfig {
   apiEndpoint?: string;
   apiPrefix?: 'supabase' | 'renderer';
   useDemoData?: boolean;
+  tenantSlug?: string;
   
   // Data Mapping
   dataMapping?: {
@@ -78,6 +84,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   config = {},
   className = ''
 }) => {
+  const { tenantId } = useTenant(); // Get tenant ID from hook
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +104,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     apiEndpoint,
     apiPrefix = 'supabase',
     useDemoData = false,
+    tenantSlug,
     dataMapping = {}
   } = config;
 
@@ -108,15 +116,43 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     location: '',
     type: 'full-time' as const,
     deadline: '',
-    requireResume: false
+    requireResume: false,
+    salary: '',
+    criteria: '',
+    skills: ''
   });
 
-  // Data mapping helper
+  // Custom questions state for new job
+  const [customQuestions, setCustomQuestions] = useState<string[]>(['', '']);
+
+  // Add a new question field
+  const addQuestionField = () => {
+    setCustomQuestions([...customQuestions, '']);
+  };
+
+  // Remove a question field
+  const removeQuestionField = (index: number) => {
+    if (customQuestions.length > 1) {
+      setCustomQuestions(customQuestions.filter((_, i) => i !== index));
+    }
+  };
+
+  // Update a question
+  const updateQuestion = (index: number, value: string) => {
+    const updated = [...customQuestions];
+    updated[index] = value;
+    setCustomQuestions(updated);
+  };
+
+  // Data mapping helper - Parse backend response format
   const mapApiDataToJob = (apiData: any): Job => {
+    // Backend returns: { id, entity_type, name, data: {...} }
+    const jobData = apiData.data || apiData;
+    
     const {
       idField = 'id',
       titleField = 'title',
-      descriptionField = 'description',
+      descriptionField = 'other_description',
       departmentField = 'department',
       locationField = 'location',
       typeField = 'type',
@@ -125,55 +161,93 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       createdAtField = 'createdAt'
     } = dataMapping;
 
-    // Create a default form if none provided
-    const defaultForm: DynamicFormData = createDefaultForm(
-      apiData[titleField] || apiData.title || 'Job Application',
-      apiData.requireResume || false
-    );
+    // Extract questions from backend format and convert to form questions
+    const backendQuestions = jobData.questions || {};
+    const formQuestions: FormQuestion[] = Object.entries(backendQuestions).map(([key, questionText], index) => ({
+      id: key,
+      type: 'text' as QuestionType,
+      title: String(questionText),
+      required: true,
+      placeholder: `Enter your answer here...`
+    }));
+
+    // Add default questions if none provided
+    if (formQuestions.length === 0) {
+      formQuestions.push(
+        {
+          id: 'fullName',
+          type: 'text',
+          title: 'Full Name',
+          required: true,
+          placeholder: 'Enter your full name'
+        },
+        {
+          id: 'email',
+          type: 'email',
+          title: 'Email Address',
+          required: true,
+          placeholder: 'your@email.com'
+        }
+      );
+    }
+
+    const form: DynamicFormData = {
+      id: jobData.formId || `form_${apiData.id || Date.now()}`,
+      title: jobData.formTitle || `Application for ${jobData[titleField] || jobData.title}`,
+      description: 'Please fill out this application form to apply for this position.',
+      questions: formQuestions,
+      settings: {
+        allowMultipleSubmissions: false,
+        showProgressBar: true,
+        collectEmail: true
+      }
+    };
 
     return {
       id: apiData[idField] || apiData.id || '',
-      title: apiData[titleField] || apiData.title || '',
-      description: apiData[descriptionField] || apiData.description || '',
-      department: apiData[departmentField] || apiData.department,
-      location: apiData[locationField] || apiData.location,
-      type: apiData[typeField] || apiData.type || 'full-time',
-      status: apiData[statusField] || apiData.status || 'draft',
-      deadline: apiData[deadlineField] || apiData.deadline,
-      requireResume: apiData.requireResume || false,
-      form: apiData.form || apiData.application_form || defaultForm,
-      createdAt: apiData[createdAtField] || apiData.createdAt || apiData.created_at || new Date().toISOString(),
-      applicationsCount: apiData.applicationsCount || apiData.applications_count || 0
+      title: jobData[titleField] || jobData.title || apiData.name || '',
+      description: jobData[descriptionField] || jobData.other_description || '',
+      department: jobData[departmentField] || jobData.department || '',
+      location: jobData[locationField] || jobData.location || '',
+      type: jobData[typeField] || jobData.type || 'full-time',
+      status: jobData[statusField] || jobData.status || 'draft',
+      deadline: jobData[deadlineField] || jobData.deadline || '',
+      requireResume: jobData.requireResume || false,
+      form: form,
+      createdAt: jobData[createdAtField] || jobData.createdAt || apiData.created_at || new Date().toISOString(),
+      applicationsCount: jobData.applicationsCount || 0
     };
   };
 
-  // Map Job to API format for POST requests
+  // Map Job to API format for POST requests (Backend format)
   const mapJobToApiFormat = (job: Job): any => {
-    const {
-      idField = 'id',
-      titleField = 'title',
-      descriptionField = 'description',
-      departmentField = 'department',
-      locationField = 'location',
-      typeField = 'type',
-      statusField = 'status',
-      deadlineField = 'deadline',
-      createdAtField = 'createdAt'
-    } = dataMapping;
+    // Convert form questions to the backend format
+    const questions: Record<string, string> = {};
+    job.form.questions.forEach((question, index) => {
+      questions[`q${index + 1}`] = question.title;
+    });
 
+    // Format according to backend requirements
     return {
-      [idField]: job.id,
-      [titleField]: job.title,
-      [descriptionField]: job.description,
-      [departmentField]: job.department,
-      [locationField]: job.location,
-      [typeField]: job.type,
-      [statusField]: job.status,
-      [deadlineField]: job.deadline,
-      [createdAtField]: job.createdAt,
-      requireResume: job.requireResume,
-      form: job.form,
-      applicationsCount: job.applicationsCount
+      entity_type: "job",
+      name: job.title, // Job title as the name field
+      data: {
+        title: job.title,
+        department: job.department || '',
+        salary: job.salary || '',
+        location: job.location || '',
+        criteria: job.criteria || '',
+        skills: job.skills || '',
+        other_description: job.description || '',
+        deadline: job.deadline || '',
+        type: job.type || 'full-time',
+        status: job.status || 'draft',
+        requireResume: job.requireResume || false,
+        questions: questions, // Dynamic questions from form
+        createdAt: job.createdAt,
+        formId: job.form.id,
+        formTitle: job.form.title
+      }
     };
   };
 
@@ -190,17 +264,31 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     setError(null);
 
     try {
+      // Construct full URL based on API prefix
       let url = apiEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      }
+
       let headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
-      // Add API prefix specific logic
-      if (apiPrefix === 'renderer') {
-        headers['X-API-Source'] = 'renderer';
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
       }
 
       console.log('Fetching jobs from:', url);
+      console.log('Using tenant slug:', effectiveTenantSlug);
       console.log('Request headers:', headers);
 
       const response = await fetch(url, {
@@ -291,19 +379,34 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     }
 
     try {
+      // Construct full URL based on API prefix
+      let url = apiEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      }
+
       let headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
-      // Add API prefix specific logic
-      if (apiPrefix === 'renderer') {
-        headers['X-API-Source'] = 'renderer';
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
       }
 
       const apiData = mapJobToApiFormat(job);
+      console.log('Using tenant slug:', effectiveTenantSlug);
       console.log('Posting job to API:', apiData);
 
-      const response = await fetch(apiEndpoint, {
+      const response = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(apiData)
@@ -419,6 +522,67 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       return;
     }
 
+    // Filter out empty questions
+    const validQuestions = customQuestions.filter(q => q.trim() !== '');
+    if (validQuestions.length === 0) {
+      toast.error('Please add at least one question');
+      return;
+    }
+
+    // Create form questions from custom questions
+    const formQuestions: FormQuestion[] = [
+      {
+        id: 'fullName',
+        type: 'text',
+        title: 'Full Name',
+        required: true,
+        placeholder: 'Enter your full name'
+      },
+      {
+        id: 'email',
+        type: 'email',
+        title: 'Email Address',
+        required: true,
+        placeholder: 'your@email.com'
+      },
+      {
+        id: 'phone',
+        type: 'phone',
+        title: 'Phone Number',
+        required: true,
+        placeholder: '+1 (555) 123-4567'
+      },
+      ...validQuestions.map((question, index) => ({
+        id: `custom_${index + 1}`,
+        type: 'textarea' as QuestionType,
+        title: question,
+        required: true,
+        placeholder: 'Enter your answer here...'
+      })),
+      ...(newJobData.requireResume ? [{
+        id: 'resume',
+        type: 'file' as QuestionType,
+        title: 'Resume/CV',
+        description: 'Please upload your resume or CV (PDF, DOC, DOCX)',
+        required: true,
+        validation: {
+          pattern: '\\.(pdf|doc|docx)$'
+        }
+      }] : [])
+    ];
+
+    const customForm: DynamicFormData = {
+      id: `form_${Date.now()}`,
+      title: `Application for ${newJobData.title}`,
+      description: 'Please fill out this application form to apply for this position.',
+      questions: formQuestions,
+      settings: {
+        allowMultipleSubmissions: false,
+        showProgressBar: true,
+        collectEmail: true
+      }
+    };
+
     const newJob: Job = {
       id: `job_${Date.now()}`,
       title: newJobData.title,
@@ -428,8 +592,11 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       type: newJobData.type,
       deadline: newJobData.deadline,
       requireResume: newJobData.requireResume,
+      salary: newJobData.salary,
+      criteria: newJobData.criteria,
+      skills: newJobData.skills,
       status: 'draft',
-      form: createDefaultForm(newJobData.title, newJobData.requireResume),
+      form: customForm,
       createdAt: new Date().toISOString(),
       applicationsCount: 0
     };
@@ -454,8 +621,12 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       location: '',
       type: 'full-time',
       deadline: '',
-      requireResume: false
+      requireResume: false,
+      salary: '',
+      criteria: '',
+      skills: ''
     });
+    setCustomQuestions(['', '']); // Reset questions
     setIsCreateModalOpen(false);
   };
 
@@ -579,7 +750,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                   Create Job
                 </Button>
               </DialogTrigger>
-            <DialogContent className="max-w-lg bg-white">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold text-gray-900">Create New Job</DialogTitle>
               </DialogHeader>
@@ -630,6 +801,41 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                     />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="salary" className="text-sm font-medium text-gray-700">Salary</Label>
+                    <Input
+                      id="salary"
+                      value={newJobData.salary}
+                      onChange={(e) => setNewJobData(prev => ({ ...prev, salary: e.target.value }))}
+                      placeholder="55LPA or 120000-150000 USD"
+                      className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="criteria" className="text-sm font-medium text-gray-700">Criteria</Label>
+                    <Input
+                      id="criteria"
+                      value={newJobData.criteria}
+                      onChange={(e) => setNewJobData(prev => ({ ...prev, criteria: e.target.value }))}
+                      placeholder="2-3 Years of Experience"
+                      className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="skills" className="text-sm font-medium text-gray-700">Required Skills</Label>
+                  <Input
+                    id="skills"
+                    value={newJobData.skills}
+                    onChange={(e) => setNewJobData(prev => ({ ...prev, skills: e.target.value }))}
+                    placeholder="HTML, C++, DSA"
+                    className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                  />
+                </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -674,6 +880,58 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                     Require Resume Upload
                   </Label>
                   <p className="text-xs text-gray-500 mt-1">Applicants will be required to upload their resume</p>
+                </div>
+
+                {/* Custom Questions Section */}
+                <div className="pt-6 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Application Questions</Label>
+                      <p className="text-xs text-gray-500 mt-1">Add custom questions for applicants</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={addQuestionField}
+                      className="bg-gray-900 text-white hover:bg-gray-800"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Question
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {customQuestions.map((question, index) => (
+                      <div key={index} className="flex gap-2 items-start">
+                        <div className="flex-1">
+                          <Label htmlFor={`question-${index}`} className="text-xs text-gray-600">
+                            Question {index + 1}
+                          </Label>
+                          <Input
+                            id={`question-${index}`}
+                            value={question}
+                            onChange={(e) => updateQuestion(index, e.target.value)}
+                            placeholder={`e.g., What programming languages are you comfortable with?`}
+                            className="mt-1 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeQuestionField(index)}
+                          disabled={customQuestions.length === 1}
+                          className="mt-6 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-3">
+                    💡 Default questions (Name, Email, Phone) are automatically included
+                  </p>
                 </div>
                 
                 <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">

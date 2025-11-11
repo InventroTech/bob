@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Briefcase, Users, Filter, Layout, Database } from 'lucide-react';
 
-interface JobsPageComponentConfig {
+export interface JobsPageComponentConfig {
   // Basic Settings
   title?: string;
   description?: string;
@@ -16,6 +16,8 @@ interface JobsPageComponentConfig {
   apiEndpoint?: string;
   apiPrefix?: 'supabase' | 'renderer';
   useDemoData?: boolean;
+  tenantSlug?: string;
+  submitEndpoint?: string;
   
   // Display Options
   showFilters?: boolean;
@@ -146,6 +148,35 @@ export const JobsPageConfigComponent: React.FC<JobsPageConfigProps> = ({
                 <SelectItem value="renderer">Renderer API</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="tenantSlug" className="text-sm font-medium text-gray-700">Tenant Slug</Label>
+            <Input
+              id="tenantSlug"
+              value={config.tenantSlug || ''}
+              onChange={(e) => onConfigChange('tenantSlug', e.target.value)}
+              placeholder="my-tenant-slug"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Sent as X-Tenant-Slug header in API requests (auto-uses user's tenant ID if empty)
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="submitEndpoint" className="text-sm font-medium text-gray-700">Submit Endpoint</Label>
+            <Input
+              id="submitEndpoint"
+              value={config.submitEndpoint || ''}
+              onChange={(e) => onConfigChange('submitEndpoint', e.target.value)}
+              placeholder="/crm-records/records/"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Endpoint for submitting job applications
+            </p>
           </div>
         </CardContent>
       </Card>

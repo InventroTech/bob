@@ -3,14 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Upload, X, FileIcon, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+import { useTenant } from '@/hooks/useTenant';
 
 interface FileUploadComponentProps {
   title?: string;
   description?: string;
   apiEndpoint: string;
+  apiPrefix?: 'supabase' | 'renderer';
   acceptedFileTypes?: string; // e.g., ".pdf,.doc,.docx" or "image/*"
   maxFileSize?: number; // in MB
   multiple?: boolean;
+  tenantSlug?: string; // Tenant slug to send as X-Tenant-Slug header
   className?: string;
   onUploadSuccess?: (response: any) => void;
   onUploadError?: (error: Error) => void;
@@ -26,13 +30,16 @@ export const FileUploadComponent: React.FC<FileUploadComponentProps> = ({
   title = 'Upload Files',
   description = 'Drag and drop files here or click to browse',
   apiEndpoint,
+  apiPrefix = 'renderer',
   acceptedFileTypes = '*',
   maxFileSize = 10, // 10MB default
   multiple = true,
+  tenantSlug,
   className = '',
   onUploadSuccess,
   onUploadError
 }) => {
+  const { tenantId } = useTenant(); // Get tenant ID from hook
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -164,10 +171,35 @@ export const FileUploadComponent: React.FC<FileUploadComponentProps> = ({
       formData.append('uploadDate', new Date().toISOString());
       formData.append('fileCount', files.length.toString());
 
-      console.log('Uploading files to:', apiEndpoint);
+      // Construct full URL based on API prefix
+      let url = apiEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      }
 
-      const response = await fetch(apiEndpoint, {
+      console.log('Uploading files to:', url);
+
+      // Prepare headers
+      const headers: HeadersInit = {};
+      
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+      }
+
+      console.log('Using tenant slug:', effectiveTenantSlug);
+
+      const response = await fetch(url, {
         method: 'POST',
+        headers,
         body: formData,
         // Note: Don't set Content-Type header - browser will set it with boundary for multipart/form-data
       });

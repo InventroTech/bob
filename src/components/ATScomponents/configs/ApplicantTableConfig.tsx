@@ -1,13 +1,13 @@
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Label } from '../ui/label';
-import { Input } from '../ui/input';
-import { Textarea } from '../ui/textarea';
-import { Switch } from '../ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Separator } from '../ui/separator';
-import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
+import React, { useEffect, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
+import { Label } from '../../ui/label';
+import { Input } from '../../ui/input';
+import { Textarea } from '../../ui/textarea';
+import { Switch } from '../../ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Separator } from '../../ui/separator';
+import { Badge } from '../../ui/badge';
+import { Button } from '../../ui/button';
 import { Users, Settings, Filter, Eye, Download, Zap, Database, Columns, Plus, Trash2 } from 'lucide-react';
 
 export interface ApplicantTableConfig {
@@ -20,6 +20,7 @@ export interface ApplicantTableConfig {
   apiPrefix?: 'supabase' | 'renderer';
   statusDataApiEndpoint?: string;
   useDemoData?: boolean;
+  tenantSlug?: string;
   
   // Display Options
   showJobSelector?: boolean;
@@ -90,6 +91,65 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
   config,
   onConfigChange
 }) => {
+  const lastColumnLabelRef = useRef<HTMLInputElement>(null);
+  const lastColumnAccessorRef = useRef<HTMLInputElement>(null);
+  const previousColumnCount = useRef((config.columns || []).length);
+  const [focusField, setFocusField] = React.useState<'label' | 'accessor' | null>(null);
+  
+  // Local state for columns to prevent re-render on every keystroke
+  const [localColumns, setLocalColumns] = React.useState(config.columns || []);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const configColumnsLengthRef = useRef((config.columns || []).length);
+
+  // Sync local columns with config ONLY when length changes (add/remove column)
+  useEffect(() => {
+    const currentLength = (config.columns || []).length;
+    const previousLength = configColumnsLengthRef.current;
+    
+    // Only sync if length changed (column added/removed), not on content changes
+    if (currentLength !== previousLength) {
+      setLocalColumns(config.columns || []);
+      configColumnsLengthRef.current = currentLength;
+    }
+  }, [config.columns]);
+
+  // Debounced update to parent config
+  const updateColumns = (newColumns: any[]) => {
+    setLocalColumns(newColumns);
+    
+    // Clear existing timeout
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
+    
+    // Set new timeout to update parent after user stops typing
+    updateTimeoutRef.current = setTimeout(() => {
+      onConfigChange('columns', newColumns);
+    }, 300); // 300ms debounce
+  };
+
+  // Auto-focus on new column input when a column is added
+  useEffect(() => {
+    const currentColumnCount = localColumns.length;
+    if (currentColumnCount > previousColumnCount.current) {
+      // A new column was added
+      setFocusField('label');
+      setTimeout(() => {
+        lastColumnLabelRef.current?.focus();
+        lastColumnLabelRef.current?.select();
+      }, 50);
+    }
+    previousColumnCount.current = currentColumnCount;
+  }, [localColumns.length]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-6 max-h-[80vh] overflow-y-auto">
@@ -187,6 +247,21 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
               className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
               disabled={config.useDemoData}
             />
+          </div>
+
+          <div>
+            <Label htmlFor="tenantSlug" className="text-sm font-medium text-gray-700">Tenant Slug</Label>
+            <Input
+              id="tenantSlug"
+              value={config.tenantSlug || ''}
+              onChange={(e) => onConfigChange('tenantSlug', e.target.value)}
+              placeholder="my-tenant-slug"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Sent as X-Tenant-Slug header in API requests
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -381,8 +456,8 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                   sortable: true,
                   filterable: false
                 };
-                const currentColumns = config.columns || [];
-                onConfigChange('columns', [...currentColumns, newColumn]);
+                const newColumns = [...localColumns, newColumn];
+                updateColumns(newColumns);
               }}
               className="bg-gray-900 text-white hover:bg-gray-800"
             >
@@ -392,7 +467,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
           </div>
           
           <div className="space-y-3 max-h-60 overflow-y-auto">
-            {(config.columns || []).map((column, index) => (
+            {localColumns.map((column, index) => (
               <div key={column.key} className="border border-gray-200 rounded-lg p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -405,8 +480,8 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                     size="sm"
                     variant="ghost"
                     onClick={() => {
-                      const newColumns = config.columns?.filter((_, i) => i !== index) || [];
-                      onConfigChange('columns', newColumns);
+                      const newColumns = localColumns.filter((_, i) => i !== index);
+                      updateColumns(newColumns);
                     }}
                     className="text-red-600 hover:text-red-700 hover:bg-red-50"
                   >
@@ -418,12 +493,14 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                   <div>
                     <Label className="text-xs text-gray-600">Label</Label>
                     <Input
+                      ref={index === localColumns.length - 1 ? lastColumnLabelRef : undefined}
                       value={column.label}
                       onChange={(e) => {
-                        const newColumns = [...(config.columns || [])];
+                        const newColumns = [...localColumns];
                         newColumns[index] = { ...column, label: e.target.value };
-                        onConfigChange('columns', newColumns);
+                        updateColumns(newColumns);
                       }}
+                      onFocus={() => setFocusField('label')}
                       className="text-sm h-8"
                     />
                   </div>
@@ -431,12 +508,14 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                   <div>
                     <Label className="text-xs text-gray-600">Key/Accessor</Label>
                     <Input
+                      ref={index === localColumns.length - 1 ? lastColumnAccessorRef : undefined}
                       value={column.accessor || column.key}
                       onChange={(e) => {
-                        const newColumns = [...(config.columns || [])];
+                        const newColumns = [...localColumns];
                         newColumns[index] = { ...column, accessor: e.target.value, key: e.target.value };
-                        onConfigChange('columns', newColumns);
+                        updateColumns(newColumns);
                       }}
+                      onFocus={() => setFocusField('accessor')}
                       placeholder="field_name"
                       className="text-sm h-8"
                     />
@@ -447,9 +526,9 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                     <Select
                       value={column.type}
                       onValueChange={(value) => {
-                        const newColumns = [...(config.columns || [])];
+                        const newColumns = [...localColumns];
                         newColumns[index] = { ...column, type: value as any };
-                        onConfigChange('columns', newColumns);
+                        updateColumns(newColumns);
                       }}
                     >
                       <SelectTrigger className="text-sm h-8">
@@ -475,9 +554,9 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                     <Input
                       value={column.width || ''}
                       onChange={(e) => {
-                        const newColumns = [...(config.columns || [])];
+                        const newColumns = [...localColumns];
                         newColumns[index] = { ...column, width: e.target.value };
-                        onConfigChange('columns', newColumns);
+                        updateColumns(newColumns);
                       }}
                       placeholder="150px"
                       className="text-sm h-8"
@@ -490,9 +569,9 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                     <Switch
                       checked={column.visible ?? true}
                       onCheckedChange={(checked) => {
-                        const newColumns = [...(config.columns || [])];
+                        const newColumns = [...localColumns];
                         newColumns[index] = { ...column, visible: checked };
-                        onConfigChange('columns', newColumns);
+                        updateColumns(newColumns);
                       }}
                       className="scale-75"
                     />
@@ -503,9 +582,9 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                     <Switch
                       checked={column.sortable ?? true}
                       onCheckedChange={(checked) => {
-                        const newColumns = [...(config.columns || [])];
+                        const newColumns = [...localColumns];
                         newColumns[index] = { ...column, sortable: checked };
-                        onConfigChange('columns', newColumns);
+                        updateColumns(newColumns);
                       }}
                       className="scale-75"
                     />
@@ -516,9 +595,9 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                     <Switch
                       checked={column.filterable ?? false}
                       onCheckedChange={(checked) => {
-                        const newColumns = [...(config.columns || [])];
+                        const newColumns = [...localColumns];
                         newColumns[index] = { ...column, filterable: checked };
-                        onConfigChange('columns', newColumns);
+                        updateColumns(newColumns);
                       }}
                       className="scale-75"
                     />
@@ -529,7 +608,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
             ))}
           </div>
           
-          {(!config.columns || config.columns.length === 0) && (
+          {localColumns.length === 0 && (
             <div className="text-center py-8 text-gray-500">
               <Columns className="h-12 w-12 mx-auto mb-3 text-gray-400" />
               <p className="text-sm">No columns configured</p>
@@ -733,15 +812,15 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
             {/* Columns */}
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">
-                Configured Columns ({(config.columns || []).filter(col => col.visible !== false).length}):
+                Configured Columns ({localColumns.filter(col => col.visible !== false).length}):
               </p>
               <div className="flex flex-wrap gap-1">
-                {(config.columns || []).filter(col => col.visible !== false).map((column, index) => (
+                {localColumns.filter(col => col.visible !== false).map((column, index) => (
                   <Badge key={index} className="bg-blue-100 text-blue-800 text-xs">
                     {column.label} ({column.type})
                   </Badge>
                 ))}
-                {(!config.columns || config.columns.length === 0) && (
+                {localColumns.length === 0 && (
                   <span className="text-xs text-gray-500">No columns configured</span>
                 )}
               </div>

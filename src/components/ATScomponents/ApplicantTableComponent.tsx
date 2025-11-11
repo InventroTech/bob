@@ -51,6 +51,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
+import { supabase } from '@/lib/supabase';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface Application {
   id: string;
@@ -93,6 +95,7 @@ export interface ApplicantTableConfig {
   apiPrefix?: 'supabase' | 'renderer';
   statusDataApiEndpoint?: string;
   useDemoData?: boolean; // Force use demo data instead of API
+  tenantSlug?: string;
   
   // Display Options
   showJobSelector?: boolean;
@@ -279,6 +282,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   config = {},
   className = ''
 }) => {
+  const { tenantId } = useTenant(); // Get tenant ID from hook
   const {
     title = 'Job Applications',
     description = 'Manage and review job applications',
@@ -286,6 +290,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     apiPrefix = 'supabase',
     statusDataApiEndpoint,
     useDemoData = false,
+    tenantSlug,
     showJobSelector = true,
     showStats = true,
     showFilters = true,
@@ -310,15 +315,15 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
 
   // Default columns if none configured
   const defaultColumns = [
-    { key: 'applicantName', label: 'Applicant', type: 'text' as const, visible: true, sortable: true },
-    { key: 'applicantEmail', label: 'Contact', type: 'email' as const, visible: true, sortable: false },
-    { key: 'status', label: 'Status', type: 'status' as const, visible: true, sortable: true },
-    { key: 'submittedAt', label: 'Applied', type: 'date' as const, visible: true, sortable: true },
-    { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: true },
-    { key: 'location', label: 'Location', type: 'text' as const, visible: true, sortable: false },
-    { key: 'expectedSalary', label: 'Expected Salary', type: 'text' as const, visible: true, sortable: false },
-    { key: 'rating', label: 'Rating', type: 'rating' as const, visible: true, sortable: true },
-    { key: 'actions', label: 'Actions', type: 'actions' as const, visible: true, sortable: false }
+    { key: 'applicantName', label: 'Applicant', type: 'text' as const, visible: true, sortable: true, accessor: 'applicantName', align: 'left' as const, width: '200px' },
+    { key: 'applicantEmail', label: 'Contact', type: 'email' as const, visible: true, sortable: false, accessor: 'applicantEmail', align: 'left' as const, width: '200px' },
+    { key: 'status', label: 'Status', type: 'status' as const, visible: true, sortable: true, accessor: 'status', align: 'center' as const, width: '120px' },
+    { key: 'submittedAt', label: 'Applied', type: 'date' as const, visible: true, sortable: true, accessor: 'submittedAt', align: 'left' as const, width: '150px' },
+    { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: true, accessor: 'experience', align: 'left' as const, width: '150px' },
+    { key: 'location', label: 'Location', type: 'text' as const, visible: true, sortable: false, accessor: 'location', align: 'left' as const, width: '150px' },
+    { key: 'expectedSalary', label: 'Expected Salary', type: 'text' as const, visible: true, sortable: false, accessor: 'expectedSalary', align: 'left' as const, width: '150px' },
+    { key: 'rating', label: 'Rating', type: 'rating' as const, visible: true, sortable: true, accessor: 'rating', align: 'center' as const, width: '120px' },
+    { key: 'actions', label: 'Actions', type: 'actions' as const, visible: true, sortable: false, accessor: 'actions', align: 'center' as const, width: '120px' }
   ];
 
   const visibleColumns = (columns && columns.length > 0 ? columns : defaultColumns).filter(col => col.visible !== false);
@@ -342,35 +347,46 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
 
   // Data mapping helper
   const mapApiDataToApplication = (apiData: any): Application => {
+    console.log('    📥 Raw applicant data:', apiData);
+    
+    // Backend returns: { id, entity_type, name, data: {...}, created_at, updated_at }
+    // Extract nested data object
+    const nestedData = apiData.data || {};
+    console.log('    📦 Applicant nested data:', nestedData);
+    
     const {
       idField = 'id',
-      nameField = 'applicantName',
-      emailField = 'applicantEmail',
-      phoneField = 'applicantPhone',
+      nameField = 'name',
+      emailField = 'email',
+      phoneField = 'phone',
       statusField = 'status',
       dateField = 'submittedAt'
     } = dataMapping;
 
+    // Get job title from jobs list if available
+    const jobId = String(nestedData.jobId || apiData.jobId || '');
+    const job = jobs.find(j => j.id === jobId);
+
     return {
       id: apiData[idField] || apiData.id || '',
-      jobId: apiData.jobId || apiData.job_id || '',
-      jobTitle: apiData.jobTitle || apiData.job_title || '',
-      applicantName: apiData[nameField] || apiData.applicantName || apiData.name || '',
-      applicantEmail: apiData[emailField] || apiData.applicantEmail || apiData.email || '',
-      applicantPhone: apiData[phoneField] || apiData.applicantPhone || apiData.phone,
-      status: apiData[statusField] || apiData.status || 'pending',
-      submittedAt: apiData[dateField] || apiData.submittedAt || apiData.created_at || new Date().toISOString(),
-      experience: apiData.experience || apiData.years_experience,
-      location: apiData.location || apiData.city,
-      expectedSalary: apiData.expectedSalary || apiData.expected_salary,
-      noticePeriod: apiData.noticePeriod || apiData.notice_period,
-      resumeUrl: apiData.resumeUrl || apiData.resume_url,
-      coverLetter: apiData.coverLetter || apiData.cover_letter,
-      responses: apiData.responses || apiData.form_responses || {},
-      rating: apiData.rating || apiData.score,
-      notes: apiData.notes || apiData.internal_notes,
-      interviewDate: apiData.interviewDate || apiData.interview_date,
-      source: apiData.source || apiData.application_source
+      jobId: jobId,
+      jobTitle: job?.title || nestedData.jobTitle || apiData.jobTitle || `Job ${jobId}` || 'Unknown Position',
+      applicantName: nestedData[nameField] || nestedData.name || apiData.name || 'Anonymous',
+      applicantEmail: nestedData[emailField] || nestedData.email || apiData.email || '',
+      applicantPhone: nestedData[phoneField] || nestedData.phone || apiData.phone || '',
+      status: nestedData[statusField] || nestedData.status || apiData.status || 'pending',
+      submittedAt: nestedData[dateField] || nestedData.submittedAt || apiData.created_at || new Date().toISOString(),
+      experience: nestedData.experience || apiData.experience || '',
+      location: nestedData.location || apiData.location || '',
+      expectedSalary: nestedData.salary || nestedData.expectedSalary || apiData.salary || '',
+      noticePeriod: nestedData.noticePeriod || apiData.notice_period || '',
+      resumeUrl: nestedData.resumeUrl || apiData.resume_url || '',
+      coverLetter: nestedData.coverLetter || apiData.cover_letter || '',
+      responses: nestedData.answers || nestedData.responses || apiData.responses || {},
+      rating: nestedData.rating || apiData.rating || 0,
+      notes: nestedData.notes || apiData.notes || '',
+      interviewDate: nestedData.interviewDate || apiData.interview_date || '',
+      source: nestedData.source || apiData.source || 'Direct'
     };
   };
 
@@ -388,18 +404,31 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     setError(null);
 
     try {
+      // Construct full URL based on API prefix
       let url = apiEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      }
+
       let headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
-      // Add API prefix specific logic
-      if (apiPrefix === 'renderer') {
-        // Add renderer-specific headers if needed
-        headers['X-API-Source'] = 'renderer';
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
       }
 
       console.log('Fetching applications from:', url);
+      console.log('Using tenant slug:', effectiveTenantSlug);
       console.log('Request headers:', headers);
 
       const response = await fetch(url, {
@@ -436,19 +465,36 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       }
 
       const data = await response.json();
-      console.log('API response data:', data);
-      
-      // Handle different response structures
-      const applicationsData = Array.isArray(data) ? data : (data.data || data.applications || []);
+      console.log('✅ API response data:', data);
+
+      // Handle wrapped response: { data: [...], page_meta: {...} }
+      let applicationsData;
+      if (Array.isArray(data)) {
+        applicationsData = data;
+        console.log('  Direct array response');
+      } else if (data.data && Array.isArray(data.data)) {
+        applicationsData = data.data; // Extract from wrapper
+        console.log('  Wrapped response - extracted data array');
+        console.log('  Page meta:', data.page_meta);
+        console.log('  Total applicants:', data.page_meta?.total_count);
+      } else if (data.applications && Array.isArray(data.applications)) {
+        applicationsData = data.applications;
+        console.log('  Applications array found');
+      } else {
+        applicationsData = [];
+        console.log('  No valid data array found, using empty array');
+      }
+
+      console.log('  Number of applicants:', applicationsData.length);
       
       if (!Array.isArray(applicationsData)) {
-        console.warn('API response is not an array:', applicationsData);
+        console.warn('❌ API response is not an array:', applicationsData);
         throw new Error('API response does not contain a valid applications array');
       }
       
       // Map API data to our Application interface
       const mappedApplications = applicationsData.map(mapApiDataToApplication);
-      console.log('Mapped applications:', mappedApplications);
+      console.log('✅ Mapped applications:', mappedApplications);
       
       setApplications(mappedApplications);
     } catch (err) {

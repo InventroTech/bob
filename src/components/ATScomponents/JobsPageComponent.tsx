@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DynamicForm, DynamicFormData } from './DynamicForm';
+import { supabase } from '@/lib/supabase';
+import { useTenant } from '@/hooks/useTenant';
 
 // Job interface
 interface Job {
@@ -30,7 +32,7 @@ interface Job {
   type?: 'full-time' | 'part-time' | 'contract' | 'internship';
   status: 'active' | 'inactive' | 'draft';
   deadline?: string;
-  salary?: {
+  salary?: string | {
     min?: number;
     max?: number;
     currency?: string;
@@ -56,6 +58,8 @@ interface JobsPageComponentConfig {
   apiEndpoint?: string;
   apiPrefix?: 'supabase' | 'renderer';
   useDemoData?: boolean;
+  tenantSlug?: string;
+  submitEndpoint?: string; // Endpoint for submitting applications
   
   // Display Options
   showFilters?: boolean;
@@ -300,6 +304,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   config = {},
   className = ''
 }) => {
+  const { tenantId } = useTenant(); // Get tenant ID from hook
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
@@ -320,6 +325,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     apiEndpoint,
     apiPrefix = 'supabase',
     useDemoData = false,
+    tenantSlug,
+    submitEndpoint = '/crm-records/records/',
     showFilters = true,
     showStats = true,
     layout = 'grid',
@@ -330,10 +337,16 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
   // Data mapping helper
   const mapApiDataToJob = (apiData: any): Job => {
+    console.log('    📥 Raw API data:', apiData);
+    
+    // Backend returns: { id, entity_type, name, data: {...} }
+    const jobData = apiData.data || apiData;
+    console.log('    📦 Job data (nested):', jobData);
+    
     const {
       idField = 'id',
       titleField = 'title',
-      descriptionField = 'description',
+      descriptionField = 'other_description',
       departmentField = 'department',
       locationField = 'location',
       typeField = 'type',
@@ -343,12 +356,23 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       createdAtField = 'createdAt'
     } = dataMapping;
 
-    // Create a default form if none provided
-    const defaultForm: DynamicFormData = {
-      id: `form_${apiData[idField] || apiData.id}`,
-      title: `${apiData[titleField] || apiData.title} Application`,
-      description: `Apply for the ${apiData[titleField] || apiData.title} position.`,
-      questions: [
+    // Extract questions from backend format and convert to form questions
+    const backendQuestions = jobData.questions || {};
+    console.log('    ❓ Backend questions:', backendQuestions);
+    
+    const formQuestions: any[] = Object.entries(backendQuestions).map(([key, questionText]) => ({
+      id: key,
+      type: 'text',
+      title: String(questionText),
+      required: true,
+      placeholder: 'Enter your answer here...'
+    }));
+    
+    console.log('    ✓ Converted to form questions:', formQuestions.length, 'questions');
+
+    // Add default questions if none provided
+    if (formQuestions.length === 0) {
+      formQuestions.push(
         {
           id: 'fullName',
           type: 'text',
@@ -358,17 +382,10 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         },
         {
           id: 'email',
-          type: 'email',
+          type: 'text',
           title: 'Email Address',
           required: true,
           placeholder: 'your@email.com'
-        },
-        {
-          id: 'phone',
-          type: 'text',
-          title: 'Phone Number',
-          required: false,
-          placeholder: '+1 (555) 123-4567'
         },
         {
           id: 'resume',
@@ -377,7 +394,14 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
           required: true,
           placeholder: 'Upload your resume'
         }
-      ],
+      );
+    }
+
+    const form: DynamicFormData = {
+      id: jobData.formId || `form_${apiData.id || Date.now()}`,
+      title: jobData.formTitle || `Application for ${jobData.title || apiData.name}`,
+      description: 'Please fill out this application form to apply for this position.',
+      questions: formQuestions,
       settings: {
         allowMultipleSubmissions: false,
         showProgressBar: true,
@@ -387,27 +411,23 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
     return {
       id: apiData[idField] || apiData.id || '',
-      title: apiData[titleField] || apiData.title || '',
-      description: apiData[descriptionField] || apiData.description || '',
-      department: apiData[departmentField] || apiData.department,
-      location: apiData[locationField] || apiData.location,
-      type: apiData[typeField] || apiData.type || 'full-time',
-      status: apiData[statusField] || apiData.status || 'active',
-      deadline: apiData[deadlineField] || apiData.deadline,
-      salary: apiData[salaryField] || apiData.salary || {
-        min: apiData.salary_min || apiData.salaryMin,
-        max: apiData.salary_max || apiData.salaryMax,
-        currency: apiData.salary_currency || apiData.salaryCurrency || 'USD'
-      },
-      requirements: apiData.requirements || apiData.job_requirements || [],
-      benefits: apiData.benefits || apiData.job_benefits || [],
-      form: apiData.form || apiData.application_form || defaultForm,
-      createdAt: apiData[createdAtField] || apiData.createdAt || apiData.created_at || new Date().toISOString(),
-      applicationsCount: apiData.applicationsCount || apiData.applications_count || 0,
-      company: apiData.company || {
-        name: apiData.company_name || apiData.companyName || 'Company',
-        logo: apiData.company_logo || apiData.companyLogo,
-        website: apiData.company_website || apiData.companyWebsite
+      title: jobData[titleField] || jobData.title || apiData.name || '',
+      description: jobData[descriptionField] || jobData.other_description || '',
+      department: jobData[departmentField] || jobData.department || '',
+      location: jobData[locationField] || jobData.location || '',
+      type: jobData[typeField] || jobData.type || 'full-time',
+      status: jobData[statusField] || jobData.status || 'active',
+      deadline: jobData[deadlineField] || jobData.deadline || '',
+      salary: jobData[salaryField] || jobData.salary || '', // Can be string or object
+      requirements: jobData.criteria ? [jobData.criteria] : (jobData.requirements || []),
+      benefits: jobData.benefits || [],
+      form: form,
+      createdAt: jobData[createdAtField] || jobData.createdAt || apiData.created_at || new Date().toISOString(),
+      applicationsCount: jobData.applicationsCount || 0,
+      company: jobData.company || {
+        name: jobData.company_name || 'Company',
+        logo: jobData.company_logo,
+        website: jobData.company_website
       }
     };
   };
@@ -425,17 +445,31 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     setError(null);
 
     try {
+      // Construct full URL based on API prefix
       let url = apiEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      }
+
       let headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
-      // Add API prefix specific logic
-      if (apiPrefix === 'renderer') {
-        headers['X-API-Source'] = 'renderer';
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
       }
 
       console.log('Fetching jobs from:', url);
+      console.log('Using tenant slug:', effectiveTenantSlug);
       console.log('Request headers:', headers);
 
       const response = await fetch(url, {
@@ -470,25 +504,46 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       }
 
       const data = await response.json();
-      console.log('API response data:', data);
+      console.log('✅ API response data:', data);
+      console.log('  Response type:', Array.isArray(data) ? 'Array' : 'Object');
       
       // Handle different response structures
-      const jobsData = Array.isArray(data) ? data : (data.data || data.jobs || []);
+      // Backend returns: { data: [...], page_meta: {...} }
+      let jobsData;
+      if (Array.isArray(data)) {
+        jobsData = data;
+      } else if (data.data && Array.isArray(data.data)) {
+        jobsData = data.data; // Extract from wrapper
+        console.log('  Page meta:', data.page_meta);
+      } else {
+        jobsData = data.jobs || [];
+      }
+      
+      console.log('  Number of items:', jobsData.length);
       
       if (!Array.isArray(jobsData)) {
         console.warn('API response is not an array:', jobsData);
         throw new Error('API response does not contain a valid jobs array');
       }
       
+      console.log('📊 Jobs data to map:', jobsData.length, 'jobs');
+      
       // Map API data to our Job interface
-      const mappedJobs = jobsData.map(mapApiDataToJob);
-      console.log('Mapped jobs:', mappedJobs);
+      const mappedJobs = jobsData.map((job, index) => {
+        console.log(`  Mapping job ${index + 1}:`, job);
+        const mapped = mapApiDataToJob(job);
+        console.log(`  ✓ Mapped to:`, mapped);
+        return mapped;
+      });
+      console.log('✅ All mapped jobs:', mappedJobs);
       
-      // Filter only active jobs and apply maxJobs limit
-      const activeJobs = mappedJobs.filter(job => job.status === 'active').slice(0, maxJobs);
+      // Apply maxJobs limit (show all statuses, not just active)
+      // Filter by status can be done by user using the filter UI
+      const limitedJobs = mappedJobs.slice(0, maxJobs);
+      console.log('📋 Jobs to display:', limitedJobs.length, '(after maxJobs limit)');
       
-      setJobs(activeJobs);
-      setFilteredJobs(activeJobs);
+      setJobs(limitedJobs);
+      setFilteredJobs(limitedJobs);
     } catch (err) {
       console.error('Error fetching jobs:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch jobs';
@@ -595,19 +650,120 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     setIsSubmitting(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const applicationData = {
-        jobId: selectedJob.id,
-        jobTitle: selectedJob.title,
-        company: selectedJob.company?.name,
-        formId: selectedJob.form.id,
-        responses: formData,
-        submittedAt: new Date().toISOString()
+      // Construct full URL based on API prefix
+      let url = submitEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${submitEndpoint}` : submitEndpoint;
+      }
+
+      // Prepare headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
       };
+
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+      }
+
+      // Extract name, email, phone from form data (these are not answers)
+      // Check both standard IDs and question IDs (q1, q2, q3 might be name/email/phone)
+      let applicantName = formData['fullName'] || formData['name'] || '';
+      let applicantEmail = formData['email'] || '';
+      let applicantPhone = formData['phone'] || '';
       
-      console.log('Application submitted:', applicationData);
+      // Find questions that are likely name/email/phone based on title
+      selectedJob.form.questions.forEach((question) => {
+        const questionTitle = question.title.toLowerCase();
+        const answer = formData[question.id];
+        
+        if (answer) {
+          if (questionTitle.includes('name') && questionTitle.includes('full')) {
+            applicantName = applicantName || String(answer);
+          } else if (questionTitle.includes('email')) {
+            applicantEmail = applicantEmail || String(answer);
+          } else if (questionTitle.includes('phone')) {
+            applicantPhone = applicantPhone || String(answer);
+          }
+        }
+      });
+
+      // If still no name, try to extract from any "name" field
+      if (!applicantName) {
+        applicantName = formData[selectedJob.form.questions[0]?.id] || 'Anonymous';
+      }
+
+      // Map remaining questions to answers format (a1, a2, a3...)
+      // Skip questions that are name, email, phone, or resume
+      const answers: Record<string, string> = {};
+      let answerIndex = 1;
+      
+      selectedJob.form.questions.forEach((question) => {
+        const questionTitle = question.title.toLowerCase();
+        const isNameField = questionTitle.includes('name') && questionTitle.includes('full');
+        const isEmailField = questionTitle.includes('email');
+        const isPhoneField = questionTitle.includes('phone');
+        const isResumeField = questionTitle.includes('resume') || questionTitle.includes('cv');
+        
+        // Skip default fields, only include custom questions in answers
+        if (!isNameField && !isEmailField && !isPhoneField && !isResumeField) {
+          const answer = formData[question.id];
+          if (answer) {
+            answers[`a${answerIndex}`] = String(answer);
+            answerIndex++;
+          }
+        }
+      });
+
+      // Format application in backend format
+      const applicationPayload = {
+        entity_type: "Applicant",
+        name: applicantName, // Name in main payload
+        data: {
+          name: applicantName, // Name also in data section
+          jobId: selectedJob.id,
+          department: selectedJob.department || '',
+          salary: typeof selectedJob.salary === 'string' ? selectedJob.salary : '',
+          location: selectedJob.location || '',
+          criteria: selectedJob.requirements?.join(', ') || '',
+          skills: '', // Can be added if needed
+          other_description: selectedJob.description || '',
+          email: applicantEmail,
+          phone: applicantPhone,
+          resumeUrl: formData['resume'] || '',
+          answers: answers,
+          submittedAt: new Date().toISOString()
+        }
+      };
+
+      console.log('Submitting application to:', url);
+      console.log('Using tenant slug:', effectiveTenantSlug);
+      console.log('Application payload:', applicationPayload);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(applicationPayload)
+      });
+
+      console.log('Application response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Application error response:', errorText);
+        throw new Error(`Application submission failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Application submitted successfully:', result);
       
       toast.success('Application submitted successfully! We\'ll be in touch soon.');
       setFormData({});
@@ -623,7 +779,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       
     } catch (error) {
       console.error('Application submission error:', error);
-      toast.error('Failed to submit application. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit application';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -705,8 +862,15 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     }
   };
 
-  const formatSalary = (salary?: { min?: number; max?: number; currency?: string }) => {
+  const formatSalary = (salary?: { min?: number; max?: number; currency?: string } | string) => {
     if (!salary) return null;
+    
+    // If salary is a string (like "55LPA" from backend), return as-is
+    if (typeof salary === 'string') {
+      return salary;
+    }
+    
+    // If salary is an object, format it
     const { min, max, currency = 'USD' } = salary;
     
     if (min && max) {

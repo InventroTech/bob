@@ -75,13 +75,13 @@ import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
 import { OpenModalButton } from "@/components/ATScomponents/OpenModalButton";
-import { OpenModalButtonConfigComponent } from "@/components/ATScomponents/OpenModalButtonConfig";
+import { OpenModalButtonConfigComponent } from "@/components/ATScomponents/configs/OpenModalButtonConfig";
 import { JobManagerComponent } from "@/components/ATScomponents/JobManagerComponent";
-import { JobManagerConfigComponent } from "@/components/ATScomponents/JobManagerConfig";
+import { JobManagerConfigComponent } from "@/components/ATScomponents/configs/JobManagerConfig";
 import { JobsPageComponent } from "@/components/ATScomponents/JobsPageComponent";
-import { JobsPageConfigComponent } from "@/components/ATScomponents/JobsPageConfig";
+import { JobsPageConfigComponent } from "@/components/ATScomponents/configs/JobsPageConfig";
 import { ApplicantTableComponent } from "@/components/ATScomponents/ApplicantTableComponent";
-import { ApplicantTableConfigComponent } from "@/components/ATScomponents/ApplicantTableConfig";
+import { ApplicantTableConfigComponent } from "@/components/ATScomponents/configs/ApplicantTableConfig";
 import { FileUploadPageComponent } from "@/components/page-builder/FileUploadPageComponent";
 import { FileUploadPageConfig } from "@/components/page-builder/FileUploadPageConfig";
 import { CardComponent } from "@/layout/CardEditLayout";
@@ -138,7 +138,6 @@ interface ComponentConfig {
   buttonSize?: 'default' | 'sm' | 'lg' | 'icon';
   modalTitle?: string;
   selectedJobId?: string;
-  submitEndpoint?: string;
   successMessage?: string;
   width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
   // JobManager specific fields
@@ -152,6 +151,9 @@ interface ComponentConfig {
   acceptedFileTypes?: string;
   maxFileSize?: number;
   multiple?: boolean;
+  // Shared fields for all ATS components
+  tenantSlug?: string;
+  submitEndpoint?: string; // Used by OpenModalButton and JobsPage
 }
 
 // Update CanvasComponentData to include config
@@ -227,7 +229,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     buttonSize?: 'default' | 'sm' | 'lg' | 'icon';
     modalTitle?: string;
     selectedJobId?: string;
-    submitEndpoint?: string;
     successMessage?: string;
     width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
     // JobManager specific fields
@@ -241,6 +242,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     acceptedFileTypes?: string;
     maxFileSize?: number;
     multiple?: boolean;
+    // Shared fields for all ATS components
+    tenantSlug?: string;
+    submitEndpoint?: string; // Used by OpenModalButton and JobsPage
   };
 
   // Local state for all input fields
@@ -258,7 +262,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     buttonSize: initialConfig.buttonSize || 'default',
     modalTitle: initialConfig.modalTitle || 'Job Application',
     selectedJobId: initialConfig.selectedJobId || '',
-    submitEndpoint: initialConfig.submitEndpoint || '/api/job-applications',
     successMessage: initialConfig.successMessage || 'Application submitted successfully!',
     width: initialConfig.width || 'lg',
     // JobManager fields
@@ -272,6 +275,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     acceptedFileTypes: initialConfig.acceptedFileTypes || '*',
     maxFileSize: initialConfig.maxFileSize || 10,
     multiple: initialConfig.multiple ?? true,
+    // Shared fields for all ATS components
+    tenantSlug: initialConfig.tenantSlug || '',
+    submitEndpoint: initialConfig.submitEndpoint || '/crm-records/records/',
   });
 
   // Separate state for columns

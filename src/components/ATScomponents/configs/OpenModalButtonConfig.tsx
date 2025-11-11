@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Briefcase, Eye, Users, FileText } from 'lucide-react';
-import { OpenModalButtonConfig } from './OpenModalButton';
+import { OpenModalButtonConfig } from '../OpenModalButton';
 
 interface OpenModalButtonConfigProps {
   config: OpenModalButtonConfig;
@@ -174,6 +174,19 @@ export const OpenModalButtonConfigComponent: React.FC<OpenModalButtonConfigProps
               onChange={(e) => onConfigChange('submitEndpoint', e.target.value)}
               placeholder="/api/job-applications"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="tenantSlug">Tenant Slug</Label>
+            <Input
+              id="tenantSlug"
+              value={config.tenantSlug || ''}
+              onChange={(e) => onConfigChange('tenantSlug', e.target.value)}
+              placeholder="my-tenant-slug"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Sent as X-Tenant-Slug header in API requests
+            </p>
           </div>
 
           <div>

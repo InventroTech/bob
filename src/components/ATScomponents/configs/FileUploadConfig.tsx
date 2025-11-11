@@ -13,6 +13,8 @@ export interface FileUploadConfig {
 
   // API Configuration
   apiEndpoint: string;
+  apiPrefix?: 'supabase' | 'renderer';
+  tenantSlug?: string; // Tenant slug to send as X-Tenant-Slug header
   
   // File Validation
   acceptedFileTypes?: string; // e.g., ".pdf,.doc,.docx" or "image/*"

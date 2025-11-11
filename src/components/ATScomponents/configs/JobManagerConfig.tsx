@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Briefcase, Database } from 'lucide-react';
 
-interface JobManagerComponentConfig {
+export interface JobManagerComponentConfig {
   // Basic Settings
   title?: string;
   showCreateButton?: boolean;
@@ -18,6 +18,7 @@ interface JobManagerComponentConfig {
   apiEndpoint?: string;
   apiPrefix?: 'supabase' | 'renderer';
   useDemoData?: boolean;
+  tenantSlug?: string;
   
   // Data Mapping
   dataMapping?: {
@@ -145,6 +146,21 @@ export const JobManagerConfigComponent: React.FC<JobManagerConfigProps> = ({
                 <SelectItem value="renderer">Renderer API</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="tenantSlug" className="text-sm font-medium text-gray-700">Tenant Slug</Label>
+            <Input
+              id="tenantSlug"
+              value={config.tenantSlug || ''}
+              onChange={(e) => onConfigChange('tenantSlug', e.target.value)}
+              placeholder="my-tenant-slug"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Sent as X-Tenant-Slug header in API requests
+            </p>
           </div>
         </CardContent>
       </Card>
