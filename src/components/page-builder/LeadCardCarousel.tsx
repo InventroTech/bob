@@ -1,32 +1,22 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
-import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import { timePicker } from "analogue-time-picker";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { FaWhatsapp } from "react-icons/fa";
 import {
   User,
   Phone,
-  Mail,
-  MapPin,
-  DollarSign,
   Coffee,
-  ChevronDown,
+  CheckCircle2,
+  XCircle,
+  Circle,
   X,
-  Clock,
-  Calendar as CalendarLucide,
-  ExternalLink,
 } from "lucide-react";
 
 interface LeadCardCarouselProps {
@@ -37,6 +27,18 @@ interface LeadCardCarouselProps {
   };
 }
 
+interface LeadTask {
+  id?: string | number;
+  title?: string;
+  name?: string;
+  description?: string;
+  status?: string;
+  due_date?: string;
+  dueDate?: string;
+  rawStatus?: any;
+  [key: string]: any;
+}
+
 interface LeadData {
   id: number;
   created_at: string;
@@ -44,6 +46,7 @@ interface LeadData {
   email: string;
   phone?: string;
   phone_no?: string;
+  phone_number?: string;
   company: string;
   position: string;
   source?: string;
@@ -71,6 +74,12 @@ interface LeadData {
   last_active_date?: string;
   last_active_date_time?: string;
   latest_remarks: string;
+  tasks?: LeadTask[] | LeadTask | string;
+  data?: {
+    notes?: string;
+    tasks?: LeadTask[] | LeadTask | string;
+    [key: string]: any;
+  };
 }
 
 interface LeadStats {
@@ -106,44 +115,18 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [showPendingCard, setShowPendingCard] = useState(true);
   const [hasCheckedForLeads, setHasCheckedForLeads] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date>();
-  const [selectedHour, setSelectedHour] = useState<number>(12);
-  const [selectedMinute, setSelectedMinute] = useState<number>(0);
-  const [isAM, setIsAM] = useState<boolean>(true);
-  const [clockMode, setClockMode] = useState<'hour' | 'minute'>('hour'); // Toggle between hour and minute
   const [inspirationalMessage, setInspirationalMessage] = useState<string>('');
-  const [showTime, setShowTime] = useState<any>(null);
   const [animationData, setAnimationData] = useState<any>(null);
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
+  const [selectedNotInterestedReason, setSelectedNotInterestedReason] = useState<string>("");
+  const [customNotInterestedReason, setCustomNotInterestedReason] = useState("");
+  const [showCallBackDialog, setShowCallBackDialog] = useState(false);
+  const [callbackDate, setCallbackDate] = useState<Date | undefined>(undefined);
+  const [callbackHour, setCallbackHour] = useState(12);
+  const [callbackMinute, setCallbackMinute] = useState(0);
+  const [callbackIsAM, setCallbackIsAM] = useState(true);
+  const [clockMode, setClockMode] = useState<'hour' | 'minute'>('hour');
   const clockRef = useRef<HTMLDivElement | null>(null);
-  
-  // Reset showTime when popover opens to ensure fresh initialization
-  useEffect(() => {
-    if (popoverOpen) {
-      setShowTime(null);
-      // Wait a bit for the DOM to be ready
-      setTimeout(() => {
-        if (clockRef.current) {
-          try {
-            const instance = timePicker({
-              element: clockRef.current,
-              mode: 12,
-              width: "300px",
-              time: { hour: selectedHour, minute: selectedMinute }
-            });
-            setShowTime(instance);
-          } catch (error) {
-            console.error('Error initializing clock:', error);
-          }
-        }
-      }, 200);
-    }
-  }, [popoverOpen]);
-  
-  // Callback ref to set the ref
-  const setClockRef = (element: HTMLDivElement | null) => {
-    clockRef.current = element;
-  };
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -167,17 +150,119 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     "You've got this! Keep pushing forward! 💯"
   ];
 
-  // Utility functions
-  const formatPhoneNumber = (phone?: string) => {
-    if (!phone) return "N/A";
-    return phone.replace(/(\d{2})(\d{5})(\d{5})/, "$1 $2 $3");
-  };
+  const NOT_INTERESTED_REASONS = [
+    "Not a political follower or leader",
+    "No Trust in Auto Pay Feature",
+    "Bank Account/UPI Issue",
+    "Cannot Afford",
+    ">=6 attempts",
+    "Opted other services for Posters",
+    "Lack of local Leader Content",
+    "Lack of customization options",
+    "Other (Free Text)",
+  ];
 
+  // Utility functions
   const parseTags = (tags: string[] | string) => {
     if (Array.isArray(tags)) return tags;
     if (typeof tags === "string") return tags.split(",").map(tag => tag.trim());
     return [];
   };
+
+  const formatPhoneForDisplay = (phone?: string) => {
+    if (!phone) return "N/A";
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 12) {
+      return `+${digits.slice(0, 2)} ${digits.slice(2, 7)} ${digits.slice(7)}`;
+    }
+    if (digits.length === 10) {
+      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+    }
+    return phone;
+  };
+
+  const normalizePhoneForLinks = (phone?: string) => {
+    if (!phone) return "";
+    return phone.replace(/\D/g, "");
+  };
+
+  const handleCallLead = (phone?: string) => {
+    const clean = normalizePhoneForLinks(phone);
+    if (!clean) return;
+    window.open(`tel:${clean}`);
+  };
+
+  const handleWhatsAppLead = (phone?: string, whatsappLink?: string) => {
+    if (whatsappLink) {
+      window.open(whatsappLink, "_blank");
+      return;
+    }
+    const clean = normalizePhoneForLinks(phone);
+    if (!clean) return;
+    window.open(`https://wa.me/${clean}`, "_blank");
+  };
+
+  const primaryPhone = useMemo(() => {
+    return currentLead?.phone_no || currentLead?.phone || (currentLead as any)?.phone_number || currentLead?.data?.phone_number;
+  }, [currentLead]);
+
+  const leadTasks = useMemo(() => {
+    const source =
+      (currentLead as any)?.tasks ??
+      currentLead?.data?.tasks;
+
+    if (!source) return [];
+
+    if (typeof source === "string") {
+      try {
+        const parsed = JSON.parse(source);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch {
+        // fall back to comma-separated list
+      }
+      return source
+        .split(",")
+        .map(task => task.trim())
+        .filter(Boolean);
+    }
+
+    if (Array.isArray(source)) {
+      return source;
+    }
+
+    if (typeof source === "object" && source !== null) {
+      const taskLikeKeys = ["title", "name", "description", "status", "due_date", "dueDate"];
+      if (taskLikeKeys.some(key => key in (source as Record<string, unknown>))) {
+        return [source];
+      }
+
+      return Object.entries(source as Record<string, any>).map(([key, value]) => {
+        let normalizedStatus: string | undefined;
+        if (value === null || value === undefined || value === "Null") {
+          normalizedStatus = undefined;
+        } else if (typeof value === "string") {
+          normalizedStatus = value;
+        } else {
+          try {
+            normalizedStatus = JSON.stringify(value);
+          } catch {
+            normalizedStatus = String(value);
+          }
+        }
+
+        return {
+          id: key,
+          title: key,
+          status: normalizedStatus,
+          rawStatus: value,
+        } as LeadTask;
+      });
+    }
+
+    return [];
+  }, [currentLead]);
 
   // Fetching the lead stats
   const fetchLeadStats = async () => {
@@ -214,8 +299,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const fetchFirstLead = async () => {
     try {
       setLoading(true);
-      setPopoverOpen(false);
-      
       const endpoint = config?.apiEndpoint || "/api/leads";
       const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
@@ -282,8 +365,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         ...prev,
         leadStatus: leadData.status || "New",
         priority: leadData.priority || "Medium",
-        notes: leadData.data.notes || "",
-        selectedTags: parseTags(leadData.tags || []),
+        notes: (leadData?.data?.notes as string) || leadData?.notes || "",
+        selectedTags: parseTags(leadData?.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
         leadStartTime: new Date(),
       }));
@@ -336,6 +419,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       if (!token) throw new Error("Authentication required");
 
       const base = import.meta.env.VITE_RENDER_API_URL;
+      if (!base) {
+        console.warn("[LeadCardCarousel] VITE_RENDER_API_URL is not defined");
+      }
       const url = `${base}/crm-records/records/events/`;
       const body = {
         event: eventName,
@@ -352,7 +438,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         body: JSON.stringify(body),
       });
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => null);
+        console.error("[LeadCardCarousel] Event request failed", { status: resp.status, statusText: resp.statusText, body: text });
+        throw new Error(`HTTP ${resp.status}`);
+      }
 
       if (options.successTitle || options.successDescription) {
         toast({
@@ -371,55 +461,76 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  const handleActionButton = async (action: "Not Connected" | "Call Later" | "Lost" | "Won") => {
+  const handleActionButton = async (
+    action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later",
+    extra?: { reason?: string; nextCallAt?: string }
+  ) => {
     if (!currentLead?.id) {
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
       return;
     }
 
-    // For Not Connected, send call_later event with user's notes
-    if (action === "Not Connected") {
-      const ok = await sendLeadEvent(
-        "lead.call_later_clicked",
-        {
+    const eventMap: Record<typeof action, { event: string; success: string }> = {
+      "Trial Activated": { event: "lead.trial_activated", success: "Marked as trial activated" },
+      "Not Interested": { event: "lead.not_interested", success: "Lead marked as not interested" },
+      "Call Not Connected": { event: "lead.call_not_connected", success: "Call status updated" },
+      "Call Back Later": { event: "lead.call_back_later", success: "Marked for follow-up" },
+    };
+
+    const { event, success } = eventMap[action];
+
+    const payload: Record<string, any> = {
           notes: lead.notes || "",
           remarks: currentLead.latest_remarks,
           lead_id: currentLead.id,
           user_id: currentLead.user_id,
-        },
-        { successTitle: "Success", successDescription: "Marked as snoozed" }
-      );
-      if (ok) await fetchFirstLead();
-      return;
+    };
+
+    if (extra?.reason) {
+      payload.reason = extra.reason;
+    }
+    if (extra?.nextCallAt) {
+      payload.next_call_at = extra.nextCallAt;
     }
 
-    // For Won/Lost, send events to backend as specified
-    if (action === "Won" || action === "Lost") {
       const ok = await sendLeadEvent(
-        action === "Won" ? "lead.win_clicked" : "lead.lost_clicked",
-        {
-          notes: lead.notes,
-          remarks: currentLead.latest_remarks,
-          lead_id: currentLead.id,
-          user_id: currentLead.user_id,
-        },
-        { successTitle: "Success", successDescription: `Marked as ${action}` }
-      );
-      if (ok) await fetchFirstLead();
+      event,
+      payload,
+      { successTitle: "Success", successDescription: success }
+    );
+
+    if (ok) {
+      await fetchFirstLead();
+    }
+
+    return ok;
+  };
+
+  const handleNotInterestedClick = () => {
+    setSelectedNotInterestedReason("");
+    setCustomNotInterestedReason("");
+    setShowNotInterestedDialog(true);
+  };
+
+  const handleCloseNotInterestedDialog = () => {
+    setShowNotInterestedDialog(false);
+    setSelectedNotInterestedReason("");
+    setCustomNotInterestedReason("");
+  };
+
+  const handleSubmitNotInterested = async () => {
+    const selected = selectedNotInterestedReason.trim();
+    const isOther = selected === "Other (Free Text)";
+    const finalReason = isOther ? customNotInterestedReason.trim() : selected;
+
+    if (!finalReason) {
+      toast({ title: "Reason required", description: "Please select or enter a reason.", variant: "destructive" });
       return;
     }
 
-    // Default behavior for other actions stays as-is (simulated)
-    try {
-      setUpdating(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast({ title: "Success", description: `Lead marked as: ${action}`, variant: "default" });
-      await fetchFirstLead();
-    } catch (error) {
-      console.error("Error updating lead:", error);
-      toast({ title: "Error", description: "Failed to update lead. Please try again.", variant: "destructive" });
-    } finally {
-      setUpdating(false);
+    const ok = await handleActionButton("Not Interested", { reason: finalReason });
+    if (ok) {
+      handleCloseNotInterestedDialog();
     }
   };
 
@@ -443,49 +554,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  const buildNextCallISO = (): string | null => {
-    if (!selectedDate) return null;
-    let hour24 = selectedHour % 12;
-    hour24 = isAM ? hour24 : hour24 + 12;
-    const dt = new Date(selectedDate);
-    dt.setHours(hour24, selectedMinute, 0, 0);
-    try {
-      return dt.toISOString();
-    } catch {
-      return null;
-    }
-  };
-
-  const handleScheduleCall = async () => {
-    if (!currentLead?.id) {
-      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
-      return;
-    }
-    const nextCallIso = buildNextCallISO();
-    if (!nextCallIso) {
-      toast({ title: "Missing time", description: "Select date and time before scheduling.", variant: "destructive" });
-      return;
-    }
-    const ok = await sendLeadEvent(
-      "lead.call_scheduled",
-      {
-        next_call_at: nextCallIso,
-        notes: lead.notes,
-        remarks: currentLead.latest_remarks,
-        lead_id: currentLead.id,
-        user_id: currentLead.user_id,
-      },
-      { successTitle: "Scheduled!", successDescription: "Call scheduled successfully." }
-    );
-    if (ok) {
-      setPopoverOpen(false);
-      setSelectedDate(undefined);
-      setSelectedHour(12);
-      setSelectedMinute(0);
-      await fetchFirstLead();
-    }
-  };
-
   const handleCloseProfile = () => {
     setShowProfileModal(false);
   };
@@ -496,6 +564,81 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
+  const buildCallbackISO = (): string | null => {
+    if (!callbackDate) return null;
+    let hour24 = callbackHour % 12;
+    hour24 = callbackIsAM ? hour24 : hour24 + 12;
+    const date = new Date(callbackDate);
+    date.setHours(hour24, callbackMinute, 0, 0);
+    try {
+      return date.toISOString();
+    } catch {
+      return null;
+    }
+  };
+
+  const handleOpenCallBackDialog = () => {
+    setCallbackDate(new Date());
+    setCallbackHour(12);
+    setCallbackMinute(0);
+    setCallbackIsAM(true);
+    setClockMode('hour');
+    setShowCallBackDialog(true);
+  };
+
+  const handleCloseCallBackDialog = () => {
+    setShowCallBackDialog(false);
+  };
+
+  const handleSubmitCallBackLater = async () => {
+    const iso = buildCallbackISO();
+    if (!iso) {
+      toast({ title: "Select time", description: "Please choose a valid date and time.", variant: "destructive" });
+      return;
+    }
+    const ok = await handleActionButton("Call Back Later", { nextCallAt: iso });
+    if (ok) {
+      handleCloseCallBackDialog();
+    }
+  };
+
+  const updateHourFromAngle = (angle: number) => {
+    let hour = Math.round(angle / 30) % 12;
+    if (hour <= 0) hour = 12;
+    setCallbackHour(hour);
+  };
+
+  const updateMinuteFromAngle = (angle: number) => {
+    let minute = Math.round(angle / 6) % 60;
+    if (minute < 0) minute += 60;
+    setCallbackMinute(minute);
+  };
+
+  const handleClockPointer = (clientX: number, clientY: number) => {
+    if (!clockRef.current) return;
+    const rect = clockRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const x = clientX - centerX;
+    const y = clientY - centerY;
+    let angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
+    if (angle < 0) angle += 360;
+    if (clockMode === 'hour') {
+      updateHourFromAngle(angle);
+    } else {
+      updateMinuteFromAngle(angle);
+    }
+  };
+
+  const handleClockMouse = (event: React.MouseEvent<HTMLDivElement>) => {
+    handleClockPointer(event.clientX, event.clientY);
+  };
+
+  const handleClockTouch = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    handleClockPointer(touch.clientX, touch.clientY);
+  };
 
   // Load Lottie animation (idle + cached)
   useEffect(() => {
@@ -653,34 +796,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
           )}
           <div className="space-y-4">
-            {/* Lead Stage - Top */}
-            <div className="text-center">
-              <div className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                {currentLead?.lead_stage || "New Lead"}
-              </div>
-            </div>
-
-            {/* Lead Source - Below Lead Stage */}
-            <div className="text-center">
-              <span className="text-sm text-muted-foreground">Source: </span>
-              <span className="text-sm font-medium">{currentLead?.lead_source || currentLead?.source || "N/A"}</span>
-            </div>
-
             {/* Main Lead Information */}
             <div className="space-y-2">
-              {/* Date and Time */}
-              <div className="text-sm bg-muted/50 p-2 rounded-md">
-                <span className="font-medium text-sm">
-                  {currentLead?.created_at ? new Date(currentLead.created_at).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  }) : "N/A"}
-                </span>
-              </div>
-
               {/* Customer Profile Section */}
               <div className="bg-muted/50 p-4 rounded-md">
                 <div className="flex items-center gap-3">
@@ -700,8 +817,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   />
                   
                   <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="space-y-1">
                         {/* Customer Full Name - Clickable to User Profile */}
                         <a
                           href={currentLead?.user_profile_link || "#"}
@@ -711,23 +828,34 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                         >
                           {currentLead?.customer_full_name || currentLead?.name || "N/A"}
                         </a>
-                        <p className="text-xs text-muted-foreground pt-1">
-                          ID: {currentLead?.user_id || "N/A"}
+                        <p className="text-xs text-muted-foreground">
+                          {currentLead?.affiliated_party || "N/A"}
                         </p>
                       </div>
                       
-                      {/* Affiliated Party - Next to Name */}
-                      <div className="text-right">
-                        <span className="text-sm font-medium text-orange-600">
-                          {currentLead?.affiliated_party || "N/A"}
-                        </span>
+                      {primaryPhone && (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`tel:${normalizePhoneForLinks(primaryPhone)}`}
+                            className="flex items-center gap-2 text-sm font-semibold text-white bg-black px-4 py-1.5 rounded-full shadow hover:bg-black/80 transition-colors"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleCallLead(primaryPhone);
+                            }}
+                          >
+                            <Phone className="h-4 w-4" />
+                            <span>{formatPhoneForDisplay(primaryPhone)}</span>
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
+                            className="flex items-center justify-center h-8 w-8 rounded-full bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                            aria-label="Open WhatsApp"
+                          >
+                            <FaWhatsapp className="h-4 w-4" />
+                          </button>
                       </div>
-                    </div>
-                    
-                    {/* Premium Poster Count - Below Party */}
-                    <div className="mt-2">
-                      <span className="text-xs text-muted-foreground">Premium Count: </span>
-                      <span className="text-xs font-medium">{currentLead?.premium_poster_count || 0}</span>
+                      )}
                     </div>
                     
                     {/* Package to Pitch - Below Premium Count */}
@@ -739,398 +867,357 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 </div>
               </div>
 
-              {/* Contact Information */}
+              {/* Tasks */}
               <div className="space-y-2">
-                {/* Phone Number with WhatsApp */}
-                <div 
-                  className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
-                  onClick={() => {
-                    if (currentLead?.whatsapp_link) {
-                      window.open(currentLead.whatsapp_link, '_blank');
-                    } else {
-                      // Support both phone and phone_no fields
-                      const phoneNumber = currentLead?.phone_no || currentLead?.phone;
-                      if (phoneNumber) {
-                        const cleanNumber = phoneNumber.replace(/\D/g, '');
-                        const whatsappUrl = `https://wa.me/${cleanNumber}`;
-                        window.open(whatsappUrl, '_blank');
-                      }
-                    }
-                  }}
-                >
-                  <Phone className="h-3 w-3 mr-2 text-primary" />
-                  <span className="font-medium text-sm">{formatPhoneNumber(currentLead?.phone_no || currentLead?.phone) || "N/A"}</span>
-                </div>
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Tasks</Label>
+                {leadTasks.length > 0 ? (
+                  <div className="relative mx-auto max-w-2xl pl-10">
+                    {leadTasks.map((task, index) => {
+                      const isObjectTask = typeof task === "object" && task !== null;
+                      const castTask = isObjectTask ? (task as LeadTask) : null;
+                      const title = isObjectTask
+                        ? castTask?.title || castTask?.name || `Task ${index + 1}`
+                        : task;
+                      const description =
+                        isObjectTask && typeof castTask?.description === "string"
+                          ? castTask?.description
+                          : "";
+                      const statusTextRaw = (() => {
+                        if (!isObjectTask) return "";
+                        const value = castTask?.status ?? castTask?.rawStatus;
+                        if (value === undefined || value === null) return "";
+                        return String(value);
+                      })();
+                      const statusNormalized = statusTextRaw.trim().toLowerCase();
+                      const isAffirmative = statusNormalized === "yes";
+                      const isNegative = statusNormalized === "no";
+                      const lineColor = isAffirmative
+                        ? "border-emerald-500"
+                        : isNegative
+                          ? "border-rose-400"
+                          : "border-gray-400";
+                      const dotColor = isAffirmative
+                        ? "bg-emerald-500"
+                        : isNegative
+                          ? "bg-rose-500"
+                          : "bg-gray-400";
+                      const lineStyle = isAffirmative ? "" : "border-dashed";
+                      const dueRaw =
+                        isObjectTask &&
+                        typeof ((castTask?.due_date ?? castTask?.dueDate)) === "string"
+                          ? (castTask?.due_date ?? castTask?.dueDate)
+                          : "";
+                      const due =
+                        dueRaw && !Number.isNaN(Date.parse(dueRaw))
+                          ? new Date(dueRaw).toLocaleString()
+                          : dueRaw;
+                      const key =
+                        (isObjectTask &&
+                          (castTask?.id ?? castTask?.title ?? castTask?.name)) ||
+                        `task-${index}`;
+                      const isLast = index === leadTasks.length - 1;
 
-                {/* RM Dashboard Link */}
-                {currentLead?.rm_dashboard && (
-                  <div 
-                    className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
-                    onClick={() => window.open(currentLead.rm_dashboard, '_blank')}
-                  >
-                    <ExternalLink className="h-3 w-3 mr-2 text-primary" />
-                    <span className="font-medium text-sm">RM Dashboard</span>
+                      return (
+                        <div key={key} className="relative pb-6 last:pb-0">
+                          {!isLast && (
+                            <span
+                              className={`absolute left-[11px] top-5 bottom-0 border-l-2 ${lineStyle} ${lineColor}`}
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span
+                            className={`absolute left-[3px] top-3 h-5 w-5 rounded-full ${dotColor} shadow`}
+                            aria-hidden="true"
+                          />
+                          <div className="bg-muted/40 rounded-md px-6 py-4 ml-2">
+                            <p className="text-base font-semibold">
+                              {typeof title === "string" && title.length > 0 ? title : `Task ${index + 1}`}
+                            </p>
+                            {description && (
+                              <p className="text-sm text-muted-foreground mt-2 whitespace-pre-line">
+                                {description}
+                              </p>
+                            )}
+                            {(statusTextRaw || due) && (
+                              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mt-3">
+                                {statusTextRaw && (
+                                  <span className="font-medium capitalize">{statusTextRaw}</span>
+                                )}
+                                {due && <span className="font-medium">Due: {due}</span>}
                   </div>
                 )}
               </div>
-
-              {/* Additional Information */}
-              <div className="space-y-2">
-                {/* Last Active Date and Time */}
-                <div className="text-sm bg-muted/50 p-2 rounded-md">
-                  <span className="text-muted-foreground">Last Active: </span>
-                  <span className="font-medium">
-                    {currentLead?.last_active_date_time || currentLead?.last_active_date ? new Date(currentLead.last_active_date_time || currentLead.last_active_date).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    }) : "N/A"}
-                  </span>
                 </div>
-
-                {/* Latest Remarks */}
-                <div className="text-sm bg-muted/50 p-2 rounded-md">
-                  <span className="text-muted-foreground">Latest Remarks: </span>
-                  <span className="font-medium">{currentLead?.latest_remarks || "No remarks"}</span>
+                      );
+                    })}
                 </div>
+                ) : (
+                  <div className="bg-muted/50 p-2 rounded-md text-sm text-muted-foreground">
+                    No tasks available
               </div>
-
-              {/* Notes/Remarks Input */}
-              <div className="space-y-2">
-                <Label>Add Notes/Remarks</Label>
-                <Textarea
-                  value={lead.notes}
-                  onChange={(e) => setLead(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Add notes or remarks about this lead..."
-                  className="min-h-[80px]"
-                />
+                )}
               </div>
             </div>
           </div>
           
-            <div className="buttons flex flex-row flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-6 lg:gap-10 w-full max-w-full px-4">
+            <div className="buttons flex flex-row flex-wrap items-center justify-center gap-4 sm:gap-5 md:gap-6 w-full max-w-full px-4">
               <div className="flex flex-wrap justify-center items-center gap-3 mt-4 pt-3 w-full">
                 <Button
-                  onClick={() => handleActionButton("Not Connected")}
+                  onClick={() => handleActionButton("Trial Activated")}
                   size="sm"
                   variant="outline"
-                  className="w-full sm:w-32 bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={updating}
-                >
-                  Not Connected
-                </Button>
-                
-              {/* Call Later with DateTime Picker */}
-              <Dialog open={popoverOpen} onOpenChange={setPopoverOpen}>
-                <DialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full sm:w-32 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={updating}
-                >
-                  Call Later
-                </Button>
-                </DialogTrigger>
-                <DialogContent className="w-auto p-4 max-w-fit">
-                  <div className="space-y-6">
-                    <div className="flex gap-6">
-                      <div className="space-y-3">
-                        <Label className="text-base font-semibold">Select Date</Label>
-                        <Calendar
-                          mode="single"
-                          selected={selectedDate}
-                          onSelect={setSelectedDate}
-                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                          initialFocus
-                        />
-              </div>
-                      <div className="space-y-3">
-                      <Label className="text-base font-semibold">Select Time</Label>
-                        <div className="flex items-center justify-center p-2">
-                          <div className="relative w-48 h-48">
-                          {/* Analog Clock */}
-                            <svg className="w-48 h-48" viewBox="0 0 200 200">
-                            {/* Clock circle - white background */}
-                              <circle cx="100" cy="100" r="95" fill="white" stroke="rgb(102, 51, 153)" strokeWidth="2"/>
-                            
-                              {/* Hour markers as numbers 1–12 */}
-                              {Array.from({ length: 12 }).map((_, i) => {
-                                const angle = (i * 30 - 90) * (Math.PI / 180);
-                                const radius = 78; // slightly inward from the circle edge
-                                const x = 100 + radius * Math.cos(angle);
-                                const y = 100 + radius * Math.sin(angle);
-                                const num = i === 0 ? 12 : i;
-                                return (
-                                  <text
-                                    key={i}
-                                    x={x}
-                                    y={y}
-                                    fontSize="10"
-                                    fill="rgb(102, 51, 153)"
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                  >
-                                    {num}
-                                  </text>
-                                );
-                              })}
-                            
-                            {/* Show only the active hand */}
-                              {clockMode === 'minute' && (
-                              /* Minute hand */
-                              <line
-                                x1="100"
-                                y1="100"
-                                x2={100 + 70 * Math.cos((selectedMinute * 6 - 90) * (Math.PI / 180))}
-                                y2={100 + 70 * Math.sin((selectedMinute * 6 - 90) * (Math.PI / 180))}
-                                stroke="rgb(102, 51, 153)"
-                                  strokeWidth="3"
-                                strokeLinecap="round"
-                              />
-                            )}
-                              {clockMode === 'hour' && (
-                              /* Hour hand */
-                              <line
-                                x1="100"
-                                y1="100"
-                                x2={100 + 50 * Math.cos(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
-                                y2={100 + 50 * Math.sin(((selectedHour % 12) * 30 + selectedMinute * 0.5 - 90) * (Math.PI / 180))}
-                                stroke="rgb(102, 51, 153)"
-                                  strokeWidth="4"
-                                strokeLinecap="round"
-                              />
-                            )}
-                            
-                            {/* Center dot */}
-                              <circle cx="100" cy="100" r="4" fill="rgb(102, 51, 153)"/>
-                          </svg>
-                          
-                          {/* Invisible overlay for dragging */}
-                          <div 
-                            className="absolute inset-0 rounded-full cursor-pointer"
-                            style={{ background: 'transparent' }}
-                            onMouseDown={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const centerX = rect.left + rect.width / 2;
-                              const centerY = rect.top + rect.height / 2;
-                              const x = e.clientX - centerX;
-                              const y = e.clientY - centerY;
-                              const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
-                              
-                              if (clockMode === 'hour') {
-                                let hour = Math.round(angle / 30) % 12;
-                                if (hour <= 0) hour = 12;
-                                hour += isAM ? 0 : 12;
-                                if (hour === 12 && isAM) hour = 0;
-                                setSelectedHour(hour);
-                                // Auto-advance to minute selection after hour set
-                                setClockMode('minute');
-                              } else {
-                                let minute = Math.round(angle / 6) % 60;
-                                if (minute < 0) minute += 60;
-                                setSelectedMinute(minute);
-                              }
-                            }}
-                            onMouseMove={(e) => {
-                              if (e.buttons === 1) {
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const centerX = rect.left + rect.width / 2;
-                                const centerY = rect.top + rect.height / 2;
-                                const x = e.clientX - centerX;
-                                const y = e.clientY - centerY;
-                                const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
-                                
-                                if (clockMode === 'hour') {
-                                  let hour = Math.round(angle / 30) % 12;
-                                  if (hour <= 0) hour = 12;
-                                  hour += isAM ? 0 : 12;
-                                  if (hour === 12 && isAM) hour = 0;
-                                  setSelectedHour(hour);
-                                } else {
-                                  let minute = Math.round(angle / 6) % 60;
-                                  if (minute < 0) minute += 60;
-                                  setSelectedMinute(minute);
-                                }
-                              }
-                            }}
-                            onMouseUp={() => {
-                              if (clockMode === 'hour') setClockMode('minute');
-                            }}
-                            onTouchStart={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const centerX = rect.left + rect.width / 2;
-                              const centerY = rect.top + rect.height / 2;
-                              const touch = e.touches[0];
-                              const x = touch.clientX - centerX;
-                              const y = touch.clientY - centerY;
-                              const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
-                              
-                              if (clockMode === 'hour') {
-                                let hour = Math.round(angle / 30) % 12;
-                                if (hour <= 0) hour = 12;
-                                hour += isAM ? 0 : 12;
-                                if (hour === 12 && isAM) hour = 0;
-                                setSelectedHour(hour);
-                                // Auto-advance to minute selection after hour set
-                                setClockMode('minute');
-                              } else {
-                                let minute = Math.round(angle / 6) % 60;
-                                if (minute < 0) minute += 60;
-                                setSelectedMinute(minute);
-                              }
-                            }}
-                            onTouchMove={(e) => {
-                              e.preventDefault();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const centerX = rect.left + rect.width / 2;
-                              const centerY = rect.top + rect.height / 2;
-                              const touch = e.touches[0];
-                              const x = touch.clientX - centerX;
-                              const y = touch.clientY - centerY;
-                              const angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
-                              
-                              if (clockMode === 'hour') {
-                                let hour = Math.round(angle / 30) % 12;
-                                if (hour <= 0) hour = 12;
-                                hour += isAM ? 0 : 12;
-                                if (hour === 12 && isAM) hour = 0;
-                                setSelectedHour(hour);
-                              } else {
-                                let minute = Math.round(angle / 6) % 60;
-                                if (minute < 0) minute += 60;
-                                setSelectedMinute(minute);
-                              }
-                            }}
-                            onTouchEnd={() => {
-                              if (clockMode === 'hour') setClockMode('minute');
-                            }}
-                          />
-                        </div>
-                      </div>
-                      {/* Mode toggle and AM/PM selector */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setClockMode('hour')}
-                          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                            clockMode === 'hour'
-                              ? 'bg-[rgb(102,51,153)] text-white'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
-                        >
-                          Hour
-                        </button>
-                        <button
-                          onClick={() => setClockMode('minute')}
-                          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                            clockMode === 'minute'
-                              ? 'bg-[rgb(102,51,153)] text-white'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
-                        >
-                          Minute
-                        </button>
-                      </div>
-                      
-                      {/* Time display with AM/PM inline */}
-                      <div className="flex items-center justify-center gap-2 p-2 bg-gray-50 rounded-md">
-                        <span className="text-sm text-gray-600">Selected Time:</span>
-                        <span className="font-medium text-sm">
-                          {selectedHour % 12 === 0 ? 12 : selectedHour % 12}:{selectedMinute.toString().padStart(2, '0')}
-                        </span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => {
-                              setIsAM(true);
-                              if (selectedHour >= 12) {
-                                setSelectedHour(selectedHour - 12);
-                              }
-                            }}
-                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                              selectedHour < 12
-                                ? 'bg-[rgb(102,51,153)] text-white'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                          >
-                            AM
-                          </button>
-                          <button
-                            onClick={() => {
-                              setIsAM(false);
-                              if (selectedHour < 12) {
-                                setSelectedHour(selectedHour + 12);
-                              }
-                            }}
-                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                              selectedHour >= 12
-                                ? 'bg-[rgb(102,51,153)] text-white'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                          >
-                            PM
-                          </button>
-                        </div>
-                      </div>
-                      <div className="p-2 bg-gray-50 rounded-md text-sm text-center">
-                        <span className="text-gray-600">Selected Time = </span>
-                        <span className="font-medium">
-                          {selectedHour}:{selectedMinute.toString().padStart(2, '0')}
-                        </span>
-                      </div>
-                      </div>
-                    </div>
-                    {(selectedDate) && (
-                      <div className="p-2 bg-blue-50 rounded-md text-sm">
-                        <span className="font-medium">Scheduled for: </span>
-                        {format(selectedDate, "PPP")} at {selectedHour > 12 ? selectedHour - 12 : selectedHour}:{selectedMinute.toString().padStart(2, '0')} {selectedHour >= 12 ? 'PM' : 'AM'}
-                      </div>
-                    )}
-                    <Button
-                      onClick={handleScheduleCall}
-                      className="w-full"
-                      disabled={!selectedDate}
-                    >
-                      Schedule Call
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-              
-                <Button
-                  onClick={() => handleActionButton("Lost")}
-                  size="sm"
-                  variant="outline"
-                className="w-full sm:w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                disabled={updating || fetchingNext}
-                >
-                  Lost
-                </Button>
-                
-                <Button
-                  onClick={() => handleActionButton("Won")}
-                  size="sm"
-                  variant="outline"
-                  className="w-full sm:w-32 bg-white text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="w-full sm:w-40 bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:border-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={updating || fetchingNext}
                 >
-                  {updating ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                      Updating...
-                    </>
-                  ) : fetchingNext ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                      Loading Next Lead...
-                    </>
-                  ) : (
-                    "Won"
-                  )}
+                  Trial Activated
                 </Button>
-              </div>
-            </div>
+                <Button
+                  onClick={handleNotInterestedClick}
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-40 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating || fetchingNext}
+                >
+                  Not Interested
+                </Button>
+                <Button
+                  onClick={() => handleActionButton("Call Not Connected")}
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-40 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating || fetchingNext}
+                >
+                  Call Not Connected
+                </Button>
+                <Button
+                  onClick={handleOpenCallBackDialog}
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-40 bg-white text-purple-600 border-purple-300 hover:bg-purple-50 hover:border-purple-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating || fetchingNext}
+                >
+                  Call Back Later
+                </Button>
+                        </div>
+                      </div>
+            <Dialog open={showNotInterestedDialog} onOpenChange={(open) => {
+              if (!open) {
+                handleCloseNotInterestedDialog();
+              }
+            }}>
+              <DialogContent className="sm:max-w-lg" aria-describedby="not-interested-dialog-description">
+                <DialogHeader>
+                  <DialogTitle>Select a reason</DialogTitle>
+                </DialogHeader>
+                <p id="not-interested-dialog-description" className="sr-only">
+                  Choose a reason for marking the lead as not interested or provide a custom explanation.
+                </p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {NOT_INTERESTED_REASONS.filter(reason => reason !== "Other (Free Text)").map((reason) => {
+                      const isSelected = selectedNotInterestedReason === reason;
+                      return (
+                        <button
+                          key={reason}
+                          type="button"
+                            onClick={() => {
+                            setSelectedNotInterestedReason(reason);
+                            setCustomNotInterestedReason("");
+                          }}
+                          className={`rounded-md border px-3 py-2 text-sm text-left transition-colors ${
+                            isSelected
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border hover:border-primary/60"
+                          }`}
+                        >
+                          {reason}
+                          </button>
+                      );
+                    })}
+                  </div>
+                  <div
+                    className={`rounded-md border px-3 py-2 transition-colors ${
+                      selectedNotInterestedReason === "other"
+                        ? "border-primary bg-primary/10"
+                        : "border-border"
+                    }`}
+                  >
+                    <Label htmlFor="not-interested-other" className="text-xs font-semibold text-muted-foreground">
+                      Other Reason
+                    </Label>
+                    <Textarea
+                      id="not-interested-other"
+                      value={customNotInterestedReason}
+                      onFocus={() => setSelectedNotInterestedReason("other")}
+                      onChange={(e) => {
+                        setSelectedNotInterestedReason("other");
+                        setCustomNotInterestedReason(e.target.value);
+                      }}
+                      placeholder="Describe the customer's reason"
+                      rows={3}
+                      className="mt-2"
+                    />
+                        </div>
+                      </div>
+                <DialogFooter className="flex flex-col sm:flex-row sm:justify-end sm:gap-2">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={handleCloseNotInterestedDialog}>
+                    Cancel
+                  </Button>
+                    <Button
+                    className="w-full sm:w-auto"
+                    onClick={handleSubmitNotInterested}
+                    disabled={
+                      !selectedNotInterestedReason ||
+                      (selectedNotInterestedReason === "other" && !customNotInterestedReason.trim()) ||
+                      updating
+                    }
+                  >
+                    Submit
+                    </Button>
+                </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            <Dialog open={showCallBackDialog} onOpenChange={(open) => {
+               if (!open) {
+                 handleCloseCallBackDialog();
+               }
+             }}>
+               <DialogContent className="sm:max-w-3xl" aria-describedby="callback-dialog-description">
+                 <DialogHeader>
+                   <DialogTitle>Schedule Call Back</DialogTitle>
+                 </DialogHeader>
+                 <p id="callback-dialog-description" className="sr-only">
+                   Pick a date and time to follow up with this lead.
+                 </p>
+                 <div className="flex flex-col md:flex-row gap-4">
+                   <div className="border rounded-md p-3 flex-1 min-w-[260px]">
+                     <Label className="text-xs font-semibold text-muted-foreground">Select Date</Label>
+                     <Calendar
+                       mode="single"
+                       selected={callbackDate}
+                       onSelect={setCallbackDate}
+                       disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                       className="mt-2"
+                     />
+                   </div>
+                   <div className="border rounded-md p-3 flex flex-col items-center gap-3 flex-1 min-w-[260px]">
+                     <Label className="text-xs font-semibold text-muted-foreground self-start">Select Time</Label>
+                     <div
+                       ref={clockRef}
+                       onMouseDown={handleClockMouse}
+                       onTouchStart={handleClockTouch}
+                       className="relative h-48 w-48 rounded-full bg-white shadow-inner cursor-pointer select-none"
+                     >
+                       <svg viewBox="0 0 200 200" className="h-full w-full">
+                         <circle cx="100" cy="100" r="96" fill="white" stroke="#E5E7EB" strokeWidth="2" />
+                         {Array.from({ length: 12 }, (_, i) => {
+                           const angle = ((i + 1) * 30 - 90) * (Math.PI / 180);
+                           const radius = 80;
+                           const x = 100 + radius * Math.cos(angle);
+                           const y = 100 + radius * Math.sin(angle);
+                           return (
+                             <text
+                               key={i}
+                               x={x}
+                               y={y}
+                               fontSize="12"
+                               fill="#4B5563"
+                               textAnchor="middle"
+                               dominantBaseline="middle"
+                             >
+                               {i + 1}
+                             </text>
+                           );
+                         })}
+                         {clockMode === 'minute' && (
+                           <line
+                             x1="100"
+                             y1="100"
+                             x2={100 + 70 * Math.cos(((callbackMinute * 6) - 90) * (Math.PI / 180))}
+                             y2={100 + 70 * Math.sin(((callbackMinute * 6) - 90) * (Math.PI / 180))}
+                             stroke="#8B5CF6"
+                             strokeWidth="3"
+                             strokeLinecap="round"
+                           />
+                         )}
+                         {clockMode === 'hour' && (
+                           <line
+                             x1="100"
+                             y1="100"
+                             x2={100 + 50 * Math.cos((((callbackHour % 12) * 30 + callbackMinute * 0.5) - 90) * (Math.PI / 180))}
+                             y2={100 + 50 * Math.sin((((callbackHour % 12) * 30 + callbackMinute * 0.5) - 90) * (Math.PI / 180))}
+                             stroke="#8B5CF6"
+                             strokeWidth="4"
+                             strokeLinecap="round"
+                           />
+                         )}
+                         <circle cx="100" cy="100" r="4" fill="#8B5CF6" />
+                       </svg>
+                     </div>
+                     <div className="flex gap-2 w-full">
+                       <Button
+                         type="button"
+                         variant={clockMode === 'hour' ? "default" : "outline"}
+                         size="sm"
+                         className="flex-1"
+                         onClick={() => setClockMode('hour')}
+                       >
+                         Hour
+                       </Button>
+                       <Button
+                         type="button"
+                         variant={clockMode === 'minute' ? "default" : "outline"}
+                         size="sm"
+                         className="flex-1"
+                         onClick={() => setClockMode('minute')}
+                       >
+                         Minute
+                       </Button>
+                     </div>
+                     <div className="flex gap-2 w-full">
+                       <Button
+                         type="button"
+                         variant={callbackIsAM ? "default" : "outline"}
+                         size="sm"
+                         className="flex-1"
+                         onClick={() => setCallbackIsAM(true)}
+                       >
+                         AM
+                       </Button>
+                       <Button
+                         type="button"
+                         variant={!callbackIsAM ? "default" : "outline"}
+                         size="sm"
+                         className="flex-1"
+                         onClick={() => setCallbackIsAM(false)}
+                       >
+                         PM
+                       </Button>
+                     </div>
+                   </div>
+                 </div>
+                 {callbackDate && (
+                   <div className="mt-4 rounded-md bg-muted p-2 text-sm">
+                     <span className="text-muted-foreground">Scheduled for: </span>
+                     <span className="font-medium">
+                       {format(callbackDate, "PPP")} at {((callbackHour % 12) || 12)}:{callbackMinute.toString().padStart(2, '0')} {callbackIsAM ? 'AM' : 'PM'}
+                     </span>
+                   </div>
+                 )}
+                 <DialogFooter className="flex flex-col sm:flex-row sm:justify-end sm:gap-2">
+                   <Button variant="outline" className="w-full sm:w-auto" onClick={handleCloseCallBackDialog}>
+                     Cancel
+                   </Button>
+                   <Button
+                     className="w-full sm:w-auto"
+                     onClick={handleSubmitCallBackLater}
+                     disabled={!callbackDate || updating}
+                   >
+                     Schedule
+                   </Button>
+                 </DialogFooter>
+               </DialogContent>
+             </Dialog>
         </div>
       </div>
       
