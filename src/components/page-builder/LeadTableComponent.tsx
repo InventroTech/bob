@@ -257,6 +257,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
+  const lastFetchedTokenRef = useRef<string | null>(null); // Track last fetched session token
+  const lastFetchedConfigRef = useRef<string>(''); // Track last fetched config/filter combination
 
   // Normalize filters to ensure non-empty, unique keys
   const normalizedFilters = useMemo(() => {
@@ -1139,6 +1141,25 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }
         
         const authToken = session?.access_token;
+        
+        // Prevent redundant fetches: check if we've already fetched with this token and config
+        const currentConfigKey = JSON.stringify({
+          apiEndpoint: config?.apiEndpoint,
+          defaultFilters: config?.defaultFilters,
+          normalizedFilters: normalizedFilters.map(f => f.key),
+          entityType: config?.entityType,
+          hasActiveFilters
+        });
+        
+        // Only skip if token and config haven't changed and we have data
+        if (authToken && 
+            lastFetchedTokenRef.current === authToken && 
+            lastFetchedConfigRef.current === currentConfigKey) {
+          console.log('Skipping redundant fetch - same token and config');
+          setLoading(false);
+          return;
+        }
+        
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         const endpoint = config?.apiEndpoint || '/api/records/';
 
@@ -1230,6 +1251,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           ...prev,
           sources: uniqueSources as string[]
         }));
+        
+        // Update refs to track what we've fetched
+        if (authToken) {
+          lastFetchedTokenRef.current = authToken;
+          lastFetchedConfigRef.current = currentConfigKey;
+        }
       } catch (error) {
         console.error('Error fetching leads:', error);
         setData([]);
@@ -1242,8 +1269,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
     if (session?.access_token) {
       fetchLeads();
+    } else {
+      // Reset refs when session is lost
+      lastFetchedTokenRef.current = null;
+      lastFetchedConfigRef.current = '';
     }
-  }, [session, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType]);
+  }, [session?.access_token, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, hasActiveFilters]);
 
   // Cleanup on unmount
   useEffect(() => {

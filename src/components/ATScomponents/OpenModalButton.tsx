@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DynamicForm, DynamicFormData } from './DynamicForm';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface OpenModalButtonConfig {
   buttonTitle?: string;
@@ -13,6 +15,23 @@ export interface OpenModalButtonConfig {
   submitEndpoint?: string;
   successMessage?: string;
   width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+  tenantSlug?: string;
+}
+
+// Job interface to get full job details
+interface Job {
+  id: string;
+  title: string;
+  description: string;
+  department?: string;
+  location?: string;
+  type?: string;
+  status: string;
+  deadline?: string;
+  salary?: string;
+  criteria?: string;
+  skills?: string;
+  form: DynamicFormData;
 }
 
 interface OpenModalButtonProps {
@@ -24,10 +43,12 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
   config = {},
   className = ''
 }) => {
+  const { tenantId } = useTenant(); // Get tenant ID from hook
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [currentForm, setCurrentForm] = useState<DynamicFormData | null>(null);
+  const [currentJob, setCurrentJob] = useState<Job | null>(null);
 
   // Default configuration
   const {
@@ -38,8 +59,12 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
     selectedJobId,
     submitEndpoint = '/api/job-applications',
     successMessage = 'Application submitted successfully!',
-    width = 'lg'
+    width = 'lg',
+    tenantSlug
   } = config;
+
+  // Get API prefix from config (default to supabase)
+  const apiPrefix = 'renderer'; // OpenModalButton typically uses renderer API
 
   // Load job form when selectedJobId changes
   useEffect(() => {
@@ -51,6 +76,7 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
           const job = jobs.find((j: any) => j.id === selectedJobId);
           if (job) {
             setCurrentForm(job.form);
+            setCurrentJob(job);
           }
         } catch (error) {
           console.error('Error loading job form:', error);
@@ -120,19 +146,109 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
     setIsSubmitting(true);
     
     try {
-      // Simulate API call - replace with actual endpoint
-      const response = await fetch(submitEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jobId: selectedJobId,
-          formId: formToUse.id,
-          formTitle: formToUse.title,
-          responses: formData,
+      // Construct full URL based on API prefix
+      let url = submitEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${submitEndpoint}` : submitEndpoint;
+      }
+
+      // Prepare headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+      }
+
+      console.log('Submitting application to:', url);
+      console.log('Using tenant slug:', effectiveTenantSlug);
+      console.log('Request headers:', headers);
+
+      // Extract name, email, phone from form data (these are not answers)
+      let applicantName = formData['fullName'] || formData['name'] || '';
+      let applicantEmail = formData['email'] || '';
+      let applicantPhone = formData['phone'] || '';
+      
+      // Check if questions are named fields (based on title)
+      formToUse.questions.forEach((question) => {
+        const questionTitle = question.title.toLowerCase();
+        const answer = formData[question.id];
+        
+        if (answer) {
+          if (questionTitle.includes('name') && questionTitle.includes('full')) {
+            applicantName = applicantName || String(answer);
+          } else if (questionTitle.includes('email')) {
+            applicantEmail = applicantEmail || String(answer);
+          } else if (questionTitle.includes('phone')) {
+            applicantPhone = applicantPhone || String(answer);
+          }
+        }
+      });
+
+      // If still no name, use first response
+      if (!applicantName) {
+        applicantName = formData[formToUse.questions[0]?.id] || 'Anonymous';
+      }
+
+      // Map remaining questions to answers format (a1, a2, a3...)
+      // Skip questions that are name, email, phone, or resume
+      const answers: Record<string, string> = {};
+      let answerIndex = 1;
+      
+      formToUse.questions.forEach((question) => {
+        const questionTitle = question.title.toLowerCase();
+        const isNameField = questionTitle.includes('name') && questionTitle.includes('full');
+        const isEmailField = questionTitle.includes('email');
+        const isPhoneField = questionTitle.includes('phone');
+        const isResumeField = questionTitle.includes('resume') || questionTitle.includes('cv');
+        
+        // Skip default fields, only include custom questions in answers
+        if (!isNameField && !isEmailField && !isPhoneField && !isResumeField) {
+          const answer = formData[question.id];
+          if (answer) {
+            answers[`a${answerIndex}`] = String(answer);
+            answerIndex++;
+          }
+        }
+      });
+
+      // Format application in backend format
+      const applicationPayload = {
+        entity_type: "Applicant",
+        name: applicantName, // Name in main payload
+        data: {
+          name: applicantName, // Name also in data section
+          jobId: selectedJobId || '',
+          department: currentJob?.department || '',
+          salary: currentJob?.salary || '',
+          location: currentJob?.location || '',
+          criteria: currentJob?.criteria || '',
+          skills: currentJob?.skills || '',
+          other_description: currentJob?.description || '',
+          email: applicantEmail,
+          phone: applicantPhone,
+          resumeUrl: formData['resume'] || '',
+          answers: answers,
           submittedAt: new Date().toISOString()
-        })
+        }
+      };
+
+      console.log('Application payload:', applicationPayload);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(applicationPayload)
       });
 
       if (response.ok) {

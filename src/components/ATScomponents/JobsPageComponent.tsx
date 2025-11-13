@@ -14,10 +14,13 @@ import {
   Users, 
   Briefcase,
   Filter,
-  ExternalLink
+  ExternalLink,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DynamicForm, DynamicFormData } from './DynamicForm';
+import { supabase } from '@/lib/supabase';
+import { useTenant } from '@/hooks/useTenant';
 
 // Job interface
 interface Job {
@@ -29,7 +32,7 @@ interface Job {
   type?: 'full-time' | 'part-time' | 'contract' | 'internship';
   status: 'active' | 'inactive' | 'draft';
   deadline?: string;
-  salary?: {
+  salary?: string | {
     min?: number;
     max?: number;
     currency?: string;
@@ -47,13 +50,37 @@ interface Job {
 }
 
 interface JobsPageComponentConfig {
+  // Basic Settings
   title?: string;
   description?: string;
+  
+  // API Configuration
+  apiEndpoint?: string;
+  apiPrefix?: 'supabase' | 'renderer';
+  useDemoData?: boolean;
+  tenantSlug?: string;
+  submitEndpoint?: string; // Endpoint for submitting applications
+  
+  // Display Options
   showFilters?: boolean;
   showStats?: boolean;
   layout?: 'grid' | 'list';
   maxJobs?: number;
   allowApplications?: boolean;
+  
+  // Data Mapping
+  dataMapping?: {
+    idField?: string;
+    titleField?: string;
+    descriptionField?: string;
+    departmentField?: string;
+    locationField?: string;
+    typeField?: string;
+    statusField?: string;
+    deadlineField?: string;
+    salaryField?: string;
+    createdAtField?: string;
+  };
 }
 
 interface JobsPageComponentProps {
@@ -277,8 +304,11 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   config = {},
   className = ''
 }) => {
+  const { tenantId } = useTenant(); // Get tenant ID from hook
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -292,15 +322,247 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   const {
     title = 'Available Positions',
     description = 'Discover exciting opportunities and take the next step in your career',
+    apiEndpoint,
+    apiPrefix = 'supabase',
+    useDemoData = false,
+    tenantSlug,
+    submitEndpoint = '/crm-records/records/',
     showFilters = true,
     showStats = true,
     layout = 'grid',
     maxJobs = 10,
-    allowApplications = true
+    allowApplications = true,
+    dataMapping = {}
   } = config;
 
-  // Load jobs (demo data + localStorage jobs)
-  useEffect(() => {
+  // Data mapping helper
+  const mapApiDataToJob = (apiData: any): Job => {
+    console.log('    📥 Raw API data:', apiData);
+    
+    // Backend returns: { id, entity_type, name, data: {...} }
+    const jobData = apiData.data || apiData;
+    console.log('    📦 Job data (nested):', jobData);
+    
+    const {
+      idField = 'id',
+      titleField = 'title',
+      descriptionField = 'other_description',
+      departmentField = 'department',
+      locationField = 'location',
+      typeField = 'type',
+      statusField = 'status',
+      deadlineField = 'deadline',
+      salaryField = 'salary',
+      createdAtField = 'createdAt'
+    } = dataMapping;
+
+    // Extract questions from backend format and convert to form questions
+    const backendQuestions = jobData.questions || {};
+    console.log('    ❓ Backend questions:', backendQuestions);
+    
+    const formQuestions: any[] = Object.entries(backendQuestions).map(([key, questionText]) => ({
+      id: key,
+      type: 'text',
+      title: String(questionText),
+      required: true,
+      placeholder: 'Enter your answer here...'
+    }));
+    
+    console.log('    ✓ Converted to form questions:', formQuestions.length, 'questions');
+
+    // Add default questions if none provided
+    if (formQuestions.length === 0) {
+      formQuestions.push(
+        {
+          id: 'fullName',
+          type: 'text',
+          title: 'Full Name',
+          required: true,
+          placeholder: 'Enter your full name'
+        },
+        {
+          id: 'email',
+          type: 'text',
+          title: 'Email Address',
+          required: true,
+          placeholder: 'your@email.com'
+        },
+        {
+          id: 'resume',
+          type: 'file',
+          title: 'Resume',
+          required: true,
+          placeholder: 'Upload your resume'
+        }
+      );
+    }
+
+    const form: DynamicFormData = {
+      id: jobData.formId || `form_${apiData.id || Date.now()}`,
+      title: jobData.formTitle || `Application for ${jobData.title || apiData.name}`,
+      description: 'Please fill out this application form to apply for this position.',
+      questions: formQuestions,
+      settings: {
+        allowMultipleSubmissions: false,
+        showProgressBar: true,
+        collectEmail: true
+      }
+    };
+
+    return {
+      id: apiData[idField] || apiData.id || '',
+      title: jobData[titleField] || jobData.title || apiData.name || '',
+      description: jobData[descriptionField] || jobData.other_description || '',
+      department: jobData[departmentField] || jobData.department || '',
+      location: jobData[locationField] || jobData.location || '',
+      type: jobData[typeField] || jobData.type || 'full-time',
+      status: jobData[statusField] || jobData.status || 'active',
+      deadline: jobData[deadlineField] || jobData.deadline || '',
+      salary: jobData[salaryField] || jobData.salary || '', // Can be string or object
+      requirements: jobData.criteria ? [jobData.criteria] : (jobData.requirements || []),
+      benefits: jobData.benefits || [],
+      form: form,
+      createdAt: jobData[createdAtField] || jobData.createdAt || apiData.created_at || new Date().toISOString(),
+      applicationsCount: jobData.applicationsCount || 0,
+      company: jobData.company || {
+        name: jobData.company_name || 'Company',
+        logo: jobData.company_logo,
+        website: jobData.company_website
+      }
+    };
+  };
+
+  // API fetching function
+  const fetchJobs = async () => {
+    if (!apiEndpoint || useDemoData) {
+      // Use demo data + localStorage if no API endpoint or demo mode
+      console.log('Using demo data:', useDemoData ? 'Demo mode enabled' : 'No API endpoint configured');
+      loadLocalJobs();
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Construct full URL based on API prefix
+      let url = apiEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      }
+
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+      }
+
+      console.log('Fetching jobs from:', url);
+      console.log('Using tenant slug:', effectiveTenantSlug);
+      console.log('Request headers:', headers);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
+      });
+
+      console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error('Response text:', responseText);
+        
+        if (responseText.includes('<!DOCTYPE')) {
+          throw new Error(`API endpoint returned HTML instead of JSON. This usually means the endpoint doesn't exist or requires authentication. Status: ${response.status}`);
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status} - ${responseText}`);
+      }
+
+      // Check content type
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text();
+        console.error('Non-JSON response:', responseText);
+        
+        if (responseText.includes('<!DOCTYPE')) {
+          throw new Error('API endpoint returned HTML instead of JSON. Please check if the endpoint exists and is accessible.');
+        }
+        
+        throw new Error(`Expected JSON response but got: ${contentType || 'unknown'}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ API response data:', data);
+      console.log('  Response type:', Array.isArray(data) ? 'Array' : 'Object');
+      
+      // Handle different response structures
+      // Backend returns: { data: [...], page_meta: {...} }
+      let jobsData;
+      if (Array.isArray(data)) {
+        jobsData = data;
+      } else if (data.data && Array.isArray(data.data)) {
+        jobsData = data.data; // Extract from wrapper
+        console.log('  Page meta:', data.page_meta);
+      } else {
+        jobsData = data.jobs || [];
+      }
+      
+      console.log('  Number of items:', jobsData.length);
+      
+      if (!Array.isArray(jobsData)) {
+        console.warn('API response is not an array:', jobsData);
+        throw new Error('API response does not contain a valid jobs array');
+      }
+      
+      console.log('📊 Jobs data to map:', jobsData.length, 'jobs');
+      
+      // Map API data to our Job interface
+      const mappedJobs = jobsData.map((job, index) => {
+        console.log(`  Mapping job ${index + 1}:`, job);
+        const mapped = mapApiDataToJob(job);
+        console.log(`  ✓ Mapped to:`, mapped);
+        return mapped;
+      });
+      console.log('✅ All mapped jobs:', mappedJobs);
+      
+      // Apply maxJobs limit (show all statuses, not just active)
+      // Filter by status can be done by user using the filter UI
+      const limitedJobs = mappedJobs.slice(0, maxJobs);
+      console.log('📋 Jobs to display:', limitedJobs.length, '(after maxJobs limit)');
+      
+      setJobs(limitedJobs);
+      setFilteredJobs(limitedJobs);
+    } catch (err) {
+      console.error('Error fetching jobs:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch jobs';
+      setError(errorMessage);
+      
+      // Show detailed error for debugging
+      if (errorMessage.includes('<!DOCTYPE')) {
+        setError('API endpoint returned HTML instead of JSON. Please check:\n1. The endpoint URL is correct\n2. The API server is running\n3. Authentication is not required\n4. CORS is properly configured');
+      }
+      
+      // Fallback to local jobs on error
+      loadLocalJobs();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load local jobs (demo + localStorage)
+  const loadLocalJobs = () => {
     const savedJobs = localStorage.getItem('ats-jobs');
     let allJobs = [...demoJobs];
     
@@ -319,7 +581,12 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     const limitedJobs = allJobs.slice(0, maxJobs);
     setJobs(limitedJobs);
     setFilteredJobs(limitedJobs);
-  }, [maxJobs]);
+  };
+
+  // Load jobs on component mount and when API config changes
+  useEffect(() => {
+    fetchJobs();
+  }, [apiEndpoint, apiPrefix, useDemoData, maxJobs]);
 
   // Filter jobs based on search and filters
   useEffect(() => {
@@ -383,19 +650,120 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     setIsSubmitting(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const applicationData = {
-        jobId: selectedJob.id,
-        jobTitle: selectedJob.title,
-        company: selectedJob.company?.name,
-        formId: selectedJob.form.id,
-        responses: formData,
-        submittedAt: new Date().toISOString()
+      // Construct full URL based on API prefix
+      let url = submitEndpoint;
+      if (apiPrefix === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${submitEndpoint}` : submitEndpoint;
+      }
+
+      // Prepare headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
       };
+
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+      }
+
+      // Extract name, email, phone from form data (these are not answers)
+      // Check both standard IDs and question IDs (q1, q2, q3 might be name/email/phone)
+      let applicantName = formData['fullName'] || formData['name'] || '';
+      let applicantEmail = formData['email'] || '';
+      let applicantPhone = formData['phone'] || '';
       
-      console.log('Application submitted:', applicationData);
+      // Find questions that are likely name/email/phone based on title
+      selectedJob.form.questions.forEach((question) => {
+        const questionTitle = question.title.toLowerCase();
+        const answer = formData[question.id];
+        
+        if (answer) {
+          if (questionTitle.includes('name') && questionTitle.includes('full')) {
+            applicantName = applicantName || String(answer);
+          } else if (questionTitle.includes('email')) {
+            applicantEmail = applicantEmail || String(answer);
+          } else if (questionTitle.includes('phone')) {
+            applicantPhone = applicantPhone || String(answer);
+          }
+        }
+      });
+
+      // If still no name, try to extract from any "name" field
+      if (!applicantName) {
+        applicantName = formData[selectedJob.form.questions[0]?.id] || 'Anonymous';
+      }
+
+      // Map remaining questions to answers format (a1, a2, a3...)
+      // Skip questions that are name, email, phone, or resume
+      const answers: Record<string, string> = {};
+      let answerIndex = 1;
+      
+      selectedJob.form.questions.forEach((question) => {
+        const questionTitle = question.title.toLowerCase();
+        const isNameField = questionTitle.includes('name') && questionTitle.includes('full');
+        const isEmailField = questionTitle.includes('email');
+        const isPhoneField = questionTitle.includes('phone');
+        const isResumeField = questionTitle.includes('resume') || questionTitle.includes('cv');
+        
+        // Skip default fields, only include custom questions in answers
+        if (!isNameField && !isEmailField && !isPhoneField && !isResumeField) {
+          const answer = formData[question.id];
+          if (answer) {
+            answers[`a${answerIndex}`] = String(answer);
+            answerIndex++;
+          }
+        }
+      });
+
+      // Format application in backend format
+      const applicationPayload = {
+        entity_type: "Applicant",
+        name: applicantName, // Name in main payload
+        data: {
+          name: applicantName, // Name also in data section
+          jobId: selectedJob.id,
+          department: selectedJob.department || '',
+          salary: typeof selectedJob.salary === 'string' ? selectedJob.salary : '',
+          location: selectedJob.location || '',
+          criteria: selectedJob.requirements?.join(', ') || '',
+          skills: '', // Can be added if needed
+          other_description: selectedJob.description || '',
+          email: applicantEmail,
+          phone: applicantPhone,
+          resumeUrl: formData['resume'] || '',
+          answers: answers,
+          submittedAt: new Date().toISOString()
+        }
+      };
+
+      console.log('Submitting application to:', url);
+      console.log('Using tenant slug:', effectiveTenantSlug);
+      console.log('Application payload:', applicationPayload);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(applicationPayload)
+      });
+
+      console.log('Application response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Application error response:', errorText);
+        throw new Error(`Application submission failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Application submitted successfully:', result);
       
       toast.success('Application submitted successfully! We\'ll be in touch soon.');
       setFormData({});
@@ -411,7 +779,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       
     } catch (error) {
       console.error('Application submission error:', error);
-      toast.error('Failed to submit application. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit application';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -493,8 +862,15 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     }
   };
 
-  const formatSalary = (salary?: { min?: number; max?: number; currency?: string }) => {
+  const formatSalary = (salary?: { min?: number; max?: number; currency?: string } | string) => {
     if (!salary) return null;
+    
+    // If salary is a string (like "55LPA" from backend), return as-is
+    if (typeof salary === 'string') {
+      return salary;
+    }
+    
+    // If salary is an object, format it
     const { min, max, currency = 'USD' } = salary;
     
     if (min && max) {
@@ -524,6 +900,41 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
             {description}
           </p>
         </div>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <span className="ml-3 text-gray-600">Loading jobs...</span>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mx-4">
+            <div className="flex items-start">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-semibold text-red-800 mb-2">API Error</h4>
+                <div className="text-red-700 text-sm whitespace-pre-line">{error}</div>
+                {apiEndpoint && (
+                  <div className="mt-3 p-3 bg-red-100 rounded border text-xs">
+                    <strong>Debug Info:</strong><br />
+                    Endpoint: <code className="bg-red-200 px-1 rounded">{apiEndpoint}</code><br />
+                    API Type: <code className="bg-red-200 px-1 rounded">{apiPrefix}</code><br />
+                    <br />
+                    <strong>Common Solutions:</strong><br />
+                    • Check if the API endpoint exists and is accessible<br />
+                    • Verify the API server is running<br />
+                    • Ensure CORS is configured for your domain<br />
+                    • Check if authentication headers are required<br />
+                    • Verify the endpoint returns JSON, not HTML
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         {showStats && (

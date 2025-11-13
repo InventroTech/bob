@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Bell, PanelLeft, Sparkles, Users } from 'lucide-react';
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
+import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -32,6 +33,8 @@ const CustomAppLayout: React.FC = () => {
     "Pending Leads": <Sparkles className="h-4 w-4" />,
     "All Leads": <Users className="h-4 w-4" />,
   };
+  const dataExtractedRef = useRef(false); // Track if we've already extracted data from JWT
+  
   // Debug user data
   useEffect(() => {
     if (user) {
@@ -41,50 +44,51 @@ const CustomAppLayout: React.FC = () => {
     }
   }, [user]);
 
-  // Step 1: Get current user and their role
+  // Step 1: Get current user and their role from JWT (no API calls needed)
   useEffect(() => {
-    const fetchUserRole = async () => {
-      console.log("fetching user role")
-      
-      if (!user?.email) {
-        console.warn('Email missing.');
+    // Reset ref when user changes (e.g., on logout/login)
+    if (!user) {
+      dataExtractedRef.current = false;
+      setTenantId(null);
+      setUserRoleId(null);
+      return;
+    }
+
+    const extractUserDataFromJWT = async () => {
+      // Prevent redundant extraction when user object changes (e.g., on page focus)
+      if (dataExtractedRef.current && tenantId && userRoleId) {
         return;
       }
       
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     
-      if (sessionError || !sessionData.session) {
+      if (sessionError || !sessionData.session?.access_token) {
         console.error('No session found:', sessionError);
         return;
       }
     
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('email', user.email)
-        .single();
+      // Extract tenant_id and role_id from JWT token
+      const token = sessionData.session.access_token;
+      const extractedTenantId = getTenantIdFromJWT(token);
+      const extractedRoleId = getRoleIdFromJWT(token);
       
-      console.log("tenantData", tenantData)
-      setTenantId(tenantData?.tenant_id || null);
-      localStorage.setItem('tenant_id', tenantData?.tenant_id || null);
-    
-      const { data, error } = await supabase
-        .from('users')
-        .select('role_id')
-        .eq('email', user.email)
-        .single();
-    
-      console.log("data", data)
-      if (error) {
-        console.error('Failed to fetch user role:', error);
-        toast.error('Could not load user role');
-        return;
+      if (extractedTenantId && extractedRoleId) {
+        console.log('Extracted from JWT - tenantId:', extractedTenantId, 'roleId:', extractedRoleId);
+        setTenantId(extractedTenantId);
+        setUserRoleId(extractedRoleId);
+        localStorage.setItem('tenant_id', extractedTenantId);
+        dataExtractedRef.current = true;
+      } else {
+        console.warn('Could not extract tenant_id or role_id from JWT');
+        // Fallback: try to get from localStorage if available
+        const cachedTenantId = localStorage.getItem('tenant_id');
+        if (cachedTenantId) {
+          setTenantId(cachedTenantId);
+        }
       }
-    
-      setUserRoleId(data?.role_id || null);
     };
     
-    fetchUserRole();
+    extractUserDataFromJWT();
   }, [user]);
 
   // Step 2: Fetch pages that match the user's role

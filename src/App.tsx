@@ -33,6 +33,7 @@ import AddUserPage from "./pages/AddUserPage";
 import AuthCallbackPage from "./pages/AuthCallBackPage";
 import LeadTypeAssignmentPageWrapper from "./pages/LeadTypeAssignmentPageWrapper";
 import { JobsPage } from "./pages/JobsPage";
+import PublicTenantPage from "./pages/PublicTenantPage";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -70,6 +71,9 @@ const App = () => (
           {/* Custom App Routes */}
           <Route path="/app/:tenantSlug/login" element={<CustomAppAuthPage />} />
           <Route path="/app/:tenantSlug/auth/callback" element={<AuthCallbackPage />} />
+          
+          {/* Public Tenant Pages - No Authentication Required */}
+          <Route path="/app/:tenantSlug/public/:pageId" element={<PublicTenantPage />} />
 
           <Route path="/app/:tenantSlug" element={<ProtectedAppRoute />}>  
             <Route element={<CustomAppLayout />}> 
