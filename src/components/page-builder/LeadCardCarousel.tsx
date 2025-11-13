@@ -15,9 +15,14 @@ import {
   Coffee,
   CheckCircle2,
   XCircle,
-  Circle,
+  AlertCircle,
+  Clock,
+  MessageSquare,
   X,
 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { LeadActionButton } from "./LeadActionButton";
 
 interface LeadCardCarouselProps {
   config?: {
@@ -135,6 +140,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     nextFollowUp: "",
     leadStartTime: new Date(),
   });
+  const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
 
   const isInitialized = useRef(false);
 
@@ -189,6 +196,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const handleCallLead = (phone?: string) => {
     const clean = normalizePhoneForLinks(phone);
     if (!clean) return;
+    setActionButtonsVisible(true);
     window.open(`tel:${clean}`);
   };
 
@@ -263,6 +271,196 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     return [];
   }, [currentLead]);
+
+  type TaskStatus = "completed" | "current" | "pending";
+
+  interface TaskStep {
+    id: string;
+    label: string;
+    status: TaskStatus;
+    description?: string;
+  }
+
+  const taskSteps = useMemo<TaskStep[]>(() => {
+    if (!leadTasks.length) return [];
+
+    const rawSteps = leadTasks.map((task, index) => {
+      if (typeof task === "string") {
+        return {
+          id: `task-${index}`,
+          label: task,
+          description: undefined,
+          statusText: "",
+        };
+      }
+
+      if (typeof task === "object" && task !== null) {
+        const cast = task as LeadTask;
+        const statusText = (() => {
+          const value = cast.status ?? cast.rawStatus;
+          if (value === null || value === undefined) return "";
+          return String(value);
+        })();
+
+        return {
+          id: String(cast.id ?? cast.title ?? cast.name ?? `task-${index}`),
+          label: cast.title || cast.name || `Task ${index + 1}`,
+          description: cast.description,
+          statusText,
+        };
+      }
+
+      return {
+        id: `task-${index}`,
+        label: `Task ${index + 1}`,
+        description: undefined,
+        statusText: "",
+      };
+    });
+
+    let currentMarked = false;
+    const normalised = rawSteps.map((step, index) => {
+      const normalizedStatus = step.statusText.toLowerCase().trim();
+      let status: TaskStatus = "pending";
+      if (!normalizedStatus && index === 0) {
+        status = "current";
+        currentMarked = true;
+      } else if (
+        normalizedStatus.includes("done") ||
+        normalizedStatus.includes("yes") ||
+        normalizedStatus.includes("complete")
+      ) {
+        status = "completed";
+      } else if (
+        normalizedStatus.includes("current") ||
+        normalizedStatus.includes("progress") ||
+        normalizedStatus.includes("ongoing")
+      ) {
+        status = "current";
+        currentMarked = true;
+      }
+
+      return {
+        id: step.id,
+        label: step.label,
+        description: step.description,
+        status,
+        statusText: step.statusText,
+      };
+    });
+
+    if (!currentMarked) {
+      const firstPendingIndex = normalised.findIndex(step => step.status === "pending");
+      if (firstPendingIndex >= 0) {
+        normalised[firstPendingIndex].status = "current";
+      } else if (normalised.length) {
+        normalised[0].status = "current";
+      }
+    }
+
+    return normalised.map(step => ({
+      id: step.id,
+      label: step.label,
+      description: step.description,
+      status: step.status,
+    }));
+  }, [leadTasks]);
+
+  const TaskProgressList: React.FC<{ steps: TaskStep[] }> = ({ steps }) => {
+    if (!steps.length) return null;
+
+    return (
+      <ol
+        className="relative flex flex-col gap-4"
+        style={{
+          fontFamily: '"Open Sans", sans-serif',
+          fontWeight: 500,
+          fontSize: "16px",
+          lineHeight: "24px",
+          letterSpacing: "0%",
+        }}
+      >
+        {steps.map((step, index) => (
+          <li key={step.id} className="flex min-h-[44px] gap-4">
+            <div className="flex flex-col items-center">
+              <div
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors",
+                  step.status === "completed" && "border-emerald-500 bg-emerald-100 text-emerald-600",
+                  step.status === "current" && "border-slate-900 bg-slate-900 text-white",
+                  step.status === "pending" && "border-slate-200 bg-white text-slate-300"
+                )}
+              >
+                {step.status === "completed" ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : step.status === "current" ? (
+                  <span className="block h-2.5 w-2.5 rounded-full bg-white" />
+                ) : (
+                  <span className="block h-2 w-2 rounded-full bg-slate-300" />
+                )}
+              </div>
+              {index !== steps.length - 1 && <div className="mt-1 h-full w-px flex-1 bg-slate-200" />}
+            </div>
+            <div className="pt-1">
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  step.status === "current"
+                    ? "text-slate-900"
+                    : step.status === "completed"
+                    ? "text-slate-600"
+                    : "text-slate-500"
+                )}
+              >
+                {step.label}
+              </p>
+              {step.description && <p className="text-xs text-slate-400">{step.description}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+    );
+  };
+
+  interface LeadInfoTileProps {
+    icon: React.ElementType;
+    label: string;
+    value?: string | number | null;
+    onClick?: () => void;
+  }
+
+  const LeadInfoTile: React.FC<LeadInfoTileProps> = ({ icon: Icon, label, value, onClick }) => {
+    const displayValue =
+      typeof value === "string" && value.trim().length > 0 ? value : value ?? "N/A";
+
+    const className = cn(
+      "flex w-full items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left",
+      onClick &&
+        "transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+    );
+
+    const content = (
+      <>
+        <Icon className="h-4 w-4 shrink-0 text-slate-500" />
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {label}
+          </span>
+          <span className="break-words text-sm font-semibold text-slate-800">{displayValue}</span>
+        </div>
+      </>
+    );
+
+    if (onClick) {
+      return (
+        <button type="button" onClick={onClick} className={className}>
+          {content}
+        </button>
+      );
+    }
+
+    return <div className={className}>{content}</div>;
+  };
 
   // Fetching the lead stats
   const fetchLeadStats = async () => {
@@ -361,6 +559,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       setCurrentLead(leadData);
       setShowPendingCard(false);
+      setActionButtonsVisible(false);
+      setProcessingAction(null);
       setLead(prev => ({
         ...prev,
         leadStatus: leadData.status || "New",
@@ -400,6 +600,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       nextFollowUp: "",
       leadStartTime: new Date(),
     });
+    setActionButtonsVisible(false);
+    setProcessingAction(null);
   };
 
   // Reusable helper to post CRM events
@@ -480,10 +682,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     const { event, success } = eventMap[action];
 
     const payload: Record<string, any> = {
-          notes: lead.notes || "",
-          remarks: currentLead.latest_remarks,
-          lead_id: currentLead.id,
-          user_id: currentLead.user_id,
+      notes: lead.notes || "",
+      remarks: currentLead.latest_remarks,
+      lead_id: currentLead.id,
+      user_id: currentLead.user_id,
     };
 
     if (extra?.reason) {
@@ -493,17 +695,22 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       payload.next_call_at = extra.nextCallAt;
     }
 
+    setProcessingAction(action);
+    try {
       const ok = await sendLeadEvent(
-      event,
-      payload,
-      { successTitle: "Success", successDescription: success }
-    );
+        event,
+        payload,
+        { successTitle: "Success", successDescription: success }
+      );
 
-    if (ok) {
-      await fetchFirstLead();
+      if (ok) {
+        await fetchFirstLead();
+      }
+
+      return ok;
+    } finally {
+      setProcessingAction(null);
     }
-
-    return ok;
   };
 
   const handleNotInterestedClick = () => {
@@ -770,236 +977,222 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     );
   }
 
+  const formattedCreatedAt = currentLead?.created_at
+    ? new Date(currentLead.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
+  const formattedPhoneNumber = primaryPhone ? formatPhoneForDisplay(primaryPhone) : "N/A";
+  const profileClickable = Boolean(
+    currentLead?.linkedin_profile || currentLead?.website || currentLead?.user_profile_link
+  );
+  const postCallActions = [
+    {
+      id: "trial-activated",
+      label: "Trail Accepted",
+      icon: CheckCircle2,
+      tone: "neutral" as const,
+      onClick: () => {
+        void handleActionButton("Trial Activated");
+      },
+      loadingKey: "Trial Activated",
+    },
+    {
+      id: "not-interested",
+      label: "Not Interested",
+      icon: MessageSquare,
+      tone: "neutral" as const,
+      onClick: handleNotInterestedClick,
+      loadingKey: "Not Interested",
+    },
+    {
+      id: "call-not-connected",
+      label: "Not Connected",
+      icon: AlertCircle,
+      tone: "neutral" as const,
+      onClick: () => {
+        void handleActionButton("Call Not Connected");
+      },
+      loadingKey: "Call Not Connected",
+    },
+    {
+      id: "call-back",
+      label: "Call Back",
+      icon: Clock,
+      tone: "neutral" as const,
+      onClick: handleOpenCallBackDialog,
+      loadingKey: "Call Back Later",
+    },
+  ].filter(Boolean);
+  const titleFont = { fontFamily: "Georgia, serif" };
+  const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
   // Showing the lead card
   return (
-    <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-      <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
-        <Button
-          onClick={handleTakeBreak}
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2"
-          disabled={updating}
-        >
-          <Coffee className="h-3 w-3" />
-          Take a Break
-        </Button>
-      </div>
-      <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
-        <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
+    <div className="flex h-full w-full flex-col gap-6">
+      <div className="relative flex h/full w/full">
+        <Card className="relative flex w-full flex-col overflow-hidden bg-white border-0 shadow-none">
           {fetchingNext && (
-            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                <p className="text-sm text-muted-foreground">Loading next lead...</p>
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-b-transparent" />
+                <p className="text-sm text-slate-500">Loading next lead...</p>
               </div>
             </div>
           )}
-          <div className="space-y-4">
-            {/* Main Lead Information */}
-            <div className="space-y-2">
-              {/* Customer Profile Section */}
-              <div className="bg-muted/50 p-4 rounded-md">
-                <div className="flex items-center gap-3">
+          <CardContent className="flex flex-col gap-8 p-6 bg-white" style={bodyFont}>
+            <div className="w-full border-b border-slate-200 px-5 pb-5">
+              <div className="flex flex-wrap items-start justify-between gap-6">
+                <div
+                  className={cn(
+                    "flex items-center gap-4",
+                    profileClickable && "cursor-pointer"
+                  )}
+                  onClick={profileClickable ? handleOpenProfile : undefined}
+                >
                   {currentLead?.display_pic_url ? (
                     <img
                       src={currentLead.display_pic_url}
-                      alt={`${currentLead.name || "Lead"} profile`}
-                      className="h-12 w-12 rounded-full object-cover"
+                      alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
+                      className="h-14 w-14 rounded-full object-cover"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove("hidden");
                       }}
                     />
                   ) : null}
-                  <User
-                    className={`h-12 w-12 text-primary ${currentLead?.display_pic_url ? "hidden" : ""}`}
-                  />
-                  
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="space-y-1">
-                        {/* Customer Full Name - Clickable to User Profile */}
-                        <a
-                          href={currentLead?.user_profile_link || "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-lg hover:text-blue-600 hover:underline cursor-pointer"
-                        >
-                          {currentLead?.customer_full_name || currentLead?.name || "N/A"}
-                        </a>
-                        <p className="text-xs text-muted-foreground">
-                          {currentLead?.affiliated_party || "N/A"}
-                        </p>
+                  <div
+                    className={cn(
+                      "flex h-14 w-14 items-center justify-center rounded-full bg-slate-100",
+                      currentLead?.display_pic_url ? "hidden" : ""
+                    )}
+                  >
+                    <User className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex flex-col gap-1">
+                    {currentLead?.user_profile_link ? (
+                      <a
+                        href={currentLead.user_profile_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-2xl font-semibold text-slate-900 hover:text-primary"
+                        style={titleFont}
+                      >
+                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                      </a>
+                    ) : (
+                      <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
+                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                      </h2>
+                    )}
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                        {currentLead?.affiliated_party && (
+                          <span className="font-medium text-slate-700">
+                            {currentLead.affiliated_party}
+                          </span>
+                        )}
+                        {currentLead?.lead_stage && (
+                          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            {currentLead.lead_stage}
+                          </span>
+                        )}
                       </div>
-                      
-                      {primaryPhone && (
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={`tel:${normalizePhoneForLinks(primaryPhone)}`}
-                            className="flex items-center gap-2 text-sm font-semibold text-white bg-black px-4 py-1.5 rounded-full shadow hover:bg-black/80 transition-colors"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleCallLead(primaryPhone);
-                            }}
-                          >
-                            <Phone className="h-4 w-4" />
-                            <span>{formatPhoneForDisplay(primaryPhone)}</span>
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
-                            className="flex items-center justify-center h-8 w-8 rounded-full bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
-                            aria-label="Open WhatsApp"
-                          >
-                            <FaWhatsapp className="h-4 w-4" />
-                          </button>
-                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {currentLead?.status && (
+                        <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          {currentLead.status}
+                        </span>
+                      )}
+                      {currentLead?.priority && (
+                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          Priority: {currentLead.priority}
+                        </span>
                       )}
                     </div>
-                    
-                    {/* Package to Pitch - Below Premium Count */}
-                    <div className="mt-1">
-                      <span className="text-xs text-muted-foreground">Package: </span>
-                      <span className="text-xs font-medium">{currentLead?.package_to_pitch || "N/A"}</span>
-                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Tasks */}
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Tasks</Label>
-                {leadTasks.length > 0 ? (
-                  <div className="relative mx-auto max-w-2xl pl-10">
-                    {leadTasks.map((task, index) => {
-                      const isObjectTask = typeof task === "object" && task !== null;
-                      const castTask = isObjectTask ? (task as LeadTask) : null;
-                      const title = isObjectTask
-                        ? castTask?.title || castTask?.name || `Task ${index + 1}`
-                        : task;
-                      const description =
-                        isObjectTask && typeof castTask?.description === "string"
-                          ? castTask?.description
-                          : "";
-                      const statusTextRaw = (() => {
-                        if (!isObjectTask) return "";
-                        const value = castTask?.status ?? castTask?.rawStatus;
-                        if (value === undefined || value === null) return "";
-                        return String(value);
-                      })();
-                      const statusNormalized = statusTextRaw.trim().toLowerCase();
-                      const isAffirmative = statusNormalized === "yes";
-                      const isNegative = statusNormalized === "no";
-                      const lineColor = isAffirmative
-                        ? "border-emerald-500"
-                        : isNegative
-                          ? "border-rose-400"
-                          : "border-gray-400";
-                      const dotColor = isAffirmative
-                        ? "bg-emerald-500"
-                        : isNegative
-                          ? "bg-rose-500"
-                          : "bg-gray-400";
-                      const lineStyle = isAffirmative ? "" : "border-dashed";
-                      const dueRaw =
-                        isObjectTask &&
-                        typeof ((castTask?.due_date ?? castTask?.dueDate)) === "string"
-                          ? (castTask?.due_date ?? castTask?.dueDate)
-                          : "";
-                      const due =
-                        dueRaw && !Number.isNaN(Date.parse(dueRaw))
-                          ? new Date(dueRaw).toLocaleString()
-                          : dueRaw;
-                      const key =
-                        (isObjectTask &&
-                          (castTask?.id ?? castTask?.title ?? castTask?.name)) ||
-                        `task-${index}`;
-                      const isLast = index === leadTasks.length - 1;
-
-                      return (
-                        <div key={key} className="relative pb-6 last:pb-0">
-                          {!isLast && (
-                            <span
-                              className={`absolute left-[11px] top-5 bottom-0 border-l-2 ${lineStyle} ${lineColor}`}
-                              aria-hidden="true"
-                            />
-                          )}
-                          <span
-                            className={`absolute left-[3px] top-3 h-5 w-5 rounded-full ${dotColor} shadow`}
-                            aria-hidden="true"
-                          />
-                          <div className="bg-muted/40 rounded-md px-6 py-4 ml-2">
-                            <p className="text-base font-semibold">
-                              {typeof title === "string" && title.length > 0 ? title : `Task ${index + 1}`}
-                            </p>
-                            {description && (
-                              <p className="text-sm text-muted-foreground mt-2 whitespace-pre-line">
-                                {description}
-                              </p>
-                            )}
-                            {(statusTextRaw || due) && (
-                              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mt-3">
-                                {statusTextRaw && (
-                                  <span className="font-medium capitalize">{statusTextRaw}</span>
-                                )}
-                                {due && <span className="font-medium">Due: {due}</span>}
-                  </div>
-                )}
-              </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                    onClick={handleTakeBreak}
+                    disabled={updating}
+                  >
+                    <Coffee className="h-4 w-4 text-gray-500" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                    onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
+                    disabled={!primaryPhone || updating || fetchingNext}
+                  >
+                    <FaWhatsapp className="h-4 w-4 text-[#344054]" />
+                    WhatsApp
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                    onClick={() => handleCallLead(primaryPhone)}
+                    disabled={!primaryPhone || updating || fetchingNext}
+                  >
+                    <Phone className="h-4 w-4" />
+                    <span>{formattedPhoneNumber}</span>
+                  </Button>
                 </div>
-                      );
-                    })}
-                </div>
-                ) : (
-                  <div className="bg-muted/50 p-2 rounded-md text-sm text-muted-foreground">
-                    No tasks available
-              </div>
-                )}
               </div>
             </div>
+            <div
+              className={cn(
+                "mt-8 grid gap-6",
+                currentLead?.location && "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+              )}
+            >
+              <div className="rounded-2xl border border-slate-200 p-5 w-full">
+                <div className="mb-4 flex items-center justify-between pl-2">
+                  <h3 className="text-lg font-semibold text-slate-900" style={titleFont}>Task Progress</h3>
+                </div>
+                {taskSteps.length ? (
+                  <div className="pl-4">
+                    <TaskProgressList steps={taskSteps} />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No tasks available.</p>
+                )}
+              </div>
+              {currentLead?.location ? (
+                <div className="space-y-3">
+                  <LeadInfoTile icon={AlertCircle} label="Location" value={currentLead.location} />
+                </div>
+              ) : null}
+            </div>
+          </CardContent>
+          <div className="border-t border-slate-100 bg-white px-6 py-4">
+            {actionButtonsVisible && postCallActions.length > 0 ? (
+              <div className="flex w-full flex-wrap items-center gap-3">
+                {postCallActions.map((action) => (
+                  <LeadActionButton
+                    key={action.id}
+                    icon={action.icon}
+                    label={action.label}
+                    onClick={action.onClick}
+                    disabled={updating || fetchingNext}
+                    loading={processingAction === action.loadingKey && updating}
+                    tone={action.tone}
+                    className="flex-1 min-w-[160px]"
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
-          
-            <div className="buttons flex flex-row flex-wrap items-center justify-center gap-4 sm:gap-5 md:gap-6 w-full max-w-full px-4">
-              <div className="flex flex-wrap justify-center items-center gap-3 mt-4 pt-3 w-full">
-                <Button
-                  onClick={() => handleActionButton("Trial Activated")}
-                  size="sm"
-                  variant="outline"
-                  className="w-full sm:w-40 bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:border-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={updating || fetchingNext}
-                >
-                  Trial Activated
-                </Button>
-                <Button
-                  onClick={handleNotInterestedClick}
-                  size="sm"
-                  variant="outline"
-                  className="w-full sm:w-40 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={updating || fetchingNext}
-                >
-                  Not Interested
-                </Button>
-                <Button
-                  onClick={() => handleActionButton("Call Not Connected")}
-                  size="sm"
-                  variant="outline"
-                  className="w-full sm:w-40 bg-white text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={updating || fetchingNext}
-                >
-                  Call Not Connected
-                </Button>
-                <Button
-                  onClick={handleOpenCallBackDialog}
-                  size="sm"
-                  variant="outline"
-                  className="w-full sm:w-40 bg-white text-purple-600 border-purple-300 hover:bg-purple-50 hover:border-purple-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={updating || fetchingNext}
-                >
-                  Call Back Later
-                </Button>
-                        </div>
-                      </div>
+        </Card>
+      </div>
             <Dialog open={showNotInterestedDialog} onOpenChange={(open) => {
               if (!open) {
                 handleCloseNotInterestedDialog();
@@ -1217,10 +1410,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                    </Button>
                  </DialogFooter>
                </DialogContent>
-             </Dialog>
-        </div>
-      </div>
-      
+            </Dialog>
+
       {/* Profile Modal */}
       {showProfileModal && (currentLead?.linkedin_profile || currentLead?.website) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">

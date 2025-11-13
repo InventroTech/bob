@@ -5,7 +5,7 @@ import {
   Grid3X3,
   Home, 
   Layout, 
-  PanelLeft, 
+  PanelLeft,
   Settings, 
   Users,
   UserPlus,
@@ -21,6 +21,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
+  SidebarRail,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { Table } from "lucide-react";
@@ -76,12 +78,15 @@ const sidebarItems = [
 
 const Sidebar = () => {
   return (
-    <SidebarComponent>
-      <SidebarHeader className="flex items-center px-4 py-2">
+    <SidebarComponent collapsible="icon">
+      <SidebarHeader className="flex flex-row items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2">
           <PanelLeft className="h-6 w-6 text-crm-primary" />
           <span className="font-bold text-lg">CRM Builder</span>
         </div>
+        <SidebarTrigger
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-sidebar-border bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent hover:text-primary"
+        />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -130,6 +135,7 @@ const Sidebar = () => {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      <SidebarRail />
     </SidebarComponent>
   );
 };
