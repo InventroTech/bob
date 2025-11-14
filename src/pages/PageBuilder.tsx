@@ -86,7 +86,6 @@ import { ApplicantTableComponent } from "@/components/ATScomponents/ApplicantTab
 import { ApplicantTableConfigComponent } from "@/components/ATScomponents/configs/ApplicantTableConfig";
 import { FileUploadPageComponent } from "@/components/page-builder/FileUploadPageComponent";
 import { FileUploadPageConfig } from "@/components/page-builder/FileUploadPageConfig";
-import { CardComponent } from "@/layout/CardEditLayout";
 import { Carousel } from "@/components/ui/carousel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
