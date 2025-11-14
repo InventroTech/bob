@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, PlusCircle, Settings, User } from "lucide-react";
+import { Bell, LogOut, Settings, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,11 +26,11 @@ interface NavbarProps {
 const Navbar = ({ user }: NavbarProps) => {
   const initials = user?.name
     ? user.name
-        .split(' ')
-        .map(n => n[0])
-        .join('')
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
         .toUpperCase()
-    : 'U';
+    : "U";
 
   return (
     <header className="border-b px-6 py-3">
@@ -42,34 +42,6 @@ const Navbar = ({ user }: NavbarProps) => {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <PlusCircle className="h-5 w-5" />
-                <span className="sr-only">Create new</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Create New</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Link to="/builder/new" className="flex w-full">
-                  Custom Page
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link to="/builder/templates/task" className="flex w-full">
-                  Task Page (Template)
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link to="/builder/templates/leads" className="flex w-full">
-                  Leads List (Template)
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
           <Button variant="outline" size="icon">
             <Bell className="h-5 w-5" />
             <span className="sr-only">Notifications</span>
@@ -77,32 +49,51 @@ const Navbar = ({ user }: NavbarProps) => {
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative rounded-full h-8 w-8 p-0" size="icon">
-                <Avatar>
+              <button className="flex items-center gap-3 rounded-full border border-gray-200 bg-white/80 px-3 py-1.5 shadow-sm transition hover:bg-white">
+                <Avatar className="h-8 w-8">
                   <AvatarImage src={user?.image} />
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
-              </Button>
+                <div className="hidden text-left sm:block">
+                  <p className="text-sm font-semibold leading-tight text-gray-900">{user?.name || "User"}</p>
+                  <p className="text-xs text-gray-500">{user?.email || "user@example.com"}</p>
+                </div>
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user?.name}</p>
-                  <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="flex items-center gap-3">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={user?.image} />
+                  <AvatarFallback className="text-lg">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-gray-900">{user?.name || "User"}</p>
+                  <p className="text-sm text-gray-500">{user?.email || "user@example.com"}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Link to="/profile" className="flex w-full">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
+              <DropdownMenuItem asChild>
+                <Link to="/profile" className="flex items-center gap-3">
+                  <User className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Profile</p>
+                    <p className="text-xs text-gray-500">View and edit your details</p>
+                  </div>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link to="/settings" className="flex w-full">
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
+              <DropdownMenuItem asChild>
+                <Link to="/settings" className="flex items-center gap-3">
+                  <Settings className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Settings</p>
+                    <p className="text-xs text-gray-500">Manage preferences</p>
+                  </div>
                 </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="flex items-center gap-3 text-red-600">
+                <LogOut className="h-4 w-4" />
+                <span>Logout</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
