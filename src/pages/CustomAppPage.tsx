@@ -77,9 +77,14 @@ const CustomAppPage: React.FC = () => {
         {Array.isArray(page.config)
           ? (page.config as any[]).map((component) => {
               const Renderer = componentMap[component.type];
-              return Renderer ? (
-                <Renderer key={component.id} {...component.props} config={component.config} />
-              ) : null;
+              if (!Renderer) return null;
+              return (
+                <Renderer
+                  key={component.id}
+                  {...component.props}
+                  config={component.config}
+                />
+              );
             })
           : null}
       </div>

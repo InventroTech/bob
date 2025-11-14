@@ -1,5 +1,5 @@
 import React from "react";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 import { cn } from "@/lib/utils";
@@ -19,15 +19,13 @@ interface DashboardLayoutProps {
 const DashboardLayout = ({ children, className, user }: DashboardLayoutProps) => {
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Navbar user={user} />
-          <main className={cn("flex-1 p-6", className)}>
-            {children}
-          </main>
-        </div>
-      </div>
+      <Sidebar />
+      <SidebarInset className="bg-background">
+        <Navbar user={user} />
+        <main className={cn("flex-1 overflow-auto p-6", className)}>
+          {children}
+        </main>
+      </SidebarInset>
     </SidebarProvider>
   );
 };
