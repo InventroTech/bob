@@ -28,6 +28,13 @@ import { DynamicForm, DynamicFormData, FormQuestion, QUESTION_TYPES, QuestionTyp
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 
+// Question with answer type interface
+interface QuestionWithType {
+  text: string;
+  type: QuestionType;
+  options?: string[]; // Options for select, radio, checkbox types
+}
+
 // Job interface with deadline
 export interface Job {
   id: string;
@@ -124,12 +131,41 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     skills: ''
   });
 
-  // Custom questions state for new job
-  const [customQuestions, setCustomQuestions] = useState<string[]>(['', '']);
+  // Custom questions state for new job (with answer type)
+  const [customQuestions, setCustomQuestions] = useState<QuestionWithType[]>([
+    { text: '', type: 'textarea' },
+    { text: '', type: 'textarea' }
+  ]);
+
+  // Edit job form state
+  const [editJobData, setEditJobData] = useState<{
+    title: string;
+    description: string;
+    department: string;
+    location: string;
+    type: 'full-time' | 'part-time' | 'contract' | 'internship';
+    deadline: string;
+    requireResume: boolean;
+    salary: string;
+    criteria: string;
+    skills: string;
+  }>({
+    title: '',
+    description: '',
+    department: '',
+    location: '',
+    type: 'full-time',
+    deadline: '',
+    requireResume: false,
+    salary: '',
+    criteria: '',
+    skills: ''
+  });
+  const [editCustomQuestions, setEditCustomQuestions] = useState<QuestionWithType[]>([]);
 
   // Add a new question field
   const addQuestionField = () => {
-    setCustomQuestions([...customQuestions, '']);
+    setCustomQuestions([...customQuestions, { text: '', type: 'textarea' }]);
   };
 
   // Remove a question field
@@ -139,11 +175,60 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     }
   };
 
-  // Update a question
+  // Update a question text
   const updateQuestion = (index: number, value: string) => {
     const updated = [...customQuestions];
-    updated[index] = value;
+    updated[index] = { ...updated[index], text: value };
     setCustomQuestions(updated);
+  };
+
+  // Update a question type
+  const updateQuestionType = (index: number, type: QuestionType) => {
+    const updated = [...customQuestions];
+    const question = updated[index];
+    updated[index] = { 
+      ...question, 
+      type,
+      // Initialize options for select/radio/checkbox types
+      options: (type === 'select' || type === 'radio' || type === 'checkbox') 
+        ? (question.options && question.options.length > 0 ? question.options : ['Option 1', 'Option 2', 'Option 3'])
+        : undefined
+    };
+    setCustomQuestions(updated);
+  };
+
+  // Add an option to a question
+  const addQuestionOption = (questionIndex: number) => {
+    const updated = [...customQuestions];
+    const question = updated[questionIndex];
+    if (!question.options) {
+      question.options = [];
+    }
+    question.options.push(`Option ${question.options.length + 1}`);
+    updated[questionIndex] = { ...question };
+    setCustomQuestions(updated);
+  };
+
+  // Remove an option from a question
+  const removeQuestionOption = (questionIndex: number, optionIndex: number) => {
+    const updated = [...customQuestions];
+    const question = updated[questionIndex];
+    if (question.options && question.options.length > 1) {
+      question.options = question.options.filter((_, i) => i !== optionIndex);
+      updated[questionIndex] = { ...question };
+      setCustomQuestions(updated);
+    }
+  };
+
+  // Update an option value
+  const updateQuestionOption = (questionIndex: number, optionIndex: number, value: string) => {
+    const updated = [...customQuestions];
+    const question = updated[questionIndex];
+    if (question.options) {
+      question.options[optionIndex] = value;
+      updated[questionIndex] = { ...question };
+      setCustomQuestions(updated);
+    }
   };
 
   // Data mapping helper - Parse backend response format
@@ -163,15 +248,43 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       createdAtField = 'createdAt'
     } = dataMapping;
 
-    // Extract questions from backend format and convert to form questions
-    const backendQuestions = jobData.questions || {};
-    const formQuestions: FormQuestion[] = Object.entries(backendQuestions).map(([key, questionText], index) => ({
-      id: key,
-      type: 'text' as QuestionType,
-      title: String(questionText),
-      required: true,
-      placeholder: `Enter your answer here...`
-    }));
+    // Extract form questions - prefer full form structure, fallback to simple questions
+    let formQuestions: FormQuestion[] = [];
+    
+    if (jobData.formQuestions && Array.isArray(jobData.formQuestions)) {
+      // Use full form structure if available (with types and options)
+      formQuestions = jobData.formQuestions.map((q: any) => ({
+        id: q.id || `q_${Date.now()}_${Math.random()}`,
+        type: q.type || 'text',
+        title: q.title || '',
+        description: q.description,
+        required: q.required !== undefined ? q.required : true,
+        placeholder: q.placeholder,
+        options: q.options,
+        validation: q.validation
+      }));
+    } else {
+      // Fallback: Extract questions from backend format (backward compatibility)
+      const backendQuestions = jobData.questions || {};
+      formQuestions = Object.entries(backendQuestions).map(([key, questionText]) => {
+        const questionStr = String(questionText).toLowerCase();
+        const isFileQuestion = questionStr.includes('resume') || questionStr.includes('cv') || questionStr.includes('upload');
+        
+        return {
+          id: key,
+          type: isFileQuestion ? 'file' : 'text',
+          title: String(questionText),
+          required: true,
+          placeholder: isFileQuestion ? 'Upload your file here' : 'Enter your answer here...',
+          ...(isFileQuestion && {
+            description: 'Please upload your resume or CV (PDF, DOC, DOCX)',
+            validation: {
+              pattern: '\\.(pdf|doc|docx)$'
+            }
+          })
+        };
+      });
+    }
 
     // Add default questions if none provided
     if (formQuestions.length === 0) {
@@ -223,11 +336,23 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
 
   // Map Job to API format for POST requests (Backend format)
   const mapJobToApiFormat = (job: Job): any => {
-    // Convert form questions to the backend format
+    // Convert form questions to the backend format (for backward compatibility)
     const questions: Record<string, string> = {};
     job.form.questions.forEach((question, index) => {
       questions[`q${index + 1}`] = question.title;
     });
+
+    // Store full form structure with types and options
+    const formQuestions = job.form.questions.map(q => ({
+      id: q.id,
+      type: q.type,
+      title: q.title,
+      description: q.description,
+      required: q.required,
+      placeholder: q.placeholder,
+      options: q.options,
+      validation: q.validation
+    }));
 
     // Format according to backend requirements
     return {
@@ -245,7 +370,8 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         type: job.type || 'full-time',
         status: job.status || 'draft',
         requireResume: job.requireResume || false,
-        questions: questions, // Dynamic questions from form
+        questions: questions, // Dynamic questions from form (for backward compatibility)
+        formQuestions: formQuestions, // Full form structure with types and options
         createdAt: job.createdAt,
         formId: job.form.id,
         formTitle: job.form.title
@@ -529,7 +655,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     }
 
     // Filter out empty questions
-    const validQuestions = customQuestions.filter(q => q.trim() !== '');
+    const validQuestions = customQuestions.filter(q => q.text.trim() !== '');
     if (validQuestions.length === 0) {
       toast.error('Please add at least one question');
       return;
@@ -558,13 +684,28 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         required: true,
         placeholder: '+1 (555) 123-4567'
       },
-      ...validQuestions.map((question, index) => ({
-        id: `custom_${index + 1}`,
-        type: 'textarea' as QuestionType,
-        title: question,
-        required: true,
-        placeholder: 'Enter your answer here...'
-      })),
+      ...validQuestions.map((question, index) => {
+        const baseQuestion: FormQuestion = {
+          id: `custom_${index + 1}`,
+          type: question.type,
+          title: question.text,
+          required: true,
+          placeholder: question.type === 'textarea' ? 'Enter your answer here...' : 
+                       question.type === 'text' ? 'Enter your answer' :
+                       question.type === 'select' ? 'Select an option' :
+                       question.type === 'number' ? 'Enter a number' :
+                       question.type === 'date' ? 'Select a date' : 'Enter your answer'
+        };
+        
+        // Add options for select, radio, checkbox types from question state
+        if (question.type === 'select' || question.type === 'radio' || question.type === 'checkbox') {
+          baseQuestion.options = question.options && question.options.length > 0 
+            ? question.options 
+            : ['Option 1', 'Option 2', 'Option 3'];
+        }
+        
+        return baseQuestion;
+      }),
       ...(newJobData.requireResume ? [{
         id: 'resume',
         type: 'file' as QuestionType,
@@ -632,7 +773,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       criteria: '',
       skills: ''
     });
-    setCustomQuestions(['', '']); // Reset questions
+    setCustomQuestions([{ text: '', type: 'textarea' }, { text: '', type: 'textarea' }]); // Reset questions
     setIsCreateModalOpen(false);
   };
 
@@ -662,17 +803,196 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   // Edit job form
   const handleEditForm = (job: Job) => {
     setEditingJob(job);
+    // Pre-populate edit form with job data
+    setEditJobData({
+      title: job.title,
+      description: job.description,
+      department: job.department || '',
+      location: job.location || '',
+      type: job.type || 'full-time',
+      deadline: job.deadline || '',
+      requireResume: job.requireResume || false,
+      salary: job.salary || '',
+      criteria: job.criteria || '',
+      skills: job.skills || ''
+    });
+    
+    // Extract custom questions from form (skip default ones)
+    const customQs = job.form.questions
+      .filter(q => !['fullName', 'email', 'phone', 'resume'].includes(q.id))
+      .map(q => ({ text: q.title, type: q.type, options: q.options }));
+    setEditCustomQuestions(customQs.length > 0 ? customQs : [{ text: '', type: 'textarea' }]);
+    
     setIsEditModalOpen(true);
   };
 
-  // Save form changes
-  const handleSaveForm = (updatedForm: DynamicFormData) => {
-    if (editingJob) {
-      const updatedJob = { ...editingJob, form: updatedForm };
-      handleUpdateJob(updatedJob);
-      setIsEditModalOpen(false);
-      setEditingJob(null);
+  // Add question field for edit form
+  const addEditQuestionField = () => {
+    setEditCustomQuestions([...editCustomQuestions, { text: '', type: 'textarea' }]);
+  };
+
+  // Update question text in edit form
+  const updateEditQuestion = (index: number, value: string) => {
+    const updated = [...editCustomQuestions];
+    updated[index] = { ...updated[index], text: value };
+    setEditCustomQuestions(updated);
+  };
+
+  // Update question type in edit form
+  const updateEditQuestionType = (index: number, type: QuestionType) => {
+    const updated = [...editCustomQuestions];
+    const question = updated[index];
+    updated[index] = { 
+      ...question, 
+      type,
+      // Initialize options for select/radio/checkbox types
+      options: (type === 'select' || type === 'radio' || type === 'checkbox') 
+        ? (question.options && question.options.length > 0 ? question.options : ['Option 1', 'Option 2', 'Option 3'])
+        : undefined
+    };
+    setEditCustomQuestions(updated);
+  };
+
+  // Add an option to an edit question
+  const addEditQuestionOption = (questionIndex: number) => {
+    const updated = [...editCustomQuestions];
+    const question = updated[questionIndex];
+    if (!question.options) {
+      question.options = [];
     }
+    question.options.push(`Option ${question.options.length + 1}`);
+    updated[questionIndex] = { ...question };
+    setEditCustomQuestions(updated);
+  };
+
+  // Remove an option from an edit question
+  const removeEditQuestionOption = (questionIndex: number, optionIndex: number) => {
+    const updated = [...editCustomQuestions];
+    const question = updated[questionIndex];
+    if (question.options && question.options.length > 1) {
+      question.options = question.options.filter((_, i) => i !== optionIndex);
+      updated[questionIndex] = { ...question };
+      setEditCustomQuestions(updated);
+    }
+  };
+
+  // Update an option value in edit question
+  const updateEditQuestionOption = (questionIndex: number, optionIndex: number, value: string) => {
+    const updated = [...editCustomQuestions];
+    const question = updated[questionIndex];
+    if (question.options) {
+      question.options[optionIndex] = value;
+      updated[questionIndex] = { ...question };
+      setEditCustomQuestions(updated);
+    }
+  };
+
+  // Remove question from edit form
+  const removeEditQuestionField = (index: number) => {
+    if (editCustomQuestions.length > 1) {
+      setEditCustomQuestions(editCustomQuestions.filter((_, i) => i !== index));
+    }
+  };
+
+  // Save edited job
+  const handleSaveEditedJob = async () => {
+    if (!editingJob) return;
+
+    if (!editJobData.title.trim()) {
+      toast.error('Job title is required');
+      return;
+    }
+
+    // Filter out empty questions
+    const validQuestions = editCustomQuestions.filter(q => q.text.trim() !== '');
+    
+    // Create form questions from custom questions
+    const formQuestions: FormQuestion[] = [
+      {
+        id: 'fullName',
+        type: 'text',
+        title: 'Full Name',
+        required: true,
+        placeholder: 'Enter your full name'
+      },
+      {
+        id: 'email',
+        type: 'email',
+        title: 'Email Address',
+        required: true,
+        placeholder: 'your@email.com'
+      },
+      {
+        id: 'phone',
+        type: 'phone',
+        title: 'Phone Number',
+        required: true,
+        placeholder: '+1 (555) 123-4567'
+      },
+      ...validQuestions.map((question, index) => {
+        const baseQuestion: FormQuestion = {
+          id: `custom_${index + 1}`,
+          type: question.type,
+          title: question.text,
+          required: true,
+          placeholder: question.type === 'textarea' ? 'Enter your answer here...' : 
+                       question.type === 'text' ? 'Enter your answer' :
+                       question.type === 'select' ? 'Select an option' :
+                       question.type === 'number' ? 'Enter a number' :
+                       question.type === 'date' ? 'Select a date' : 'Enter your answer'
+        };
+        
+        // Add options for select, radio, checkbox types from question state
+        if (question.type === 'select' || question.type === 'radio' || question.type === 'checkbox') {
+          baseQuestion.options = question.options && question.options.length > 0 
+            ? question.options 
+            : ['Option 1', 'Option 2', 'Option 3'];
+        }
+        
+        return baseQuestion;
+      }),
+      ...(editJobData.requireResume ? [{
+        id: 'resume',
+        type: 'file' as QuestionType,
+        title: 'Resume/CV',
+        description: 'Please upload your resume or CV (PDF, DOC, DOCX)',
+        required: true,
+        validation: {
+          pattern: '\\.(pdf|doc|docx)$'
+        }
+      }] : [])
+    ];
+
+    const customForm: DynamicFormData = {
+      id: editingJob.form.id,
+      title: `Application for ${editJobData.title}`,
+      description: 'Please fill out this application form to apply for this position.',
+      questions: formQuestions,
+      settings: {
+        allowMultipleSubmissions: false,
+        showProgressBar: true,
+        collectEmail: true
+      }
+    };
+
+    const updatedJob: Job = {
+      ...editingJob,
+      title: editJobData.title,
+      description: editJobData.description,
+      department: editJobData.department,
+      location: editJobData.location,
+      type: editJobData.type,
+      deadline: editJobData.deadline,
+      requireResume: editJobData.requireResume,
+      salary: editJobData.salary,
+      criteria: editJobData.criteria,
+      skills: editJobData.skills,
+      form: customForm
+    };
+
+    handleUpdateJob(updatedJob);
+    setIsEditModalOpen(false);
+    setEditingJob(null);
   };
 
   // Preview job form
@@ -906,31 +1226,94 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                     </Button>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {customQuestions.map((question, index) => (
-                      <div key={index} className="flex gap-2 items-start">
-                        <div className="flex-1">
-                          <Label htmlFor={`question-${index}`} className="text-xs text-gray-600">
-                            Question {index + 1}
-                          </Label>
-                          <Input
-                            id={`question-${index}`}
-                            value={question}
-                            onChange={(e) => updateQuestion(index, e.target.value)}
-                            placeholder={`e.g., What programming languages are you comfortable with?`}
-                            className="mt-1 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
-                          />
+                      <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                        <div className="flex gap-2 items-start">
+                          <div className="flex-1">
+                            <Label htmlFor={`question-${index}`} className="text-xs text-gray-600">
+                              Question {index + 1}
+                            </Label>
+                            <Input
+                              id={`question-${index}`}
+                              value={question.text}
+                              onChange={(e) => updateQuestion(index, e.target.value)}
+                              placeholder={`e.g., What programming languages are you comfortable with?`}
+                              className="mt-1 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs text-gray-600 opacity-0">Type</Label>
+                            <Select
+                              value={question.type}
+                              onValueChange={(value: QuestionType) => updateQuestionType(index, value)}
+                            >
+                              <SelectTrigger className="w-[140px] h-9 border-gray-300 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Short Text</SelectItem>
+                                <SelectItem value="textarea">Long Text</SelectItem>
+                                <SelectItem value="select">Dropdown</SelectItem>
+                                <SelectItem value="radio">Multiple Choice</SelectItem>
+                                <SelectItem value="checkbox">Checkboxes</SelectItem>
+                                <SelectItem value="number">Number</SelectItem>
+                                <SelectItem value="date">Date</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeQuestionField(index)}
+                            disabled={customQuestions.length === 1}
+                            className="mt-6 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeQuestionField(index)}
-                          disabled={customQuestions.length === 1}
-                          className="mt-6 text-gray-500 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        
+                        {/* Options Configuration for select/radio/checkbox */}
+                        {(question.type === 'select' || question.type === 'radio' || question.type === 'checkbox') && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <Label className="text-xs font-medium text-gray-700">Options</Label>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => addQuestionOption(index)}
+                                className="h-7 text-xs text-gray-600 hover:text-gray-900"
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add Option
+                              </Button>
+                            </div>
+                            <div className="space-y-2">
+                              {question.options?.map((option, optIndex) => (
+                                <div key={optIndex} className="flex gap-2 items-center">
+                                  <Input
+                                    value={option}
+                                    onChange={(e) => updateQuestionOption(index, optIndex, e.target.value)}
+                                    placeholder={`Option ${optIndex + 1}`}
+                                    className="h-8 text-xs border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeQuestionOption(index, optIndex)}
+                                    disabled={question.options && question.options.length <= 1}
+                                    className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1087,7 +1470,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                       className="flex-1 border-gray-300 text-black hover:bg-gray-50"
                     >
                       <Edit className="h-4 w-4 mr-2" />
-                      Edit Form
+                      Edit Job
                     </Button>
                     
                     <Button
@@ -1122,22 +1505,276 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
             </div>
           )}
 
-      {/* Edit Form Modal */}
+      {/* Edit Job Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-white">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-gray-900">
-              Edit Application Form: {editingJob?.title}
-            </DialogTitle>
+            <DialogTitle className="text-xl font-bold text-gray-900">Edit Job</DialogTitle>
           </DialogHeader>
-          {editingJob && (
-            <DynamicForm
-              initialForm={editingJob.form}
-              onSave={handleSaveForm}
-              mode="edit"
-              className="mt-4"
-            />
-          )}
+          <div className="space-y-4 mt-6">
+            <div>
+              <Label htmlFor="editJobTitle" className="text-sm font-medium text-gray-700">Job Title *</Label>
+              <Input
+                id="editJobTitle"
+                value={editJobData.title}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="e.g. Frontend Developer"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="editJobDescription" className="text-sm font-medium text-gray-700">Job Description</Label>
+              <Textarea
+                id="editJobDescription"
+                value={editJobData.description}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Describe the role and responsibilities..."
+                rows={3}
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="editDepartment" className="text-sm font-medium text-gray-700">Department</Label>
+                <Input
+                  id="editDepartment"
+                  value={editJobData.department}
+                  onChange={(e) => setEditJobData(prev => ({ ...prev, department: e.target.value }))}
+                  placeholder="Engineering"
+                  className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="editLocation" className="text-sm font-medium text-gray-700">Location</Label>
+                <Input
+                  id="editLocation"
+                  value={editJobData.location}
+                  onChange={(e) => setEditJobData(prev => ({ ...prev, location: e.target.value }))}
+                  placeholder="Remote / NYC"
+                  className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="editSalary" className="text-sm font-medium text-gray-700">Salary</Label>
+                <Input
+                  id="editSalary"
+                  value={editJobData.salary}
+                  onChange={(e) => setEditJobData(prev => ({ ...prev, salary: e.target.value }))}
+                  placeholder="55LPA or 120000-150000 USD"
+                  className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="editCriteria" className="text-sm font-medium text-gray-700">Criteria</Label>
+                <Input
+                  id="editCriteria"
+                  value={editJobData.criteria}
+                  onChange={(e) => setEditJobData(prev => ({ ...prev, criteria: e.target.value }))}
+                  placeholder="2-3 Years of Experience"
+                  className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="editSkills" className="text-sm font-medium text-gray-700">Required Skills</Label>
+              <Input
+                id="editSkills"
+                value={editJobData.skills}
+                onChange={(e) => setEditJobData(prev => ({ ...prev, skills: e.target.value }))}
+                placeholder="HTML, C++, DSA"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="editJobType" className="text-sm font-medium text-gray-700">Job Type</Label>
+                <Select
+                  value={editJobData.type}
+                  onValueChange={(value: any) => setEditJobData(prev => ({ ...prev, type: value }))}
+                >
+                  <SelectTrigger className="mt-2 border-gray-300">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full-time">Full-time</SelectItem>
+                    <SelectItem value="part-time">Part-time</SelectItem>
+                    <SelectItem value="contract">Contract</SelectItem>
+                    <SelectItem value="internship">Internship</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="editDeadline" className="text-sm font-medium text-gray-700">Application Deadline</Label>
+                <Input
+                  id="editDeadline"
+                  type="date"
+                  value={editJobData.deadline}
+                  onChange={(e) => setEditJobData(prev => ({ ...prev, deadline: e.target.value }))}
+                  className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="editRequireResume" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="editRequireResume"
+                  checked={editJobData.requireResume || false}
+                  onChange={(e) => setEditJobData(prev => ({ ...prev, requireResume: e.target.checked }))}
+                  className="rounded border-gray-300"
+                />
+                Require Resume Upload
+              </Label>
+              <p className="text-xs text-gray-500 mt-1">Applicants will be required to upload their resume</p>
+            </div>
+
+            {/* Custom Questions Section */}
+            <div className="pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Application Questions</Label>
+                  <p className="text-xs text-gray-500 mt-1">Add custom questions for applicants</p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={addEditQuestionField}
+                  className="bg-gray-900 text-white hover:bg-gray-800"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Question
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                {editCustomQuestions.map((question, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <Label htmlFor={`edit-question-${index}`} className="text-xs text-gray-600">
+                          Question {index + 1}
+                        </Label>
+                        <Input
+                          id={`edit-question-${index}`}
+                          value={question.text}
+                          onChange={(e) => updateEditQuestion(index, e.target.value)}
+                          placeholder={`e.g., What programming languages are you comfortable with?`}
+                          className="mt-1 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-gray-600 opacity-0">Type</Label>
+                        <Select
+                          value={question.type}
+                          onValueChange={(value: QuestionType) => updateEditQuestionType(index, value)}
+                        >
+                          <SelectTrigger className="w-[140px] h-9 border-gray-300 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Short Text</SelectItem>
+                            <SelectItem value="textarea">Long Text</SelectItem>
+                            <SelectItem value="select">Dropdown</SelectItem>
+                            <SelectItem value="radio">Multiple Choice</SelectItem>
+                            <SelectItem value="checkbox">Checkboxes</SelectItem>
+                            <SelectItem value="number">Number</SelectItem>
+                            <SelectItem value="date">Date</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeEditQuestionField(index)}
+                        disabled={editCustomQuestions.length === 1}
+                        className="mt-6 text-gray-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Options Configuration for select/radio/checkbox */}
+                    {(question.type === 'select' || question.type === 'radio' || question.type === 'checkbox') && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-xs font-medium text-gray-700">Options</Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => addEditQuestionOption(index)}
+                            className="h-7 text-xs text-gray-600 hover:text-gray-900"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Add Option
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {question.options?.map((option, optIndex) => (
+                            <div key={optIndex} className="flex gap-2 items-center">
+                              <Input
+                                value={option}
+                                onChange={(e) => updateEditQuestionOption(index, optIndex, e.target.value)}
+                                placeholder={`Option ${optIndex + 1}`}
+                                className="h-8 text-xs border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeEditQuestionOption(index, optIndex)}
+                                disabled={question.options && question.options.length <= 1}
+                                className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-xs text-gray-500 mt-3">
+                💡 Default questions (Name, Email, Phone) are automatically included
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingJob(null);
+                }}
+                className="px-6 py-3 border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveEditedJob}
+                className="px-6 py-3 bg-gray-900 text-white hover:bg-gray-800 font-semibold"
+              >
+                Save Changes
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

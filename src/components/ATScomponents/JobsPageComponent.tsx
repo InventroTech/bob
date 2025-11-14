@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { DynamicForm, DynamicFormData } from './DynamicForm';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { FileUploadComponent } from './FileUploadComponent';
 
 // Job interface
 interface Job {
@@ -61,6 +62,7 @@ interface JobsPageComponentConfig {
   useDemoData?: boolean;
   tenantSlug?: string;
   submitEndpoint?: string; // Endpoint for submitting applications
+  fileUploadEndpoint?: string; // Endpoint for uploading files (resumes)
   
   // Display Options
   showFilters?: boolean;
@@ -318,6 +320,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeUploadResponse, setResumeUploadResponse] = useState<any>(null);
 
   // Configuration with defaults
   const {
@@ -329,6 +333,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     useDemoData = false,
     tenantSlug,
     submitEndpoint = '/crm-records/records/',
+    fileUploadEndpoint = '/api/upload/resume',
     showFilters = true,
     showStats = true,
     layout = 'grid',
@@ -358,19 +363,49 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       createdAtField = 'createdAt'
     } = dataMapping;
 
-    // Extract questions from backend format and convert to form questions
-    const backendQuestions = jobData.questions || {};
-    console.log('    ❓ Backend questions:', backendQuestions);
+    // Extract form questions - prefer full form structure, fallback to simple questions
+    let formQuestions: any[] = [];
     
-    const formQuestions: any[] = Object.entries(backendQuestions).map(([key, questionText]) => ({
-      id: key,
-      type: 'text',
-      title: String(questionText),
-      required: true,
-      placeholder: 'Enter your answer here...'
-    }));
-    
-    console.log('    ✓ Converted to form questions:', formQuestions.length, 'questions');
+    if (jobData.formQuestions && Array.isArray(jobData.formQuestions)) {
+      // Use full form structure if available (with types and options)
+      formQuestions = jobData.formQuestions.map((q: any) => ({
+        id: q.id || `q_${Date.now()}_${Math.random()}`,
+        type: q.type || 'text',
+        title: q.title || '',
+        description: q.description,
+        required: q.required !== undefined ? q.required : true,
+        placeholder: q.placeholder,
+        options: q.options,
+        validation: q.validation
+      }));
+      console.log('    ✓ Using full form structure:', formQuestions.length, 'questions with types');
+    } else {
+      // Fallback: Extract questions from backend format (backward compatibility)
+      const backendQuestions = jobData.questions || {};
+      console.log('    ❓ Backend questions:', backendQuestions);
+      
+      formQuestions = Object.entries(backendQuestions).map(([key, questionText]) => {
+        const questionStr = String(questionText).toLowerCase();
+        // Check if question is about resume/CV upload
+        const isFileQuestion = questionStr.includes('resume') || questionStr.includes('cv') || questionStr.includes('upload');
+        
+        return {
+          id: key,
+          type: isFileQuestion ? 'file' : 'text',
+          title: String(questionText),
+          required: true,
+          placeholder: isFileQuestion ? 'Upload your file here' : 'Enter your answer here...',
+          ...(isFileQuestion && {
+            description: 'Please upload your resume or CV (PDF, DOC, DOCX)',
+            validation: {
+              pattern: '\\.(pdf|doc|docx)$'
+            }
+          })
+        };
+      });
+      
+      console.log('    ✓ Converted to form questions:', formQuestions.length, 'questions');
+    }
 
     // Add default questions if none provided
     if (formQuestions.length === 0) {
@@ -644,7 +679,18 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     
     // Validate required fields
     const requiredQuestions = selectedJob.form.questions.filter(q => q.required);
-    const missingFields = requiredQuestions.filter(q => !formData[q.id] || formData[q.id].toString().trim() === '');
+    const missingFields = requiredQuestions.filter(q => {
+      // Check if it's a file field (resume)
+      const isFileField = q.type === 'file' || q.title.toLowerCase().includes('resume') || q.title.toLowerCase().includes('cv');
+      
+      if (isFileField) {
+        // For file fields, check if resumeFile is selected
+        return !resumeFile;
+      } else {
+        // For other fields, check formData
+        return !formData[q.id] || formData[q.id].toString().trim() === '';
+      }
+    });
     
     if (missingFields.length > 0) {
       toast.error(`Please fill in all required fields: ${missingFields.map(f => f.title).join(', ')}`);
@@ -654,6 +700,61 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     setIsSubmitting(true);
     
     try {
+      // First, upload resume if a file is selected
+      let uploadResponse = resumeUploadResponse;
+      if (resumeFile && !uploadResponse) {
+        try {
+          toast.info('Uploading resume...');
+          
+          // Construct upload URL
+          let uploadUrl = fileUploadEndpoint;
+          if (apiMode === 'renderer') {
+            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+            uploadUrl = baseUrl ? `${baseUrl}${fileUploadEndpoint}` : fileUploadEndpoint;
+          } else if (apiMode === 'direct' && apiBaseUrl) {
+            uploadUrl = `${apiBaseUrl}${fileUploadEndpoint}`;
+          }
+
+          // Prepare FormData for resume upload
+          const uploadFormData = new FormData();
+          uploadFormData.append('file', resumeFile);
+          uploadFormData.append('prompt', 'please scan the resume and make a json of education , skills, etc basically a summury');
+
+          // Prepare headers for upload
+          const uploadHeaders: HeadersInit = {};
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            uploadHeaders['Authorization'] = `Bearer ${session.access_token}`;
+          }
+          const effectiveTenantSlug = tenantSlug || tenantId;
+          if (effectiveTenantSlug) {
+            uploadHeaders['X-Tenant-Slug'] = effectiveTenantSlug;
+          }
+
+          // Upload resume
+          const uploadResult = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: uploadHeaders,
+            body: uploadFormData,
+          });
+
+          if (!uploadResult.ok) {
+            const errorText = await uploadResult.text();
+            throw new Error(`Resume upload failed: ${uploadResult.status} - ${errorText}`);
+          }
+
+          uploadResponse = await uploadResult.json();
+          setResumeUploadResponse(uploadResponse);
+          console.log('Resume uploaded successfully:', uploadResponse);
+          toast.success('Resume uploaded successfully!');
+        } catch (uploadError) {
+          console.error('Resume upload error:', uploadError);
+          toast.error(`Failed to upload resume: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       // Construct full URL based on API mode
       let url = submitEndpoint;
       if (apiMode === 'renderer') {
@@ -708,22 +809,33 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       }
 
       // Map remaining questions to answers format (a1, a2, a3...)
-      // Skip questions that are name, email, phone, or resume
+      // Skip questions that are name, email, phone, or file uploads
       const answers: Record<string, string> = {};
       let answerIndex = 1;
+      let resumeUrl = '';
       
       selectedJob.form.questions.forEach((question) => {
         const questionTitle = question.title.toLowerCase();
         const isNameField = questionTitle.includes('name') && questionTitle.includes('full');
         const isEmailField = questionTitle.includes('email');
         const isPhoneField = questionTitle.includes('phone');
-        const isResumeField = questionTitle.includes('resume') || questionTitle.includes('cv');
+        const isFileField = question.type === 'file' || questionTitle.includes('resume') || questionTitle.includes('cv');
         
-        // Skip default fields, only include custom questions in answers
-        if (!isNameField && !isEmailField && !isPhoneField && !isResumeField) {
+        // Extract file URL if it's a file field
+        if (isFileField) {
+          const fileUrl = formData[question.id];
+          if (fileUrl) {
+            resumeUrl = fileUrl; // Use the uploaded file URL
+          }
+        }
+        
+        // Skip default fields and file uploads, only include custom questions in answers
+        if (!isNameField && !isEmailField && !isPhoneField && !isFileField) {
           const answer = formData[question.id];
           if (answer) {
-            answers[`a${answerIndex}`] = String(answer);
+            // Handle checkbox arrays - convert to comma-separated string
+            const answerValue = Array.isArray(answer) ? answer.join(', ') : String(answer);
+            answers[`a${answerIndex}`] = answerValue;
             answerIndex++;
           }
         }
@@ -744,7 +856,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
           other_description: selectedJob.description || '',
           email: applicantEmail,
           phone: applicantPhone,
-          resumeUrl: formData['resume'] || '',
+          resumeUrl: resumeUrl || uploadResponse?.files?.[0]?.url || uploadResponse?.url || uploadResponse?.fileUrl || formData['resume'] || '', // Use file upload URL or fallback
+          openairesponse: uploadResponse?.response || formData['openaiaresponse'] || '', // OpenAI response from resume upload
           answers: answers,
           submittedAt: new Date().toISOString()
         }
@@ -773,6 +886,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       
       toast.success('Application submitted successfully! We\'ll be in touch soon.');
       setFormData({});
+      setResumeFile(null);
+      setResumeUploadResponse(null);
       setIsApplicationModalOpen(false);
       setSelectedJob(null);
       
@@ -826,6 +941,9 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         );
 
       case 'select':
+        const selectOptions = question.options && question.options.length > 0 
+          ? question.options 
+          : ['Option 1', 'Option 2', 'Option 3'];
         return (
           <select
             id={question.id}
@@ -835,12 +953,143 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
           >
             <option value="">Select an option</option>
-            {question.options?.map((option: string, index: number) => (
+            {selectOptions.map((option: string, index: number) => (
               <option key={index} value={option}>
                 {option}
               </option>
             ))}
           </select>
+        );
+
+      case 'radio':
+        const radioOptions = question.options && question.options.length > 0 
+          ? question.options 
+          : ['Option 1', 'Option 2', 'Option 3'];
+        return (
+          <div className="space-y-2">
+            {radioOptions.map((option: string, index: number) => (
+              <label key={index} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={question.id}
+                  value={option}
+                  checked={value === option}
+                  onChange={(e) => handleInputChange(question.id, e.target.value)}
+                  required={question.required}
+                  className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-900"
+                />
+                <span className="text-gray-700">{option}</span>
+              </label>
+            ))}
+          </div>
+        );
+
+      case 'checkbox':
+        const checkboxValues = Array.isArray(value) ? value : (value ? [value] : []);
+        const checkboxOptions = question.options && question.options.length > 0 
+          ? question.options 
+          : ['Option 1', 'Option 2', 'Option 3'];
+        return (
+          <div className="space-y-2">
+            {checkboxOptions.map((option: string, index: number) => (
+              <label key={index} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  value={option}
+                  checked={checkboxValues.includes(option)}
+                  onChange={(e) => {
+                    const currentValues = checkboxValues;
+                    if (e.target.checked) {
+                      handleInputChange(question.id, [...currentValues, option]);
+                    } else {
+                      handleInputChange(question.id, currentValues.filter(v => v !== option));
+                    }
+                  }}
+                  className="w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900"
+                />
+                <span className="text-gray-700">{option}</span>
+              </label>
+            ))}
+          </div>
+        );
+
+      case 'number':
+        return (
+          <input
+            type="number"
+            id={question.id}
+            value={value}
+            onChange={(e) => handleInputChange(question.id, e.target.value)}
+            placeholder={question.placeholder}
+            required={question.required}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
+          />
+        );
+
+      case 'date':
+        return (
+          <input
+            type="date"
+            id={question.id}
+            value={value}
+            onChange={(e) => handleInputChange(question.id, e.target.value)}
+            required={question.required}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
+          />
+        );
+
+      case 'file':
+        return (
+          <div className="w-full">
+            <FileUploadComponent
+              title={question.title}
+              description={question.description || 'Upload your file here'}
+              apiEndpoint={fileUploadEndpoint}
+              apiPrefix={apiMode === 'renderer' ? 'renderer' : apiMode === 'direct' ? 'renderer' : 'supabase'}
+              acceptedFileTypes={(() => {
+                if (question.validation?.pattern) {
+                  // Convert regex pattern like '\\.(pdf|doc|docx)$' to '.pdf,.doc,.docx'
+                  const pattern = question.validation.pattern;
+                  // Remove regex anchors and escape characters
+                  const cleaned = pattern
+                    .replace(/^\\\./, '.')  // Replace \. with .
+                    .replace(/\$/g, '')      // Remove end anchor
+                    .replace(/^\^/, '')      // Remove start anchor
+                    .replace(/^\./, '')      // Remove leading dot if present
+                    .replace(/\(/g, '')      // Remove opening paren
+                    .replace(/\)/g, '')      // Remove closing paren
+                    .replace(/\|/g, ',')     // Replace | with comma
+                    .replace(/\\/g, '');     // Remove any remaining backslashes
+                  
+                  // Split by comma and add dots back
+                  const extensions = cleaned.split(',').map(ext => {
+                    const trimmed = ext.trim();
+                    return trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
+                  });
+                  
+                  return extensions.join(',');
+                }
+                return '.pdf,.doc,.docx';
+              })()}
+              maxFileSize={10}
+              multiple={false}
+              tenantSlug={tenantSlug || tenantId}
+              uploadPrompt="please scan the resume and make a json of education , skills, etc basically a summury"
+              hideUploadButton={true}
+              onFileSelected={(file) => {
+                setResumeFile(file);
+                setResumeUploadResponse(null); // Reset previous upload response
+              }}
+              className="w-full"
+            />
+            {value && (
+              <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800">
+                  ✓ File uploaded: <a href={value} target="_blank" rel="noopener noreferrer" className="underline">{value}</a>
+                </p>
+              </div>
+            )}
+          </div>
         );
 
       default:
@@ -1160,7 +1409,15 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
       {/* Application Modal */}
       {allowApplications && (
-        <Dialog open={isApplicationModalOpen} onOpenChange={setIsApplicationModalOpen}>
+        <Dialog open={isApplicationModalOpen} onOpenChange={(open) => {
+          setIsApplicationModalOpen(open);
+          if (!open) {
+            // Reset form and resume state when modal closes
+            setFormData({});
+            setResumeFile(null);
+            setResumeUploadResponse(null);
+          }
+        }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold text-black">
