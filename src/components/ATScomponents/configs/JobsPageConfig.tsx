@@ -19,6 +19,7 @@ export interface JobsPageComponentConfig {
   useDemoData?: boolean;
   tenantSlug?: string;
   submitEndpoint?: string;
+  fileUploadEndpoint?: string; // Endpoint for uploading resume files
   
   // Display Options
   showFilters?: boolean;
@@ -197,6 +198,20 @@ export const JobsPageConfigComponent: React.FC<JobsPageConfigProps> = ({
             />
             <p className="text-xs text-gray-500 mt-1">
               Endpoint for submitting job applications
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="fileUploadEndpoint" className="text-sm font-medium text-gray-700">File Upload Endpoint</Label>
+            <Input
+              id="fileUploadEndpoint"
+              value={config.fileUploadEndpoint || ''}
+              onChange={(e) => onConfigChange('fileUploadEndpoint', e.target.value)}
+              placeholder="/api/upload/resume"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Endpoint for uploading resume files (returns OpenAI analysis response)
             </p>
           </div>
         </CardContent>
