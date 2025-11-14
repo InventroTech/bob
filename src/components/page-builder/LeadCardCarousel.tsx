@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { Checkbox } from "@/components/ui/checkbox";
+import { format, addDays, addHours, startOfDay } from "date-fns";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -19,6 +19,7 @@ import {
   Clock,
   MessageSquare,
   X,
+  ChevronRight,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,21 @@ interface LeadState {
   leadStartTime: Date;
 }
 
+interface CallbackSlot {
+  id: string;
+  label: string;
+  iso: string;
+  disabled: boolean;
+}
+
+interface CallbackSlotSection {
+  label: string;
+  slots: CallbackSlot[];
+}
+
+const CALLBACK_SLOT_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+const CALLBACK_SLOT_HOURS_AHEAD = 48;
+
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
@@ -126,12 +142,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [selectedNotInterestedReason, setSelectedNotInterestedReason] = useState<string>("");
   const [customNotInterestedReason, setCustomNotInterestedReason] = useState("");
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
-  const [callbackDate, setCallbackDate] = useState<Date | undefined>(undefined);
-  const [callbackHour, setCallbackHour] = useState(12);
-  const [callbackMinute, setCallbackMinute] = useState(0);
-  const [callbackIsAM, setCallbackIsAM] = useState(true);
-  const [clockMode, setClockMode] = useState<'hour' | 'minute'>('hour');
-  const clockRef = useRef<HTMLDivElement | null>(null);
+  const [showTrialSuccessDialog, setShowTrialSuccessDialog] = useState(false);
+  const [callbackSlotSections, setCallbackSlotSections] = useState<CallbackSlotSection[]>([]);
+  const [selectedCallbackSlot, setSelectedCallbackSlot] = useState<string | null>(null);
+  const [assignCallbackToSelf, setAssignCallbackToSelf] = useState(false);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -604,6 +618,36 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     setProcessingAction(null);
   };
 
+  const buildCallbackSections = (): CallbackSlotSection[] => {
+    const now = new Date();
+    const limit = addHours(now, CALLBACK_SLOT_HOURS_AHEAD);
+
+    return [0, 1, 2].map((offset) => {
+      const dayStart = startOfDay(addDays(now, offset));
+      const label =
+        offset === 0
+          ? "Today"
+          : offset === 1
+          ? "Tomorrow"
+          : format(dayStart, "EEEE");
+
+      const slots = CALLBACK_SLOT_HOURS.map((hour) => {
+        const slotDate = new Date(dayStart);
+        slotDate.setHours(hour, 0, 0, 0);
+        const iso = slotDate.toISOString();
+        const disabled = slotDate <= now || slotDate > limit;
+        return {
+          id: `${offset}-${hour}`,
+          label: format(slotDate, "hh:mm a"),
+          iso,
+          disabled,
+        };
+      });
+
+      return { label, slots };
+    });
+  };
+
   // Reusable helper to post CRM events
   const sendLeadEvent = async (
     eventName: string,
@@ -665,7 +709,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
   const handleActionButton = async (
     action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later",
-    extra?: { reason?: string; nextCallAt?: string }
+    extra?: { reason?: string; nextCallAt?: string; assignToSelf?: boolean }
   ) => {
     if (!currentLead?.id) {
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
@@ -694,6 +738,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     if (extra?.nextCallAt) {
       payload.next_call_at = extra.nextCallAt;
     }
+    if (typeof extra?.assignToSelf === "boolean") {
+      payload.assign_to_self = extra.assignToSelf;
+    }
 
     setProcessingAction(action);
     try {
@@ -705,6 +752,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       if (ok) {
         await fetchFirstLead();
+        if (action === "Trial Activated") {
+          setShowTrialSuccessDialog(true);
+        }
       }
 
       return ok;
@@ -771,80 +821,33 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  const buildCallbackISO = (): string | null => {
-    if (!callbackDate) return null;
-    let hour24 = callbackHour % 12;
-    hour24 = callbackIsAM ? hour24 : hour24 + 12;
-    const date = new Date(callbackDate);
-    date.setHours(hour24, callbackMinute, 0, 0);
-    try {
-      return date.toISOString();
-    } catch {
-      return null;
-    }
-  };
-
   const handleOpenCallBackDialog = () => {
-    setCallbackDate(new Date());
-    setCallbackHour(12);
-    setCallbackMinute(0);
-    setCallbackIsAM(true);
-    setClockMode('hour');
+    const sections = buildCallbackSections();
+    setCallbackSlotSections(sections);
+    const firstAvailable = sections.flatMap((section) => section.slots).find((slot) => !slot.disabled);
+    setSelectedCallbackSlot(firstAvailable?.iso ?? null);
+    setAssignCallbackToSelf(false);
     setShowCallBackDialog(true);
   };
 
   const handleCloseCallBackDialog = () => {
     setShowCallBackDialog(false);
+    setSelectedCallbackSlot(null);
+    setAssignCallbackToSelf(false);
   };
 
   const handleSubmitCallBackLater = async () => {
-    const iso = buildCallbackISO();
-    if (!iso) {
+    if (!selectedCallbackSlot) {
       toast({ title: "Select time", description: "Please choose a valid date and time.", variant: "destructive" });
       return;
     }
-    const ok = await handleActionButton("Call Back Later", { nextCallAt: iso });
+    const ok = await handleActionButton("Call Back Later", {
+      nextCallAt: selectedCallbackSlot,
+      assignToSelf: assignCallbackToSelf,
+    });
     if (ok) {
       handleCloseCallBackDialog();
     }
-  };
-
-  const updateHourFromAngle = (angle: number) => {
-    let hour = Math.round(angle / 30) % 12;
-    if (hour <= 0) hour = 12;
-    setCallbackHour(hour);
-  };
-
-  const updateMinuteFromAngle = (angle: number) => {
-    let minute = Math.round(angle / 6) % 60;
-    if (minute < 0) minute += 60;
-    setCallbackMinute(minute);
-  };
-
-  const handleClockPointer = (clientX: number, clientY: number) => {
-    if (!clockRef.current) return;
-    const rect = clockRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const x = clientX - centerX;
-    const y = clientY - centerY;
-    let angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
-    if (angle < 0) angle += 360;
-    if (clockMode === 'hour') {
-      updateHourFromAngle(angle);
-    } else {
-      updateMinuteFromAngle(angle);
-    }
-  };
-
-  const handleClockMouse = (event: React.MouseEvent<HTMLDivElement>) => {
-    handleClockPointer(event.clientX, event.clientY);
-  };
-
-  const handleClockTouch = (event: React.TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    if (!touch) return;
-    handleClockPointer(touch.clientX, touch.clientY);
   };
 
   // Load Lottie animation (idle + cached)
@@ -1193,224 +1196,176 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           </div>
         </Card>
       </div>
-            <Dialog open={showNotInterestedDialog} onOpenChange={(open) => {
-              if (!open) {
-                handleCloseNotInterestedDialog();
+      <Dialog open={showTrialSuccessDialog} onOpenChange={setShowTrialSuccessDialog}>
+        <DialogContent className="sm:max-w-md" aria-describedby="trial-success-description">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-2xl font-semibold text-slate-900">Great Job!</DialogTitle>
+            <p id="trial-success-description" className="text-sm text-slate-500">
+              Well done. Proceed to next call.
+            </p>
+          </DialogHeader>
+          <DialogFooter className="w-full pt-2">
+            <Button
+              className="w-40 gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+              onClick={() => setShowTrialSuccessDialog(false)}
+            >
+              <ChevronRight className="h-4 w-4" />
+              Next Lead
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showNotInterestedDialog} onOpenChange={(open) => {
+        if (!open) {
+          handleCloseNotInterestedDialog();
+        }
+      }}>
+        <DialogContent className="sm:max-w-xl" aria-describedby="not-interested-dialog-description">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-2xl font-semibold text-slate-900">Any Feedback?</DialogTitle>
+            <p id="not-interested-dialog-description" className="text-sm text-slate-500">
+              Share why this lead is not interested so we can improve the experience.
+            </p>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="not-interested-other" className="text-sm font-medium text-slate-700">
+                Feedback
+              </Label>
+              <Textarea
+                id="not-interested-other"
+                value={customNotInterestedReason}
+                onFocus={() => setSelectedNotInterestedReason("other")}
+                onChange={(e) => {
+                  setSelectedNotInterestedReason("other");
+                  setCustomNotInterestedReason(e.target.value);
+                }}
+                placeholder="Add feedback"
+                rows={3}
+                className="h-28 rounded-2xl border-slate-200 shadow-sm focus-visible:ring-slate-400"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {NOT_INTERESTED_REASONS.filter(reason => reason !== "Other (Free Text)").map((reason) => {
+                const isSelected = selectedNotInterestedReason === reason;
+                return (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => {
+                      setSelectedNotInterestedReason(reason);
+                      setCustomNotInterestedReason("");
+                    }}
+                    className={cn(
+                      "rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+                      isSelected
+                        ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300"
+                    )}
+                  >
+                    {reason}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={handleCloseNotInterestedDialog}>
+              Cancel
+            </Button>
+            <Button
+              className="w-full sm:w-auto gap-2 rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold shadow-sm hover:bg-slate-800"
+              onClick={handleSubmitNotInterested}
+              disabled={
+                !selectedNotInterestedReason ||
+                (selectedNotInterestedReason === "other" && !customNotInterestedReason.trim()) ||
+                updating
               }
-            }}>
-              <DialogContent className="sm:max-w-lg" aria-describedby="not-interested-dialog-description">
-                <DialogHeader>
-                  <DialogTitle>Select a reason</DialogTitle>
-                </DialogHeader>
-                <p id="not-interested-dialog-description" className="sr-only">
-                  Choose a reason for marking the lead as not interested or provide a custom explanation.
+            >
+              Submit
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showCallBackDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseCallBackDialog();
+          }
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-sm sm:ml-auto overflow-hidden p-0 shadow-2xl"
+          aria-describedby="callback-dialog-description"
+        >
+          <div className="flex max-h-[70vh] flex-col">
+            <div className="border-b px-4 py-3">
+              <DialogHeader className="space-y-1 p-0">
+                <DialogTitle className="text-xl font-semibold text-slate-900">Select time</DialogTitle>
+                <p id="callback-dialog-description" className="text-sm text-slate-500">
+                  Pick a time within the next 48 hours.
                 </p>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {NOT_INTERESTED_REASONS.filter(reason => reason !== "Other (Free Text)").map((reason) => {
-                      const isSelected = selectedNotInterestedReason === reason;
+              </DialogHeader>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+              {callbackSlotSections.map((section) => (
+                <div key={section.label} className="space-y-3">
+                  <p className="text-sm font-semibold text-slate-500">{section.label}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {section.slots.map((slot) => {
+                      const isSelected = selectedCallbackSlot === slot.iso;
                       return (
                         <button
-                          key={reason}
+                          key={slot.id}
                           type="button"
-                            onClick={() => {
-                            setSelectedNotInterestedReason(reason);
-                            setCustomNotInterestedReason("");
-                          }}
-                          className={`rounded-md border px-3 py-2 text-sm text-left transition-colors ${
-                            isSelected
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border hover:border-primary/60"
-                          }`}
+                          disabled={slot.disabled}
+                          onClick={() => setSelectedCallbackSlot(slot.iso)}
+                          className={cn(
+                            "rounded-full px-4 py-2 text-sm font-medium transition",
+                            slot.disabled
+                              ? "cursor-not-allowed bg-slate-100 text-slate-400"
+                              : isSelected
+                              ? "bg-slate-900 text-white shadow-sm"
+                              : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                          )}
                         >
-                          {reason}
-                          </button>
+                          {slot.label.toLowerCase()}
+                        </button>
                       );
                     })}
                   </div>
-                  <div
-                    className={`rounded-md border px-3 py-2 transition-colors ${
-                      selectedNotInterestedReason === "other"
-                        ? "border-primary bg-primary/10"
-                        : "border-border"
-                    }`}
-                  >
-                    <Label htmlFor="not-interested-other" className="text-xs font-semibold text-muted-foreground">
-                      Other Reason
-                    </Label>
-                    <Textarea
-                      id="not-interested-other"
-                      value={customNotInterestedReason}
-                      onFocus={() => setSelectedNotInterestedReason("other")}
-                      onChange={(e) => {
-                        setSelectedNotInterestedReason("other");
-                        setCustomNotInterestedReason(e.target.value);
-                      }}
-                      placeholder="Describe the customer's reason"
-                      rows={3}
-                      className="mt-2"
-                    />
-                        </div>
-                      </div>
-                <DialogFooter className="flex flex-col sm:flex-row sm:justify-end sm:gap-2">
-                  <Button variant="outline" className="w-full sm:w-auto" onClick={handleCloseNotInterestedDialog}>
-                    Cancel
-                  </Button>
-                    <Button
-                    className="w-full sm:w-auto"
-                    onClick={handleSubmitNotInterested}
-                    disabled={
-                      !selectedNotInterestedReason ||
-                      (selectedNotInterestedReason === "other" && !customNotInterestedReason.trim()) ||
-                      updating
-                    }
-                  >
-                    Submit
-                    </Button>
-                </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            <Dialog open={showCallBackDialog} onOpenChange={(open) => {
-               if (!open) {
-                 handleCloseCallBackDialog();
-               }
-             }}>
-               <DialogContent className="sm:max-w-3xl" aria-describedby="callback-dialog-description">
-                 <DialogHeader>
-                   <DialogTitle>Schedule Call Back</DialogTitle>
-                 </DialogHeader>
-                 <p id="callback-dialog-description" className="sr-only">
-                   Pick a date and time to follow up with this lead.
-                 </p>
-                 <div className="flex flex-col md:flex-row gap-4">
-                   <div className="border rounded-md p-3 flex-1 min-w-[260px]">
-                     <Label className="text-xs font-semibold text-muted-foreground">Select Date</Label>
-                     <Calendar
-                       mode="single"
-                       selected={callbackDate}
-                       onSelect={setCallbackDate}
-                       disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                       className="mt-2"
-                     />
-                   </div>
-                   <div className="border rounded-md p-3 flex flex-col items-center gap-3 flex-1 min-w-[260px]">
-                     <Label className="text-xs font-semibold text-muted-foreground self-start">Select Time</Label>
-                     <div
-                       ref={clockRef}
-                       onMouseDown={handleClockMouse}
-                       onTouchStart={handleClockTouch}
-                       className="relative h-48 w-48 rounded-full bg-white shadow-inner cursor-pointer select-none"
-                     >
-                       <svg viewBox="0 0 200 200" className="h-full w-full">
-                         <circle cx="100" cy="100" r="96" fill="white" stroke="#E5E7EB" strokeWidth="2" />
-                         {Array.from({ length: 12 }, (_, i) => {
-                           const angle = ((i + 1) * 30 - 90) * (Math.PI / 180);
-                           const radius = 80;
-                           const x = 100 + radius * Math.cos(angle);
-                           const y = 100 + radius * Math.sin(angle);
-                           return (
-                             <text
-                               key={i}
-                               x={x}
-                               y={y}
-                               fontSize="12"
-                               fill="#4B5563"
-                               textAnchor="middle"
-                               dominantBaseline="middle"
-                             >
-                               {i + 1}
-                             </text>
-                           );
-                         })}
-                         {clockMode === 'minute' && (
-                           <line
-                             x1="100"
-                             y1="100"
-                             x2={100 + 70 * Math.cos(((callbackMinute * 6) - 90) * (Math.PI / 180))}
-                             y2={100 + 70 * Math.sin(((callbackMinute * 6) - 90) * (Math.PI / 180))}
-                             stroke="#8B5CF6"
-                             strokeWidth="3"
-                             strokeLinecap="round"
-                           />
-                         )}
-                         {clockMode === 'hour' && (
-                           <line
-                             x1="100"
-                             y1="100"
-                             x2={100 + 50 * Math.cos((((callbackHour % 12) * 30 + callbackMinute * 0.5) - 90) * (Math.PI / 180))}
-                             y2={100 + 50 * Math.sin((((callbackHour % 12) * 30 + callbackMinute * 0.5) - 90) * (Math.PI / 180))}
-                             stroke="#8B5CF6"
-                             strokeWidth="4"
-                             strokeLinecap="round"
-                           />
-                         )}
-                         <circle cx="100" cy="100" r="4" fill="#8B5CF6" />
-                       </svg>
-                     </div>
-                     <div className="flex gap-2 w-full">
-                       <Button
-                         type="button"
-                         variant={clockMode === 'hour' ? "default" : "outline"}
-                         size="sm"
-                         className="flex-1"
-                         onClick={() => setClockMode('hour')}
-                       >
-                         Hour
-                       </Button>
-                       <Button
-                         type="button"
-                         variant={clockMode === 'minute' ? "default" : "outline"}
-                         size="sm"
-                         className="flex-1"
-                         onClick={() => setClockMode('minute')}
-                       >
-                         Minute
-                       </Button>
-                     </div>
-                     <div className="flex gap-2 w-full">
-                       <Button
-                         type="button"
-                         variant={callbackIsAM ? "default" : "outline"}
-                         size="sm"
-                         className="flex-1"
-                         onClick={() => setCallbackIsAM(true)}
-                       >
-                         AM
-                       </Button>
-                       <Button
-                         type="button"
-                         variant={!callbackIsAM ? "default" : "outline"}
-                         size="sm"
-                         className="flex-1"
-                         onClick={() => setCallbackIsAM(false)}
-                       >
-                         PM
-                       </Button>
-                     </div>
-                   </div>
-                 </div>
-                 {callbackDate && (
-                   <div className="mt-4 rounded-md bg-muted p-2 text-sm">
-                     <span className="text-muted-foreground">Scheduled for: </span>
-                     <span className="font-medium">
-                       {format(callbackDate, "PPP")} at {((callbackHour % 12) || 12)}:{callbackMinute.toString().padStart(2, '0')} {callbackIsAM ? 'AM' : 'PM'}
-                     </span>
-                   </div>
-                 )}
-                 <DialogFooter className="flex flex-col sm:flex-row sm:justify-end sm:gap-2">
-                   <Button variant="outline" className="w-full sm:w-auto" onClick={handleCloseCallBackDialog}>
-                     Cancel
-                   </Button>
-                   <Button
-                     className="w-full sm:w-auto"
-                     onClick={handleSubmitCallBackLater}
-                     disabled={!callbackDate || updating}
-                   >
-                     Schedule
-                   </Button>
-                 </DialogFooter>
-               </DialogContent>
-            </Dialog>
+                </div>
+              ))}
+            </div>
+            <div className="border-t px-4 py-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="assign-callback"
+                  checked={assignCallbackToSelf}
+                  onCheckedChange={(checked) => setAssignCallbackToSelf(Boolean(checked))}
+                />
+                <Label htmlFor="assign-callback" className="text-sm text-slate-600">
+                  Assign it to me.
+                </Label>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+                <Button variant="ghost" className="w-full sm:w-auto" onClick={handleCloseCallBackDialog}>
+                  Close
+                </Button>
+                <Button
+                  className="w-full sm:w-auto rounded-lg bg-slate-900 text-white hover:bg-slate-800"
+                  onClick={handleSubmitCallBackLater}
+                  disabled={!selectedCallbackSlot || updating}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Profile Modal */}
       {showProfileModal && (currentLead?.linkedin_profile || currentLead?.website) && (
