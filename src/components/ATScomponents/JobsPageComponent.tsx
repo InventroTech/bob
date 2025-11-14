@@ -56,7 +56,8 @@ interface JobsPageComponentConfig {
   
   // API Configuration
   apiEndpoint?: string;
-  apiPrefix?: 'supabase' | 'renderer';
+  apiMode?: 'renderer' | 'direct';
+  apiBaseUrl?: string; // Full URL prefix for direct mode
   useDemoData?: boolean;
   tenantSlug?: string;
   submitEndpoint?: string; // Endpoint for submitting applications
@@ -323,7 +324,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     title = 'Available Positions',
     description = 'Discover exciting opportunities and take the next step in your career',
     apiEndpoint,
-    apiPrefix = 'supabase',
+    apiMode = 'renderer',
+    apiBaseUrl,
     useDemoData = false,
     tenantSlug,
     submitEndpoint = '/crm-records/records/',
@@ -447,9 +449,11 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     try {
       // Construct full URL based on API prefix
       let url = apiEndpoint;
-      if (apiPrefix === 'renderer') {
+      if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      } else if (apiMode === 'direct' && apiBaseUrl) {
+        url = `${apiBaseUrl}${apiEndpoint}`;
       }
 
       let headers: Record<string, string> = {
@@ -586,7 +590,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   // Load jobs on component mount and when API config changes
   useEffect(() => {
     fetchJobs();
-  }, [apiEndpoint, apiPrefix, useDemoData, maxJobs]);
+  }, [apiEndpoint, apiMode, apiBaseUrl, useDemoData, maxJobs]);
 
   // Filter jobs based on search and filters
   useEffect(() => {
@@ -650,11 +654,13 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     setIsSubmitting(true);
     
     try {
-      // Construct full URL based on API prefix
+      // Construct full URL based on API mode
       let url = submitEndpoint;
-      if (apiPrefix === 'renderer') {
+      if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         url = baseUrl ? `${baseUrl}${submitEndpoint}` : submitEndpoint;
+      } else if (apiMode === 'direct' && apiBaseUrl) {
+        url = `${apiBaseUrl}${submitEndpoint}`;
       }
 
       // Prepare headers
@@ -921,7 +927,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
                   <div className="mt-3 p-3 bg-red-100 rounded border text-xs">
                     <strong>Debug Info:</strong><br />
                     Endpoint: <code className="bg-red-200 px-1 rounded">{apiEndpoint}</code><br />
-                    API Type: <code className="bg-red-200 px-1 rounded">{apiPrefix}</code><br />
+                    API Mode: <code className="bg-red-200 px-1 rounded">{apiMode}</code><br />
                     <br />
                     <strong>Common Solutions:</strong><br />
                     • Check if the API endpoint exists and is accessible<br />
