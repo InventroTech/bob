@@ -16,7 +16,8 @@ export interface JobManagerComponentConfig {
   
   // API Configuration
   apiEndpoint?: string;
-  apiPrefix?: 'supabase' | 'renderer';
+  apiMode?: 'renderer' | 'direct';
+  apiBaseUrl?: string; // Full URL prefix for direct mode
   useDemoData?: boolean;
   tenantSlug?: string;
   
@@ -132,21 +133,41 @@ export const JobManagerConfigComponent: React.FC<JobManagerConfigProps> = ({
           </div>
           
           <div>
-            <Label htmlFor="apiPrefix" className="text-sm font-medium text-gray-700">API Prefix</Label>
+            <Label htmlFor="apiMode" className="text-sm font-medium text-gray-700">API Mode</Label>
             <Select
-              value={config.apiPrefix || 'supabase'}
-              onValueChange={(value) => onConfigChange('apiPrefix', value)}
+              value={config.apiMode || 'renderer'}
+              onValueChange={(value) => onConfigChange('apiMode', value)}
               disabled={config.useDemoData}
             >
               <SelectTrigger className="mt-2 border-gray-300">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="supabase">Supabase</SelectItem>
-                <SelectItem value="renderer">Renderer API</SelectItem>
+                <SelectItem value="renderer">Renderer (Uses VITE_RENDER_API_URL)</SelectItem>
+                <SelectItem value="direct">Direct (Full URL with prefix)</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-gray-500 mt-1">
+              Renderer: Uses environment variable. Direct: Use custom base URL.
+            </p>
           </div>
+
+          {config.apiMode === 'direct' && (
+            <div>
+              <Label htmlFor="apiBaseUrl" className="text-sm font-medium text-gray-700">API Base URL</Label>
+              <Input
+                id="apiBaseUrl"
+                value={config.apiBaseUrl || ''}
+                onChange={(e) => onConfigChange('apiBaseUrl', e.target.value)}
+                placeholder="https://api.example.com"
+                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+                disabled={config.useDemoData}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Full base URL (e.g., https://api.example.com). Endpoint will be appended.
+              </p>
+            </div>
+          )}
 
           <div>
             <Label htmlFor="tenantSlug" className="text-sm font-medium text-gray-700">Tenant Slug</Label>

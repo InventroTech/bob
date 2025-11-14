@@ -57,7 +57,8 @@ interface JobManagerComponentConfig {
   
   // API Configuration
   apiEndpoint?: string;
-  apiPrefix?: 'supabase' | 'renderer';
+  apiMode?: 'renderer' | 'direct';
+  apiBaseUrl?: string; // Full URL prefix for direct mode
   useDemoData?: boolean;
   tenantSlug?: string;
   
@@ -102,7 +103,8 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     layout = 'grid',
     maxJobs = 50,
     apiEndpoint,
-    apiPrefix = 'supabase',
+    apiMode = 'renderer',
+    apiBaseUrl,
     useDemoData = false,
     tenantSlug,
     dataMapping = {}
@@ -264,11 +266,13 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     setError(null);
 
     try {
-      // Construct full URL based on API prefix
+      // Construct full URL based on API mode
       let url = apiEndpoint;
-      if (apiPrefix === 'renderer') {
+      if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      } else if (apiMode === 'direct' && apiBaseUrl) {
+        url = `${apiBaseUrl}${apiEndpoint}`;
       }
 
       let headers: Record<string, string> = {
@@ -379,11 +383,13 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     }
 
     try {
-      // Construct full URL based on API prefix
+      // Construct full URL based on API mode
       let url = apiEndpoint;
-      if (apiPrefix === 'renderer') {
+      if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      } else if (apiMode === 'direct' && apiBaseUrl) {
+        url = `${apiBaseUrl}${apiEndpoint}`;
       }
 
       let headers: Record<string, string> = {
@@ -434,7 +440,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   // Load jobs on component mount and when API config changes
   useEffect(() => {
     fetchJobs();
-  }, [apiEndpoint, apiPrefix, useDemoData, maxJobs]);
+  }, [apiEndpoint, apiMode, apiBaseUrl, useDemoData, maxJobs]);
 
   // Save jobs to localStorage whenever jobs change
   useEffect(() => {
@@ -975,7 +981,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                   <div className="mt-3 p-3 bg-red-100 rounded border text-xs">
                     <strong>Debug Info:</strong><br />
                     Endpoint: <code className="bg-red-200 px-1 rounded">{apiEndpoint}</code><br />
-                    API Type: <code className="bg-red-200 px-1 rounded">{apiPrefix}</code><br />
+                    API Mode: <code className="bg-red-200 px-1 rounded">{apiMode}</code><br />
                     <br />
                     <strong>Common Solutions:</strong><br />
                     • Check if the API endpoint exists and is accessible<br />
