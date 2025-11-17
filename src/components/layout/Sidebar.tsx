@@ -1,15 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { 
-  BookOpen,
-  Grid3X3,
-  Home, 
-  Layout, 
-  PanelLeft, 
-  Settings, 
-  Users,
-  UserPlus,
-} from "lucide-react";
+import { Home, Layout, Sparkles, UserPlus } from "lucide-react";
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -21,10 +12,10 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
+  SidebarRail,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { Table } from "lucide-react";
-import { Card } from "../ui/card";
 
 const sidebarItems = [
   {
@@ -33,39 +24,9 @@ const sidebarItems = [
     icon: Home,
   },
   {
-    title: "Components",
-    path: "/components",
-    icon: Grid3X3,
-  },
-  {
     title: "My Pages",
     path: "/pages",
     icon: Layout,
-  },
-  {
-    title: "Team",
-    path: "/team/invite",
-    icon: Users,
-  },
-  {
-    title: "Tables",
-    path: "/tables",
-    icon: Table,
-  },
-  {
-    title: "Leads",
-    path: "/leads",
-    icon: Table,
-  },
-  {
-    title: "Cards",
-    path: "/cards",
-    icon: Table,
-  },
-  {
-    title: "Templates",
-    path: "/templates",
-    icon: BookOpen,
   },
   {
     title: "Add User",
@@ -76,12 +37,15 @@ const sidebarItems = [
 
 const Sidebar = () => {
   return (
-    <SidebarComponent>
-      <SidebarHeader className="flex items-center px-4 py-2">
-        <div className="flex items-center gap-2">
-          <PanelLeft className="h-6 w-6 text-crm-primary" />
-          <span className="font-bold text-lg">CRM Builder</span>
+    <SidebarComponent collapsible="icon">
+      <SidebarHeader className="flex flex-row items-center justify-between px-4 py-2 transition-all duration-200 group-data-[collapsible=icon]:px-2">
+        <div className="flex items-center gap-2 group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:justify-center">
+          <Sparkles className="h-6 w-6 flex-shrink-0 text-crm-primary" />
+          <span className="text-lg font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+            CRM Builder
+          </span>
         </div>
+        <SidebarTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-sidebar-border bg-sidebar text-sidebar-foreground transition hover:bg-sidebar-accent hover:text-primary" />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -110,26 +74,8 @@ const Sidebar = () => {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <NavLink
-                to="/settings"
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-2 px-2 py-1 rounded-md",
-                    isActive && "bg-sidebar-accent text-primary font-medium"
-                  )
-                }
-              >
-                <Settings className="h-5 w-5" />
-                <span>Settings</span>
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+      <SidebarFooter />
+      <SidebarRail />
     </SidebarComponent>
   );
 };
