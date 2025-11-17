@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Bell, LogOut, Settings, User } from "lucide-react";
 import {
   DropdownMenu,
@@ -9,9 +9,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/useAuth";
 
 interface UserInfo {
   name: string;
@@ -24,6 +25,10 @@ interface NavbarProps {
 }
 
 const Navbar = ({ user }: NavbarProps) => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const initials = user?.name
     ? user.name
         .split(" ")
@@ -31,6 +36,18 @@ const Navbar = ({ user }: NavbarProps) => {
         .join("")
         .toUpperCase()
     : "U";
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate('/auth');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <header className="border-b px-6 py-3">
@@ -91,9 +108,13 @@ const Navbar = ({ user }: NavbarProps) => {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex items-center gap-3 text-red-600">
+              <DropdownMenuItem 
+                className="flex items-center gap-3 text-red-600"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+              >
                 <LogOut className="h-4 w-4" />
-                <span>Logout</span>
+                <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
