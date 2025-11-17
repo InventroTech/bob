@@ -3,7 +3,7 @@ import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
-import { Bell, PanelLeft, Sparkles, Users } from 'lucide-react';
+import { Bell, PanelLeft, Sparkles, Users, LogOut } from 'lucide-react';
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
@@ -17,6 +17,7 @@ const CustomAppLayout: React.FC = () => {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const sidebarWidths = {
     expanded: 288,
@@ -118,6 +119,7 @@ const CustomAppLayout: React.FC = () => {
   }, [tenantId, userRoleId]);
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       // Use the centralized logout function
       await logout();
@@ -130,6 +132,8 @@ const CustomAppLayout: React.FC = () => {
       
     } catch (error) {
       console.error('Logout navigation error:', error);
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -194,7 +198,7 @@ const CustomAppLayout: React.FC = () => {
               {!sidebarCollapsed && <span>Notifications</span>}
             </button>
 
-            <div className="border-t pt-4">
+            <div className="border-t pt-4 space-y-2">
               <div className="flex items-center gap-3 rounded-xl px-3 py-2">
               {sidebarCollapsed ? (
                 <img
@@ -216,6 +220,30 @@ const CustomAppLayout: React.FC = () => {
                 </div>
               )}
             </div>
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                sidebarCollapsed 
+                  ? 'justify-center' 
+                  : ''
+              } ${
+                isLoggingOut
+                  ? 'opacity-50 cursor-not-allowed border-transparent text-gray-500'
+                  : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                isLoggingOut 
+                  ? 'bg-gray-100 text-gray-500' 
+                  : 'bg-gray-100 text-gray-500'
+              }`}>
+                <LogOut className="h-4 w-4" />
+              </div>
+              {!sidebarCollapsed && (
+                <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+              )}
+            </button>
             </div>
           </div>
         </aside>
