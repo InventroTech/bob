@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import { format, addDays, addHours, startOfDay } from "date-fns";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -19,11 +14,13 @@ import {
   Clock,
   MessageSquare,
   X,
-  ChevronRight,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
+import { NotInterestedModal } from "./NotInterestedModal";
+import { TrialActivatedModal } from "./TrialActivatedModal";
+import { CallBackModal } from "./CallBackModal";
 
 interface LeadCardCarouselProps {
   config?: {
@@ -105,20 +102,6 @@ interface LeadState {
   leadStartTime: Date;
 }
 
-interface CallbackSlot {
-  id: string;
-  label: string;
-  iso: string;
-  disabled: boolean;
-}
-
-interface CallbackSlotSection {
-  label: string;
-  slots: CallbackSlot[];
-}
-
-const CALLBACK_SLOT_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
-const CALLBACK_SLOT_HOURS_AHEAD = 48;
 
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
@@ -139,13 +122,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [inspirationalMessage, setInspirationalMessage] = useState<string>('');
   const [animationData, setAnimationData] = useState<any>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
-  const [selectedNotInterestedReason, setSelectedNotInterestedReason] = useState<string>("");
-  const [customNotInterestedReason, setCustomNotInterestedReason] = useState("");
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
   const [showTrialSuccessDialog, setShowTrialSuccessDialog] = useState(false);
-  const [callbackSlotSections, setCallbackSlotSections] = useState<CallbackSlotSection[]>([]);
-  const [selectedCallbackSlot, setSelectedCallbackSlot] = useState<string | null>(null);
-  const [assignCallbackToSelf, setAssignCallbackToSelf] = useState(false);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -171,17 +149,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     "You've got this! Keep pushing forward! 💯"
   ];
 
-  const NOT_INTERESTED_REASONS = [
-    "Not a political follower or leader",
-    "No Trust in Auto Pay Feature",
-    "Bank Account/UPI Issue",
-    "Cannot Afford",
-    ">=6 attempts",
-    "Opted other services for Posters",
-    "Lack of local Leader Content",
-    "Lack of customization options",
-    "Other (Free Text)",
-  ];
 
   // Utility functions
   const parseTags = (tags: string[] | string) => {
@@ -618,35 +585,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     setProcessingAction(null);
   };
 
-  const buildCallbackSections = (): CallbackSlotSection[] => {
-    const now = new Date();
-    const limit = addHours(now, CALLBACK_SLOT_HOURS_AHEAD);
-
-    return [0, 1, 2].map((offset) => {
-      const dayStart = startOfDay(addDays(now, offset));
-      const label =
-        offset === 0
-          ? "Today"
-          : offset === 1
-          ? "Tomorrow"
-          : format(dayStart, "EEEE");
-
-      const slots = CALLBACK_SLOT_HOURS.map((hour) => {
-        const slotDate = new Date(dayStart);
-        slotDate.setHours(hour, 0, 0, 0);
-        const iso = slotDate.toISOString();
-        const disabled = slotDate <= now || slotDate > limit;
-        return {
-          id: `${offset}-${hour}`,
-          label: format(slotDate, "hh:mm a"),
-          iso,
-          disabled,
-        };
-      });
-
-      return { label, slots };
-    });
-  };
 
   // Reusable helper to post CRM events
   const sendLeadEvent = async (
@@ -764,31 +702,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
   const handleNotInterestedClick = () => {
-    setSelectedNotInterestedReason("");
-    setCustomNotInterestedReason("");
     setShowNotInterestedDialog(true);
   };
 
-  const handleCloseNotInterestedDialog = () => {
-    setShowNotInterestedDialog(false);
-    setSelectedNotInterestedReason("");
-    setCustomNotInterestedReason("");
-  };
-
-  const handleSubmitNotInterested = async () => {
-    const selected = selectedNotInterestedReason.trim();
-    const isOther = selected === "Other (Free Text)";
-    const finalReason = isOther ? customNotInterestedReason.trim() : selected;
-
-    if (!finalReason) {
+  const handleSubmitNotInterested = async (reason: string): Promise<boolean> => {
+    if (!reason) {
       toast({ title: "Reason required", description: "Please select or enter a reason.", variant: "destructive" });
-      return;
+      return false;
     }
-
-    const ok = await handleActionButton("Not Interested", { reason: finalReason });
-    if (ok) {
-      handleCloseNotInterestedDialog();
-    }
+    return await handleActionButton("Not Interested", { reason });
   };
 
   const handleTakeBreak = async () => {
@@ -822,32 +744,18 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
   const handleOpenCallBackDialog = () => {
-    const sections = buildCallbackSections();
-    setCallbackSlotSections(sections);
-    const firstAvailable = sections.flatMap((section) => section.slots).find((slot) => !slot.disabled);
-    setSelectedCallbackSlot(firstAvailable?.iso ?? null);
-    setAssignCallbackToSelf(false);
     setShowCallBackDialog(true);
   };
 
-  const handleCloseCallBackDialog = () => {
-    setShowCallBackDialog(false);
-    setSelectedCallbackSlot(null);
-    setAssignCallbackToSelf(false);
-  };
-
-  const handleSubmitCallBackLater = async () => {
-    if (!selectedCallbackSlot) {
+  const handleSubmitCallBackLater = async (nextCallAt: string, assignToSelf: boolean): Promise<boolean> => {
+    if (!nextCallAt) {
       toast({ title: "Select time", description: "Please choose a valid date and time.", variant: "destructive" });
-      return;
+      return false;
     }
-    const ok = await handleActionButton("Call Back Later", {
-      nextCallAt: selectedCallbackSlot,
-      assignToSelf: assignCallbackToSelf,
+    return await handleActionButton("Call Back Later", {
+      nextCallAt,
+      assignToSelf,
     });
-    if (ok) {
-      handleCloseCallBackDialog();
-    }
   };
 
   // Load Lottie animation (idle + cached)
@@ -1196,176 +1104,22 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           </div>
         </Card>
       </div>
-      <Dialog open={showTrialSuccessDialog} onOpenChange={setShowTrialSuccessDialog}>
-        <DialogContent className="sm:max-w-md" aria-describedby="trial-success-description">
-          <DialogHeader className="space-y-2">
-            <DialogTitle className="text-2xl font-semibold text-slate-900">Great Job!</DialogTitle>
-            <p id="trial-success-description" className="text-sm text-slate-500">
-              Well done. Proceed to next call.
-            </p>
-          </DialogHeader>
-          <DialogFooter className="w-full pt-2">
-            <Button
-              className="w-40 gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
-              onClick={() => setShowTrialSuccessDialog(false)}
-            >
-              <ChevronRight className="h-4 w-4" />
-              Next Lead
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showNotInterestedDialog} onOpenChange={(open) => {
-        if (!open) {
-          handleCloseNotInterestedDialog();
-        }
-      }}>
-        <DialogContent className="sm:max-w-xl" aria-describedby="not-interested-dialog-description">
-          <DialogHeader className="space-y-1">
-            <DialogTitle className="text-2xl font-semibold text-slate-900">Any Feedback?</DialogTitle>
-            <p id="not-interested-dialog-description" className="text-sm text-slate-500">
-              Share why this lead is not interested so we can improve the experience.
-            </p>
-          </DialogHeader>
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="not-interested-other" className="text-sm font-medium text-slate-700">
-                Feedback
-              </Label>
-              <Textarea
-                id="not-interested-other"
-                value={customNotInterestedReason}
-                onFocus={() => setSelectedNotInterestedReason("other")}
-                onChange={(e) => {
-                  setSelectedNotInterestedReason("other");
-                  setCustomNotInterestedReason(e.target.value);
-                }}
-                placeholder="Add feedback"
-                rows={3}
-                className="h-28 rounded-2xl border-slate-200 shadow-sm focus-visible:ring-slate-400"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {NOT_INTERESTED_REASONS.filter(reason => reason !== "Other (Free Text)").map((reason) => {
-                const isSelected = selectedNotInterestedReason === reason;
-                return (
-                  <button
-                    key={reason}
-                    type="button"
-                    onClick={() => {
-                      setSelectedNotInterestedReason(reason);
-                      setCustomNotInterestedReason("");
-                    }}
-                    className={cn(
-                      "rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-                      isSelected
-                        ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300"
-                    )}
-                  >
-                    {reason}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="outline" className="w-full sm:w-auto" onClick={handleCloseNotInterestedDialog}>
-              Cancel
-            </Button>
-            <Button
-              className="w-full sm:w-auto gap-2 rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold shadow-sm hover:bg-slate-800"
-              onClick={handleSubmitNotInterested}
-              disabled={
-                !selectedNotInterestedReason ||
-                (selectedNotInterestedReason === "other" && !customNotInterestedReason.trim()) ||
-                updating
-              }
-            >
-              Submit
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
+      <TrialActivatedModal
+        open={showTrialSuccessDialog}
+        onOpenChange={setShowTrialSuccessDialog}
+      />
+      <NotInterestedModal
+        open={showNotInterestedDialog}
+        onOpenChange={setShowNotInterestedDialog}
+        onSubmit={handleSubmitNotInterested}
+        updating={updating}
+      />
+      <CallBackModal
         open={showCallBackDialog}
-        onOpenChange={(open) => {
-          if (!open) {
-            handleCloseCallBackDialog();
-          }
-        }}
-      >
-        <DialogContent
-          className="sm:max-w-sm sm:ml-auto overflow-hidden p-0 shadow-2xl"
-          aria-describedby="callback-dialog-description"
-        >
-          <div className="flex max-h-[70vh] flex-col">
-            <div className="border-b px-4 py-3">
-              <DialogHeader className="space-y-1 p-0">
-                <DialogTitle className="text-xl font-semibold text-slate-900">Select time</DialogTitle>
-                <p id="callback-dialog-description" className="text-sm text-slate-500">
-                  Pick a time within the next 48 hours.
-                </p>
-              </DialogHeader>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-              {callbackSlotSections.map((section) => (
-                <div key={section.label} className="space-y-3">
-                  <p className="text-sm font-semibold text-slate-500">{section.label}</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {section.slots.map((slot) => {
-                      const isSelected = selectedCallbackSlot === slot.iso;
-                      return (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          disabled={slot.disabled}
-                          onClick={() => setSelectedCallbackSlot(slot.iso)}
-                          className={cn(
-                            "rounded-full px-4 py-2 text-sm font-medium transition",
-                            slot.disabled
-                              ? "cursor-not-allowed bg-slate-100 text-slate-400"
-                              : isSelected
-                              ? "bg-slate-900 text-white shadow-sm"
-                              : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                          )}
-                        >
-                          {slot.label.toLowerCase()}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="border-t px-4 py-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="assign-callback"
-                  checked={assignCallbackToSelf}
-                  onCheckedChange={(checked) => setAssignCallbackToSelf(Boolean(checked))}
-                />
-                <Label htmlFor="assign-callback" className="text-sm text-slate-600">
-                  Assign it to me.
-                </Label>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-                <Button variant="ghost" className="w-full sm:w-auto" onClick={handleCloseCallBackDialog}>
-                  Close
-                </Button>
-                <Button
-                  className="w-full sm:w-auto rounded-lg bg-slate-900 text-white hover:bg-slate-800"
-                  onClick={handleSubmitCallBackLater}
-                  disabled={!selectedCallbackSlot || updating}
-                >
-                  Save
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setShowCallBackDialog}
+        onSubmit={handleSubmitCallBackLater}
+        updating={updating}
+      />
 
       {/* Profile Modal */}
       {showProfileModal && (currentLead?.linkedin_profile || currentLead?.website) && (
