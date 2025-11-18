@@ -52,14 +52,26 @@ const AddUserComponent: React.FC = () => {
 
   useEffect(() => {
     const fetchRoles = async () => {
-      try {
-        const rolesData = await membershipService.getRoles();
-        setRoles(rolesData);
-      } catch (error: any) {
-        console.error('Error fetching roles:', error);
-        toast.error(`Failed to fetch roles: ${error.message}`);
-        setRoles([]);
+      if (!tenantId) return;
+
+      let { data, error } = await supabase
+        .from('roles')
+        .select('id, name')
+        .eq('tenant_id', tenantId);
+
+      if (error) {
+        const response = await supabase.from('roles').select('id, name');
+        data = response.data;
+        error = response.error;
+
+        if (error) {
+          console.error('Error fetching roles:', error);
+          toast.error('Failed to fetch roles');
+          return;
+        }
       }
+
+      setRoles(data || []);
     };
 
     fetchRoles();
@@ -70,64 +82,39 @@ const AddUserComponent: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          uid,
+          name,
+          email,
+          role_id,
+          created_at,
+          roles (
+            id,
+            name
+          )
+        `)
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false });
 
-      if (!token) {
-        console.error('No authentication token available');
-        toast.error('Authentication required to fetch users');
-        return;
-      }
+      if (error) throw error;
 
-      // Use renderer URL for users
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/membership/users`;
-      
-      console.log('Fetching users from:', apiUrl);
-
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error response:', errorData);
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const responseData = await response.json();
-      console.log('Users response:', responseData);
-      
-      // Handle different response formats
-      let usersData = [];
-      if (responseData.results && Array.isArray(responseData.results)) {
-        usersData = responseData.results;
-      } else if (Array.isArray(responseData)) {
-        usersData = responseData;
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        usersData = responseData.data;
-      }
-
-      // Transform the data to match expected format
-      const transformedUsers: User[] = usersData.map((user: any, index: number) => ({
-        uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
-        name: user.name || user.full_name || 'Unnamed User',
-        email: user.email || 'No Email',
-        role_id: user.role_id || user.role?.id || '',
-        created_at: user.created_at || user.date_joined || new Date().toISOString(),
-        role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined)
-      }));
+      // Transform the data without filtering out users
+      const transformedUsers: User[] = ((data as unknown) as DatabaseUser[])
+        .map((user, index) => ({
+          uid: user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
+          name: user.name || 'Unnamed User',
+          email: user.email || 'No Email',
+          role_id: user.role_id || '',
+          created_at: user.created_at || new Date().toISOString(),
+          role: user.roles || undefined
+        }));
 
       setUsers(transformedUsers);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching users:', error);
-      toast.error(`Failed to fetch users: ${error.message}`);
-      setUsers([]);
+      toast.error('Failed to fetch users');
     } finally {
       setIsLoading(false);
     }
@@ -142,35 +129,27 @@ const AddUserComponent: React.FC = () => {
   };
 
   const handleAddRole = async () => {
-    if (!newRoleName || !newRoleKey) return toast.error('Role name and key are required');
+    if (!newRoleName) return toast.error('Role name is required');
+    if (!tenantId) return toast.error('Tenant ID not found');
 
-    try {
-      const createdRole = await membershipService.createRole(newRoleKey, newRoleName);
+    const { data, error } = await supabase
+      .from('roles')
+      .insert([{ name: newRoleName, tenant_id: tenantId }])
+      .select()
+      .single();
 
-      // Clear form fields first
-      setNewRoleName('');
-      setNewRoleKey('');
-      setShowRoleFields(false);
-      
-      // Set the newly created role as selected if we have an ID
-      if (createdRole.id) {
-        setSelectedRoleId(createdRole.id);
-      }
-
-      // Show success toast
-      toast.success('Role added successfully');
-
-      // Refresh the roles list (don't block on this)
-      try {
-        const rolesData = await membershipService.getRoles();
-        setRoles(rolesData);
-      } catch (refreshError) {
-        console.error('Error refreshing roles list:', refreshError);
-        // Don't show error toast for refresh failure, role was already created
-      }
-    } catch (error: any) {
+    if (error) {
       console.error('Error adding role:', error);
-      toast.error(`Error adding role: ${error.message || 'Failed to create role'}`);
+      toast.error(`Error adding role: ${error.message}`);
+    } else {
+      toast.success('Role added');
+      setNewRoleName('');
+      setSelectedRoleId(data.id);
+      const updated = await supabase
+        .from('roles')
+        .select('id, name')
+        .eq('tenant_id', tenantId);
+      setRoles(updated.data || []);
     }
   };
 
