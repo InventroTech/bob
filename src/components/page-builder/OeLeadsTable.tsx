@@ -25,55 +25,6 @@ const columns: Column[] = [
   { header: 'Phone Number', accessor: 'phone', type: 'text' }
 ];
 
-// Demo data for fallback
-const DEMO_LEADS = [
-  {
-    id: 1,
-    name: "John Doe",
-    party: "BJP",
-    lastconnected: "2024-03-15",
-    info: "Interested in party membership",
-    status: "Active",
-    phone: "+91 9876543210"
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    party: "Congress",
-    lastconnected: "2024-03-14",
-    info: "Looking for local party events",
-    status: "Pending",
-    phone: "+91 8765432109"
-  },
-  {
-    id: 3,
-    name: "Rajesh Kumar",
-    party: "AAP",
-    lastconnected: "2024-03-13",
-    info: "Wants to volunteer",
-    status: "Active",
-    phone: "+91 7654321098"
-  },
-  {
-    id: 4,
-    name: "Priya Sharma",
-    party: "BJP",
-    lastconnected: "2024-03-12",
-    info: "Interested in youth wing",
-    status: "Inactive",
-    phone: "+91 6543210987"
-  },
-  {
-    id: 5,
-    name: "Amit Patel",
-    party: "Congress",
-    lastconnected: "2024-03-11",
-    info: "Wants to join party",
-    status: "Active",
-    phone: "+91 5432109876"
-  }
-];
-
 interface OeLeadsTableProps {
   config?: {
     apiEndpoint?: string;
@@ -105,11 +56,14 @@ export const OeLeadsTable: React.FC<OeLeadsTableProps> = ({ config }) => {
     const fetchLeads = async () => {
       try {
         setLoading(true);
+        console.log('OeLeadsTable: Starting to fetch data...');
         const authToken = session?.access_token;
 
         // Use configured endpoint or fallback to default
         const endpoint = config?.apiEndpoint || '/api/oe-leads';
         const apiUrl = `${import.meta.env.API_URI}${endpoint}`;
+        
+        console.log('OeLeadsTable: API URL:', apiUrl);
         
         const response = await fetch(apiUrl, {
           method: 'GET',
@@ -124,15 +78,19 @@ export const OeLeadsTable: React.FC<OeLeadsTableProps> = ({ config }) => {
         }
 
         const data = await response.json();
+        console.log('OeLeadsTable: API Response:', data);
+        
         if (data.leads && Array.isArray(data.leads)) {
+          console.log('OeLeadsTable: Setting data from API:', data.leads);
           setData(data.leads);
         } else {
           throw new Error('Invalid data format received');
         }
       } catch (error) {
-        console.error('Error fetching leads:', error);
-        toast.error('Failed to fetch leads data, using demo data');
-        setData(DEMO_LEADS);
+        console.error('OeLeadsTable: Error fetching leads:', error);
+        toast.error('Failed to fetch leads data');
+        console.log('OeLeadsTable: Setting empty data array');
+        setData([]);
       } finally {
         setLoading(false);
       }

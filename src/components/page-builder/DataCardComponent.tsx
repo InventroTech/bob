@@ -58,6 +58,8 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
   const { session } = useAuth();
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchCardData = async () => {
       try {
         setLoading(true);
@@ -72,7 +74,8 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
           headers: {
             'Content-Type': 'application/json',
             'Authorization': token ? `Bearer ${token}` : ''
-          }
+          },
+          signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -108,7 +111,11 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
     };
 
     fetchCardData();
-  }, [config?.apiEndpoint]);
+
+    return () => {
+      abortController.abort();
+    };
+  }, [config?.apiEndpoint, session?.access_token]);
 
   if (loading) {
     return (

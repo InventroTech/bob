@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -10,8 +11,17 @@ const CustomAppDashboard: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
+  const dataFetchedRef = useRef(false); // Track if we've already fetched data
 
   useEffect(() => {
+    // Reset ref when user changes (e.g., on logout/login)
+    if (!user) {
+      dataFetchedRef.current = false;
+      setUserRoleId(null);
+      setLoading(false);
+      return;
+    }
+
     const fetchFirstPage = async () => {
       if (!user?.email) {
         console.log('No user email available');
@@ -19,34 +29,38 @@ const CustomAppDashboard: React.FC = () => {
         return;
       }
 
+      // Prevent redundant fetches when user object changes (e.g., on page focus)
+      if (dataFetchedRef.current) {
+        return;
+      }
+
       console.log('Fetching data for user:', user.email);
 
       try {
-        // Get tenant_id and role_id for the user
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('tenant_id, role_id')
-          .eq('email', user.email)
-          .single();
+        // Get session to extract JWT token
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
-        console.log('User data result:', { userData, userError });
-
-        if (userError) {
-          console.error('Error fetching user data:', userError);
+        if (sessionError || !sessionData.session?.access_token) {
+          console.error('No session found:', sessionError);
           toast.error('Failed to load user data');
           setLoading(false);
           return;
         }
 
-        if (!userData?.tenant_id) {
-          console.log('No tenant_id found for user');
+        // Extract tenant_id and role_id from JWT token (no API call needed)
+        const token = sessionData.session.access_token;
+        const tenantId = getTenantIdFromJWT(token);
+        const roleId = getRoleIdFromJWT(token);
+
+        if (!tenantId || !roleId) {
+          console.log('Could not extract tenant_id or role_id from JWT');
+          toast.error('Failed to load user data');
           setLoading(false);
           return;
         }
 
-        const tenantId = userData.tenant_id;
-        const roleId = userData.role_id;
         setUserRoleId(roleId);
+        dataFetchedRef.current = true;
 
         console.log('Tenant ID:', tenantId, 'Role ID:', roleId);
 
