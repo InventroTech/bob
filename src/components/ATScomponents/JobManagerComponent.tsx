@@ -64,6 +64,7 @@ interface JobManagerComponentConfig {
   
   // API Configuration
   apiEndpoint?: string;
+  updateEndpoint?: string; // Separate endpoint for updates (optional, falls back to apiEndpoint)
   apiMode?: 'renderer' | 'direct';
   apiBaseUrl?: string; // Full URL prefix for direct mode
   useDemoData?: boolean;
@@ -110,6 +111,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     layout = 'grid',
     maxJobs = 50,
     apiEndpoint,
+    updateEndpoint, // Separate endpoint for updates
     apiMode = 'renderer',
     apiBaseUrl,
     useDemoData = false,
@@ -777,10 +779,117 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     setIsCreateModalOpen(false);
   };
 
+  // Update job to API
+  const updateJobToAPI = async (job: Job): Promise<boolean> => {
+    if (useDemoData) {
+      // Skip API call if demo mode
+      return true;
+    }
+
+    try {
+      // Use updateEndpoint if provided, otherwise fall back to apiEndpoint
+      const endpoint = updateEndpoint || apiEndpoint;
+      if (!endpoint) {
+        throw new Error('No update endpoint configured. Please set either updateEndpoint or apiEndpoint in config.');
+      }
+
+      // Construct full URL based on API mode
+      let url = endpoint;
+      if (apiMode === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${endpoint}` : endpoint;
+      } else if (apiMode === 'direct' && apiBaseUrl) {
+        url = `${apiBaseUrl}${endpoint}`;
+      }
+
+      // Construct update URL
+      // If updateEndpoint is provided, use it as-is (may or may not need ID in URL)
+      // If using apiEndpoint, append ID (RESTful pattern)
+      let updateUrl: string;
+      if (updateEndpoint) {
+        // If updateEndpoint is provided, check if it already contains a placeholder or use as-is
+        // Some update endpoints might be like "/api/jobs/update" and expect ID in body
+        // Others might be like "/api/jobs/{id}" and need ID replacement
+        if (url.includes('{id}') || url.includes(':id')) {
+          updateUrl = url.replace('{id}', job.id).replace(':id', job.id);
+        } else {
+          // Use endpoint as-is (ID will be in payload)
+          updateUrl = url;
+        }
+      } else {
+        // Fallback to apiEndpoint with ID appended (RESTful pattern)
+        updateUrl = url.endsWith('/') ? `${url}${job.id}` : `${url}/${job.id}`;
+      }
+
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      // Add Bearer token from Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Add tenant slug if provided (use config or fallback to tenantId from hook)
+      const effectiveTenantSlug = tenantSlug || tenantId;
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+      }
+
+      const apiData = mapJobToApiFormat(job);
+      // Include record_id in payload for update (required by backend)
+      // The job.id is the backend record ID from the API response
+      apiData.id = job.id;
+      apiData.record_id = job.id; // Backend requires record_id field for updates
+      // Also include ID in data section if backend requires it
+      if (!apiData.data.id) {
+        apiData.data.id = job.id;
+      }
+      
+      console.log('Updating job with record ID:', job.id);
+      console.log('Using tenant slug:', effectiveTenantSlug);
+      console.log('Update URL:', updateUrl);
+      console.log('Update payload:', apiData);
+
+      const response = await fetch(updateUrl, {
+        method: 'PUT', // Use PUT for updates, change to PATCH if your API requires it
+        headers,
+        body: JSON.stringify(apiData)
+      });
+
+      console.log('PUT response status:', response.status);
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error('PUT response text:', responseText);
+        throw new Error(`Failed to update job: ${response.status} - ${responseText}`);
+      }
+
+      const result = await response.json();
+      console.log('Job updated successfully:', result);
+      
+      return true;
+    } catch (err) {
+      console.error('Error updating job to API:', err);
+      toast.error(`Failed to sync job update to API: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      return false;
+    }
+  };
+
   // Update job
-  const handleUpdateJob = (updatedJob: Job) => {
+  const handleUpdateJob = async (updatedJob: Job) => {
+    // Update local state first
     setJobs(prev => prev.map(job => job.id === updatedJob.id ? updatedJob : job));
-    toast.success('Job updated successfully');
+    
+    // Try to update to API
+    const apiSuccess = await updateJobToAPI(updatedJob);
+    
+    if (apiSuccess) {
+      toast.success('Job updated successfully!');
+    } else {
+      toast.success('Job updated locally (API sync failed)');
+    }
   };
 
   // Delete job
@@ -977,6 +1086,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
 
     const updatedJob: Job = {
       ...editingJob,
+      id: editingJob.id, // Preserve the original record ID from backend
       title: editJobData.title,
       description: editJobData.description,
       department: editJobData.department,
@@ -990,9 +1100,10 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       form: customForm
     };
 
-    handleUpdateJob(updatedJob);
-    setIsEditModalOpen(false);
-    setEditingJob(null);
+    console.log('Saving edited job with record ID:', updatedJob.id);
+    await handleUpdateJob(updatedJob);
+      setIsEditModalOpen(false);
+      setEditingJob(null);
   };
 
   // Preview job form

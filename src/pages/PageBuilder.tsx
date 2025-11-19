@@ -164,6 +164,11 @@ interface ComponentConfig {
   // Shared fields for all ATS components
   tenantSlug?: string;
   submitEndpoint?: string; // Used by OpenModalButton and JobsPage
+  // JobManager specific API fields
+  updateEndpoint?: string; // Separate endpoint for updates (PUT)
+  apiMode?: 'renderer' | 'direct'; // API mode for JobManager
+  apiBaseUrl?: string; // Full URL prefix for direct mode
+  useDemoData?: boolean; // Use demo data instead of API calls
   // LeadAssignment specific fields
   leadTypesEndpoint?: string;
   rmsEndpoint?: string;
@@ -256,10 +261,15 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     acceptedFileTypes?: string;
     maxFileSize?: number;
     multiple?: boolean;
-    // Shared fields for all ATS components
-    tenantSlug?: string;
-    submitEndpoint?: string; // Used by OpenModalButton and JobsPage
-  };
+  // Shared fields for all ATS components
+  tenantSlug?: string;
+  submitEndpoint?: string; // Used by OpenModalButton and JobsPage
+  // JobManager specific API fields
+  updateEndpoint?: string; // Separate endpoint for updates (PUT)
+  apiMode?: 'renderer' | 'direct'; // API mode for JobManager
+  apiBaseUrl?: string; // Full URL prefix for direct mode
+  useDemoData?: boolean; // Use demo data instead of API calls
+};
 
   // Local state for all input fields
   const [localConfig, setLocalConfig] = useState<LocalConfigType>({
@@ -293,6 +303,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // Shared fields for all ATS components
     tenantSlug: initialConfig.tenantSlug || '',
     submitEndpoint: initialConfig.submitEndpoint || '/crm-records/records/',
+    // JobManager specific API fields
+    updateEndpoint: initialConfig.updateEndpoint || '',
+    apiMode: initialConfig.apiMode || 'renderer',
+    apiBaseUrl: initialConfig.apiBaseUrl || '',
+    useDemoData: initialConfig.useDemoData ?? false,
   });
 
   // Separate state for columns
