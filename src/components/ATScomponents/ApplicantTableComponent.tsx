@@ -54,6 +54,8 @@ import { Textarea } from '../ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 
+export type ApplicantStage = 'Initial' | 'Assignment Pending' | 'Interview' | 'HR' | 'Rejected' | 'Hire';
+
 export interface Application {
   id: string;
   jobId: string;
@@ -62,6 +64,7 @@ export interface Application {
   applicantEmail: string;
   applicantPhone?: string;
   status: 'pending' | 'reviewing' | 'interviewed' | 'shortlisted' | 'accepted' | 'rejected';
+  stage?: ApplicantStage; // New stage field
   submittedAt: string;
   experience?: string;
   location?: string;
@@ -74,6 +77,51 @@ export interface Application {
   notes?: string;
   interviewDate?: string;
   source?: string;
+  // Full application data from database
+  fullData?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    jobId?: number | string;
+    salary?: string;
+    skills?: string;
+    answers?: Record<string, string>;
+    criteria?: string;
+    location?: string;
+    resumeUrl?: string;
+    department?: string;
+    submittedAt?: string;
+    openairesponse?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      github?: string;
+      skills?: string[];
+      summary?: string;
+      linkedin?: string;
+      location?: string;
+      projects?: Array<{
+        name?: string;
+        tech_stack?: string[];
+        description?: string;
+      }>;
+      ats_score?: number;
+      education?: Array<{
+        degree?: string;
+        college?: string;
+        start_year?: string;
+        end_year?: string;
+      }>;
+      portfolio?: string;
+      experience?: Array<{
+        company?: string;
+        duration?: string;
+        position?: string;
+        description?: string;
+      }>;
+    };
+    other_description?: string;
+  };
 }
 
 export interface Job {
@@ -94,6 +142,7 @@ export interface ApplicantTableConfig {
   apiEndpoint?: string;
   apiPrefix?: 'supabase' | 'renderer';
   statusDataApiEndpoint?: string;
+  updateEndpoint?: string; // Endpoint for updating applicant stage
   useDemoData?: boolean; // Force use demo data instead of API
   tenantSlug?: string;
   
@@ -289,6 +338,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     apiEndpoint,
     apiPrefix = 'supabase',
     statusDataApiEndpoint,
+    updateEndpoint,
     useDemoData = false,
     tenantSlug,
     showJobSelector = true,
@@ -317,6 +367,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   const defaultColumns = [
     { key: 'applicantName', label: 'Applicant', type: 'text' as const, visible: true, sortable: true, accessor: 'applicantName', align: 'left' as const, width: '200px' },
     { key: 'applicantEmail', label: 'Contact', type: 'email' as const, visible: true, sortable: false, accessor: 'applicantEmail', align: 'left' as const, width: '200px' },
+    { key: 'stage', label: 'Stage', type: 'stage' as const, visible: true, sortable: true, accessor: 'stage', align: 'center' as const, width: '150px' },
     { key: 'status', label: 'Status', type: 'status' as const, visible: true, sortable: true, accessor: 'status', align: 'center' as const, width: '120px' },
     { key: 'submittedAt', label: 'Applied', type: 'date' as const, visible: true, sortable: true, accessor: 'submittedAt', align: 'left' as const, width: '150px' },
     { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: true, accessor: 'experience', align: 'left' as const, width: '150px' },
@@ -367,6 +418,40 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     const jobId = String(nestedData.jobId || apiData.jobId || '');
     const job = jobs.find(j => j.id === jobId);
 
+    // Extract stage from nestedData or default to 'Initial'
+    const stage: ApplicantStage = nestedData.stage || apiData.stage || 'Initial';
+
+    // Store full data structure including openairesponse
+    const fullData = {
+      name: nestedData.name || apiData.name,
+      email: nestedData.email || apiData.email,
+      phone: nestedData.phone || apiData.phone,
+      jobId: nestedData.jobId || apiData.jobId,
+      salary: nestedData.salary,
+      skills: nestedData.skills,
+      answers: nestedData.answers || {},
+      criteria: nestedData.criteria,
+      location: nestedData.location,
+      resumeUrl: nestedData.resumeUrl,
+      department: nestedData.department,
+      submittedAt: nestedData.submittedAt || apiData.created_at,
+      openairesponse: (() => {
+        if (nestedData.openairesponse) {
+          if (typeof nestedData.openairesponse === 'string') {
+            try {
+              return JSON.parse(nestedData.openairesponse);
+            } catch (e) {
+              console.warn('Failed to parse openairesponse as JSON:', e);
+              return null;
+            }
+          }
+          return nestedData.openairesponse;
+        }
+        return null;
+      })(),
+      other_description: nestedData.other_description
+    };
+
     return {
       id: apiData[idField] || apiData.id || '',
       jobId: jobId,
@@ -375,6 +460,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       applicantEmail: nestedData[emailField] || nestedData.email || apiData.email || '',
       applicantPhone: nestedData[phoneField] || nestedData.phone || apiData.phone || '',
       status: nestedData[statusField] || nestedData.status || apiData.status || 'pending',
+      stage: stage, // Add stage field
       submittedAt: nestedData[dateField] || nestedData.submittedAt || apiData.created_at || new Date().toISOString(),
       experience: nestedData.experience || apiData.experience || '',
       location: nestedData.location || apiData.location || '',
@@ -386,7 +472,8 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       rating: nestedData.rating || apiData.rating || 0,
       notes: nestedData.notes || apiData.notes || '',
       interviewDate: nestedData.interviewDate || apiData.interview_date || '',
-      source: nestedData.source || apiData.source || 'Direct'
+      source: nestedData.source || apiData.source || 'Direct',
+      fullData: fullData // Store full data structure
     };
   };
 
@@ -666,9 +753,104 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     setIsViewModalOpen(true);
   };
 
+  // Stage management functions
+  const getNextStage = (currentStage: ApplicantStage): ApplicantStage | null => {
+    const stageOrder: ApplicantStage[] = ['Initial', 'Assignment Pending', 'Interview', 'HR', 'Hire'];
+    const currentIndex = stageOrder.indexOf(currentStage);
+    if (currentIndex === -1 || currentIndex === stageOrder.length - 1) {
+      return null; // No next stage or already at final stage
+    }
+    return stageOrder[currentIndex + 1];
+  };
+
+  const updateApplicantStage = async (applicationId: string, newStage: ApplicantStage) => {
+    // Update local state immediately
+    setApplications(prev => prev.map(app => 
+      app.id === applicationId ? { ...app, stage: newStage } : app
+    ));
+
+    // Update via API if endpoint is configured
+    if (updateEndpoint && !useDemoData) {
+      try {
+        let url = updateEndpoint;
+        if (apiPrefix === 'renderer') {
+          const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+          url = baseUrl ? `${baseUrl}${updateEndpoint}` : updateEndpoint;
+        }
+
+        // Construct URL with application ID
+        const updateUrl = url.endsWith('/') ? `${url}${applicationId}` : `${url}/${applicationId}`;
+
+        let headers: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const effectiveTenantSlug = tenantSlug || tenantId;
+        if (effectiveTenantSlug) {
+          headers['X-Tenant-Slug'] = effectiveTenantSlug;
+        }
+
+        const response = await fetch(updateUrl, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            stage: newStage,
+            data: {
+              stage: newStage
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update stage: ${response.status}`);
+        }
+
+        console.log('Stage updated successfully');
+      } catch (error) {
+        console.error('Error updating stage:', error);
+        // Revert local state on error - fetch the current state before updating
+        setApplications(prev => {
+          const currentApp = prev.find(a => a.id === applicationId);
+          return prev.map(app => 
+            app.id === applicationId ? { ...app, stage: currentApp?.stage || 'Initial' } : app
+          );
+        });
+      }
+    }
+  };
+
+  const handleNextStep = (application: Application) => {
+    const currentStage = application.stage || 'Initial';
+    const nextStage = getNextStage(currentStage);
+    if (nextStage) {
+      updateApplicantStage(application.id, nextStage);
+    }
+  };
+
+  const handleReject = (application: Application) => {
+    updateApplicantStage(application.id, 'Rejected');
+  };
+
   const handleExport = () => {
     // In real app, this would export to CSV/Excel
     console.log('Exporting applications...', filteredAndSortedApplications);
+  };
+
+  const getStageColor = (stage: ApplicantStage) => {
+    switch (stage) {
+      case 'Initial': return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'Assignment Pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'Interview': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'HR': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Rejected': return 'bg-red-100 text-red-800 border-red-200';
+      case 'Hire': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
   };
 
   const getStatusColor = (status: Application['status']) => {
@@ -757,6 +939,37 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             {application.applicantPhone}
           </div>
         ) : <span className="text-sm text-gray-400">Not provided</span>;
+        
+      case 'stage':
+        const currentStage = application.stage || 'Initial';
+        const nextStage = getNextStage(currentStage);
+        return (
+          <div className="flex flex-col items-center gap-2">
+            <Badge className={`${getStageColor(currentStage)} flex items-center gap-1 w-fit`}>
+              {currentStage}
+            </Badge>
+            {nextStage && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleNextStep(application)}
+                className="h-7 text-xs"
+              >
+                Next: {nextStage}
+              </Button>
+            )}
+            {currentStage !== 'Rejected' && currentStage !== 'Hire' && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => handleReject(application)}
+                className="h-7 text-xs"
+              >
+                Reject
+              </Button>
+            )}
+          </div>
+        );
         
       case 'status':
         return showStatusBadges ? (
@@ -1270,42 +1483,42 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             </DialogHeader>
             {selectedApplication && (
               <div className="space-y-8 mt-6">
-                {/* Quick Actions */}
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                  <Button 
-                    size="sm" 
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => handleStatusChange(selectedApplication.id, 'shortlisted')}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Shortlist
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleStatusChange(selectedApplication.id, 'interviewed')}
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                  >
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Schedule Interview
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    <Mail className="h-4 w-4 mr-2" />
-                    Send Email
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleStatusChange(selectedApplication.id, 'rejected')}
-                    className="border-red-300 text-red-700 hover:bg-red-50"
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Reject
-                  </Button>
+                {/* Stage and Quick Actions */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <Badge className={`${getStageColor(selectedApplication.stage || 'Initial')} text-base px-4 py-2`}>
+                      Current Stage: {selectedApplication.stage || 'Initial'}
+                    </Badge>
+                    {getNextStage(selectedApplication.stage || 'Initial') && (
+                      <Button 
+                        size="sm" 
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => handleNextStep(selectedApplication)}
+                      >
+                        Next Step: {getNextStage(selectedApplication.stage || 'Initial')}
+                      </Button>
+                    )}
+                    {selectedApplication.stage !== 'Rejected' && selectedApplication.stage !== 'Hire' && (
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => handleReject(selectedApplication)}
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Reject
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      <Mail className="h-4 w-4 mr-2" />
+                      Send Email
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Main Content */}
@@ -1384,37 +1597,147 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                     </div>
                   </div>
 
-                  {/* Right Column - Application Responses */}
+                  {/* Right Column - Application Responses and OpenAI Data */}
                   <div className="lg:col-span-2 space-y-6">
-                    {selectedApplication.coverLetter && (
+                    {/* Application Answers */}
+                    {selectedApplication.fullData?.answers && Object.keys(selectedApplication.fullData.answers).length > 0 && (
                       <div className="bg-white border border-gray-200 rounded-xl p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Cover Letter</h3>
-                        <div className="prose prose-sm max-w-none">
-                          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                            {selectedApplication.coverLetter}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {Object.keys(selectedApplication.responses).length > 0 && (
-                      <div className="bg-white border border-gray-200 rounded-xl p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Application Responses</h3>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Application Answers</h3>
                         <div className="space-y-4">
-                          {Object.entries(selectedApplication.responses).map(([key, value]) => (
+                          {Object.entries(selectedApplication.fullData.answers).map(([key, value]) => (
                             <div key={key} className="border-b border-gray-100 pb-4 last:border-b-0">
-                              <h4 className="font-medium text-gray-900 mb-2 capitalize">
-                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              <h4 className="font-medium text-gray-900 mb-2">
+                                Question {key.replace('a', '')}
                               </h4>
                               <div className="text-gray-700 leading-relaxed">
                                 {typeof value === 'string' && value.length > 100 ? (
                                   <div className="whitespace-pre-wrap">{value}</div>
                                 ) : (
-                                  <span>{value}</span>
+                                  <span>{String(value)}</span>
                                 )}
                               </div>
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* OpenAI Resume Analysis */}
+                    {selectedApplication.fullData?.openairesponse && (
+                      <div className="bg-white border border-gray-200 rounded-xl p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <FileText className="h-5 w-5" />
+                          Resume Analysis (AI)
+                        </h3>
+                        <div className="space-y-6">
+                          {/* Skills */}
+                          {selectedApplication.fullData.openairesponse.skills && selectedApplication.fullData.openairesponse.skills.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Skills</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {selectedApplication.fullData.openairesponse.skills.map((skill: string, idx: number) => (
+                                  <Badge key={idx} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Education */}
+                          {selectedApplication.fullData.openairesponse.education && selectedApplication.fullData.openairesponse.education.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Education</h4>
+                              <div className="space-y-3">
+                                {selectedApplication.fullData.openairesponse.education.map((edu: any, idx: number) => (
+                                  <div key={idx} className="border-l-2 border-blue-200 pl-4">
+                                    <div className="font-medium text-gray-900">{edu.degree}</div>
+                                    <div className="text-sm text-gray-600">{edu.college}</div>
+                                    {(edu.start_year || edu.end_year) && (
+                                      <div className="text-xs text-gray-500">
+                                        {edu.start_year} {edu.end_year ? `- ${edu.end_year}` : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Experience */}
+                          {selectedApplication.fullData.openairesponse.experience && selectedApplication.fullData.openairesponse.experience.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Experience</h4>
+                              <div className="space-y-4">
+                                {selectedApplication.fullData.openairesponse.experience.map((exp: any, idx: number) => (
+                                  <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                    <div className="font-medium text-gray-900">{exp.position}</div>
+                                    <div className="text-sm text-gray-600">{exp.company}</div>
+                                    <div className="text-xs text-gray-500 mb-2">{exp.duration}</div>
+                                    {exp.description && (
+                                      <div className="text-sm text-gray-700 mt-2">{exp.description}</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Projects */}
+                          {selectedApplication.fullData.openairesponse.projects && selectedApplication.fullData.openairesponse.projects.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Projects</h4>
+                              <div className="space-y-4">
+                                {selectedApplication.fullData.openairesponse.projects.map((project: any, idx: number) => (
+                                  <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                    <div className="font-medium text-gray-900 mb-2">{project.name}</div>
+                                    {project.description && (
+                                      <div className="text-sm text-gray-700 mb-2">{project.description}</div>
+                                    )}
+                                    {project.tech_stack && project.tech_stack.length > 0 && (
+                                      <div className="flex flex-wrap gap-2 mt-2">
+                                        {project.tech_stack.map((tech: string, techIdx: number) => (
+                                          <Badge key={techIdx} variant="outline" className="text-xs">
+                                            {tech}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Links */}
+                          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                            {selectedApplication.fullData.openairesponse.github && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">GitHub:</span>
+                                <a href={`https://github.com/${selectedApplication.fullData.openairesponse.github}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-2">
+                                  {selectedApplication.fullData.openairesponse.github}
+                                </a>
+                              </div>
+                            )}
+                            {selectedApplication.fullData.openairesponse.linkedin && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">LinkedIn:</span>
+                                <span className="ml-2">{selectedApplication.fullData.openairesponse.linkedin}</span>
+                              </div>
+                            )}
+                            {selectedApplication.fullData.openairesponse.portfolio && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">Portfolio:</span>
+                                <span className="ml-2">{selectedApplication.fullData.openairesponse.portfolio}</span>
+                              </div>
+                            )}
+                            {selectedApplication.fullData.openairesponse.ats_score !== undefined && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">ATS Score:</span>
+                                <Badge className="ml-2">{selectedApplication.fullData.openairesponse.ats_score}</Badge>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

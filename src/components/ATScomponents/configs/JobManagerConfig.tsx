@@ -16,6 +16,7 @@ export interface JobManagerComponentConfig {
   
   // API Configuration
   apiEndpoint?: string;
+  updateEndpoint?: string; // Separate endpoint for updates (optional, falls back to apiEndpoint)
   apiMode?: 'renderer' | 'direct';
   apiBaseUrl?: string; // Full URL prefix for direct mode
   useDemoData?: boolean;
@@ -129,6 +130,21 @@ export const JobManagerConfigComponent: React.FC<JobManagerConfigProps> = ({
             )}
             <p className="text-xs text-gray-500 mt-1">
               Used for both GET (fetch jobs) and POST (create jobs) requests
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="updateEndpoint" className="text-sm font-medium text-gray-700">Update Endpoint (Optional)</Label>
+            <Input
+              id="updateEndpoint"
+              value={config.updateEndpoint || ''}
+              onChange={(e) => onConfigChange('updateEndpoint', e.target.value)}
+              placeholder="/api/jobs/update or leave empty to use API Endpoint"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Separate endpoint for PUT/PATCH (update jobs). If empty, uses API Endpoint above.
             </p>
           </div>
           

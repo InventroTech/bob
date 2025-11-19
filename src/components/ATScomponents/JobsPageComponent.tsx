@@ -718,7 +718,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
           // Prepare FormData for resume upload
           const uploadFormData = new FormData();
           uploadFormData.append('file', resumeFile);
-          uploadFormData.append('prompt', 'please scan the resume and make a json of education , skills, etc basically a summury');
+          // Prompt removed - API will handle resume analysis automatically
 
           // Prepare headers for upload
           const uploadHeaders: HeadersInit = {};
@@ -1074,7 +1074,6 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
               maxFileSize={10}
               multiple={false}
               tenantSlug={tenantSlug || tenantId}
-              uploadPrompt="please scan the resume and make a json of education , skills, etc basically a summury"
               hideUploadButton={true}
               onFileSelected={(file) => {
                 setResumeFile(file);
