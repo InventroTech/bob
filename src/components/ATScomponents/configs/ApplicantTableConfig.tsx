@@ -19,6 +19,7 @@ export interface ApplicantTableConfig {
   apiEndpoint?: string;
   apiPrefix?: 'supabase' | 'renderer';
   statusDataApiEndpoint?: string;
+  updateEndpoint?: string; // Endpoint for updating applicant stage
   useDemoData?: boolean;
   tenantSlug?: string;
   
@@ -247,6 +248,21 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
               className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
               disabled={config.useDemoData}
             />
+          </div>
+
+          <div>
+            <Label htmlFor="updateEndpoint" className="text-sm font-medium text-gray-700">Update Endpoint (Optional)</Label>
+            <Input
+              id="updateEndpoint"
+              value={config.updateEndpoint || ''}
+              onChange={(e) => onConfigChange('updateEndpoint', e.target.value)}
+              placeholder="/api/applications/update or leave empty"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Endpoint for updating applicant stage (PUT request). If empty, stage updates will only be local.
+            </p>
           </div>
 
           <div>

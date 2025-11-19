@@ -781,8 +781,8 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
 
   // Update job to API
   const updateJobToAPI = async (job: Job): Promise<boolean> => {
-    if (!apiEndpoint || useDemoData) {
-      // Skip API call if no endpoint or demo mode
+    if (useDemoData) {
+      // Skip API call if demo mode
       return true;
     }
 
@@ -790,7 +790,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       // Use updateEndpoint if provided, otherwise fall back to apiEndpoint
       const endpoint = updateEndpoint || apiEndpoint;
       if (!endpoint) {
-        throw new Error('No update endpoint configured');
+        throw new Error('No update endpoint configured. Please set either updateEndpoint or apiEndpoint in config.');
       }
 
       // Construct full URL based on API mode
@@ -1102,8 +1102,8 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
 
     console.log('Saving edited job with record ID:', updatedJob.id);
     await handleUpdateJob(updatedJob);
-    setIsEditModalOpen(false);
-    setEditingJob(null);
+      setIsEditModalOpen(false);
+      setEditingJob(null);
   };
 
   // Preview job form
