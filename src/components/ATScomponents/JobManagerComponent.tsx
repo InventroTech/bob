@@ -65,8 +65,8 @@ interface JobManagerComponentConfig {
   // API Configuration
   apiEndpoint?: string;
   updateEndpoint?: string; // Separate endpoint for updates (optional, falls back to apiEndpoint)
-  apiMode?: 'renderer' | 'direct';
-  apiBaseUrl?: string; // Full URL prefix for direct mode
+  deleteEndpoint?: string; // Separate endpoint for deletes (optional, falls back to apiEndpoint)
+  apiMode?: 'localhost' | 'renderer';
   useDemoData?: boolean;
   tenantSlug?: string;
   
@@ -112,8 +112,8 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     maxJobs = 50,
     apiEndpoint,
     updateEndpoint, // Separate endpoint for updates
-    apiMode = 'renderer',
-    apiBaseUrl,
+    deleteEndpoint, // Separate endpoint for deletes
+    apiMode = 'localhost',
     useDemoData = false,
     tenantSlug,
     dataMapping = {}
@@ -399,8 +399,9 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
-      } else if (apiMode === 'direct' && apiBaseUrl) {
-        url = `${apiBaseUrl}${apiEndpoint}`;
+      } else if (apiMode === 'localhost') {
+        const baseUrl = import.meta.env.VITE_LOCAL_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 
       let headers: Record<string, string> = {
@@ -516,8 +517,9 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
-      } else if (apiMode === 'direct' && apiBaseUrl) {
-        url = `${apiBaseUrl}${apiEndpoint}`;
+      } else if (apiMode === 'localhost') {
+        const baseUrl = import.meta.env.VITE_LOCAL_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 
       let headers: Record<string, string> = {
@@ -568,7 +570,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   // Load jobs on component mount and when API config changes
   useEffect(() => {
     fetchJobs();
-  }, [apiEndpoint, apiMode, apiBaseUrl, useDemoData, maxJobs]);
+  }, [apiEndpoint, apiMode, useDemoData, maxJobs]);
 
   // Save jobs to localStorage whenever jobs change
   useEffect(() => {
@@ -798,8 +800,9 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         url = baseUrl ? `${baseUrl}${endpoint}` : endpoint;
-      } else if (apiMode === 'direct' && apiBaseUrl) {
-        url = `${apiBaseUrl}${endpoint}`;
+      } else if (apiMode === 'localhost') {
+        const baseUrl = import.meta.env.VITE_LOCAL_API_URL;
+        url = baseUrl ? `${baseUrl}${endpoint}` : endpoint;
       }
 
       // Construct update URL
@@ -893,9 +896,79 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   };
 
   // Delete job
-  const handleDeleteJob = (jobId: string) => {
-    if (confirm('Are you sure you want to delete this job?')) {
+  const handleDeleteJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to delete this job?')) {
+      return;
+    }
+
+    // Update local state immediately
       setJobs(prev => prev.filter(job => job.id !== jobId));
+
+    // Delete via API using updateEndpoint (same endpoint as updates, but with DELETE method)
+    const endpoint = updateEndpoint || apiEndpoint;
+    if (endpoint && !useDemoData) {
+      try {
+        // Construct full URL based on API mode
+        let url = endpoint;
+        if (apiMode === 'renderer') {
+          const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+          url = baseUrl ? `${baseUrl}${endpoint}` : endpoint;
+        } else if (apiMode === 'localhost') {
+          const baseUrl = import.meta.env.VITE_LOCAL_API_URL;
+          url = baseUrl ? `${baseUrl}${endpoint}` : endpoint;
+        }
+
+        // Construct delete URL with job ID and trailing slash for Django
+        const deleteUrl = url.endsWith('/') 
+          ? `${url}${jobId}/` 
+          : `${url}/${jobId}/`;
+
+        let headers: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+
+        // Add Bearer token from Supabase session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        // Add tenant slug if provided (use config or fallback to tenantId from hook)
+        const effectiveTenantSlug = tenantSlug || tenantId;
+        if (effectiveTenantSlug) {
+          headers['X-Tenant-Slug'] = effectiveTenantSlug;
+        }
+
+        console.log('Deleting job:', {
+          jobId,
+          url: deleteUrl,
+          tenantSlug: effectiveTenantSlug
+        });
+
+        const response = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Delete response error:', errorText);
+          throw new Error(`Failed to delete job: ${response.status} - ${errorText}`);
+        }
+
+        console.log('Job deleted successfully');
+        toast.success('Job deleted successfully');
+      } catch (error) {
+        console.error('Error deleting job:', error);
+        
+        // Revert local state on error - re-fetch jobs
+        await fetchJobs();
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        toast.error(`Failed to delete job: ${errorMessage}`);
+      }
+    } else {
+      // If no API endpoint or demo mode, just show success
       toast.success('Job deleted successfully');
     }
   };
