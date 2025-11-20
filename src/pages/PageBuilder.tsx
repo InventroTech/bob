@@ -120,7 +120,7 @@ import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadC
 interface ComponentConfig {
   apiEndpoint?: string;
   statusDataApiEndpoint?: string;
-  apiPrefix?: 'supabase' | 'renderer';
+  apiPrefix?: 'localhost' | 'renderer';
   columns?: Array<{
     key: string;
     label: string;
@@ -166,6 +166,7 @@ interface ComponentConfig {
   submitEndpoint?: string; // Used by OpenModalButton and JobsPage
   // JobManager specific API fields
   updateEndpoint?: string; // Separate endpoint for updates (PUT)
+  deleteEndpoint?: string; // Separate endpoint for deletes (DELETE)
   apiMode?: 'renderer' | 'direct'; // API mode for JobManager
   apiBaseUrl?: string; // Full URL prefix for direct mode
   useDemoData?: boolean; // Use demo data instead of API calls
@@ -236,7 +237,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   type LocalConfigType = {
     apiEndpoint: string;
     statusDataApiEndpoint?: string;
-    apiPrefix?: 'supabase' | 'renderer';
+    apiPrefix?: 'localhost' | 'renderer';
     title?: string;
     description?: string;
     refreshInterval?: number;
@@ -266,8 +267,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   submitEndpoint?: string; // Used by OpenModalButton and JobsPage
   // JobManager specific API fields
   updateEndpoint?: string; // Separate endpoint for updates (PUT)
-  apiMode?: 'renderer' | 'direct'; // API mode for JobManager
-  apiBaseUrl?: string; // Full URL prefix for direct mode
+  deleteEndpoint?: string; // Separate endpoint for deletes (DELETE)
+  apiMode?: 'localhost' | 'renderer'; // API mode for JobManager
   useDemoData?: boolean; // Use demo data instead of API calls
 };
 
@@ -275,7 +276,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   const [localConfig, setLocalConfig] = useState<LocalConfigType>({
     apiEndpoint: initialConfig.apiEndpoint || '',
     statusDataApiEndpoint: initialConfig.statusDataApiEndpoint || '',
-    apiPrefix: initialConfig.apiPrefix || 'supabase',
+    apiPrefix: initialConfig.apiPrefix || 'localhost',
     title: initialConfig.title || '',
     description: initialConfig.description || '',
     refreshInterval: initialConfig.refreshInterval || 0,
@@ -305,8 +306,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     submitEndpoint: initialConfig.submitEndpoint || '/crm-records/records/',
     // JobManager specific API fields
     updateEndpoint: initialConfig.updateEndpoint || '',
-    apiMode: initialConfig.apiMode || 'renderer',
-    apiBaseUrl: initialConfig.apiBaseUrl || '',
+    deleteEndpoint: initialConfig.deleteEndpoint || '',
+    apiMode: (initialConfig.apiMode === 'direct' ? 'localhost' : initialConfig.apiMode) || 'localhost',
     useDemoData: initialConfig.useDemoData ?? false,
   });
 
@@ -567,7 +568,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'ticketCarousel':
         return (
           <TicketCarouselConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
         );
@@ -575,7 +576,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'leadCarousel':
         return (
           <LeadCardCarouselConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
         );

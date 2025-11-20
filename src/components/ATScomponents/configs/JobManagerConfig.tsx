@@ -17,8 +17,8 @@ export interface JobManagerComponentConfig {
   // API Configuration
   apiEndpoint?: string;
   updateEndpoint?: string; // Separate endpoint for updates (optional, falls back to apiEndpoint)
-  apiMode?: 'renderer' | 'direct';
-  apiBaseUrl?: string; // Full URL prefix for direct mode
+  deleteEndpoint?: string; // Separate endpoint for deletes (optional, falls back to apiEndpoint)
+  apiMode?: 'localhost' | 'renderer';
   useDemoData?: boolean;
   tenantSlug?: string;
   
@@ -147,11 +147,26 @@ export const JobManagerConfigComponent: React.FC<JobManagerConfigProps> = ({
               Separate endpoint for PUT/PATCH (update jobs). If empty, uses API Endpoint above.
             </p>
           </div>
+
+          <div>
+            <Label htmlFor="deleteEndpoint" className="text-sm font-medium text-gray-700">Delete Endpoint (Optional)</Label>
+            <Input
+              id="deleteEndpoint"
+              value={config.deleteEndpoint || ''}
+              onChange={(e) => onConfigChange('deleteEndpoint', e.target.value)}
+              placeholder="/api/jobs/delete or leave empty to use API Endpoint"
+              className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
+              disabled={config.useDemoData}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Separate endpoint for DELETE (delete jobs). If empty, uses API Endpoint above.
+            </p>
+          </div>
           
           <div>
             <Label htmlFor="apiMode" className="text-sm font-medium text-gray-700">API Mode</Label>
             <Select
-              value={config.apiMode || 'renderer'}
+              value={config.apiMode || 'localhost'}
               onValueChange={(value) => onConfigChange('apiMode', value)}
               disabled={config.useDemoData}
             >
@@ -159,31 +174,14 @@ export const JobManagerConfigComponent: React.FC<JobManagerConfigProps> = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="renderer">Renderer (Uses VITE_RENDER_API_URL)</SelectItem>
-                <SelectItem value="direct">Direct (Full URL with prefix)</SelectItem>
+                <SelectItem value="localhost">Localhost</SelectItem>
+                <SelectItem value="renderer">Renderer</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500 mt-1">
-              Renderer: Uses environment variable. Direct: Use custom base URL.
+              Localhost: Uses VITE_LOCAL_API_URL. Renderer: Uses VITE_RENDER_API_URL.
             </p>
           </div>
-
-          {config.apiMode === 'direct' && (
-            <div>
-              <Label htmlFor="apiBaseUrl" className="text-sm font-medium text-gray-700">API Base URL</Label>
-              <Input
-                id="apiBaseUrl"
-                value={config.apiBaseUrl || ''}
-                onChange={(e) => onConfigChange('apiBaseUrl', e.target.value)}
-                placeholder="https://api.example.com"
-                className="mt-2 border-gray-300 focus:border-gray-900 focus:ring-gray-900"
-                disabled={config.useDemoData}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Full base URL (e.g., https://api.example.com). Endpoint will be appended.
-              </p>
-            </div>
-          )}
 
           <div>
             <Label htmlFor="tenantSlug" className="text-sm font-medium text-gray-700">Tenant Slug</Label>
