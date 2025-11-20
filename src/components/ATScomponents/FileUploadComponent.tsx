@@ -10,7 +10,7 @@ interface FileUploadComponentProps {
   title?: string;
   description?: string;
   apiEndpoint: string;
-  apiPrefix?: 'supabase' | 'renderer';
+  apiPrefix?: 'localhost' | 'renderer';
   acceptedFileTypes?: string; // e.g., ".pdf,.doc,.docx" or "image/*"
   maxFileSize?: number; // in MB
   multiple?: boolean;
@@ -289,6 +289,9 @@ export const FileUploadComponent: React.FC<FileUploadComponentProps> = ({
       let url = apiEndpoint;
       if (apiPrefix === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      } else if (apiPrefix === 'localhost') {
+        const baseUrl = import.meta.env.VITE_LOCAL_API_URL;
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 

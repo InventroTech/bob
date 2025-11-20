@@ -1045,7 +1045,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
               title={question.title}
               description={question.description || 'Upload your file here'}
               apiEndpoint={fileUploadEndpoint}
-              apiPrefix={apiMode === 'renderer' ? 'renderer' : apiMode === 'direct' ? 'renderer' : 'supabase'}
+              apiPrefix={apiMode === 'renderer' ? 'renderer' : apiMode === 'direct' ? 'renderer' : 'localhost'}
               acceptedFileTypes={(() => {
                 if (question.validation?.pattern) {
                   // Convert regex pattern like '\\.(pdf|doc|docx)$' to '.pdf,.doc,.docx'

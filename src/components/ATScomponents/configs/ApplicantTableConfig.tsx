@@ -17,7 +17,7 @@ export interface ApplicantTableConfig {
   
   // API Configuration
   apiEndpoint?: string;
-  apiPrefix?: 'supabase' | 'renderer';
+  apiPrefix?: 'localhost' | 'renderer';
   statusDataApiEndpoint?: string;
   updateEndpoint?: string; // Endpoint for updating applicant stage
   useDemoData?: boolean;
@@ -224,7 +224,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
           <div>
             <Label htmlFor="apiPrefix" className="text-sm font-medium text-gray-700">API Prefix</Label>
             <Select
-              value={config.apiPrefix || 'supabase'}
+              value={config.apiPrefix || 'localhost'}
               onValueChange={(value) => onConfigChange('apiPrefix', value)}
               disabled={config.useDemoData}
             >
@@ -232,7 +232,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="supabase">Supabase</SelectItem>
+                <SelectItem value="localhost">Localhost</SelectItem>
                 <SelectItem value="renderer">Renderer API</SelectItem>
               </SelectContent>
             </Select>
@@ -791,7 +791,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                 <p className="text-sm font-medium text-gray-700 mb-2">API Configuration:</p>
                 <div className="flex flex-wrap gap-2">
                   <Badge className="bg-green-100 text-green-800 text-xs">
-                    {config.apiPrefix || 'supabase'}: {config.apiEndpoint}
+                    {config.apiPrefix || 'localhost'}: {config.apiEndpoint}
                   </Badge>
                   {config.statusDataApiEndpoint && (
                     <Badge className="bg-green-100 text-green-800 text-xs">
