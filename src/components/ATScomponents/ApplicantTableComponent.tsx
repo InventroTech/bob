@@ -78,6 +78,9 @@ export interface Application {
   notes?: string;
   interviewDate?: string;
   source?: string;
+  // OpenAI response fields
+  skills?: string;
+  college?: string;
   // Full application data from database
   fullData?: {
     name?: string;
@@ -170,7 +173,7 @@ export interface ApplicantTableConfig {
   columns?: Array<{
     key: string;
     label: string;
-    type: 'text' | 'email' | 'phone' | 'status' | 'date' | 'number' | 'rating' | 'actions' | 'badge' | 'boolean';
+    type: 'text' | 'email' | 'phone' | 'status' | 'date' | 'number' | 'rating' | 'actions' | 'badge' | 'boolean' | 'skills' | 'stage';
     accessor?: string;
     sortable?: boolean;
     filterable?: boolean;
@@ -367,14 +370,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   // Default columns if none configured
   const defaultColumns = [
     { key: 'applicantName', label: 'Applicant', type: 'text' as const, visible: true, sortable: true, accessor: 'applicantName', align: 'left' as const, width: '200px' },
-    { key: 'applicantEmail', label: 'Contact', type: 'email' as const, visible: true, sortable: false, accessor: 'applicantEmail', align: 'left' as const, width: '200px' },
     { key: 'stage', label: 'Stage', type: 'stage' as const, visible: true, sortable: true, accessor: 'stage', align: 'center' as const, width: '150px' },
-    { key: 'submittedAt', label: 'Applied', type: 'date' as const, visible: true, sortable: true, accessor: 'submittedAt', align: 'left' as const, width: '150px' },
-    { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: true, accessor: 'experience', align: 'left' as const, width: '150px' },
-    { key: 'location', label: 'Location', type: 'text' as const, visible: true, sortable: false, accessor: 'location', align: 'left' as const, width: '150px' },
-    { key: 'expectedSalary', label: 'Expected Salary', type: 'text' as const, visible: true, sortable: false, accessor: 'expectedSalary', align: 'left' as const, width: '150px' },
-    { key: 'rating', label: 'Rating', type: 'rating' as const, visible: true, sortable: true, accessor: 'rating', align: 'center' as const, width: '120px' },
-    { key: 'actions', label: 'Actions', type: 'actions' as const, visible: true, sortable: false, accessor: 'actions', align: 'center' as const, width: '120px' }
+    { key: 'skills', label: 'Skills', type: 'skills' as const, visible: true, sortable: false, accessor: 'skills', align: 'left' as const, width: '300px' },
+    { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: false, accessor: 'experience', align: 'left' as const, width: '200px' },
+    { key: 'college', label: 'College', type: 'text' as const, visible: true, sortable: false, accessor: 'college', align: 'left' as const, width: '200px' }
   ];
 
   const visibleColumns = (columns && columns.length > 0 ? columns : defaultColumns).filter(col => col.visible !== false);
@@ -388,7 +387,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   const [searchTerm, setSearchTerm] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [experienceFilter, setExperienceFilter] = useState<string>('all');
-  const [locationFilter, setLocationFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<string>('submittedAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -452,6 +450,43 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       other_description: nestedData.other_description
     };
 
+    // Extract skills, experience, and college from OpenAI response
+    const openaiResponse = fullData.openairesponse;
+    let skillsStr = '';
+    let experienceStr = '';
+    let collegeStr = '';
+
+    if (openaiResponse) {
+      // Extract skills
+      if (openaiResponse.skills && Array.isArray(openaiResponse.skills)) {
+        skillsStr = openaiResponse.skills.join(', ');
+      } else if (typeof openaiResponse.skills === 'string') {
+        skillsStr = openaiResponse.skills;
+      }
+
+      // Extract experience (from experience array)
+      if (openaiResponse.experience && Array.isArray(openaiResponse.experience) && openaiResponse.experience.length > 0) {
+        const exp = openaiResponse.experience[0];
+        experienceStr = exp.position || exp.company || exp.duration || '';
+        if (exp.company && exp.position) {
+          experienceStr = `${exp.position} at ${exp.company}`;
+        }
+      } else if (typeof openaiResponse.experience === 'string') {
+        experienceStr = openaiResponse.experience;
+      }
+
+      // Extract college (from education array)
+      if (openaiResponse.education && Array.isArray(openaiResponse.education) && openaiResponse.education.length > 0) {
+        const edu = openaiResponse.education[0];
+        collegeStr = edu.college || edu.institution || '';
+        if (edu.degree) {
+          collegeStr = collegeStr ? `${edu.degree} from ${collegeStr}` : edu.degree;
+        }
+      } else if (typeof openaiResponse.education === 'string') {
+        collegeStr = openaiResponse.education;
+      }
+    }
+
     return {
       id: apiData[idField] || apiData.id || '',
       jobId: jobId,
@@ -460,9 +495,9 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       applicantEmail: nestedData[emailField] || nestedData.email || apiData.email || '',
       applicantPhone: nestedData[phoneField] || nestedData.phone || apiData.phone || '',
       status: nestedData[statusField] || nestedData.status || apiData.status || 'pending',
-      stage: stage, // Add stage field
+      stage: stage,
       submittedAt: nestedData[dateField] || nestedData.submittedAt || apiData.created_at || new Date().toISOString(),
-      experience: nestedData.experience || apiData.experience || '',
+      experience: experienceStr || nestedData.experience || apiData.experience || '',
       location: nestedData.location || apiData.location || '',
       expectedSalary: nestedData.salary || nestedData.expectedSalary || apiData.salary || '',
       noticePeriod: nestedData.noticePeriod || apiData.notice_period || '',
@@ -473,6 +508,8 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       notes: nestedData.notes || apiData.notes || '',
       interviewDate: nestedData.interviewDate || apiData.interview_date || '',
       source: nestedData.source || apiData.source || 'Direct',
+      skills: skillsStr,
+      college: collegeStr,
       fullData: fullData // Store full data structure
     };
   };
@@ -675,11 +712,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         }
       }
       
-      // Location filter
-      if (locationFilter !== 'all') {
-        if (locationFilter === 'remote' && !app.location?.toLowerCase().includes('remote')) return false;
-        if (locationFilter !== 'remote' && app.location !== locationFilter) return false;
-      }
       
       return true;
     });
@@ -712,7 +744,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     }
 
     return filtered;
-  }, [applications, selectedJobId, searchTerm, stageFilter, experienceFilter, locationFilter, sortField, sortDirection]);
+  }, [applications, selectedJobId, searchTerm, stageFilter, experienceFilter, sortField, sortDirection]);
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedApplications.length / pageSize);
@@ -982,12 +1014,45 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
               </div>
               <div>
                 <div className="font-semibold text-gray-900">{application.applicantName}</div>
-                <div className="text-sm text-gray-600">{application.jobTitle}</div>
+                {isNewApplication(application.submittedAt) && (
+                  <Badge className="bg-blue-100 text-blue-800 text-xs mt-1">New</Badge>
+                )}
               </div>
-              {isNewApplication(application.submittedAt) && (
-                <Badge className="bg-blue-100 text-blue-800 text-xs">New</Badge>
-              )}
             </div>
+          );
+        }
+        if (column.key === 'skills') {
+          if (!application.skills) {
+            return <span className="text-sm text-gray-400">Not specified</span>;
+          }
+          // Split skills by comma and display as chips
+          const skillsList = application.skills.split(',').map((s: string) => s.trim()).filter(Boolean);
+          return (
+            <div className="flex flex-wrap gap-1.5">
+              {skillsList.map((skill: string, idx: number) => (
+                <Badge 
+                  key={idx} 
+                  variant="secondary" 
+                  className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
+                >
+                  {skill}
+                </Badge>
+              ))}
+            </div>
+          );
+        }
+        if (column.key === 'experience') {
+          return (
+            <span className="text-sm text-gray-900">
+              {application.experience || 'Not specified'}
+            </span>
+          );
+        }
+        if (column.key === 'college') {
+          return (
+            <span className="text-sm text-gray-900">
+              {application.college || 'Not specified'}
+            </span>
           );
         }
         return <span className="text-sm text-gray-900">{fieldValue || 'Not specified'}</span>;
@@ -1018,6 +1083,26 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           </div>
         ) : <span className="text-sm text-gray-400">Not provided</span>;
         
+      case 'skills':
+        if (!application.skills) {
+          return <span className="text-sm text-gray-400">Not specified</span>;
+        }
+        // Split skills by comma and display as chips
+        const skillsList = application.skills.split(',').map((s: string) => s.trim()).filter(Boolean);
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            {skillsList.map((skill: string, idx: number) => (
+              <Badge 
+                key={idx} 
+                variant="secondary" 
+                className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
+              >
+                {skill}
+              </Badge>
+            ))}
+          </div>
+        );
+        
       case 'stage':
         const currentStage = application.stage || 'Initial';
         return (
@@ -1041,23 +1126,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             <Clock className="h-3 w-3" />
             {formatDate(fieldValue as string)}
           </div>
-        );
-        
-      case 'rating':
-        return showRatings && application.rating ? (
-          <div className="flex items-center gap-1">
-            {[...Array(5)].map((_, i) => (
-              <div
-                key={i}
-                className={`h-3 w-3 rounded-full ${
-                  i < application.rating! ? 'bg-yellow-400' : 'bg-gray-200'
-                }`}
-              />
-            ))}
-            <span className="ml-2 text-sm text-gray-600">({application.rating}/5)</span>
-          </div>
-        ) : (
-          <span className="text-sm text-gray-400">Not rated</span>
         );
         
       case 'number':
@@ -1276,61 +1344,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                 </Select>
               </div>
               
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-3">Location</Label>
-                <Select value={locationFilter} onValueChange={setLocationFilter}>
-                  <SelectTrigger className="border-gray-300">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Locations</SelectItem>
-                    <SelectItem value="remote">Remote</SelectItem>
-                    {Array.from(new Set(applications.map(app => app.location).filter(Boolean))).map(location => (
-                      <SelectItem key={location} value={location!}>{location}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </div>
         )}
 
-        {/* Bulk Actions */}
-        {showBulkActions && selectedApplications.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-blue-900">
-                {selectedApplications.length} application(s) selected
-              </span>
-              <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleBulkStatusChange('reviewing')}
-                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                >
-                  Mark as Reviewing
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleBulkStatusChange('shortlisted')}
-                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                >
-                  Shortlist
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleBulkStatusChange('rejected')}
-                  className="border-red-300 text-red-700 hover:bg-red-100"
-                >
-                  Reject
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1370,29 +1387,21 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                {showBulkActions && (
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedApplications.length === paginatedApplications.length && paginatedApplications.length > 0}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                )}
                 {visibleColumns.map((column) => (
                   <TableHead 
                     key={column.key}
-                    className={`font-semibold text-gray-900 ${
+                    className={`font-semibold text-gray-900 py-4 ${
                       column.sortable && sortable ? 'cursor-pointer hover:bg-gray-100' : ''
                     }`}
                     onClick={() => column.sortable && sortable && handleSort(column.accessor || column.key)}
-                    style={{ width: column.width }}
+                    style={{ width: column.width, textAlign: column.align === 'center' ? 'center' : column.align === 'right' ? 'right' : 'left' }}
                   >
                     <div className={`flex items-center gap-2 ${column.align === 'center' ? 'justify-center' : column.align === 'right' ? 'justify-end' : 'justify-start'}`}>
                       {column.type === 'text' && column.key === 'applicantName' && <User className="h-4 w-4" />}
                       {column.type === 'email' && <Mail className="h-4 w-4" />}
                       {column.type === 'date' && <Calendar className="h-4 w-4" />}
                       {column.type === 'text' && column.key === 'experience' && <Briefcase className="h-4 w-4" />}
-                      {column.type === 'text' && column.key === 'location' && <MapPin className="h-4 w-4" />}
+                      {column.type === 'skills' && <Briefcase className="h-4 w-4" />}
                       {column.label}
                       {column.sortable && sortable && sortField === (column.accessor || column.key) && (
                         sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
@@ -1406,7 +1415,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
               {paginatedApplications.length === 0 ? (
                 <TableRow>
                   <TableCell 
-                    colSpan={visibleColumns.length + (showBulkActions ? 1 : 0)} 
+                    colSpan={visibleColumns.length} 
                     className="text-center py-12"
                   >
                     <div className="flex flex-col items-center gap-4">
@@ -1427,21 +1436,16 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                     className={`hover:bg-gray-50 cursor-pointer ${isNewApplication(application.submittedAt) ? 'bg-blue-50' : ''} ${compactView ? 'h-12' : 'h-16'}`}
                     onClick={() => handleViewApplication(application)}
                   >
-                    {showBulkActions && (
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedApplications.includes(application.id)}
-                          onCheckedChange={(checked) => handleSelectApplication(application.id, checked as boolean)}
-                        />
-                      </TableCell>
-                    )}
                     {visibleColumns.map((column) => (
                       <TableCell 
                         key={column.key}
                         onClick={(e) => (column.type === 'actions') ? e.stopPropagation() : undefined}
-                        className={column.align === 'center' ? 'text-center' : column.align === 'right' ? 'text-right' : ''}
+                        style={{ width: column.width, textAlign: column.align === 'center' ? 'center' : column.align === 'right' ? 'right' : 'left' }}
+                        className={`${column.align === 'center' ? 'text-center' : column.align === 'right' ? 'text-right' : 'text-left'} py-4`}
                       >
-                        {renderCellContent(column, application)}
+                        <div className={`flex items-center ${column.align === 'center' ? 'justify-center' : column.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                          {renderCellContent(column, application)}
+                        </div>
                       </TableCell>
                     ))}
                   </TableRow>
@@ -1505,19 +1509,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                       {getStatusIcon(selectedApplication.status)}
                       {selectedApplication.status.charAt(0).toUpperCase() + selectedApplication.status.slice(1)}
                     </Badge>
-                    {selectedApplication.rating && (
-                      <div className="flex items-center gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <div
-                            key={i}
-                            className={`h-4 w-4 rounded-full ${
-                              i < selectedApplication.rating! ? 'bg-yellow-400' : 'bg-gray-200'
-                            }`}
-                          />
-                        ))}
-                        <span className="ml-2 text-sm text-gray-600">({selectedApplication.rating}/5)</span>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -1588,10 +1579,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                           </div>
                         )}
                         <div className="flex items-center gap-3">
-                          <MapPin className="h-4 w-4 text-gray-400" />
-                          <span>{selectedApplication.location || 'Not specified'}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
                           <Clock className="h-4 w-4 text-gray-400" />
                           <span>Applied {formatDate(selectedApplication.submittedAt)}</span>
                         </div>
@@ -1612,16 +1599,16 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                       </h3>
                       <div className="space-y-3">
                         <div>
+                          <span className="text-sm font-medium text-gray-700">Skills:</span>
+                          <p className="text-gray-900">{selectedApplication.skills || 'Not specified'}</p>
+                        </div>
+                        <div>
                           <span className="text-sm font-medium text-gray-700">Experience:</span>
                           <p className="text-gray-900">{selectedApplication.experience || 'Not specified'}</p>
                         </div>
                         <div>
-                          <span className="text-sm font-medium text-gray-700">Expected Salary:</span>
-                          <p className="text-gray-900">{selectedApplication.expectedSalary || 'Not specified'}</p>
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-gray-700">Notice Period:</span>
-                          <p className="text-gray-900">{selectedApplication.noticePeriod || 'Not specified'}</p>
+                          <span className="text-sm font-medium text-gray-700">College:</span>
+                          <p className="text-gray-900">{selectedApplication.college || 'Not specified'}</p>
                         </div>
                         {selectedApplication.resumeUrl && (
                           <div>
