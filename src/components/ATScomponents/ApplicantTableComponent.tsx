@@ -53,6 +53,9 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { toast } from 'sonner';
+
+export type ApplicantStage = 'Initial' | 'Assignment Pending' | 'Interview' | 'HR' | 'Rejected' | 'Hire';
 
 export interface Application {
   id: string;
@@ -62,6 +65,7 @@ export interface Application {
   applicantEmail: string;
   applicantPhone?: string;
   status: 'pending' | 'reviewing' | 'interviewed' | 'shortlisted' | 'accepted' | 'rejected';
+  stage?: ApplicantStage; // New stage field
   submittedAt: string;
   experience?: string;
   location?: string;
@@ -74,6 +78,54 @@ export interface Application {
   notes?: string;
   interviewDate?: string;
   source?: string;
+  // OpenAI response fields
+  skills?: string;
+  college?: string;
+  // Full application data from database
+  fullData?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    jobId?: number | string;
+    salary?: string;
+    skills?: string;
+    answers?: Record<string, string>;
+    criteria?: string;
+    location?: string;
+    resumeUrl?: string;
+    department?: string;
+    submittedAt?: string;
+    openairesponse?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      github?: string;
+      skills?: string[];
+      summary?: string;
+      linkedin?: string;
+      location?: string;
+      projects?: Array<{
+        name?: string;
+        tech_stack?: string[];
+        description?: string;
+      }>;
+      ats_score?: number;
+      education?: Array<{
+        degree?: string;
+        college?: string;
+        start_year?: string;
+        end_year?: string;
+      }>;
+      portfolio?: string;
+      experience?: Array<{
+        company?: string;
+        duration?: string;
+        position?: string;
+        description?: string;
+      }>;
+    };
+    other_description?: string;
+  };
 }
 
 export interface Job {
@@ -92,8 +144,9 @@ export interface ApplicantTableConfig {
   
   // API Configuration
   apiEndpoint?: string;
-  apiPrefix?: 'supabase' | 'renderer';
+  apiPrefix?: 'localhost' | 'renderer';
   statusDataApiEndpoint?: string;
+  updateEndpoint?: string; // Endpoint for updating applicant stage
   useDemoData?: boolean; // Force use demo data instead of API
   tenantSlug?: string;
   
@@ -120,7 +173,7 @@ export interface ApplicantTableConfig {
   columns?: Array<{
     key: string;
     label: string;
-    type: 'text' | 'email' | 'phone' | 'status' | 'date' | 'number' | 'rating' | 'actions' | 'badge' | 'boolean';
+    type: 'text' | 'email' | 'phone' | 'status' | 'date' | 'number' | 'rating' | 'actions' | 'badge' | 'boolean' | 'skills' | 'stage';
     accessor?: string;
     sortable?: boolean;
     filterable?: boolean;
@@ -287,8 +340,9 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     title = 'Job Applications',
     description = 'Manage and review job applications',
     apiEndpoint,
-    apiPrefix = 'supabase',
+    apiPrefix = 'localhost',
     statusDataApiEndpoint,
+    updateEndpoint,
     useDemoData = false,
     tenantSlug,
     showJobSelector = true,
@@ -316,14 +370,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   // Default columns if none configured
   const defaultColumns = [
     { key: 'applicantName', label: 'Applicant', type: 'text' as const, visible: true, sortable: true, accessor: 'applicantName', align: 'left' as const, width: '200px' },
-    { key: 'applicantEmail', label: 'Contact', type: 'email' as const, visible: true, sortable: false, accessor: 'applicantEmail', align: 'left' as const, width: '200px' },
-    { key: 'status', label: 'Status', type: 'status' as const, visible: true, sortable: true, accessor: 'status', align: 'center' as const, width: '120px' },
-    { key: 'submittedAt', label: 'Applied', type: 'date' as const, visible: true, sortable: true, accessor: 'submittedAt', align: 'left' as const, width: '150px' },
-    { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: true, accessor: 'experience', align: 'left' as const, width: '150px' },
-    { key: 'location', label: 'Location', type: 'text' as const, visible: true, sortable: false, accessor: 'location', align: 'left' as const, width: '150px' },
-    { key: 'expectedSalary', label: 'Expected Salary', type: 'text' as const, visible: true, sortable: false, accessor: 'expectedSalary', align: 'left' as const, width: '150px' },
-    { key: 'rating', label: 'Rating', type: 'rating' as const, visible: true, sortable: true, accessor: 'rating', align: 'center' as const, width: '120px' },
-    { key: 'actions', label: 'Actions', type: 'actions' as const, visible: true, sortable: false, accessor: 'actions', align: 'center' as const, width: '120px' }
+    { key: 'stage', label: 'Stage', type: 'stage' as const, visible: true, sortable: true, accessor: 'stage', align: 'center' as const, width: '150px' },
+    { key: 'skills', label: 'Skills', type: 'skills' as const, visible: true, sortable: false, accessor: 'skills', align: 'left' as const, width: '300px' },
+    { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: false, accessor: 'experience', align: 'left' as const, width: '200px' },
+    { key: 'college', label: 'College', type: 'text' as const, visible: true, sortable: false, accessor: 'college', align: 'left' as const, width: '200px' }
   ];
 
   const visibleColumns = (columns && columns.length > 0 ? columns : defaultColumns).filter(col => col.visible !== false);
@@ -335,9 +385,8 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [stageFilter, setStageFilter] = useState<string>('all');
   const [experienceFilter, setExperienceFilter] = useState<string>('all');
-  const [locationFilter, setLocationFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<string>('submittedAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -367,6 +416,77 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     const jobId = String(nestedData.jobId || apiData.jobId || '');
     const job = jobs.find(j => j.id === jobId);
 
+    // Extract stage from nestedData or default to 'Initial'
+    const stage: ApplicantStage = nestedData.stage || apiData.stage || 'Initial';
+
+    // Store full data structure including openairesponse
+    const fullData = {
+      name: nestedData.name || apiData.name,
+      email: nestedData.email || apiData.email,
+      phone: nestedData.phone || apiData.phone,
+      jobId: nestedData.jobId || apiData.jobId,
+      salary: nestedData.salary,
+      skills: nestedData.skills,
+      answers: nestedData.answers || {},
+      criteria: nestedData.criteria,
+      location: nestedData.location,
+      resumeUrl: nestedData.resumeUrl,
+      department: nestedData.department,
+      submittedAt: nestedData.submittedAt || apiData.created_at,
+      openairesponse: (() => {
+        if (nestedData.openairesponse) {
+          if (typeof nestedData.openairesponse === 'string') {
+            try {
+              return JSON.parse(nestedData.openairesponse);
+            } catch (e) {
+              console.warn('Failed to parse openairesponse as JSON:', e);
+              return null;
+            }
+          }
+          return nestedData.openairesponse;
+        }
+        return null;
+      })(),
+      other_description: nestedData.other_description
+    };
+
+    // Extract skills, experience, and college from OpenAI response
+    const openaiResponse = fullData.openairesponse;
+    let skillsStr = '';
+    let experienceStr = '';
+    let collegeStr = '';
+
+    if (openaiResponse) {
+      // Extract skills
+      if (openaiResponse.skills && Array.isArray(openaiResponse.skills)) {
+        skillsStr = openaiResponse.skills.join(', ');
+      } else if (typeof openaiResponse.skills === 'string') {
+        skillsStr = openaiResponse.skills;
+      }
+
+      // Extract experience (from experience array)
+      if (openaiResponse.experience && Array.isArray(openaiResponse.experience) && openaiResponse.experience.length > 0) {
+        const exp = openaiResponse.experience[0];
+        experienceStr = exp.position || exp.company || exp.duration || '';
+        if (exp.company && exp.position) {
+          experienceStr = `${exp.position} at ${exp.company}`;
+        }
+      } else if (typeof openaiResponse.experience === 'string') {
+        experienceStr = openaiResponse.experience;
+      }
+
+      // Extract college (from education array)
+      if (openaiResponse.education && Array.isArray(openaiResponse.education) && openaiResponse.education.length > 0) {
+        const edu = openaiResponse.education[0];
+        collegeStr = edu.college || edu.institution || '';
+        if (edu.degree) {
+          collegeStr = collegeStr ? `${edu.degree} from ${collegeStr}` : edu.degree;
+        }
+      } else if (typeof openaiResponse.education === 'string') {
+        collegeStr = openaiResponse.education;
+      }
+    }
+
     return {
       id: apiData[idField] || apiData.id || '',
       jobId: jobId,
@@ -375,8 +495,9 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       applicantEmail: nestedData[emailField] || nestedData.email || apiData.email || '',
       applicantPhone: nestedData[phoneField] || nestedData.phone || apiData.phone || '',
       status: nestedData[statusField] || nestedData.status || apiData.status || 'pending',
+      stage: stage,
       submittedAt: nestedData[dateField] || nestedData.submittedAt || apiData.created_at || new Date().toISOString(),
-      experience: nestedData.experience || apiData.experience || '',
+      experience: experienceStr || nestedData.experience || apiData.experience || '',
       location: nestedData.location || apiData.location || '',
       expectedSalary: nestedData.salary || nestedData.expectedSalary || apiData.salary || '',
       noticePeriod: nestedData.noticePeriod || apiData.notice_period || '',
@@ -386,7 +507,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       rating: nestedData.rating || apiData.rating || 0,
       notes: nestedData.notes || apiData.notes || '',
       interviewDate: nestedData.interviewDate || apiData.interview_date || '',
-      source: nestedData.source || apiData.source || 'Direct'
+      source: nestedData.source || apiData.source || 'Direct',
+      skills: skillsStr,
+      college: collegeStr,
+      fullData: fullData // Store full data structure
     };
   };
 
@@ -408,6 +532,9 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       let url = apiEndpoint;
       if (apiPrefix === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
+      } else if (apiPrefix === 'localhost') {
+        const baseUrl = import.meta.env.VITE_LOCAL_API_URL;
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 
@@ -529,11 +656,34 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     }
   }, [autoRefresh, refreshInterval, apiEndpoint]);
 
+  // Extract unique jobs from applications whenever applications change
+  useEffect(() => {
+    if (applications.length > 0) {
+      const uniqueJobsMap = new Map<string, Job>();
+      applications.forEach(app => {
+        if (app.jobId && app.jobTitle && !uniqueJobsMap.has(String(app.jobId))) {
+          uniqueJobsMap.set(String(app.jobId), {
+            id: String(app.jobId),
+            title: app.jobTitle,
+            department: app.fullData?.department,
+            location: app.location,
+            status: 'active' as const
+          });
+        }
+      });
+      const extractedJobs = Array.from(uniqueJobsMap.values());
+      if (extractedJobs.length > 0) {
+        setJobs(extractedJobs);
+        console.log('✅ Updated jobs from applications:', extractedJobs);
+      }
+    }
+  }, [applications]);
+
   // Filter and sort applications
   const filteredAndSortedApplications = useMemo(() => {
     let filtered = applications.filter(app => {
       // Job filter
-      if (selectedJobId !== 'all' && app.jobId !== selectedJobId) return false;
+      if (selectedJobId !== 'all' && String(app.jobId) !== String(selectedJobId)) return false;
       
       // Search filter
       if (searchTerm) {
@@ -545,8 +695,11 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         }
       }
       
-      // Status filter
-      if (statusFilter !== 'all' && app.status !== statusFilter) return false;
+      // Stage filter
+      if (stageFilter !== 'all') {
+        const appStage = app.stage || 'Initial';
+        if (appStage !== stageFilter) return false;
+      }
       
       // Experience filter
       if (experienceFilter !== 'all') {
@@ -559,11 +712,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         }
       }
       
-      // Location filter
-      if (locationFilter !== 'all') {
-        if (locationFilter === 'remote' && !app.location?.toLowerCase().includes('remote')) return false;
-        if (locationFilter !== 'remote' && app.location !== locationFilter) return false;
-      }
       
       return true;
     });
@@ -596,7 +744,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     }
 
     return filtered;
-  }, [applications, selectedJobId, searchTerm, statusFilter, experienceFilter, locationFilter, sortField, sortDirection]);
+  }, [applications, selectedJobId, searchTerm, stageFilter, experienceFilter, sortField, sortDirection]);
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedApplications.length / pageSize);
@@ -612,12 +760,12 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       
     return {
       total: jobApplications.length,
-      pending: jobApplications.filter(app => app.status === 'pending').length,
-      reviewing: jobApplications.filter(app => app.status === 'reviewing').length,
-      interviewed: jobApplications.filter(app => app.status === 'interviewed').length,
-      shortlisted: jobApplications.filter(app => app.status === 'shortlisted').length,
-      accepted: jobApplications.filter(app => app.status === 'accepted').length,
-      rejected: jobApplications.filter(app => app.status === 'rejected').length,
+      initial: jobApplications.filter(app => (app.stage || 'Initial') === 'Initial').length,
+      assignmentPending: jobApplications.filter(app => app.stage === 'Assignment Pending').length,
+      interview: jobApplications.filter(app => app.stage === 'Interview').length,
+      hr: jobApplications.filter(app => app.stage === 'HR').length,
+      rejected: jobApplications.filter(app => app.stage === 'Rejected').length,
+      hire: jobApplications.filter(app => app.stage === 'Hire').length,
     };
   }, [applications, selectedJobId]);
 
@@ -666,9 +814,153 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     setIsViewModalOpen(true);
   };
 
+  // Stage management functions
+  const getNextStage = (currentStage: ApplicantStage): ApplicantStage | null => {
+    const stageOrder: ApplicantStage[] = ['Initial', 'Assignment Pending', 'Interview', 'HR', 'Hire'];
+    const currentIndex = stageOrder.indexOf(currentStage);
+    if (currentIndex === -1 || currentIndex === stageOrder.length - 1) {
+      return null; // No next stage or already at final stage
+    }
+    return stageOrder[currentIndex + 1];
+  };
+
+  const updateApplicantStage = async (applicationId: string, newStage: ApplicantStage) => {
+    // Find the current application to preserve its data
+    const currentApp = applications.find(a => a.id === applicationId);
+    if (!currentApp) return;
+
+    // Update local state immediately for better UX
+    setApplications(prev => prev.map(app => 
+      app.id === applicationId ? { ...app, stage: newStage } : app
+    ));
+
+    // Also update selectedApplication if modal is open
+    if (selectedApplication?.id === applicationId) {
+      setSelectedApplication(prev => prev ? { ...prev, stage: newStage } : null);
+    }
+
+    // Update via API if endpoint is configured
+    if (updateEndpoint && !useDemoData) {
+      try {
+        let url = updateEndpoint;
+        if (apiPrefix === 'renderer') {
+          const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+          url = baseUrl ? `${baseUrl}${updateEndpoint}` : updateEndpoint;
+        } else if (apiPrefix === 'localhost') {
+          const baseUrl = import.meta.env.VITE_LOCAL_API_URL;
+          url = baseUrl ? `${baseUrl}${updateEndpoint}` : updateEndpoint;
+        }
+
+        // Construct URL with application ID - ensure trailing slash for Django compatibility
+        const updateUrl = url.endsWith('/') 
+          ? `${url}${applicationId}/` 
+          : `${url}/${applicationId}/`;
+
+        let headers: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const effectiveTenantSlug = tenantSlug || tenantId;
+        if (effectiveTenantSlug) {
+          headers['X-Tenant-Slug'] = effectiveTenantSlug;
+        }
+
+        // Prepare payload - include record_id if available (for backend compatibility)
+        const payload: any = {
+          entity_type: 'Applicant', // Required by backend
+          stage: newStage,
+          data: {
+            ...(currentApp.fullData || {}),
+            stage: newStage
+          }
+        };
+
+        // Include record_id if the backend requires it (similar to job updates)
+        if (applicationId) {
+          payload.id = applicationId;
+          payload.record_id = applicationId;
+        }
+
+        console.log('Updating applicant stage:', {
+          applicationId,
+          newStage,
+          url: updateUrl,
+          payload
+        });
+
+        const response = await fetch(updateUrl, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Update response error:', errorText);
+          throw new Error(`Failed to update stage: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        console.log('Stage updated successfully:', result);
+        
+        // Show success notification
+        toast.success(`Applicant stage updated to: ${newStage}`);
+      } catch (error) {
+        console.error('Error updating stage:', error);
+        
+        // Revert local state on error
+        const previousStage = currentApp.stage || 'Initial';
+        setApplications(prev => prev.map(app => 
+          app.id === applicationId ? { ...app, stage: previousStage } : app
+        ));
+        
+        // Also revert selectedApplication if modal is open
+        if (selectedApplication?.id === applicationId) {
+          setSelectedApplication(prev => prev ? { ...prev, stage: previousStage } : null);
+        }
+        
+        // Show error notification
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        toast.error(`Failed to update stage: ${errorMessage}`);
+      }
+    } else {
+      // If no API endpoint, just log the local update
+      console.log(`Stage updated locally to: ${newStage} (no API endpoint configured)`);
+    }
+  };
+
+  const handleNextStep = (application: Application) => {
+    const currentStage = application.stage || 'Initial';
+    const nextStage = getNextStage(currentStage);
+    if (nextStage) {
+      updateApplicantStage(application.id, nextStage);
+    }
+  };
+
+  const handleReject = (application: Application) => {
+    updateApplicantStage(application.id, 'Rejected');
+  };
+
   const handleExport = () => {
     // In real app, this would export to CSV/Excel
     console.log('Exporting applications...', filteredAndSortedApplications);
+  };
+
+  const getStageColor = (stage: ApplicantStage) => {
+    switch (stage) {
+      case 'Initial': return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'Assignment Pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'Interview': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'HR': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Rejected': return 'bg-red-100 text-red-800 border-red-200';
+      case 'Hire': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
   };
 
   const getStatusColor = (status: Application['status']) => {
@@ -722,12 +1014,45 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
               </div>
               <div>
                 <div className="font-semibold text-gray-900">{application.applicantName}</div>
-                <div className="text-sm text-gray-600">{application.jobTitle}</div>
+                {isNewApplication(application.submittedAt) && (
+                  <Badge className="bg-blue-100 text-blue-800 text-xs mt-1">New</Badge>
+                )}
               </div>
-              {isNewApplication(application.submittedAt) && (
-                <Badge className="bg-blue-100 text-blue-800 text-xs">New</Badge>
-              )}
             </div>
+          );
+        }
+        if (column.key === 'skills') {
+          if (!application.skills) {
+            return <span className="text-sm text-gray-400">Not specified</span>;
+          }
+          // Split skills by comma and display as chips
+          const skillsList = application.skills.split(',').map((s: string) => s.trim()).filter(Boolean);
+          return (
+            <div className="flex flex-wrap gap-1.5">
+              {skillsList.map((skill: string, idx: number) => (
+                <Badge 
+                  key={idx} 
+                  variant="secondary" 
+                  className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
+                >
+                  {skill}
+                </Badge>
+              ))}
+            </div>
+          );
+        }
+        if (column.key === 'experience') {
+          return (
+            <span className="text-sm text-gray-900">
+              {application.experience || 'Not specified'}
+            </span>
+          );
+        }
+        if (column.key === 'college') {
+          return (
+            <span className="text-sm text-gray-900">
+              {application.college || 'Not specified'}
+            </span>
           );
         }
         return <span className="text-sm text-gray-900">{fieldValue || 'Not specified'}</span>;
@@ -758,29 +1083,32 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           </div>
         ) : <span className="text-sm text-gray-400">Not provided</span>;
         
-      case 'status':
-        return showStatusBadges ? (
-          <Badge className={`${getStatusColor(application.status)} flex items-center gap-1 w-fit`}>
-            {getStatusIcon(application.status)}
-            {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+      case 'skills':
+        if (!application.skills) {
+          return <span className="text-sm text-gray-400">Not specified</span>;
+        }
+        // Split skills by comma and display as chips
+        const skillsList = application.skills.split(',').map((s: string) => s.trim()).filter(Boolean);
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            {skillsList.map((skill: string, idx: number) => (
+              <Badge 
+                key={idx} 
+                variant="secondary" 
+                className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
+              >
+                {skill}
+              </Badge>
+            ))}
+          </div>
+        );
+        
+      case 'stage':
+        const currentStage = application.stage || 'Initial';
+        return (
+          <Badge className={`${getStageColor(currentStage)} flex items-center gap-1 w-fit`}>
+            {currentStage}
           </Badge>
-        ) : (
-          <Select
-            value={application.status}
-            onValueChange={(value) => handleStatusChange(application.id, value as Application['status'])}
-          >
-            <SelectTrigger className="w-32 h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="reviewing">Reviewing</SelectItem>
-              <SelectItem value="interviewed">Interviewed</SelectItem>
-              <SelectItem value="shortlisted">Shortlisted</SelectItem>
-              <SelectItem value="accepted">Accepted</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
         );
         
       case 'date':
@@ -798,23 +1126,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             <Clock className="h-3 w-3" />
             {formatDate(fieldValue as string)}
           </div>
-        );
-        
-      case 'rating':
-        return showRatings && application.rating ? (
-          <div className="flex items-center gap-1">
-            {[...Array(5)].map((_, i) => (
-              <div
-                key={i}
-                className={`h-3 w-3 rounded-full ${
-                  i < application.rating! ? 'bg-yellow-400' : 'bg-gray-200'
-                }`}
-              />
-            ))}
-            <span className="ml-2 text-sm text-gray-600">({application.rating}/5)</span>
-          </div>
-        ) : (
-          <span className="text-sm text-gray-400">Not rated</span>
         );
         
       case 'number':
@@ -905,14 +1216,28 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Jobs ({applications.length} applications)</SelectItem>
-                  {jobs.map(job => {
-                    const jobAppCount = applications.filter(app => app.jobId === job.id).length;
-                    return (
-                      <SelectItem key={job.id} value={job.id}>
-                        {job.title} ({jobAppCount} applications)
-                      </SelectItem>
-                    );
-                  })}
+                  {jobs.length > 0 ? (
+                    jobs.map(job => {
+                      const jobAppCount = applications.filter(app => app.jobId === job.id).length;
+                      return (
+                        <SelectItem key={job.id} value={job.id}>
+                          {job.title} ({jobAppCount} applications)
+                        </SelectItem>
+                      );
+                    })
+                  ) : (
+                    // Extract unique jobs from applications if jobs list is empty
+                    Array.from(new Map(applications.map(app => [app.jobId, { id: app.jobId, title: app.jobTitle }])).values())
+                      .filter(job => job.id && job.title)
+                      .map(job => {
+                        const jobAppCount = applications.filter(app => app.jobId === job.id).length;
+                        return (
+                          <SelectItem key={job.id} value={job.id}>
+                            {job.title} ({jobAppCount} applications)
+                          </SelectItem>
+                        );
+                      })
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -930,32 +1255,32 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             </Card>
             <Card className="bg-white border-gray-200">
               <CardContent className="p-4">
-                <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-                <div className="text-sm text-gray-600">Pending</div>
+                <div className="text-2xl font-bold text-gray-600">{stats.initial}</div>
+                <div className="text-sm text-gray-600">Initial</div>
               </CardContent>
             </Card>
             <Card className="bg-white border-gray-200">
               <CardContent className="p-4">
-                <div className="text-2xl font-bold text-blue-600">{stats.reviewing}</div>
-                <div className="text-sm text-gray-600">Reviewing</div>
+                <div className="text-2xl font-bold text-yellow-600">{stats.assignmentPending}</div>
+                <div className="text-sm text-gray-600">Assignment Pending</div>
               </CardContent>
             </Card>
             <Card className="bg-white border-gray-200">
               <CardContent className="p-4">
-                <div className="text-2xl font-bold text-purple-600">{stats.interviewed}</div>
-                <div className="text-sm text-gray-600">Interviewed</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.interview}</div>
+                <div className="text-sm text-gray-600">Interview</div>
               </CardContent>
             </Card>
             <Card className="bg-white border-gray-200">
               <CardContent className="p-4">
-                <div className="text-2xl font-bold text-indigo-600">{stats.shortlisted}</div>
-                <div className="text-sm text-gray-600">Shortlisted</div>
+                <div className="text-2xl font-bold text-purple-600">{stats.hr}</div>
+                <div className="text-sm text-gray-600">HR</div>
               </CardContent>
             </Card>
             <Card className="bg-white border-gray-200">
               <CardContent className="p-4">
-                <div className="text-2xl font-bold text-green-600">{stats.accepted}</div>
-                <div className="text-sm text-gray-600">Accepted</div>
+                <div className="text-2xl font-bold text-green-600">{stats.hire}</div>
+                <div className="text-sm text-gray-600">Hire</div>
               </CardContent>
             </Card>
             <Card className="bg-white border-gray-200">
@@ -987,19 +1312,19 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
               )}
               
               <div>
-                <Label className="text-sm font-medium text-gray-700 mb-3">Status</Label>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Label className="text-sm font-medium text-gray-700 mb-3">Stage</Label>
+                <Select value={stageFilter} onValueChange={setStageFilter}>
                   <SelectTrigger className="border-gray-300">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="reviewing">Reviewing</SelectItem>
-                    <SelectItem value="interviewed">Interviewed</SelectItem>
-                    <SelectItem value="shortlisted">Shortlisted</SelectItem>
-                    <SelectItem value="accepted">Accepted</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="all">All Stages</SelectItem>
+                    <SelectItem value="Initial">Initial</SelectItem>
+                    <SelectItem value="Assignment Pending">Assignment Pending</SelectItem>
+                    <SelectItem value="Interview">Interview</SelectItem>
+                    <SelectItem value="HR">HR</SelectItem>
+                    <SelectItem value="Rejected">Rejected</SelectItem>
+                    <SelectItem value="Hire">Hire</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1019,61 +1344,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                 </Select>
               </div>
               
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-3">Location</Label>
-                <Select value={locationFilter} onValueChange={setLocationFilter}>
-                  <SelectTrigger className="border-gray-300">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Locations</SelectItem>
-                    <SelectItem value="remote">Remote</SelectItem>
-                    {Array.from(new Set(applications.map(app => app.location).filter(Boolean))).map(location => (
-                      <SelectItem key={location} value={location!}>{location}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </div>
         )}
 
-        {/* Bulk Actions */}
-        {showBulkActions && selectedApplications.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-blue-900">
-                {selectedApplications.length} application(s) selected
-              </span>
-              <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleBulkStatusChange('reviewing')}
-                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                >
-                  Mark as Reviewing
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleBulkStatusChange('shortlisted')}
-                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                >
-                  Shortlist
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleBulkStatusChange('rejected')}
-                  className="border-red-300 text-red-700 hover:bg-red-100"
-                >
-                  Reject
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1113,29 +1387,21 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                {showBulkActions && (
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedApplications.length === paginatedApplications.length && paginatedApplications.length > 0}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                )}
                 {visibleColumns.map((column) => (
                   <TableHead 
                     key={column.key}
-                    className={`font-semibold text-gray-900 ${
+                    className={`font-semibold text-gray-900 py-4 ${
                       column.sortable && sortable ? 'cursor-pointer hover:bg-gray-100' : ''
                     }`}
                     onClick={() => column.sortable && sortable && handleSort(column.accessor || column.key)}
-                    style={{ width: column.width }}
+                    style={{ width: column.width, textAlign: column.align === 'center' ? 'center' : column.align === 'right' ? 'right' : 'left' }}
                   >
                     <div className={`flex items-center gap-2 ${column.align === 'center' ? 'justify-center' : column.align === 'right' ? 'justify-end' : 'justify-start'}`}>
                       {column.type === 'text' && column.key === 'applicantName' && <User className="h-4 w-4" />}
                       {column.type === 'email' && <Mail className="h-4 w-4" />}
                       {column.type === 'date' && <Calendar className="h-4 w-4" />}
                       {column.type === 'text' && column.key === 'experience' && <Briefcase className="h-4 w-4" />}
-                      {column.type === 'text' && column.key === 'location' && <MapPin className="h-4 w-4" />}
+                      {column.type === 'skills' && <Briefcase className="h-4 w-4" />}
                       {column.label}
                       {column.sortable && sortable && sortField === (column.accessor || column.key) && (
                         sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
@@ -1149,7 +1415,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
               {paginatedApplications.length === 0 ? (
                 <TableRow>
                   <TableCell 
-                    colSpan={visibleColumns.length + (showBulkActions ? 1 : 0)} 
+                    colSpan={visibleColumns.length} 
                     className="text-center py-12"
                   >
                     <div className="flex flex-col items-center gap-4">
@@ -1170,21 +1436,16 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                     className={`hover:bg-gray-50 cursor-pointer ${isNewApplication(application.submittedAt) ? 'bg-blue-50' : ''} ${compactView ? 'h-12' : 'h-16'}`}
                     onClick={() => handleViewApplication(application)}
                   >
-                    {showBulkActions && (
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedApplications.includes(application.id)}
-                          onCheckedChange={(checked) => handleSelectApplication(application.id, checked as boolean)}
-                        />
-                      </TableCell>
-                    )}
                     {visibleColumns.map((column) => (
                       <TableCell 
                         key={column.key}
-                        onClick={(e) => (column.type === 'status' || column.type === 'actions') ? e.stopPropagation() : undefined}
-                        className={column.align === 'center' ? 'text-center' : column.align === 'right' ? 'text-right' : ''}
+                        onClick={(e) => (column.type === 'actions') ? e.stopPropagation() : undefined}
+                        style={{ width: column.width, textAlign: column.align === 'center' ? 'center' : column.align === 'right' ? 'right' : 'left' }}
+                        className={`${column.align === 'center' ? 'text-center' : column.align === 'right' ? 'text-right' : 'text-left'} py-4`}
                       >
-                        {renderCellContent(column, application)}
+                        <div className={`flex items-center ${column.align === 'center' ? 'justify-center' : column.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                          {renderCellContent(column, application)}
+                        </div>
                       </TableCell>
                     ))}
                   </TableRow>
@@ -1248,19 +1509,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                       {getStatusIcon(selectedApplication.status)}
                       {selectedApplication.status.charAt(0).toUpperCase() + selectedApplication.status.slice(1)}
                     </Badge>
-                    {selectedApplication.rating && (
-                      <div className="flex items-center gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <div
-                            key={i}
-                            className={`h-4 w-4 rounded-full ${
-                              i < selectedApplication.rating! ? 'bg-yellow-400' : 'bg-gray-200'
-                            }`}
-                          />
-                        ))}
-                        <span className="ml-2 text-sm text-gray-600">({selectedApplication.rating}/5)</span>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -1270,42 +1518,42 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             </DialogHeader>
             {selectedApplication && (
               <div className="space-y-8 mt-6">
-                {/* Quick Actions */}
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                  <Button 
-                    size="sm" 
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => handleStatusChange(selectedApplication.id, 'shortlisted')}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Shortlist
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleStatusChange(selectedApplication.id, 'interviewed')}
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                  >
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Schedule Interview
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    <Mail className="h-4 w-4 mr-2" />
-                    Send Email
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => handleStatusChange(selectedApplication.id, 'rejected')}
-                    className="border-red-300 text-red-700 hover:bg-red-50"
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Reject
-                  </Button>
+                {/* Stage and Quick Actions */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <Badge className={`${getStageColor(selectedApplication.stage || 'Initial')} text-base px-4 py-2`}>
+                      Current Stage: {selectedApplication.stage || 'Initial'}
+                    </Badge>
+                    {getNextStage(selectedApplication.stage || 'Initial') && (
+                      <Button 
+                        size="sm" 
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => handleNextStep(selectedApplication)}
+                      >
+                        Next Step: {getNextStage(selectedApplication.stage || 'Initial')}
+                      </Button>
+                    )}
+                    {selectedApplication.stage !== 'Rejected' && selectedApplication.stage !== 'Hire' && (
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => handleReject(selectedApplication)}
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Reject
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      <Mail className="h-4 w-4 mr-2" />
+                      Send Email
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Main Content */}
@@ -1331,10 +1579,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                           </div>
                         )}
                         <div className="flex items-center gap-3">
-                          <MapPin className="h-4 w-4 text-gray-400" />
-                          <span>{selectedApplication.location || 'Not specified'}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
                           <Clock className="h-4 w-4 text-gray-400" />
                           <span>Applied {formatDate(selectedApplication.submittedAt)}</span>
                         </div>
@@ -1355,16 +1599,16 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                       </h3>
                       <div className="space-y-3">
                         <div>
+                          <span className="text-sm font-medium text-gray-700">Skills:</span>
+                          <p className="text-gray-900">{selectedApplication.skills || 'Not specified'}</p>
+                        </div>
+                        <div>
                           <span className="text-sm font-medium text-gray-700">Experience:</span>
                           <p className="text-gray-900">{selectedApplication.experience || 'Not specified'}</p>
                         </div>
                         <div>
-                          <span className="text-sm font-medium text-gray-700">Expected Salary:</span>
-                          <p className="text-gray-900">{selectedApplication.expectedSalary || 'Not specified'}</p>
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-gray-700">Notice Period:</span>
-                          <p className="text-gray-900">{selectedApplication.noticePeriod || 'Not specified'}</p>
+                          <span className="text-sm font-medium text-gray-700">College:</span>
+                          <p className="text-gray-900">{selectedApplication.college || 'Not specified'}</p>
                         </div>
                         {selectedApplication.resumeUrl && (
                           <div>
@@ -1384,37 +1628,147 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                     </div>
                   </div>
 
-                  {/* Right Column - Application Responses */}
+                  {/* Right Column - Application Responses and OpenAI Data */}
                   <div className="lg:col-span-2 space-y-6">
-                    {selectedApplication.coverLetter && (
+                    {/* Application Answers */}
+                    {selectedApplication.fullData?.answers && Object.keys(selectedApplication.fullData.answers).length > 0 && (
                       <div className="bg-white border border-gray-200 rounded-xl p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Cover Letter</h3>
-                        <div className="prose prose-sm max-w-none">
-                          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                            {selectedApplication.coverLetter}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {Object.keys(selectedApplication.responses).length > 0 && (
-                      <div className="bg-white border border-gray-200 rounded-xl p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Application Responses</h3>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Application Answers</h3>
                         <div className="space-y-4">
-                          {Object.entries(selectedApplication.responses).map(([key, value]) => (
+                          {Object.entries(selectedApplication.fullData.answers).map(([key, value]) => (
                             <div key={key} className="border-b border-gray-100 pb-4 last:border-b-0">
-                              <h4 className="font-medium text-gray-900 mb-2 capitalize">
-                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              <h4 className="font-medium text-gray-900 mb-2">
+                                Question {key.replace('a', '')}
                               </h4>
                               <div className="text-gray-700 leading-relaxed">
                                 {typeof value === 'string' && value.length > 100 ? (
                                   <div className="whitespace-pre-wrap">{value}</div>
                                 ) : (
-                                  <span>{value}</span>
+                                  <span>{String(value)}</span>
                                 )}
                               </div>
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* OpenAI Resume Analysis */}
+                    {selectedApplication.fullData?.openairesponse && (
+                      <div className="bg-white border border-gray-200 rounded-xl p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <FileText className="h-5 w-5" />
+                          Resume Analysis (AI)
+                        </h3>
+                        <div className="space-y-6">
+                          {/* Skills */}
+                          {selectedApplication.fullData.openairesponse.skills && selectedApplication.fullData.openairesponse.skills.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Skills</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {selectedApplication.fullData.openairesponse.skills.map((skill: string, idx: number) => (
+                                  <Badge key={idx} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Education */}
+                          {selectedApplication.fullData.openairesponse.education && selectedApplication.fullData.openairesponse.education.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Education</h4>
+                              <div className="space-y-3">
+                                {selectedApplication.fullData.openairesponse.education.map((edu: any, idx: number) => (
+                                  <div key={idx} className="border-l-2 border-blue-200 pl-4">
+                                    <div className="font-medium text-gray-900">{edu.degree}</div>
+                                    <div className="text-sm text-gray-600">{edu.college}</div>
+                                    {(edu.start_year || edu.end_year) && (
+                                      <div className="text-xs text-gray-500">
+                                        {edu.start_year} {edu.end_year ? `- ${edu.end_year}` : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Experience */}
+                          {selectedApplication.fullData.openairesponse.experience && selectedApplication.fullData.openairesponse.experience.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Experience</h4>
+                              <div className="space-y-4">
+                                {selectedApplication.fullData.openairesponse.experience.map((exp: any, idx: number) => (
+                                  <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                    <div className="font-medium text-gray-900">{exp.position}</div>
+                                    <div className="text-sm text-gray-600">{exp.company}</div>
+                                    <div className="text-xs text-gray-500 mb-2">{exp.duration}</div>
+                                    {exp.description && (
+                                      <div className="text-sm text-gray-700 mt-2">{exp.description}</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Projects */}
+                          {selectedApplication.fullData.openairesponse.projects && selectedApplication.fullData.openairesponse.projects.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-3">Projects</h4>
+                              <div className="space-y-4">
+                                {selectedApplication.fullData.openairesponse.projects.map((project: any, idx: number) => (
+                                  <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                    <div className="font-medium text-gray-900 mb-2">{project.name}</div>
+                                    {project.description && (
+                                      <div className="text-sm text-gray-700 mb-2">{project.description}</div>
+                                    )}
+                                    {project.tech_stack && project.tech_stack.length > 0 && (
+                                      <div className="flex flex-wrap gap-2 mt-2">
+                                        {project.tech_stack.map((tech: string, techIdx: number) => (
+                                          <Badge key={techIdx} variant="outline" className="text-xs">
+                                            {tech}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Links */}
+                          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                            {selectedApplication.fullData.openairesponse.github && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">GitHub:</span>
+                                <a href={`https://github.com/${selectedApplication.fullData.openairesponse.github}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-2">
+                                  {selectedApplication.fullData.openairesponse.github}
+                                </a>
+                              </div>
+                            )}
+                            {selectedApplication.fullData.openairesponse.linkedin && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">LinkedIn:</span>
+                                <span className="ml-2">{selectedApplication.fullData.openairesponse.linkedin}</span>
+                              </div>
+                            )}
+                            {selectedApplication.fullData.openairesponse.portfolio && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">Portfolio:</span>
+                                <span className="ml-2">{selectedApplication.fullData.openairesponse.portfolio}</span>
+                              </div>
+                            )}
+                            {selectedApplication.fullData.openairesponse.ats_score !== undefined && (
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">ATS Score:</span>
+                                <Badge className="ml-2">{selectedApplication.fullData.openairesponse.ats_score}</Badge>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
