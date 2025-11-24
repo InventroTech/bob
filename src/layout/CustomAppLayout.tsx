@@ -8,6 +8,38 @@ import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 
+const FollowUpIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <g clipPath="url(#clip0_follow_up)">
+      <path
+        d="M9.5 14C11.71 14 13.5 12.21 13.5 10C13.5 7.79 11.71 6 9.5 6C7.29 6 5.5 7.79 5.5 10C5.5 12.21 7.29 14 9.5 14ZM9.5 8C10.6 8 11.5 8.9 11.5 10C11.5 11.1 10.6 12 9.5 12C8.4 12 7.5 11.1 7.5 10C7.5 8.9 8.4 8 9.5 8Z"
+        fill="#0B0C10"
+        fillOpacity="0.8"
+      />
+      <path
+        d="M15.89 16.56C14.21 15.7 12.03 15 9.5 15C6.97 15 4.79 15.7 3.11 16.56C2.11 17.07 1.5 18.1 1.5 19.22V22H17.5V19.22C17.5 18.1 16.89 17.07 15.89 16.56ZM15.5 20H3.5V19.22C3.5 18.84 3.7 18.5 4.02 18.34C5.21 17.73 7.13 17 9.5 17C11.87 17 13.79 17.73 14.98 18.34C15.3 18.5 15.5 18.84 15.5 19.22V20Z"
+        fill="#0B0C10"
+        fillOpacity="0.8"
+      />
+      <path
+        d="M19.8272 8.18918C19.8272 6.37248 19.1369 3.95357 17.2728 2.28429C14.6746 -0.0421777 10.9629 -0.315451 8.09548 1.33521L9.02384 2.95177C11.2065 1.69474 14.0385 1.90501 16.022 3.68113C17.6164 5.10882 18 6.99995 17.9421 8.29316L15.1083 8.50464L19.1369 12.0075L22.6398 7.97887L19.8272 8.18918Z"
+        fill="#0B0C10"
+        fillOpacity="0.8"
+      />
+    </g>
+    <defs>
+      <clipPath id="clip0_follow_up">
+        <rect width="24" height="24" fill="white" />
+      </clipPath>
+    </defs>
+  </svg>
+);
+
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
@@ -31,8 +63,9 @@ const CustomAppLayout: React.FC = () => {
     user?.email?.split('@')[0] ||
     'User';
   const navigationIconMap: Record<string, JSX.Element> = {
-    "Pending Leads": <Sparkles className="h-4 w-4" />,
-    "All Leads": <Users className="h-4 w-4" />,
+    "pending leads": <Sparkles className="h-4 w-4" />,
+    "all leads": <Users className="h-4 w-4" />,
+    "follow up leads": <FollowUpIcon />,
   };
   const dataExtractedRef = useRef(false); // Track if we've already extracted data from JWT
   
@@ -138,7 +171,7 @@ const CustomAppLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <div
         className="fixed left-0 top-0 h-full bg-white transition-all duration-200"
@@ -194,7 +227,11 @@ const CustomAppLayout: React.FC = () => {
                 {({ isActive }) => (
                   <>
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-[#EFF4FF] text-[#1D2939]' : 'bg-gray-100 text-gray-500'}`}>
-                      {navigationIconMap[page.name] || <Sparkles className="h-4 w-4" />}
+                      {
+                        navigationIconMap[
+                          page.name?.toLowerCase().replace(/[\s_-]+/g, " ").trim()
+                        ] || <Sparkles className="h-4 w-4" />
+                      }
                     </div>
                     {!sidebarCollapsed && <span>{page.name}</span>}
                   </>
@@ -226,10 +263,7 @@ const CustomAppLayout: React.FC = () => {
                     alt={profileName}
                     className="h-10 w-10 rounded-full object-cover"
                   />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{profileName}</p>
-                    <p className="text-xs text-gray-500">View profile</p>
-                  </div>
+                  <p className="text-sm font-semibold text-gray-900">{profileName}</p>
                 </div>
               )}
             </div>
@@ -264,10 +298,12 @@ const CustomAppLayout: React.FC = () => {
 
       {/* Main Content */}
       <main
-        className="flex-1 overflow-auto bg-white transition-all duration-200"
+        className="flex-1 h-full bg-white transition-all duration-200 overflow-hidden"
         style={{ marginLeft: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
-        <Outlet />
+        <div className="h-full w-full overflow-hidden">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
