@@ -7,4 +7,5 @@ export { DynamicFilterConfig } from './DynamicFilterConfig';
 export { TicketCarouselConfig } from '../components/page-builder/component-config/TicketCarouselConfig';
 export { TicketTableConfig } from '../components/page-builder/component-config/TicketTableConfig';
 export { LeadCardCarouselConfig } from '../components/page-builder/component-config/LeadCardCarouselConfig';
-export { LeadAssignmentConfig } from '../components/page-builder/component-config/LeadAssignmentConfig'; 
+export { LeadAssignmentConfig } from '../components/page-builder/component-config/LeadAssignmentConfig';
+export { LeadProgressBarConfig } from '../components/page-builder/component-config/LeadProgressBarConfig'; 

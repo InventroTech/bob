@@ -90,6 +90,7 @@ import { Carousel } from "@/components/ui/carousel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
 import { ProgressBar } from "@/components/ui/progressBar";
+import { LeadProgressBar } from "@/components/page-builder/LeadProgressBar";
 import { TicketTableComponent } from "@/components/page-builder/TicketTableComponent";
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
 import { TicketCarouselWrapper } from "@/components/page-builder/TicketCarouselWrapper";
@@ -114,6 +115,7 @@ import {
   LeadAssignmentConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
+import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 
@@ -167,6 +169,9 @@ interface ComponentConfig {
   // LeadAssignment specific fields
   leadTypesEndpoint?: string;
   rmsEndpoint?: string;
+  // LeadProgressBar specific fields
+  targetCount?: number;
+  segmentCount?: number;
 }
 
 // Update CanvasComponentData to include config
@@ -193,6 +198,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   leadCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,
   progressBar: ProgressBar,
+  leadProgressBar: LeadProgressBar,
   ticketTable: TicketTableComponent,
   ticketCarousel: TicketCarouselWrapper,
   ticketBarGraph: TicketBarGraphComponent,
@@ -259,6 +265,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // Shared fields for all ATS components
     tenantSlug?: string;
     submitEndpoint?: string; // Used by OpenModalButton and JobsPage
+    // LeadProgressBar specific fields
+    targetCount?: number;
+    segmentCount?: number;
   };
 
   // Local state for all input fields
@@ -293,6 +302,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // Shared fields for all ATS components
     tenantSlug: initialConfig.tenantSlug || '',
     submitEndpoint: initialConfig.submitEndpoint || '/crm-records/records/',
+    // LeadProgressBar fields
+    targetCount: initialConfig.targetCount || 10,
+    segmentCount: initialConfig.segmentCount || 8,
   });
 
   // Separate state for columns
@@ -634,6 +646,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'leadProgressBar':
+        return (
+          <LeadProgressBarConfig
+            config={localConfig as any}
+            onConfigChange={(newConfig) => {
+              Object.entries(newConfig).forEach(([key, value]) => {
+                handleInputChange(key as keyof LocalConfigType, value);
+              });
+            }}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -683,7 +707,7 @@ const PageBuilder = () => {
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
 
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1084,6 +1108,11 @@ const PageBuilder = () => {
                           id="progressBar"
                           label="Progress Bar"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="leadProgressBar"
+                          label="Lead Progress Bar"
+                          icon={<Target className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
                           id="leadAssignment"

@@ -19,7 +19,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
-import { TrialActivatedModal } from "./TrialActivatedModal";
 import { CallBackModal } from "./CallBackModal";
 
 interface LeadCardCarouselProps {
@@ -123,7 +122,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [animationData, setAnimationData] = useState<any>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
-  const [showTrialSuccessDialog, setShowTrialSuccessDialog] = useState(false);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -451,17 +449,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       // Use configured status data API endpoint or fallback to default
       const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`;
       
-      const response = await fetch(
-        `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -470,7 +466,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const data = await response.json();
       setLeadStats(data);
     } catch (error) {
-      console.error("Error fetching lead stats:", error);
+      console.error("Error fetching lead statistics:", error);
     }
   };
 
@@ -691,7 +687,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       if (ok) {
         await fetchFirstLead();
         if (action === "Trial Activated") {
-          setShowTrialSuccessDialog(true);
+          // Dispatch custom event for progress bar to listen
+          window.dispatchEvent(new CustomEvent('trial-activated', { 
+            detail: { leadId: currentLead.id } 
+          }));
         }
       }
 
@@ -941,9 +940,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
   // Showing the lead card
   return (
-    <div className="flex h-full w-full flex-col gap-6">
-      <div className="relative flex h/full w/full">
-        <Card className="relative flex w-full flex-col overflow-hidden bg-white border-0 shadow-none">
+    <div className="flex h-full w-full flex-col relative">
+      <div className="relative flex-1 w-full overflow-auto">
+        <Card className="relative flex w-full flex-col overflow-hidden bg-white border-0 shadow-none min-h-full">
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -952,116 +951,119 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               </div>
             </div>
           )}
-          <CardContent className="flex flex-col gap-8 p-6 bg-white" style={bodyFont}>
-            <div className="w-full border-b border-slate-200 px-5 pb-5">
-              <div className="flex flex-wrap items-start justify-between gap-6">
+          {/* Header Section */}
+          <div className="w-full border-b border-slate-200 px-6 py-5 bg-white" style={bodyFont}>
+            <div className="flex flex-wrap items-start justify-between gap-6">
+              <div
+                className={cn(
+                  "flex items-center gap-4",
+                  profileClickable && "cursor-pointer"
+                )}
+                onClick={profileClickable ? handleOpenProfile : undefined}
+              >
+                {currentLead?.display_pic_url ? (
+                  <img
+                    src={currentLead.display_pic_url}
+                    alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
+                    className="h-14 w-14 rounded-full object-cover"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                    }}
+                  />
+                ) : null}
                 <div
                   className={cn(
-                    "flex items-center gap-4",
-                    profileClickable && "cursor-pointer"
+                    "flex h-14 w-14 items-center justify-center rounded-full bg-slate-100",
+                    currentLead?.display_pic_url ? "hidden" : ""
                   )}
-                  onClick={profileClickable ? handleOpenProfile : undefined}
                 >
-                  {currentLead?.display_pic_url ? (
-                    <img
-                      src={currentLead.display_pic_url}
-                      alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
-                      className="h-14 w-14 rounded-full object-cover"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-full bg-slate-100",
-                      currentLead?.display_pic_url ? "hidden" : ""
-                    )}
-                  >
-                    <User className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex flex-col gap-1">
-                    {currentLead?.user_profile_link ? (
-                      <a
-                        href={currentLead.user_profile_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-2xl font-semibold text-slate-900 hover:text-primary"
-                        style={titleFont}
-                      >
-                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
-                      </a>
-                    ) : (
-                      <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
-                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
-                      </h2>
-                    )}
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                        {currentLead?.affiliated_party && (
-                          <span className="font-medium text-slate-700">
-                            {currentLead.affiliated_party}
-                          </span>
-                        )}
-                        {currentLead?.lead_stage && (
-                          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            {currentLead.lead_stage}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {currentLead?.status && (
-                        <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          {currentLead.status}
-                        </span>
-                      )}
-                      {currentLead?.priority && (
-                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Priority: {currentLead.priority}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <User className="h-6 w-6 text-primary" />
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
-                    onClick={handleTakeBreak}
-                    disabled={updating}
-                  >
-                    <Coffee className="h-4 w-4 text-gray-500" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
-                    onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
-                    disabled={!primaryPhone || updating || fetchingNext}
-                  >
-                    <FaWhatsapp className="h-4 w-4 text-[#344054]" />
-                    WhatsApp
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
-                    onClick={() => handleCallLead(primaryPhone)}
-                    disabled={!primaryPhone || updating || fetchingNext}
-                  >
-                    <Phone className="h-4 w-4" />
-                    <span>{formattedPhoneNumber}</span>
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex flex-col gap-1">
+                  {currentLead?.user_profile_link ? (
+                    <a
+                      href={currentLead.user_profile_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-2xl font-semibold text-slate-900 hover:text-primary"
+                      style={titleFont}
+                    >
+                      {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                    </a>
+                  ) : (
+                    <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
+                      {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                    </h2>
+                  )}
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                      {currentLead?.affiliated_party && (
+                        <span className="font-medium text-slate-700">
+                          {currentLead.affiliated_party}
+                        </span>
+                      )}
+                      {currentLead?.lead_stage && (
+                        <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          {currentLead.lead_stage}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {currentLead?.status && (
+                      <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {currentLead.status}
+                      </span>
+                    )}
+                    {currentLead?.priority && (
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        Priority: {currentLead.priority}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  onClick={handleTakeBreak}
+                  disabled={updating}
+                >
+                  <Coffee className="h-4 w-4 text-gray-500" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                  onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
+                  disabled={!primaryPhone || updating || fetchingNext}
+                >
+                  <FaWhatsapp className="h-4 w-4 text-[#344054]" />
+                  WhatsApp
+                </Button>
+                <Button
+                  type="button"
+                  className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                  onClick={() => handleCallLead(primaryPhone)}
+                  disabled={!primaryPhone || updating || fetchingNext}
+                >
+                  <Phone className="h-4 w-4" />
+                  <span>{formattedPhoneNumber}</span>
+                </Button>
+              </div>
             </div>
+          </div>
+          
+          {/* Task Progress Section */}
+          <CardContent className="flex flex-col gap-8 p-6 pb-24 bg-white" style={bodyFont}>
             <div
               className={cn(
-                "mt-8 grid gap-6",
+                "grid gap-6",
                 currentLead?.location && "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
               )}
             >
@@ -1084,30 +1086,27 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               ) : null}
             </div>
           </CardContent>
-          <div className="border-t border-slate-100 bg-white px-6 py-4">
-            {actionButtonsVisible && postCallActions.length > 0 ? (
-              <div className="flex w-full flex-wrap items-center gap-3">
-                {postCallActions.map((action) => (
-                  <LeadActionButton
-                    key={action.id}
-                    icon={action.icon}
-                    label={action.label}
-                    onClick={action.onClick}
-                    disabled={updating || fetchingNext}
-                    loading={processingAction === action.loadingKey && updating}
-                    tone={action.tone}
-                    className="flex-1 min-w-[160px]"
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
         </Card>
       </div>
-      <TrialActivatedModal
-        open={showTrialSuccessDialog}
-        onOpenChange={setShowTrialSuccessDialog}
-      />
+      {/* Sticky Action Buttons at Bottom - Only within lead card container */}
+      {actionButtonsVisible && postCallActions.length > 0 && (
+        <div className="sticky bottom-0 z-50 border-t border-slate-200 bg-white px-6 py-4 shadow-lg w-full">
+          <div className="flex w-full flex-wrap items-center gap-3">
+            {postCallActions.map((action) => (
+              <LeadActionButton
+                key={action.id}
+                icon={action.icon}
+                label={action.label}
+                onClick={action.onClick}
+                disabled={updating || fetchingNext}
+                loading={processingAction === action.loadingKey && updating}
+                tone={action.tone}
+                className="flex-1 min-w-[160px]"
+              />
+            ))}
+          </div>
+        </div>
+      )}
       <NotInterestedModal
         open={showNotInterestedDialog}
         onOpenChange={setShowNotInterestedDialog}
