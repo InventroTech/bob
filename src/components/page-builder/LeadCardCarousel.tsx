@@ -9,6 +9,7 @@ import {
   Phone,
   Coffee,
   CheckCircle2,
+  Check,
   XCircle,
   AlertCircle,
   Clock,
@@ -348,6 +349,12 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const TaskProgressList: React.FC<{ steps: TaskStep[] }> = ({ steps }) => {
     if (!steps.length) return null;
 
+    const currentIndexRaw = steps.findIndex((step) => step.status === "current");
+    const currentIndex =
+      currentIndexRaw !== -1
+        ? currentIndexRaw
+        : steps.findIndex((step) => step.status !== "completed");
+
     return (
       <ol
         className="relative flex flex-col gap-4"
@@ -360,25 +367,32 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         }}
       >
         {steps.map((step, index) => (
-          <li key={step.id} className="flex min-h-[44px] gap-4">
+          <li key={step.id} className="flex min-h-[44px] gap-3">
             <div className="flex flex-col items-center">
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors",
-                  step.status === "completed" && "border-emerald-500 bg-emerald-100 text-emerald-600",
-                  step.status === "current" && "border-slate-900 bg-slate-900 text-white",
-                  step.status === "pending" && "border-slate-200 bg-white text-slate-300"
+                  "flex h-6 w-6 items-center justify-center rounded-full border transition-colors",
+                  step.status === "completed" && "border-slate-300 bg-slate-50",
+                  step.status === "current" && "border-slate-900 bg-slate-900",
+                  step.status === "pending" && "border-slate-200 bg-white"
                 )}
               >
                 {step.status === "completed" ? (
-                  <CheckCircle2 className="h-4 w-4" />
+                  <Check className="h-3 w-3 text-emerald-600" />
                 ) : step.status === "current" ? (
-                  <span className="block h-2.5 w-2.5 rounded-full bg-white" />
+                  <span className="block h-2 w-2 rounded-full bg-white" />
                 ) : (
-                  <span className="block h-2 w-2 rounded-full bg-slate-300" />
+                  <span className="block h-1.5 w-1.5 rounded-full bg-slate-300" />
                 )}
               </div>
-              {index !== steps.length - 1 && <div className="mt-1 h-full w-px flex-1 bg-slate-200" />}
+              {index !== steps.length - 1 && (
+                <div
+                  className={cn(
+                    "mt-1 h-full w-px flex-1",
+                    currentIndex !== -1 && index < currentIndex ? "bg-slate-900" : "bg-slate-200"
+                  )}
+                />
+              )}
             </div>
             <div className="pt-1">
               <p
@@ -940,9 +954,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
   // Showing the lead card
   return (
-    <div className="flex h-full w-full flex-col relative">
-      <div className="relative flex-1 w-full overflow-auto">
-        <Card className="relative flex w-full flex-col overflow-hidden bg-white border-0 shadow-none min-h-full">
+    <div className="flex w-full flex-col relative">
+      <div className="relative w-full">
+        <Card className="relative flex w-full flex-col bg-white border-0 shadow-none">
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -952,11 +966,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
           )}
           {/* Header Section */}
-          <div className="w-full border-b border-slate-200 px-6 py-5 bg-white" style={bodyFont}>
-            <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="w-full border-b border-slate-200 px-2 py-1.5 bg-white" style={bodyFont}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
               <div
                 className={cn(
-                  "flex items-center gap-4",
+                  "flex items-center gap-1.5",
                   profileClickable && "cursor-pointer"
                 )}
                 onClick={profileClickable ? handleOpenProfile : undefined}
@@ -965,7 +979,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   <img
                     src={currentLead.display_pic_url}
                     alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
-                    className="h-14 w-14 rounded-full object-cover"
+                    className="h-9 w-9 rounded-full object-cover"
                     loading="lazy"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
@@ -976,14 +990,14 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 ) : null}
                 <div
                   className={cn(
-                    "flex h-14 w-14 items-center justify-center rounded-full bg-slate-100",
+                  "flex h-9 w-9 items-center justify-center rounded-full bg-slate-100",
                     currentLead?.display_pic_url ? "hidden" : ""
                   )}
                 >
                   <User className="h-6 w-6 text-primary" />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex flex-col gap-1">
+                <div className="space-y-1">
+                  <div className="flex flex-col gap-0.5">
                   {currentLead?.user_profile_link ? (
                     <a
                       href={currentLead.user_profile_link}
@@ -1060,7 +1074,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           </div>
           
           {/* Task Progress Section */}
-          <CardContent className="flex flex-col gap-8 p-6 pb-24 bg-white" style={bodyFont}>
+          <CardContent className="flex flex-col gap-8 p-4 pb-4 bg-white" style={bodyFont}>
             <div
               className={cn(
                 "grid gap-6",
