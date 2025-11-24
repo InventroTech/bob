@@ -12,7 +12,7 @@ interface LeadCardCarouselWrapperProps {
 
 export const LeadCardCarouselWrapper: React.FC<LeadCardCarouselWrapperProps> = ({ config }) => {
   return (
-    <div className="w-full">
+    <div className="w-full overflow-hidden md:overflow-hidden">
       <LeadCardCarousel 
         config={config}
       />
