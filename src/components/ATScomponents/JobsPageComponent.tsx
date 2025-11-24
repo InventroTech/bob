@@ -699,98 +699,113 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
     setIsSubmitting(true);
     
+    // Step 1: Immediately show success and close modal (don't wait for anything)
+    toast.success('Application submitted successfully! We\'ll be in touch soon.');
+    setFormData({});
+    setResumeFile(null);
+    setResumeUploadResponse(null);
+    setIsApplicationModalOpen(false);
+    setSelectedJob(null);
+    setIsSubmitting(false);
+    
+    // Step 2: Process resume upload and application submission in background
+    // Capture form data and job before closing modal
+    const formDataSnapshot = { ...formData };
+    const selectedJobSnapshot = selectedJob;
+    
+    if (resumeFile && submitEndpoint && fileUploadEndpoint && selectedJobSnapshot) {
+      // Use setTimeout to ensure modal closes first, then process in background
+      setTimeout(() => {
+        processResumeAndSubmitInBackground(formDataSnapshot, selectedJobSnapshot, resumeFile);
+      }, 100);
+    }
+  };
+
+  // Background function to upload resume and submit application
+  const processResumeAndSubmitInBackground = async (
+    formDataSnapshot: Record<string, any>,
+    selectedJobSnapshot: Job,
+    resumeFileSnapshot: File
+  ) => {
     try {
-      // First, upload resume if a file is selected
-      let uploadResponse = resumeUploadResponse;
-      if (resumeFile && !uploadResponse) {
-        try {
-          toast.info('Uploading resume...');
-          
-          // Construct upload URL
-          let uploadUrl = fileUploadEndpoint;
-          if (apiMode === 'renderer') {
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-            uploadUrl = baseUrl ? `${baseUrl}${fileUploadEndpoint}` : fileUploadEndpoint;
-          } else if (apiMode === 'direct' && apiBaseUrl) {
-            uploadUrl = `${apiBaseUrl}${fileUploadEndpoint}`;
-          }
-
-          // Prepare FormData for resume upload
-          const uploadFormData = new FormData();
-          uploadFormData.append('file', resumeFile);
-          uploadFormData.append('prompt', 'please scan the resume and make a json of education , skills, etc basically a summury');
-
-          // Prepare headers for upload
-          const uploadHeaders: HeadersInit = {};
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.access_token) {
-            uploadHeaders['Authorization'] = `Bearer ${session.access_token}`;
-          }
-          const effectiveTenantSlug = tenantSlug || tenantId;
-          if (effectiveTenantSlug) {
-            uploadHeaders['X-Tenant-Slug'] = effectiveTenantSlug;
-          }
-
-          // Upload resume
-          const uploadResult = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: uploadHeaders,
-            body: uploadFormData,
-          });
-
-          if (!uploadResult.ok) {
-            const errorText = await uploadResult.text();
-            throw new Error(`Resume upload failed: ${uploadResult.status} - ${errorText}`);
-          }
-
-          uploadResponse = await uploadResult.json();
-          setResumeUploadResponse(uploadResponse);
-          console.log('Resume uploaded successfully:', uploadResponse);
-          toast.success('Resume uploaded successfully!');
-        } catch (uploadError) {
-          console.error('Resume upload error:', uploadError);
-          toast.error(`Failed to upload resume: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
-          setIsSubmitting(false);
-          return;
-        }
-      }
-
-      // Construct full URL based on API mode
-      let url = submitEndpoint;
+      console.log('Starting background resume upload and application submission');
+      
+      // Step 1: Upload resume
+      let resumeUrl = '';
+      let scanAnalysis: any = null;
+      
+      // Construct upload URL
+      let uploadUrl = fileUploadEndpoint;
       if (apiMode === 'renderer') {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-        url = baseUrl ? `${baseUrl}${submitEndpoint}` : submitEndpoint;
+        uploadUrl = baseUrl ? `${baseUrl}${fileUploadEndpoint}` : fileUploadEndpoint;
       } else if (apiMode === 'direct' && apiBaseUrl) {
-        url = `${apiBaseUrl}${submitEndpoint}`;
+        uploadUrl = `${apiBaseUrl}${fileUploadEndpoint}`;
       }
 
-      // Prepare headers
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
+      // Prepare FormData for resume upload
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', resumeFileSnapshot);
 
-      // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
+      // Prepare headers for upload
+      const uploadHeaders: HeadersInit = {};
+      const { data: { session: uploadSession } } = await supabase.auth.getSession();
+      if (uploadSession?.access_token) {
+        uploadHeaders['Authorization'] = `Bearer ${uploadSession.access_token}`;
       }
-
-      // Add tenant slug if provided (use config or fallback to tenantId from hook)
       const effectiveTenantSlug = tenantSlug || tenantId;
       if (effectiveTenantSlug) {
-        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+        uploadHeaders['X-Tenant-Slug'] = effectiveTenantSlug;
       }
 
-      // Extract name, email, phone from form data (these are not answers)
-      // Check both standard IDs and question IDs (q1, q2, q3 might be name/email/phone)
-      let applicantName = formData['fullName'] || formData['name'] || '';
-      let applicantEmail = formData['email'] || '';
-      let applicantPhone = formData['phone'] || '';
+      console.log('Uploading resume in background...');
+      
+      // Upload resume
+      const uploadResult = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: uploadHeaders,
+        body: uploadFormData,
+      });
+
+      if (!uploadResult.ok) {
+        const errorText = await uploadResult.text();
+        console.error('Resume upload failed in background:', errorText);
+        return; // Silent fail
+      }
+
+      const uploadResponse = await uploadResult.json();
+      console.log('Resume uploaded in background:', uploadResponse);
+      
+      // Extract file URL and scan analysis from response
+      resumeUrl = uploadResponse?.files?.[0]?.url || uploadResponse?.url || uploadResponse?.fileUrl || uploadResponse?.file?.url || '';
+      let rawScanAnalysis = uploadResponse?.response || uploadResponse?.analysis || uploadResponse?.data?.response;
+      
+      // Parse if it's a JSON string, otherwise use as-is (already an object)
+      if (typeof rawScanAnalysis === 'string') {
+        try {
+          scanAnalysis = JSON.parse(rawScanAnalysis);
+        } catch (e) {
+          // If parsing fails, it might be a plain string, use as-is
+          scanAnalysis = rawScanAnalysis;
+        }
+      } else {
+        scanAnalysis = rawScanAnalysis;
+      }
+      
+      console.log('Resume URL:', resumeUrl);
+      console.log('Scan analysis (parsed):', scanAnalysis);
+      console.log('Scan analysis type:', typeof scanAnalysis);
+
+      // Step 2: Submit application with resume data
+      // Extract name, email, phone from form data
+      let applicantName = formDataSnapshot['fullName'] || formDataSnapshot['name'] || '';
+      let applicantEmail = formDataSnapshot['email'] || '';
+      let applicantPhone = formDataSnapshot['phone'] || '';
       
       // Find questions that are likely name/email/phone based on title
-      selectedJob.form.questions.forEach((question) => {
+      selectedJobSnapshot.form.questions.forEach((question) => {
         const questionTitle = question.title.toLowerCase();
-        const answer = formData[question.id];
+        const answer = formDataSnapshot[question.id];
         
         if (answer) {
           if (questionTitle.includes('name') && questionTitle.includes('full')) {
@@ -805,33 +820,23 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
       // If still no name, try to extract from any "name" field
       if (!applicantName) {
-        applicantName = formData[selectedJob.form.questions[0]?.id] || 'Anonymous';
+        applicantName = formDataSnapshot[selectedJobSnapshot.form.questions[0]?.id] || 'Anonymous';
       }
 
       // Map remaining questions to answers format (a1, a2, a3...)
-      // Skip questions that are name, email, phone, or file uploads
       const answers: Record<string, string> = {};
       let answerIndex = 1;
-      let resumeUrl = '';
       
-      selectedJob.form.questions.forEach((question) => {
+      selectedJobSnapshot.form.questions.forEach((question) => {
         const questionTitle = question.title.toLowerCase();
         const isNameField = questionTitle.includes('name') && questionTitle.includes('full');
         const isEmailField = questionTitle.includes('email');
         const isPhoneField = questionTitle.includes('phone');
         const isFileField = question.type === 'file' || questionTitle.includes('resume') || questionTitle.includes('cv');
         
-        // Extract file URL if it's a file field
-        if (isFileField) {
-          const fileUrl = formData[question.id];
-          if (fileUrl) {
-            resumeUrl = fileUrl; // Use the uploaded file URL
-          }
-        }
-        
         // Skip default fields and file uploads, only include custom questions in answers
         if (!isNameField && !isEmailField && !isPhoneField && !isFileField) {
-          const answer = formData[question.id];
+          const answer = formDataSnapshot[question.id];
           if (answer) {
             // Handle checkbox arrays - convert to comma-separated string
             const answerValue = Array.isArray(answer) ? answer.join(', ') : String(answer);
@@ -844,66 +849,76 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       // Format application in backend format
       const applicationPayload = {
         entity_type: "Applicant",
-        name: applicantName, // Name in main payload
+        name: applicantName,
         data: {
-          name: applicantName, // Name also in data section
-          jobId: selectedJob.id,
-          department: selectedJob.department || '',
-          salary: typeof selectedJob.salary === 'string' ? selectedJob.salary : '',
-          location: selectedJob.location || '',
-          criteria: selectedJob.requirements?.join(', ') || '',
-          skills: '', // Can be added if needed
-          other_description: selectedJob.description || '',
+          name: applicantName,
+          jobId: selectedJobSnapshot.id,
+          department: selectedJobSnapshot.department || '',
+          salary: typeof selectedJobSnapshot.salary === 'string' ? selectedJobSnapshot.salary : '',
+          location: selectedJobSnapshot.location || '',
+          criteria: selectedJobSnapshot.requirements?.join(', ') || '',
+          skills: '',
+          other_description: selectedJobSnapshot.description || '',
           email: applicantEmail,
           phone: applicantPhone,
-          resumeUrl: resumeUrl || uploadResponse?.files?.[0]?.url || uploadResponse?.url || uploadResponse?.fileUrl || formData['resume'] || '', // Use file upload URL or fallback
-          openairesponse: uploadResponse?.response || formData['openaiaresponse'] || '', // OpenAI response from resume upload
+          resumeUrl: resumeUrl || '',
+          openairesponse: scanAnalysis || null, // Store as JSON object, not string
           answers: answers,
           submittedAt: new Date().toISOString()
         }
       };
 
-      console.log('Submitting application to:', url);
-      console.log('Using tenant slug:', effectiveTenantSlug);
+      // Construct submit URL
+      let submitUrl = submitEndpoint;
+      if (apiMode === 'renderer') {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        submitUrl = baseUrl ? `${baseUrl}${submitEndpoint}` : submitEndpoint;
+      } else if (apiMode === 'direct' && apiBaseUrl) {
+        submitUrl = `${apiBaseUrl}${submitEndpoint}`;
+      }
+
+      // Prepare headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      const { data: { session: submitSession } } = await supabase.auth.getSession();
+      if (submitSession?.access_token) {
+        headers['Authorization'] = `Bearer ${submitSession.access_token}`;
+      }
+
+      if (effectiveTenantSlug) {
+        headers['X-Tenant-Slug'] = effectiveTenantSlug;
+      }
+
+      console.log('Submitting application in background:', submitUrl);
       console.log('Application payload:', applicationPayload);
       
-      const response = await fetch(url, {
+      const response = await fetch(submitUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(applicationPayload)
       });
 
-      console.log('Application response status:', response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Application error response:', errorText);
-        throw new Error(`Application submission failed: ${response.status} - ${errorText}`);
+        console.error('Application submission failed in background:', errorText);
+        return; // Silent fail
       }
 
       const result = await response.json();
-      console.log('Application submitted successfully:', result);
-      
-      toast.success('Application submitted successfully! We\'ll be in touch soon.');
-      setFormData({});
-      setResumeFile(null);
-      setResumeUploadResponse(null);
-      setIsApplicationModalOpen(false);
-      setSelectedJob(null);
+      console.log('Application submitted successfully in background:', result);
       
       // Update application count
       setJobs(prev => prev.map(job => 
-        job.id === selectedJob.id 
+        job.id === selectedJobSnapshot.id 
           ? { ...job, applicationsCount: (job.applicationsCount || 0) + 1 }
           : job
       ));
       
     } catch (error) {
-      console.error('Application submission error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to submit application';
-      toast.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      // Silent fail - don't show error to user since it's background process
+      console.error('Background resume upload and submission error:', error);
     }
   };
 
@@ -1045,7 +1060,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
               title={question.title}
               description={question.description || 'Upload your file here'}
               apiEndpoint={fileUploadEndpoint}
-              apiPrefix={apiMode === 'renderer' ? 'renderer' : apiMode === 'direct' ? 'renderer' : 'supabase'}
+              apiPrefix={apiMode === 'renderer' ? 'renderer' : apiMode === 'direct' ? 'renderer' : 'localhost'}
               acceptedFileTypes={(() => {
                 if (question.validation?.pattern) {
                   // Convert regex pattern like '\\.(pdf|doc|docx)$' to '.pdf,.doc,.docx'
@@ -1074,7 +1089,6 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
               maxFileSize={10}
               multiple={false}
               tenantSlug={tenantSlug || tenantId}
-              uploadPrompt="please scan the resume and make a json of education , skills, etc basically a summury"
               hideUploadButton={true}
               onFileSelected={(file) => {
                 setResumeFile(file);

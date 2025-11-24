@@ -130,6 +130,44 @@ const formatRelativeTime = (dateString: string): string => {
   }
 };
 
+// Lightweight mustache-style matcher for replacing tokens like {{current_user}}
+const PLACEHOLDER_REGEX = /{{\s*([^}]+)\s*}}/g;
+
+type PlaceholderAdapter = {
+  tokens: string[];
+  resolve: () => string | undefined;
+};
+
+// Safely walk nested objects using dot-delimited paths (e.g. user_metadata.assigned_to)
+const getNestedValue = (source: any, path: string): any => {
+  if (!source || !path) return undefined;
+
+  return path
+    .split('.')
+    .map(segment => segment.trim())
+    .filter(Boolean)
+    .reduce((current: any, key) => {
+      if (current === undefined || current === null) {
+        return undefined;
+      }
+      return current[key];
+    }, source);
+};
+
+// Apply placeholder substitutions and URL-encode each resolved value
+const applyPlaceholderTemplate = (
+  template: string,
+  resolver: (token: string) => string | undefined
+): string => {
+  return template.replace(PLACEHOLDER_REGEX, (_match, token) => {
+    const resolved = resolver(token);
+    if (resolved === undefined || resolved === null) {
+      return '';
+    }
+    return encodeURIComponent(String(resolved));
+  });
+};
+
 // Transform backend record to table row based on optional column config
 const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   // If configuration is provided, use it to transform data
@@ -259,6 +297,72 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const requestSequenceRef = useRef<number>(0);
   const lastFetchedTokenRef = useRef<string | null>(null); // Track last fetched session token
   const lastFetchedConfigRef = useRef<string>(''); // Track last fetched config/filter combination
+  const { session, user } = useAuth();
+  const sessionUser = session?.user ?? null;
+  const activeUser = user ?? sessionUser ?? null;
+  const activeUserId = activeUser?.id ?? null;
+  const activeUserMetadata = activeUser?.user_metadata ?? null;
+  const activeAppMetadata = activeUser?.app_metadata ?? null;
+
+  const runtimeContext = useMemo(() => ({
+    session,
+    user: activeUser,
+    current_user: activeUser,
+    claims: activeUser,
+    user_metadata: activeUserMetadata,
+    metadata: activeUserMetadata,
+    app_metadata: activeAppMetadata
+  }), [session, activeUser, activeUserMetadata, activeAppMetadata]);
+
+  const runtimeTokenAdapters = useMemo<PlaceholderAdapter[]>(() => {
+    const adapters: PlaceholderAdapter[] = [];
+
+    if (activeUserId) {
+      adapters.push({
+        tokens: ['current_user'],
+        resolve: () => activeUserId
+      });
+    }
+
+    return adapters;
+  }, [activeUserId]);
+
+  // Resolve placeholder tokens to user/session claim values right before fetch time
+  const resolvePlaceholderValue = useCallback((rawToken: string) => {
+    if (!rawToken) return undefined;
+    const token = rawToken.trim();
+    if (!token) return undefined;
+
+    const normalizedKey = token.toLowerCase().replace(/[\s-]+/g, '_');
+    const adapter = runtimeTokenAdapters.find(entry =>
+      entry.tokens.includes(normalizedKey)
+    );
+
+    if (adapter) {
+      return adapter.resolve();
+    }
+
+    const normalizedPath = token.replace(/\s+/g, '');
+    const nestedValue = getNestedValue(runtimeContext, normalizedPath);
+
+    if (nestedValue === undefined || nestedValue === null || nestedValue === '') {
+      return undefined;
+    }
+
+    if (typeof nestedValue === 'object') {
+      return undefined;
+    }
+
+    return String(nestedValue);
+  }, [runtimeTokenAdapters, runtimeContext]);
+
+  // Resolve the template once per config/user combo, but keep raw endpoint as a fallback
+  const resolvedApiEndpoint = useMemo(() => {
+    if (!config?.apiEndpoint) return undefined;
+    return applyPlaceholderTemplate(config.apiEndpoint, resolvePlaceholderValue);
+  }, [config?.apiEndpoint, resolvePlaceholderValue]);
+
+  const effectiveApiEndpoint = resolvedApiEndpoint ?? config?.apiEndpoint;
 
   // Normalize filters to ensure non-empty, unique keys
   const normalizedFilters = useMemo(() => {
@@ -297,7 +401,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const filterService = useMemo(() => {
     if (normalizedFilters.length > 0 && !config?.showFallbackOnly) {
       const service = new FilterService(normalizedFilters, {
-        apiEndpoint: config.apiEndpoint,
+        apiEndpoint: effectiveApiEndpoint,
         entityType: config.entityType,
         pageSize: config.filterOptions?.pageSize || 10,
         searchFields: config.searchFields,
@@ -319,7 +423,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       return service;
     }
     return null;
-  }, [normalizedFilters, config?.apiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, config?.searchFields]);
+  }, [normalizedFilters, effectiveApiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, config?.searchFields]);
 
   // Initialize filter hooks with proper reset when no filters are configured
   const {
@@ -430,7 +534,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     lead_statuses: config?.statusOptions || [],
     sources: []
   });
-  const { session, user } = useAuth();
 
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column, columnIndex: number) => {
@@ -670,10 +773,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
+      if (!effectiveApiEndpoint) {
+        console.warn('LeadTableComponent: apiEndpoint is not configured.');
+        setTableLoading(false);
+        return;
+      }
+
       const currentSequence = requestSequence || ++requestSequenceRef.current;
       const authToken = session?.access_token;
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const endpoint = config?.apiEndpoint || '/crm-records/records/';
+      const endpoint = effectiveApiEndpoint;
       const apiUrl = `${baseUrl}${endpoint}`;
 
       // Build query parameters
@@ -824,6 +933,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       searchTimeoutRef.current = null;
     }
 
+    if (!effectiveApiEndpoint) {
+      console.warn('LeadTableComponent: apiEndpoint is not configured.');
+      return;
+    }
+
+    const endpoint = effectiveApiEndpoint;
+
     // Update URL to clear filter parameters
     if (hasActiveFilters) {
       const params = filterService.generateQueryParams({});
@@ -832,7 +948,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       params.append('page_size', '10');
 
       // Only add entity_type if using generic records endpoint and entityType is configured
-      if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+      if (endpoint.includes('/crm-records/records') && config?.entityType) {
         params.append('entity_type', config.entityType);
       }
 
@@ -848,7 +964,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       setTableLoading(true);
       const authToken = session?.access_token;
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const endpoint = config?.apiEndpoint || '/api/records/';
 
       const params = new URLSearchParams();
 
@@ -945,6 +1060,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         const apiSequence = ++requestSequenceRef.current;
         let params: URLSearchParams | undefined;
+        const endpointForEntityCheck = effectiveApiEndpoint ?? '';
         // Update URL with search parameter if using dynamic filters; otherwise include search directly
         if (hasActiveFilters) {
           const currentFilters = { ...filterState.values };
@@ -959,7 +1075,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           params.append('page_size', '10');
 
           // Only add entity_type if using generic records endpoint and entityType is configured
-          if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+          if (endpointForEntityCheck.includes('/crm-records/records') && config?.entityType) {
             params.append('entity_type', config.entityType);
           }
 
@@ -978,7 +1094,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           params.append('page_size', '10');
 
           // Only add entity_type if using generic records endpoint and entityType is configured
-          if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+          if (endpointForEntityCheck.includes('/crm-records/records') && config?.entityType) {
             params.append('entity_type', config.entityType);
           }
 
@@ -990,7 +1106,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         fetchFilteredData(apiSequence, params);
       }
     }, 1000);
-  }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, config?.apiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
+  }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
 
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
@@ -1144,7 +1260,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         
         // Prevent redundant fetches: check if we've already fetched with this token and config
         const currentConfigKey = JSON.stringify({
-          apiEndpoint: config?.apiEndpoint,
+          apiEndpoint: effectiveApiEndpoint ?? null,
           defaultFilters: config?.defaultFilters,
           normalizedFilters: normalizedFilters.map(f => f.key),
           entityType: config?.entityType,
@@ -1160,8 +1276,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           return;
         }
         
+        if (!effectiveApiEndpoint) {
+          console.warn('LeadTableComponent: apiEndpoint is not configured.');
+          setLoading(false);
+          return;
+        }
+
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-        const endpoint = config?.apiEndpoint || '/api/records/';
+        const endpoint = effectiveApiEndpoint;
 
         // Build initial query parameters
         let params: URLSearchParams;
@@ -1274,7 +1396,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       lastFetchedTokenRef.current = null;
       lastFetchedConfigRef.current = '';
     }
-  }, [session?.access_token, config?.apiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, hasActiveFilters]);
+  }, [session?.access_token, effectiveApiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, hasActiveFilters]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1334,7 +1456,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                       params.set('page_size', '10');
 
                       // Only add entity_type if using generic records endpoint and entityType is configured
-                      if (config?.apiEndpoint?.includes('/crm-records/records') && config?.entityType) {
+                      if ((effectiveApiEndpoint ?? '').includes('/crm-records/records') && config?.entityType) {
                         params.set('entity_type', config.entityType);
                       }
 
