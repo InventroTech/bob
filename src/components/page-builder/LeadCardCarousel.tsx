@@ -954,9 +954,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
   // Showing the lead card
   return (
-    <div className="flex w-full flex-col relative">
-      <div className="relative w-full">
-        <Card className="relative flex w-full flex-col bg-white border-0 shadow-none">
+    <div className="flex w-full flex-col relative overflow-hidden md:overflow-hidden">
+      <div className="relative w-full overflow-hidden md:overflow-hidden">
+        <Card className="relative flex w-full flex-col bg-white border-0 shadow-none overflow-hidden md:overflow-hidden">
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -1074,7 +1074,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           </div>
           
           {/* Task Progress Section */}
-          <CardContent className="flex flex-col gap-8 p-4 pb-4 bg-white" style={bodyFont}>
+          <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-24' : 'pb-4'}`} style={bodyFont}>
             <div
               className={cn(
                 "grid gap-6",
@@ -1102,9 +1102,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           </CardContent>
         </Card>
       </div>
-      {/* Sticky Action Buttons at Bottom - Only within lead card container */}
+      {/* Fixed Action Buttons at Bottom of Viewport */}
       {actionButtonsVisible && postCallActions.length > 0 && (
-        <div className="sticky bottom-0 z-50 border-t border-slate-200 bg-white px-6 py-4 shadow-lg w-full">
+        <div 
+          className="fixed bottom-0 right-0 z-50 border-t border-slate-200 bg-white px-6 py-4 shadow-lg"
+          style={{ 
+            left: 'var(--sidebar-width, 288px)',
+            transition: 'left 0.2s ease-in-out'
+          }}
+        >
           <div className="flex w-full flex-wrap items-center gap-3">
             {postCallActions.map((action) => (
               <LeadActionButton
