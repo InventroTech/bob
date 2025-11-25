@@ -171,9 +171,9 @@ const CustomAppLayout: React.FC = () => {
   };
 
   return (
-    <div 
-      className="flex h-screen overflow-hidden"
-      style={{ 
+    <div
+      className="flex min-h-screen"
+      style={{
         ['--sidebar-width' as string]: `${sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded}px`
       }}
     >
@@ -303,10 +303,10 @@ const CustomAppLayout: React.FC = () => {
 
       {/* Main Content */}
       <main
-        className="flex-1 h-full bg-white transition-all duration-200 overflow-hidden md:overflow-hidden"
+        className="flex-1 bg-white transition-all duration-200 overflow-auto"
         style={{ marginLeft: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
-        <div className="h-full w-full overflow-hidden md:overflow-hidden">
+        <div className="min-h-screen w-full">
           <Outlet />
         </div>
       </main>

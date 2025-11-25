@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { FaWhatsapp } from "react-icons/fa";
 import {
@@ -105,6 +106,7 @@ interface LeadState {
 
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -673,11 +675,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     const { event, success } = eventMap[action];
 
+    const actingUserId = authUser?.id || currentLead.user_id;
     const payload: Record<string, any> = {
       notes: lead.notes || "",
       remarks: currentLead.latest_remarks,
       lead_id: currentLead.id,
-      user_id: currentLead.user_id,
+      user_id: actingUserId,
+      lead_owner_user_id: currentLead.user_id,
     };
 
     if (extra?.reason) {
@@ -686,9 +690,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     if (extra?.nextCallAt) {
       payload.next_call_at = extra.nextCallAt;
     }
-    if (typeof extra?.assignToSelf === "boolean") {
-      payload.assign_to_self = extra.assignToSelf;
-    }
+    payload.assign_to_self = extra?.assignToSelf ? actingUserId : null;
 
     setProcessingAction(action);
     try {
