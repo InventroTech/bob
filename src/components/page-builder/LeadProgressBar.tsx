@@ -119,11 +119,14 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
       const params = new URLSearchParams();
       params.append('entity_type', 'lead');
       
-      // Add poster filter for each lead type
-      // The API might accept multiple poster values or comma-separated
-      assignedLeadTypes.forEach(leadType => {
-        params.append('poster', leadType);
-      });
+      // Normalize lead types to match database format (spaces -> underscores, lowercase)
+      const normalizedLeadTypes = assignedLeadTypes.map(lt => 
+        lt.toLowerCase().replace(/\s+/g, '_')
+      );
+      
+      // Add poster filter - try comma-separated format first
+      // If that doesn't work, the API might accept multiple params
+      params.append('poster', normalizedLeadTypes.join(','));
       
       params.append('page_size', '1'); // Just need count, not data
       
@@ -158,7 +161,11 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         const errorText = await response.text().catch(() => 'Unknown error');
         console.warn('[LeadProgressBar] Failed to fetch leads count:', response.status, errorText);
         // Try fallback: fetch all leads and filter by poster field
-        await fetchAssignedLeadsCountFallback(assignedLeadTypes, baseUrl, currentSession.access_token, setAssignedLeadsCount);
+        // Normalize lead types for fallback too
+        const normalizedLeadTypes = assignedLeadTypes.map(lt => 
+          lt.toLowerCase().replace(/\s+/g, '_')
+        );
+        await fetchAssignedLeadsCountFallback(normalizedLeadTypes, baseUrl, currentSession.access_token, setAssignedLeadsCount);
       }
     } catch (error) {
       console.error('[LeadProgressBar] Error fetching assigned leads count:', error);
@@ -168,7 +175,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
 
   // Fallback: Fetch leads and filter by poster field if API filtering doesn't work
   const fetchAssignedLeadsCountFallback = async (
-    assignedLeadTypes: string[], 
+    normalizedLeadTypes: string[], 
     baseUrl: string, 
     token: string,
     setCount: (count: number) => void
@@ -194,9 +201,12 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         const results = responseData.data || responseData.results || [];
         
         // Filter leads where poster field matches assigned lead types
+        // Normalize poster value for comparison (spaces -> underscores, lowercase)
         const assignedCount = results.filter((lead: any) => {
           const poster = lead.data?.poster || lead.poster;
-          return poster && assignedLeadTypes.includes(poster);
+          if (!poster) return false;
+          const normalizedPoster = String(poster).toLowerCase().replace(/\s+/g, '_');
+          return normalizedLeadTypes.includes(normalizedPoster);
         }).length;
         
         const totalCount = responseData.page_meta?.total_count || responseData.count || results.length;
