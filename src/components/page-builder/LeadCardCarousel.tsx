@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { FaWhatsapp } from "react-icons/fa";
 import {
@@ -9,6 +10,7 @@ import {
   Phone,
   Coffee,
   CheckCircle2,
+  Check,
   XCircle,
   AlertCircle,
   Clock,
@@ -19,7 +21,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
-import { TrialActivatedModal } from "./TrialActivatedModal";
 import { CallBackModal } from "./CallBackModal";
 
 interface LeadCardCarouselProps {
@@ -105,6 +106,7 @@ interface LeadState {
 
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -123,7 +125,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [animationData, setAnimationData] = useState<any>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
-  const [showTrialSuccessDialog, setShowTrialSuccessDialog] = useState(false);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -350,6 +351,12 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const TaskProgressList: React.FC<{ steps: TaskStep[] }> = ({ steps }) => {
     if (!steps.length) return null;
 
+    const currentIndexRaw = steps.findIndex((step) => step.status === "current");
+    const currentIndex =
+      currentIndexRaw !== -1
+        ? currentIndexRaw
+        : steps.findIndex((step) => step.status !== "completed");
+
     return (
       <ol
         className="relative flex flex-col gap-4"
@@ -362,25 +369,32 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         }}
       >
         {steps.map((step, index) => (
-          <li key={step.id} className="flex min-h-[44px] gap-4">
+          <li key={step.id} className="flex min-h-[44px] gap-3">
             <div className="flex flex-col items-center">
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors",
-                  step.status === "completed" && "border-emerald-500 bg-emerald-100 text-emerald-600",
-                  step.status === "current" && "border-slate-900 bg-slate-900 text-white",
-                  step.status === "pending" && "border-slate-200 bg-white text-slate-300"
+                  "flex h-6 w-6 items-center justify-center rounded-full border transition-colors",
+                  step.status === "completed" && "border-slate-300 bg-slate-50",
+                  step.status === "current" && "border-slate-900 bg-slate-900",
+                  step.status === "pending" && "border-slate-200 bg-white"
                 )}
               >
                 {step.status === "completed" ? (
-                  <CheckCircle2 className="h-4 w-4" />
+                  <Check className="h-3 w-3 text-emerald-600" />
                 ) : step.status === "current" ? (
-                  <span className="block h-2.5 w-2.5 rounded-full bg-white" />
+                  <span className="block h-2 w-2 rounded-full bg-white" />
                 ) : (
-                  <span className="block h-2 w-2 rounded-full bg-slate-300" />
+                  <span className="block h-1.5 w-1.5 rounded-full bg-slate-300" />
                 )}
               </div>
-              {index !== steps.length - 1 && <div className="mt-1 h-full w-px flex-1 bg-slate-200" />}
+              {index !== steps.length - 1 && (
+                <div
+                  className={cn(
+                    "mt-1 h-full w-px flex-1",
+                    currentIndex !== -1 && index < currentIndex ? "bg-slate-900" : "bg-slate-200"
+                  )}
+                />
+              )}
             </div>
             <div className="pt-1">
               <p
@@ -451,17 +465,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       // Use configured status data API endpoint or fallback to default
       const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`;
       
-      const response = await fetch(
-        `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -470,7 +482,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const data = await response.json();
       setLeadStats(data);
     } catch (error) {
-      console.error("Error fetching lead stats:", error);
+      console.error("Error fetching lead statistics:", error);
     }
   };
 
@@ -663,11 +675,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     const { event, success } = eventMap[action];
 
+    const actingUserId = authUser?.id || currentLead.user_id;
     const payload: Record<string, any> = {
       notes: lead.notes || "",
       remarks: currentLead.latest_remarks,
       lead_id: currentLead.id,
-      user_id: currentLead.user_id,
+      user_id: actingUserId,
+      lead_owner_user_id: currentLead.user_id,
     };
 
     if (extra?.reason) {
@@ -676,9 +690,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     if (extra?.nextCallAt) {
       payload.next_call_at = extra.nextCallAt;
     }
-    if (typeof extra?.assignToSelf === "boolean") {
-      payload.assign_to_self = extra.assignToSelf;
-    }
+    payload.assign_to_self = extra?.assignToSelf ? actingUserId : null;
 
     setProcessingAction(action);
     try {
@@ -691,7 +703,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       if (ok) {
         await fetchFirstLead();
         if (action === "Trial Activated") {
-          setShowTrialSuccessDialog(true);
+          // Dispatch custom event for progress bar to listen
+          window.dispatchEvent(new CustomEvent('trial-activated', { 
+            detail: { leadId: currentLead.id } 
+          }));
         }
       }
 
@@ -941,9 +956,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
   // Showing the lead card
   return (
-    <div className="flex h-full w-full flex-col gap-6">
-      <div className="relative flex h/full w/full">
-        <Card className="relative flex w-full flex-col overflow-hidden bg-white border-0 shadow-none">
+    <div className="flex w-full flex-col relative overflow-hidden md:overflow-hidden">
+      <div className="relative w-full overflow-hidden md:overflow-hidden">
+        <Card className="relative flex w-full flex-col bg-white border-0 shadow-none overflow-hidden md:overflow-hidden">
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -952,116 +967,119 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               </div>
             </div>
           )}
-          <CardContent className="flex flex-col gap-8 p-6 bg-white" style={bodyFont}>
-            <div className="w-full border-b border-slate-200 px-5 pb-5">
-              <div className="flex flex-wrap items-start justify-between gap-6">
+          {/* Header Section */}
+          <div className="w-full border-b border-slate-200 px-2 py-1.5 bg-white" style={bodyFont}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  profileClickable && "cursor-pointer"
+                )}
+                onClick={profileClickable ? handleOpenProfile : undefined}
+              >
+                {currentLead?.display_pic_url ? (
+                  <img
+                    src={currentLead.display_pic_url}
+                    alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
+                    className="h-9 w-9 rounded-full object-cover"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                    }}
+                  />
+                ) : null}
                 <div
                   className={cn(
-                    "flex items-center gap-4",
-                    profileClickable && "cursor-pointer"
+                  "flex h-9 w-9 items-center justify-center rounded-full bg-slate-100",
+                    currentLead?.display_pic_url ? "hidden" : ""
                   )}
-                  onClick={profileClickable ? handleOpenProfile : undefined}
                 >
-                  {currentLead?.display_pic_url ? (
-                    <img
-                      src={currentLead.display_pic_url}
-                      alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
-                      className="h-14 w-14 rounded-full object-cover"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-full bg-slate-100",
-                      currentLead?.display_pic_url ? "hidden" : ""
-                    )}
-                  >
-                    <User className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex flex-col gap-1">
-                    {currentLead?.user_profile_link ? (
-                      <a
-                        href={currentLead.user_profile_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-2xl font-semibold text-slate-900 hover:text-primary"
-                        style={titleFont}
-                      >
-                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
-                      </a>
-                    ) : (
-                      <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
-                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
-                      </h2>
-                    )}
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                        {currentLead?.affiliated_party && (
-                          <span className="font-medium text-slate-700">
-                            {currentLead.affiliated_party}
-                          </span>
-                        )}
-                        {currentLead?.lead_stage && (
-                          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            {currentLead.lead_stage}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {currentLead?.status && (
-                        <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          {currentLead.status}
-                        </span>
-                      )}
-                      {currentLead?.priority && (
-                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Priority: {currentLead.priority}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <User className="h-6 w-6 text-primary" />
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
-                    onClick={handleTakeBreak}
-                    disabled={updating}
-                  >
-                    <Coffee className="h-4 w-4 text-gray-500" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
-                    onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
-                    disabled={!primaryPhone || updating || fetchingNext}
-                  >
-                    <FaWhatsapp className="h-4 w-4 text-[#344054]" />
-                    WhatsApp
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
-                    onClick={() => handleCallLead(primaryPhone)}
-                    disabled={!primaryPhone || updating || fetchingNext}
-                  >
-                    <Phone className="h-4 w-4" />
-                    <span>{formattedPhoneNumber}</span>
-                  </Button>
+                <div className="space-y-1">
+                  <div className="flex flex-col gap-0.5">
+                  {currentLead?.user_profile_link ? (
+                    <a
+                      href={currentLead.user_profile_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-2xl font-semibold text-slate-900 hover:text-primary"
+                      style={titleFont}
+                    >
+                      {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                    </a>
+                  ) : (
+                    <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
+                      {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                    </h2>
+                  )}
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                      {currentLead?.affiliated_party && (
+                        <span className="font-medium text-slate-700">
+                          {currentLead.affiliated_party}
+                        </span>
+                      )}
+                      {currentLead?.lead_stage && (
+                        <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          {currentLead.lead_stage}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {currentLead?.status && (
+                      <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {currentLead.status}
+                      </span>
+                    )}
+                    {currentLead?.priority && (
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        Priority: {currentLead.priority}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  onClick={handleTakeBreak}
+                  disabled={updating}
+                >
+                  <Coffee className="h-4 w-4 text-gray-500" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                  onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
+                  disabled={!primaryPhone || updating || fetchingNext}
+                >
+                  <FaWhatsapp className="h-4 w-4 text-[#344054]" />
+                  WhatsApp
+                </Button>
+                <Button
+                  type="button"
+                  className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                  onClick={() => handleCallLead(primaryPhone)}
+                  disabled={!primaryPhone || updating || fetchingNext}
+                >
+                  <Phone className="h-4 w-4" />
+                  <span>{formattedPhoneNumber}</span>
+                </Button>
+              </div>
             </div>
+          </div>
+          
+          {/* Task Progress Section */}
+          <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-24' : 'pb-4'}`} style={bodyFont}>
             <div
               className={cn(
-                "mt-8 grid gap-6",
+                "grid gap-6",
                 currentLead?.location && "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
               )}
             >
@@ -1084,30 +1102,33 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               ) : null}
             </div>
           </CardContent>
-          <div className="border-t border-slate-100 bg-white px-6 py-4">
-            {actionButtonsVisible && postCallActions.length > 0 ? (
-              <div className="flex w-full flex-wrap items-center gap-3">
-                {postCallActions.map((action) => (
-                  <LeadActionButton
-                    key={action.id}
-                    icon={action.icon}
-                    label={action.label}
-                    onClick={action.onClick}
-                    disabled={updating || fetchingNext}
-                    loading={processingAction === action.loadingKey && updating}
-                    tone={action.tone}
-                    className="flex-1 min-w-[160px]"
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
         </Card>
       </div>
-      <TrialActivatedModal
-        open={showTrialSuccessDialog}
-        onOpenChange={setShowTrialSuccessDialog}
-      />
+      {/* Fixed Action Buttons at Bottom of Viewport */}
+      {actionButtonsVisible && postCallActions.length > 0 && (
+        <div 
+          className="fixed bottom-0 right-0 z-50 border-t border-slate-200 bg-white px-6 py-4 shadow-lg"
+          style={{ 
+            left: 'var(--sidebar-width, 288px)',
+            transition: 'left 0.2s ease-in-out'
+          }}
+        >
+          <div className="flex w-full flex-wrap items-center gap-3">
+            {postCallActions.map((action) => (
+              <LeadActionButton
+                key={action.id}
+                icon={action.icon}
+                label={action.label}
+                onClick={action.onClick}
+                disabled={updating || fetchingNext}
+                loading={processingAction === action.loadingKey && updating}
+                tone={action.tone}
+                className="flex-1 min-w-[160px]"
+              />
+            ))}
+          </div>
+        </div>
+      )}
       <NotInterestedModal
         open={showNotInterestedDialog}
         onOpenChange={setShowNotInterestedDialog}
