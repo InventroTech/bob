@@ -93,11 +93,28 @@ export function initSentry(config: SentryConfig): void {
   } = config;
 
   // Validate DSN format (basic validation)
-  if (!dsn.startsWith('https://') || !dsn.includes('@sentry.io')) {
-    throw new Error('Invalid Sentry DSN format');
+  // DSN format: https://<key>@<host>/<project-id>
+  if (!dsn.startsWith('https://') || !dsn.includes('@')) {
+    throw new Error('Invalid Sentry DSN format. Expected format: https://<key>@<host>/<project-id>');
   }
 
-  const integrations: Array<ReturnType<typeof Sentry.browserTracingIntegration> | ReturnType<typeof Sentry.replayIntegration>> = [
+  const integrations: Array<
+    | ReturnType<typeof Sentry.browserTracingIntegration>
+    | ReturnType<typeof Sentry.replayIntegration>
+    | ReturnType<typeof Sentry.captureConsoleIntegration>
+    | ReturnType<typeof Sentry.httpClientIntegration>
+  > = [
+    // Standard error tracking integrations
+    // Note: Global error and unhandled rejection tracking are enabled by default
+    Sentry.captureConsoleIntegration({
+      levels: ['error'], // Only capture console.error, not warnings/info
+    }),
+    Sentry.httpClientIntegration({
+      // Capture HTTP errors
+      failedRequestStatusCodes: [[400, 599]], // Capture 4xx and 5xx errors
+      failedRequestTargets: [/.*/], // Capture all failed requests
+    }),
+    // Performance monitoring
     Sentry.browserTracingIntegration({
       // Trace navigation
       enableInp: true, // Interaction to Next Paint
@@ -171,11 +188,18 @@ export function setSentryUser(user: {
   email?: string;
   username?: string;
 }): void {
-  Sentry.setUser({
+  const userContext = {
     id: user.id,
     email: user.email,
     username: user.username,
-  });
+  };
+  
+  Sentry.setUser(userContext);
+  
+  // Log in development to verify user context is being set
+  if (import.meta.env.MODE === 'development') {
+    console.log('[Sentry] User context set:', userContext);
+  }
 }
 
 /**
@@ -184,6 +208,11 @@ export function setSentryUser(user: {
  */
 export function clearSentryUser(): void {
   Sentry.setUser(null);
+  
+  // Log in development to verify user context is being cleared
+  if (import.meta.env.MODE === 'development') {
+    console.log('[Sentry] User context cleared');
+  }
 }
 
 /**
