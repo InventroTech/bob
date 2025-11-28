@@ -219,15 +219,36 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
 
     if (Array.isArray(source)) {
-      return source;
+      // Handle new list format: [{task: "...", status: "..."}, ...]
+      return source.map((item, index) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (typeof item === "object" && item !== null) {
+          // New format: {task: "...", status: "..."}
+          if ('task' in item) {
+            return {
+              id: String(item.task || index),
+              title: item.task,
+              name: item.task,
+              status: item.status || item.rawStatus,
+              rawStatus: item.status,
+            } as LeadTask;
+          }
+          // Legacy format: {title: "...", status: "..."} or {name: "...", status: "..."}
+          return item as LeadTask;
+        }
+        return item;
+      });
     }
 
     if (typeof source === "object" && source !== null) {
-      const taskLikeKeys = ["title", "name", "description", "status", "due_date", "dueDate"];
+      const taskLikeKeys = ["title", "name", "description", "status", "due_date", "dueDate", "task"];
       if (taskLikeKeys.some(key => key in (source as Record<string, unknown>))) {
         return [source];
       }
 
+      // Convert dict format to array: {"Task Name": "Status", ...}
       return Object.entries(source as Record<string, any>).map(([key, value]) => {
         let normalizedStatus: string | undefined;
         if (value === null || value === undefined || value === "Null") {
@@ -245,6 +266,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         return {
           id: key,
           title: key,
+          name: key,
           status: normalizedStatus,
           rawStatus: value,
         } as LeadTask;
@@ -280,13 +302,17 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         const cast = task as LeadTask;
         const statusText = (() => {
           const value = cast.status ?? cast.rawStatus;
-          if (value === null || value === undefined) return "";
+          if (value === null || value === undefined || value === "Null") return "";
           return String(value);
         })();
 
+        // Support new format: {task: "...", status: "..."}
+        // Also support legacy formats: {title: "..."} or {name: "..."}
+        const taskLabel = cast.task || cast.title || cast.name || `Task ${index + 1}`;
+
         return {
-          id: String(cast.id ?? cast.title ?? cast.name ?? `task-${index}`),
-          label: cast.title || cast.name || `Task ${index + 1}`,
+          id: String(cast.id ?? cast.task ?? cast.title ?? cast.name ?? `task-${index}`),
+          label: taskLabel,
           description: cast.description,
           statusText,
         };
