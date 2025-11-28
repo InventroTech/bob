@@ -19,4 +19,8 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Generate source maps for better Sentry error reporting
+    sourcemap: true,
+  },
 }));

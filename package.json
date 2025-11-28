@@ -46,6 +46,7 @@
     "@radix-ui/react-toggle": "^1.1.0",
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.4",
+    "@sentry/react": "^10.25.0",
     "@supabase/supabase-js": "^2.49.4",
     "@syncfusion/ej2-react-grids": "^29.1.41",
     "@syncfusion/ej2-react-navigations": "^29.1.41",

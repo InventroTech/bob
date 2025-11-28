@@ -72,7 +72,7 @@ const CustomAppPage: React.FC = () => {
   if (!page) return <div className="p-4">Page not found.</div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="space-y-4">
         {Array.isArray(page.config)
           ? (page.config as any[]).map((component) => {

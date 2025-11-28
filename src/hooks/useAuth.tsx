@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, ReactNode, useMe
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
+import { setSentryUser, clearSentryUser } from '../lib/sentry';
 
 interface AuthContextType {
   session: Session | null;
@@ -43,6 +44,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       console.log('Supabase logout successful');
       
+      // Clear Sentry user context
+      clearSentryUser();
+      
       // Clear session and user state
       setSession(null);
       setUser(null);
@@ -61,7 +65,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      const user = session?.user ?? null;
+      setUser(user);
+      
+      // Set Sentry user context if user exists
+      if (user) {
+        setSentryUser({
+          id: user.id,
+          email: user.email,
+          username: user.user_metadata?.username || user.email?.split('@')[0],
+        });
+      } else {
+        clearSentryUser();
+      }
+      
       setLoading(false);
     });
 
@@ -70,7 +87,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       async (_event, session) => {
         console.log('Supabase auth state changed:', _event, session);
         setSession(session);
-        setUser(session?.user ?? null);
+        const user = session?.user ?? null;
+        setUser(user);
+        
+        // Set Sentry user context when auth state changes
+        if (user) {
+          setSentryUser({
+            id: user.id,
+            email: user.email,
+            username: user.user_metadata?.username || user.email?.split('@')[0],
+          });
+        } else {
+          clearSentryUser();
+        }
+        
         setLoading(false); // Ensure loading is false after update
       }
     );

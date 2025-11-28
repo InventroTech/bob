@@ -14,4 +14,5 @@ export { default as LeadCardCarousel } from './LeadCardCarousel';
 export { LeadCardCarouselWrapper } from './LeadCardCarouselWrapper';
 export { LeadCardCarouselConfig } from './component-config/LeadCardCarouselConfig';
 export { FileUploadPageComponent } from './FileUploadPageComponent';
-export { FileUploadPageConfig } from './FileUploadPageConfig'; 
+export { FileUploadPageConfig } from './FileUploadPageConfig';
+export { LeadProgressBar } from './LeadProgressBar'; 
