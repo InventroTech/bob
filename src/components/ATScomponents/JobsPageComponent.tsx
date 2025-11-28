@@ -1432,67 +1432,166 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
             setResumeUploadResponse(null);
           }
         }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-black">
-                Apply for {selectedJob?.title}
-              </DialogTitle>
-              <div className="flex items-center gap-3 text-sm text-gray-600 mt-2">
-                <span className="text-lg">{selectedJob?.company?.logo}</span>
-                <span className="font-semibold">{selectedJob?.company?.name}</span>
-                {selectedJob?.location && (
-                  <>
-                    <span>•</span>
-                    <span>{selectedJob.location}</span>
-                  </>
-                )}
-              </div>
-            </DialogHeader>
-
-            {selectedJob && (
-              <form onSubmit={handleSubmit} className="space-y-6 mt-6">
-                {selectedJob.form.questions.map((question) => (
-                  <div key={question.id} className="space-y-3">
-                    <label 
-                      htmlFor={question.id} 
-                      className="block text-sm font-semibold text-black"
-                    >
-                      {question.title}
-                      {question.required && (
-                        <span className="text-red-500 ml-1">*</span>
-                      )}
-                    </label>
-                    
-                    {question.description && (
-                      <p className="text-sm text-gray-600 mb-3">
-                        {question.description}
-                      </p>
-                    )}
-                    
-                    {renderFormField(question)}
+          <DialogContent className="max-w-4xl max-h-[95vh] overflow-hidden bg-gradient-to-br from-gray-50 to-white">
+            <div className="overflow-y-auto max-h-[95vh] pr-2">
+              <DialogHeader className="pb-6 border-b border-gray-200">
+                <div className="flex items-start gap-4">
+                  <div className="text-4xl bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl p-4">
+                    {selectedJob?.company?.logo || '💼'}
                   </div>
-                ))}
-
-                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsApplicationModalOpen(false)}
-                    disabled={isSubmitting}
-                    className="px-6 py-3 border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="min-w-[140px] px-6 py-3 bg-gray-900 text-white hover:bg-gray-800 font-semibold"
-                  >
-                    {isSubmitting ? 'Submitting...' : 'Submit Application'}
-                  </Button>
+                  <div className="flex-1">
+                    <DialogTitle className="text-3xl font-bold text-gray-900 mb-2">
+                      {selectedJob?.title}
+                    </DialogTitle>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <span className="font-semibold text-gray-800">{selectedJob?.company?.name}</span>
+                      {selectedJob?.location && (
+                        <>
+                          <span className="text-gray-400">•</span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            {selectedJob.location}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </form>
-            )}
+              </DialogHeader>
+
+              {selectedJob && (
+                <div className="mt-6 space-y-6">
+                  {/* Job Details Section */}
+                  <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <Briefcase className="h-5 w-5 text-gray-700" />
+                      Job Details
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                      {selectedJob.department && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Building className="h-4 w-4 text-gray-500" />
+                          <div>
+                            <p className="text-gray-500 text-xs">Department</p>
+                            <p className="font-semibold text-gray-900">{selectedJob.department}</p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedJob.type && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Clock className="h-4 w-4 text-gray-500" />
+                          <div>
+                            <p className="text-gray-500 text-xs">Type</p>
+                            <p className="font-semibold text-gray-900 capitalize">{selectedJob.type.replace('-', ' ')}</p>
+                          </div>
+                        </div>
+                      )}
+                      {formatSalary(selectedJob.salary) && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-gray-500">💰</span>
+                          <div>
+                            <p className="text-gray-500 text-xs">Salary</p>
+                            <p className="font-semibold text-gray-900">{formatSalary(selectedJob.salary)}</p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedJob.deadline && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Calendar className="h-4 w-4 text-gray-500" />
+                          <div>
+                            <p className="text-gray-500 text-xs">Deadline</p>
+                            <p className="font-semibold text-gray-900">{new Date(selectedJob.deadline).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Job Description Section */}
+                  {selectedJob.description && (
+                    <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">Job Description</h3>
+                      <div className="prose prose-sm max-w-none">
+                        <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                          {selectedJob.description}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Requirements Section */}
+                  {selectedJob.requirements && selectedJob.requirements.length > 0 && (
+                    <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">Requirements</h3>
+                      <ul className="space-y-2">
+                        {selectedJob.requirements.map((req, index) => (
+                          <li key={index} className="flex items-start gap-3 text-gray-700">
+                            <span className="text-gray-400 mt-1">•</span>
+                            <span className="flex-1">{req}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Application Form Section */}
+                  <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-6">Application Form</h3>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                      {selectedJob.form.questions.map((question) => (
+                        <div key={question.id} className="space-y-2">
+                          <label 
+                            htmlFor={question.id} 
+                            className="block text-sm font-semibold text-gray-900"
+                          >
+                            {question.title}
+                            {question.required && (
+                              <span className="text-red-500 ml-1">*</span>
+                            )}
+                          </label>
+                          
+                          {question.description && (
+                            <p className="text-sm text-gray-600 mb-2">
+                              {question.description}
+                            </p>
+                          )}
+                          
+                          <div className="mt-1">
+                            {renderFormField(question)}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-gray-200">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsApplicationModalOpen(false)}
+                          disabled={isSubmitting}
+                          className="px-6 py-2.5 border-gray-300 text-gray-700 hover:bg-gray-50 font-medium"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={isSubmitting}
+                          className="min-w-[140px] px-6 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white hover:from-gray-800 hover:to-gray-700 font-semibold shadow-lg transition-all"
+                        >
+                          {isSubmitting ? (
+                            <span className="flex items-center gap-2">
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              Submitting...
+                            </span>
+                          ) : (
+                            'Submit Application'
+                          )}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       )}
