@@ -152,6 +152,7 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
                 id="assign-callback"
                 checked={assignCallbackToSelf}
                 onCheckedChange={(checked) => setAssignCallbackToSelf(Boolean(checked))}
+                className="border-black data-[state=checked]:bg-black data-[state=checked]:text-white"
               />
               <Label htmlFor="assign-callback" className="text-sm">
                 Assign it to me.
@@ -160,7 +161,7 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <Button
                 variant="ghost"
-                className="w-full sm:w-auto rounded-full border border-transparent text-[#6d5f54] hover:border-[#d1c7bf]"
+                className="w-full sm:w-auto rounded-full border border-transparent text-black hover:border-black hover:bg-transparent"
                 onClick={handleClose}
               >
                 Close
