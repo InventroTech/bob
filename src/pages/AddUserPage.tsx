@@ -143,6 +143,11 @@ const AddUserPage = () => {
       }));
 
       setUsers(transformedUsers);
+      
+      // Show message if no users found
+      if (transformedUsers.length === 0) {
+        toast.info('No users found. The list is empty.');
+      }
     } catch (error: any) {
       console.error('Error fetching users:', error);
       toast.error(`Failed to fetch users: ${error.message}`);
