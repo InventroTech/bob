@@ -375,37 +375,34 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   }
 
   return (
-    <Card className="p-3 bg-white border border-gray-200 shadow-sm">
-      <div className="flex items-center justify-between gap-4">
-        {/* Left side: Title and Progress Bar */}
-        <div className="flex flex-col gap-2 flex-1">
-          <h2 className="text-sm font-semibold text-gray-700">
+    <Card className="p-4 bg-white border border-gray-200 shadow-sm">
+      <div className="flex items-start justify-between gap-6">
+        {/* Left Section: Title and Description */}
+        <div className="flex flex-col gap-1">
+          <h2 className="text-base font-bold text-gray-900">
             {config?.title || "Target Progress"}
           </h2>
-          {/* Progress Bar - Slimmer */}
-          <div className="flex gap-0.5">
-            {Array.from({ length: segmentCount }).map((_, index) => (
-              <div
-                key={index}
-                className={cn(
-                  "flex-1 h-4 rounded-full transition-all duration-300",
-                  index < filledSegments
-                    ? "bg-green-500"
-                    : "bg-gray-200"
-                )}
-              />
-            ))}
-          </div>
+          <p className="text-base text-gray-600 font-normal">
+            {remainingTrials} trial subscriptions remaining for today.
+          </p>
         </div>
 
-        {/* Right side: Badge with remaining count */}
-        <div className="flex flex-col items-end gap-0.5">
-          <div className="bg-gray-200 rounded-md px-3 py-1.5">
-            <span className="text-xs font-medium text-gray-800">
-              {remainingTrials} trial subscriptions
+        {/* Right Section: Progress Count Bubble and Progress Bar */}
+        <div className="flex flex-col gap-2 items-end">
+          {/* Progress Count Bubble */}
+          <div className="bg-gray-200 rounded-lg px-3 py-1.5">
+            <span className="text-sm font-medium text-gray-900">
+              {trialActivated}/{targetCount} Trail subscriptions
             </span>
           </div>
-          <span className="text-xs text-gray-500">are remaining</span>
+          
+          {/* Progress Bar */}
+          <div className="w-48 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gray-800 transition-all duration-300 rounded-full"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
       </div>
     </Card>

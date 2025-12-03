@@ -90,6 +90,11 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           initialSelections[assignment.user_id] = assignment.lead_types as LeadType[];
         });
         setSelectedLeadTypes(initialSelections);
+        
+        // Show message if no users found
+        if (data.length === 0) {
+          toast.info('No users found. The list is empty.');
+        }
       } catch (error: any) {
         console.error('Error fetching lead type data:', error);
         console.error('Error details:', {
