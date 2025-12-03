@@ -129,7 +129,18 @@ export const leadTypeAssignmentApi = {
         if (response.status === 403) {
           throw new Error('Access denied: GM role required to access lead type assignments');
         }
-        throw new Error(`Failed to fetch users: ${response.statusText}`);
+        // For 404, return empty array instead of throwing (no users found is not an error)
+        if (response.status === 404) {
+          console.warn('No users found (404), returning empty array');
+          return [];
+        }
+        // Only throw for actual errors (5xx server errors)
+        if (response.status >= 500) {
+          throw new Error(`Failed to fetch users: ${response.statusText}`);
+        }
+        // For other 4xx errors, return empty array (don't treat as critical error)
+        console.warn(`API returned ${response.status}, returning empty array`);
+        return [];
       }
 
       const responseData = await response.json();
@@ -156,7 +167,7 @@ export const leadTypeAssignmentApi = {
 
       console.log('RM users found from API:', rmUsers.length);
 
-      // Get existing lead type assignments from backend API
+      // Get existing lead type assignments from backend API (regardless of users response)
       const assignmentsMap = new Map();
       try {
         const baseUrlClean = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
