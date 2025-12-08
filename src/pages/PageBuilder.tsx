@@ -31,6 +31,7 @@ import {
   Briefcase,
   Users,
   Upload,
+  Calculator,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -84,6 +85,8 @@ import { JobsPageComponent } from "@/components/ATScomponents/JobsPageComponent"
 import { JobsPageConfigComponent } from "@/components/ATScomponents/configs/JobsPageConfig";
 import { ApplicantTableComponent } from "@/components/ATScomponents/ApplicantTableComponent";
 import { ApplicantTableConfigComponent } from "@/components/ATScomponents/configs/ApplicantTableConfig";
+import { DynamicScoringComponent } from "@/components/ATScomponents/DynamicScoringComponent";
+import { DynamicScoringConfig } from "@/components/ATScomponents/configs/DynamicScoringConfig";
 import { FileUploadPageComponent } from "@/components/page-builder/FileUploadPageComponent";
 import { FileUploadPageConfig } from "@/components/page-builder/FileUploadPageConfig";
 import { Carousel } from "@/components/ui/carousel";
@@ -219,6 +222,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   jobsPage: JobsPageComponent,
   applicantTable: ApplicantTableComponent,
   fileUpload: FileUploadPageComponent,
+  dynamicScoring: DynamicScoringComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -645,6 +649,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             onConfigChange={(key: any, value: any) => handleInputChange(key, value)}
           />
         );
+      case 'dynamicScoring':
+        return (
+          <DynamicScoringConfig
+            config={localConfig as any}
+            onConfigChange={(newConfig) => {
+              // Update all config fields
+              Object.entries(newConfig).forEach(([key, value]) => {
+                handleInputChange(key, value);
+              });
+            }}
+          />
+        );
 
       case 'fileUpload':
         return (
@@ -723,7 +739,7 @@ const PageBuilder = () => {
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
 
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1208,6 +1224,11 @@ const PageBuilder = () => {
                           id="fileUpload"
                           label="File Upload"
                           icon={<Upload className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="dynamicScoring"
+                          label="Dynamic Scoring"
+                          icon={<Calculator className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
