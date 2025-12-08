@@ -338,23 +338,67 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
       
       // Handle different response structures
       let calculatedValue: number | null = null;
-      if (typeof data === 'number') {
+      let successMessage = '';
+      
+      // Check for success response with message
+      if (data.success === true) {
+        successMessage = data.message || 'Scoring completed successfully';
+        
+        // Try to extract score value from stats or other fields
+        if (data.stats?.total_score_added !== undefined) {
+          calculatedValue = data.stats.total_score_added;
+        } else if (data.stats?.total_leads !== undefined) {
+          // Use total_leads as a fallback if no score available
+          calculatedValue = data.stats.total_leads;
+        } else if (data.pyro_value !== undefined) {
+          calculatedValue = data.pyro_value;
+        } else if (data.score !== undefined) {
+          calculatedValue = data.score;
+        } else if (data.value !== undefined) {
+          calculatedValue = data.value;
+        } else if (data.data?.pyro_value !== undefined) {
+          calculatedValue = data.data.pyro_value;
+        }
+        
+        // Show success message with stats if available
+        if (data.stats) {
+          const statsMsg = `Total: ${data.stats.total_leads || 0}, Updated: ${data.stats.updated_leads || 0}, Score Added: ${data.stats.total_score_added || 0}`;
+          toast.success(`${successMessage} - ${statsMsg}`);
+        } else {
+          toast.success(successMessage);
+        }
+        
+        if (calculatedValue !== null) {
+          setPyroValue(calculatedValue);
+        }
+      } else if (typeof data === 'number') {
+        // Direct number response
         calculatedValue = data;
+        setPyroValue(calculatedValue);
+        toast.success(`Score calculated: ${calculatedValue}`);
       } else if (data.pyro_value !== undefined) {
         calculatedValue = data.pyro_value;
+        setPyroValue(calculatedValue);
+        toast.success(`Score calculated: ${calculatedValue}`);
       } else if (data.score !== undefined) {
         calculatedValue = data.score;
+        setPyroValue(calculatedValue);
+        toast.success(`Score calculated: ${calculatedValue}`);
       } else if (data.value !== undefined) {
         calculatedValue = data.value;
+        setPyroValue(calculatedValue);
+        toast.success(`Score calculated: ${calculatedValue}`);
       } else if (data.data?.pyro_value !== undefined) {
         calculatedValue = data.data.pyro_value;
-      }
-
-      if (calculatedValue !== null) {
         setPyroValue(calculatedValue);
         toast.success(`Score calculated: ${calculatedValue}`);
       } else {
-        throw new Error('Invalid response format');
+        // If we have a message but no success flag, still show success
+        if (data.message) {
+          toast.success(data.message);
+        } else {
+          throw new Error('Invalid response format');
+        }
       }
     } catch (error) {
       console.error('Error calculating score:', error);
