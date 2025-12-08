@@ -9,7 +9,7 @@ import {
   LeadTypeAssignmentResponse
 } from '../types/userSettings';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
+const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
 
 // User Settings API functions
 export const userSettingsApi = {
@@ -32,17 +32,22 @@ export const userSettingsApi = {
 
   // Create or update a user setting
   async createOrUpdate(data: UserSettingsCreate): Promise<UserSettings> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+    
     const response = await fetch(`${API_BASE_URL}/user-settings/settings/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai'
       },
       body: JSON.stringify(data),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create/update user setting: ${response.statusText}`);
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to create/update user setting: ${response.status} - ${errorText}`);
     }
 
     return response.json();
@@ -50,16 +55,21 @@ export const userSettingsApi = {
 
   // Get a specific user setting
   async get(userId: string, key: string): Promise<UserSettings> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+    
     const response = await fetch(`${API_BASE_URL}/user-settings/settings/${userId}/${key}/`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai'
       },
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch user setting: ${response.statusText}`);
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to fetch user setting: ${response.status} - ${errorText}`);
     }
 
     return response.json();
@@ -67,17 +77,22 @@ export const userSettingsApi = {
 
   // Update a specific user setting
   async update(userId: string, key: string, data: UserSettingsUpdate): Promise<UserSettings> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+    
     const response = await fetch(`${API_BASE_URL}/user-settings/settings/${userId}/${key}/`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai'
       },
       body: JSON.stringify(data),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update user setting: ${response.statusText}`);
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to update user setting: ${response.status} - ${errorText}`);
     }
 
     return response.json();
@@ -234,7 +249,8 @@ export const leadTypeAssignmentApi = {
         },
         body: JSON.stringify({
           user_id: data.user_id,
-          lead_types: data.lead_types
+          lead_types: data.lead_types,
+          assigned_leads_count: data.assigned_leads_count // Include count if provided
         })
       });
 

@@ -61,7 +61,7 @@ interface LeadData {
   budget: number;
   location: string;
   tags: string[];
-  display_pic_url: string;
+  display_pic_url?: string | null;
   linkedin_profile: string;
   website: string;
   next_follow_up: string;
@@ -135,6 +135,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   });
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
 
   const isInitialized = useRef(false);
 
@@ -576,17 +577,25 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       setHasCheckedForLeads(true);
 
-      setCurrentLead(leadData);
+      // Handle nested data structures (e.g., if data is in a 'data' or 'lead' property)
+      let processedLead = leadData;
+      if (leadData?.data && typeof leadData.data === 'object') {
+        processedLead = { ...leadData, ...leadData.data };
+      }
+      if (leadData?.lead && typeof leadData.lead === 'object') {
+        processedLead = { ...leadData, ...leadData.lead };
+      }
+      setCurrentLead(processedLead);
       setShowPendingCard(false);
       setActionButtonsVisible(false);
       setProcessingAction(null);
       setLead(prev => ({
         ...prev,
-        leadStatus: leadData.status || "New",
-        priority: leadData.priority || "Medium",
-        notes: (leadData?.data?.notes as string) || leadData?.notes || "",
-        selectedTags: parseTags(leadData?.tags || []),
-        nextFollowUp: leadData.next_follow_up || "",
+        leadStatus: processedLead.status || "New",
+        priority: processedLead.priority || "Medium",
+        notes: (processedLead?.data?.notes as string) || processedLead?.notes || "",
+        selectedTags: parseTags(processedLead?.tags || []),
+        nextFollowUp: processedLead.next_follow_up || "",
         leadStartTime: new Date(),
       }));
 
@@ -641,9 +650,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       if (!token) throw new Error("Authentication required");
 
       const base = import.meta.env.VITE_RENDER_API_URL;
-      if (!base) {
-        console.warn("[LeadCardCarousel] VITE_RENDER_API_URL is not defined");
-      }
       const url = `${base}/crm-records/records/events/`;
       const body = {
         event: eventName,
@@ -826,6 +832,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
   }, []);
 
+  // Reset image error when currentLead changes
+  useEffect(() => {
+    setImageError(false);
+  }, [currentLead]);
+
   // Pending card
   if (showPendingCard) {
     return (
@@ -1003,26 +1014,26 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 )}
                 onClick={profileClickable ? handleOpenProfile : undefined}
               >
-                {currentLead?.display_pic_url ? (
-                  <img
-                    src={currentLead.display_pic_url}
-                    alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
-                    className="h-9 w-9 rounded-full object-cover"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                    }}
-                  />
-                ) : null}
-                <div
-                  className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full bg-slate-100",
-                    currentLead?.display_pic_url ? "hidden" : ""
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 flex-shrink-0 overflow-hidden">
+                  {currentLead?.display_pic_url && 
+                   typeof currentLead.display_pic_url === 'string' && 
+                   currentLead.display_pic_url.trim() !== '' && 
+                   !imageError ? (
+                    <img
+                      src={currentLead.display_pic_url}
+                      alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
+                      className="h-9 w-9 rounded-full object-cover"
+                      loading="lazy"
+                      onError={() => {
+                        setImageError(true);
+                      }}
+                      onLoad={() => {
+                        setImageError(false);
+                      }}
+                    />
+                  ) : (
+                    <User className="h-6 w-6 text-primary" />
                   )}
-                >
-                  <User className="h-6 w-6 text-primary" />
                 </div>
                 <div className="space-y-1">
                   <div className="flex flex-col gap-0.5">
@@ -1045,11 +1056,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       {currentLead?.affiliated_party && (
                         <span className="font-medium text-slate-700">
                           {currentLead.affiliated_party}
-                        </span>
-                      )}
-                      {currentLead?.lead_stage && (
-                        <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          {currentLead.lead_stage}
                         </span>
                       )}
                     </div>
@@ -1175,22 +1181,26 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-3">
-                {currentLead?.display_pic_url ? (
-                  <img
-                    src={currentLead.display_pic_url}
-                    alt={`${currentLead.name || "Lead"} profile`}
-                    className="h-8 w-8 rounded-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                    }}
-                  />
-                ) : null}
-                <User
-                  className={`h-4 w-4 text-primary ${
-                    currentLead?.display_pic_url ? "hidden" : ""
-                  }`}
-                />
+                <div className="h-8 w-8 rounded-full flex items-center justify-center bg-slate-100 flex-shrink-0 overflow-hidden">
+                  {currentLead?.display_pic_url && 
+                   typeof currentLead.display_pic_url === 'string' && 
+                   currentLead.display_pic_url.trim() !== '' && 
+                   !imageError ? (
+                    <img
+                      src={currentLead.display_pic_url}
+                      alt={`${currentLead.name || "Lead"} profile`}
+                      className="h-8 w-8 rounded-full object-cover"
+                      onError={() => {
+                        setImageError(true);
+                      }}
+                      onLoad={() => {
+                        setImageError(false);
+                      }}
+                    />
+                  ) : (
+                    <User className="h-4 w-4 text-primary" />
+                  )}
+                </div>
                 <div>
                   <h3 className="font-semibold">{currentLead?.name || "Lead Profile"}</h3>
                   <p className="text-sm text-muted-foreground">Profile Information</p>
