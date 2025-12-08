@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
+import { userSettingsApi } from '@/lib/userSettingsApi';
 
 interface LeadProgressBarProps {
   config?: {
@@ -79,7 +79,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     });
   }, [assignedLeadsCount, config?.targetCount, targetCount, trialActivated, remainingTrials]);
 
-  // Fetch assigned leads count based on RM's assigned lead types
+  // Fetch assigned leads count from LEAD_TYPE_ASSIGNMENT record
   const fetchAssignedLeadsCount = useCallback(async () => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -95,137 +95,44 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         return;
       }
 
-      const baseUrl = (import.meta.env.VITE_RENDER_API_URL || '').replace(/\/+$/, '');
-      if (!baseUrl) {
-        console.log('[LeadProgressBar] No base URL configured');
-        return;
-      }
+      console.log('[LeadProgressBar] Fetching assigned leads count for user:', currentUser.id);
 
-      console.log('[LeadProgressBar] Fetching lead types for user:', currentUser.id);
-
-      // Step 1: Get the lead types assigned to this RM
-      const userLeadTypes = await leadTypeAssignmentApi.getUserLeadTypes(currentUser.id);
-      const assignedLeadTypes = userLeadTypes.lead_types || [];
-
-      console.log('[LeadProgressBar] Assigned lead types:', assignedLeadTypes);
-
-      if (assignedLeadTypes.length === 0) {
-        console.warn('[LeadProgressBar] No lead types assigned to user, setting count to 0');
-        setAssignedLeadsCount(0);
-        return;
-      }
-
-      // Step 2: Query leads that match these lead types (stored in poster field)
-      const params = new URLSearchParams();
-      params.append('entity_type', 'lead');
-      
-      // Normalize lead types to match database format (spaces -> underscores, lowercase)
-      const normalizedLeadTypes = assignedLeadTypes.map(lt => 
-        lt.toLowerCase().replace(/\s+/g, '_')
-      );
-      
-      // Add poster filter - try comma-separated format first
-      // If that doesn't work, the API might accept multiple params
-      params.append('poster', normalizedLeadTypes.join(','));
-      
-      params.append('page_size', '1'); // Just need count, not data
-      
-      const leadsUrl = `${baseUrl}/crm-records/records/?${params.toString()}`;
-      
-      console.log('[LeadProgressBar] Fetching leads for lead types:', leadsUrl);
-      
-      const response = await fetch(leadsUrl, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${currentSession.access_token}`,
-          "Content-Type": "application/json",
-          "X-Tenant-Slug": "bibhab-thepyro-ai",
-        },
-      });
-
-      if (response.ok) {
-        const responseData = await response.json();
-        console.log('[LeadProgressBar] Leads API response:', responseData);
+      // Get the assigned leads count from LEAD_TYPE_ASSIGNMENT record
+      // Lead types are in value column, count is in assigned_leads_count column
+      try {
+        const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
+        console.log('[LeadProgressBar] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
+          assigned_leads_count: savedSetting.assigned_leads_count,
+          value: savedSetting.value
+        });
         
-        // Get total count from API response
-        const totalCount = responseData.page_meta?.total_count || responseData.count || 0;
-        
-        if (totalCount > 0) {
-          console.log('[LeadProgressBar] Setting assigned leads count to:', totalCount, 'for lead types:', assignedLeadTypes);
-          setAssignedLeadsCount(totalCount);
+        // Get from the assigned_leads_count column
+        if (savedSetting.assigned_leads_count !== undefined && savedSetting.assigned_leads_count !== null) {
+          const savedCount = savedSetting.assigned_leads_count;
+          console.log('[LeadProgressBar] Found assigned leads count in LEAD_TYPE_ASSIGNMENT:', savedCount);
+          setAssignedLeadsCount(savedCount);
+          return;
         } else {
-          console.warn('[LeadProgressBar] No leads found for assigned lead types');
+          console.log('[LeadProgressBar] assigned_leads_count is null/undefined, setting to 0');
+          setAssignedLeadsCount(0);
+          return;
+        }
+      } catch (error: any) {
+        // If LEAD_TYPE_ASSIGNMENT record not found (404), set to 0
+        if (error.message?.includes('404') || error.message?.includes('Not found')) {
+          console.log('[LeadProgressBar] No LEAD_TYPE_ASSIGNMENT record found, setting count to 0');
+          setAssignedLeadsCount(0);
+        } else {
+          console.error('[LeadProgressBar] Error loading assigned leads count:', error);
           setAssignedLeadsCount(0);
         }
-      } else {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.warn('[LeadProgressBar] Failed to fetch leads count:', response.status, errorText);
-        // Try fallback: fetch all leads and filter by poster field
-        // Normalize lead types for fallback too
-        const normalizedLeadTypes = assignedLeadTypes.map(lt => 
-          lt.toLowerCase().replace(/\s+/g, '_')
-        );
-        await fetchAssignedLeadsCountFallback(normalizedLeadTypes, baseUrl, currentSession.access_token, setAssignedLeadsCount);
       }
     } catch (error) {
       console.error('[LeadProgressBar] Error fetching assigned leads count:', error);
-      // Will use config or default
+      setAssignedLeadsCount(0);
     }
   }, []);
 
-  // Fallback: Fetch leads and filter by poster field if API filtering doesn't work
-  const fetchAssignedLeadsCountFallback = async (
-    normalizedLeadTypes: string[], 
-    baseUrl: string, 
-    token: string,
-    setCount: (count: number) => void
-  ) => {
-    try {
-      const params = new URLSearchParams();
-      params.append('entity_type', 'lead');
-      params.append('page_size', '1000'); // Fetch a large batch
-      
-      const leadsUrl = `${baseUrl}/crm-records/records/?${params.toString()}`;
-      
-      const response = await fetch(leadsUrl, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "X-Tenant-Slug": "bibhab-thepyro-ai",
-        },
-      });
-
-      if (response.ok) {
-        const responseData = await response.json();
-        const results = responseData.data || responseData.results || [];
-        
-        // Filter leads where poster field matches assigned lead types
-        // Normalize poster value for comparison (spaces -> underscores, lowercase)
-        const assignedCount = results.filter((lead: any) => {
-          const poster = lead.data?.poster || lead.poster;
-          if (!poster) return false;
-          const normalizedPoster = String(poster).toLowerCase().replace(/\s+/g, '_');
-          return normalizedLeadTypes.includes(normalizedPoster);
-        }).length;
-        
-        const totalCount = responseData.page_meta?.total_count || responseData.count || results.length;
-        
-        // If we got all results, use actual count, otherwise estimate
-        let finalCount = assignedCount;
-        if (results.length === 1000 && totalCount > 1000) {
-          finalCount = Math.ceil((assignedCount / 1000) * totalCount);
-        }
-        
-        if (finalCount > 0) {
-          console.log('[LeadProgressBar] Fallback: Setting assigned leads count to:', finalCount);
-          setCount(finalCount);
-        }
-      }
-    } catch (error) {
-      console.error('[LeadProgressBar] Fallback fetch error:', error);
-    }
-  };
 
   const fetchLeadStats = useCallback(async () => {
     try {
