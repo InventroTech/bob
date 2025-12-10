@@ -4,6 +4,7 @@ import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
+import { userSettingsApi } from "@/lib/userSettingsApi";
 import { FaWhatsapp } from "react-icons/fa";
 import {
   User,
@@ -136,8 +137,149 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
+  const [assignedLeadsCount, setAssignedLeadsCount] = useState<number | null>(null);
+  const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
+
+  // Get today's date string (YYYY-MM-DD) for daily reset tracking
+  const getTodayDateString = (): string => {
+    const now = new Date();
+    return now.toISOString().split('T')[0];
+  };
+
+  // Check if we need to reset fetched leads count (new day after midnight)
+  const shouldResetFetchedCount = (): boolean => {
+    try {
+      const lastResetDate = localStorage.getItem('leadCardCarousel_lastResetDate');
+      const today = getTodayDateString();
+      return lastResetDate !== today;
+    } catch {
+      return true;
+    }
+  };
+
+  // Reset fetched leads count when day changes
+  const resetFetchedLeadsCount = () => {
+    try {
+      const today = getTodayDateString();
+      localStorage.setItem('leadCardCarousel_fetchedLeadsCount', '0');
+      localStorage.setItem('leadCardCarousel_lastResetDate', today);
+      setFetchedLeadsCount(0);
+    } catch (e) {
+      console.warn('[LeadCardCarousel] Failed to reset fetched leads count:', e);
+    }
+  };
+
+  // Load persisted fetched leads count from localStorage
+  const getPersistedFetchedCount = (): number => {
+    try {
+      // Check if we need to reset (new day)
+      if (shouldResetFetchedCount()) {
+        resetFetchedLeadsCount();
+        return 0;
+      }
+      const stored = localStorage.getItem('leadCardCarousel_fetchedLeadsCount');
+      return stored ? parseInt(stored, 10) : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Increment fetched leads count
+  const incrementFetchedCount = () => {
+    try {
+      const newCount = fetchedLeadsCount + 1;
+      setFetchedLeadsCount(newCount);
+      const today = getTodayDateString();
+      localStorage.setItem('leadCardCarousel_fetchedLeadsCount', newCount.toString());
+      localStorage.setItem('leadCardCarousel_lastResetDate', today);
+    } catch (e) {
+      console.warn('[LeadCardCarousel] Failed to persist fetched leads count:', e);
+    }
+  };
+
+  // Fetch assigned leads count from LEAD_TYPE_ASSIGNMENT record
+  const fetchAssignedLeadsCount = async () => {
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession) {
+        console.log('[LeadCardCarousel] No session, skipping assigned leads fetch');
+        return;
+      }
+
+      // Get current user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        console.log('[LeadCardCarousel] No user, skipping assigned leads fetch');
+        return;
+      }
+
+      console.log('[LeadCardCarousel] Fetching assigned leads count for user:', currentUser.id);
+
+      try {
+        const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
+        console.log('[LeadCardCarousel] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
+          assigned_leads_count: savedSetting.assigned_leads_count,
+          value: savedSetting.value
+        });
+        
+        if (savedSetting.assigned_leads_count !== undefined && savedSetting.assigned_leads_count !== null) {
+          const savedCount = savedSetting.assigned_leads_count;
+          console.log('[LeadCardCarousel] Found assigned leads count:', savedCount);
+          setAssignedLeadsCount(savedCount);
+        } else {
+          console.log('[LeadCardCarousel] assigned_leads_count is null/undefined, setting to null');
+          setAssignedLeadsCount(null);
+        }
+      } catch (error: any) {
+        if (error.message?.includes('404') || error.message?.includes('Not found')) {
+          console.log('[LeadCardCarousel] No LEAD_TYPE_ASSIGNMENT record found, setting count to null');
+          setAssignedLeadsCount(null);
+        } else {
+          console.error('[LeadCardCarousel] Error loading assigned leads count:', error);
+          setAssignedLeadsCount(null);
+        }
+      }
+    } catch (error) {
+      console.error('[LeadCardCarousel] Error fetching assigned leads count:', error);
+      setAssignedLeadsCount(null);
+    }
+  };
+
+  // Persistence functions for sessionStorage
+  const getPersistedState = () => {
+    try {
+      const persisted = sessionStorage.getItem("leadCardCarouselState");
+      return persisted ? JSON.parse(persisted) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistState = (lead: LeadData | null) => {
+    try {
+      if (lead) {
+        sessionStorage.setItem("leadCardCarouselState", JSON.stringify({
+          currentLead: lead,
+          leadId: lead.id,
+          timestamp: Date.now()
+        }));
+      } else {
+        sessionStorage.removeItem("leadCardCarouselState");
+      }
+    } catch (error) {
+      console.error("Error persisting state:", error);
+    }
+  };
+
+  const clearPersistedState = () => {
+    try {
+      sessionStorage.removeItem("leadCardCarouselState");
+    } catch (error) {
+      console.error("Error clearing persisted state:", error);
+    }
+  };
 
   // Inspirational messages for workers
   const inspirationalMessages = [
@@ -517,6 +659,69 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const fetchFirstLead = async () => {
     try {
       setLoading(true);
+      
+      // Check if assigned leads limit has been reached
+      if (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) {
+        setShowPendingCard(true);
+        setCurrentLead(null);
+        resetLeadState();
+        clearPersistedState();
+        setHasCheckedForLeads(true);
+        isInitialized.current = false;
+        await fetchLeadStats();
+        toast({
+          title: "Limit Reached",
+          description: `You have reached your assigned leads limit of ${assignedLeadsCount}. Please contact your manager to get more leads assigned.`,
+          variant: "default",
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Check if there's a persisted lead to restore (only on explicit "Get Leads" click)
+      // This helps with page refresh scenario, but won't interfere with navigation
+      const persistedState = getPersistedState();
+      if (persistedState?.currentLead && persistedState.leadId && !hasCheckedForLeads) {
+        // Check limit before restoring persisted lead
+        if (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) {
+          setShowPendingCard(true);
+          setCurrentLead(null);
+          resetLeadState();
+          clearPersistedState();
+          setHasCheckedForLeads(true);
+          isInitialized.current = false;
+          await fetchLeadStats();
+          toast({
+            title: "Limit Reached",
+            description: `You have reached your assigned leads limit of ${assignedLeadsCount}. Please contact your manager to get more leads assigned.`,
+            variant: "default",
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // Restore persisted lead only if user hasn't checked for leads yet (page refresh scenario)
+        // Don't increment count when restoring - it was already counted when first fetched
+        const restoredLead = persistedState.currentLead;
+        setCurrentLead(restoredLead);
+        setShowPendingCard(false);
+        setHasCheckedForLeads(true);
+        setLead(prev => ({
+          ...prev,
+          leadStatus: restoredLead.status || "New",
+          priority: restoredLead.priority || "Medium",
+          notes: (restoredLead?.data?.notes as string) || restoredLead?.notes || "",
+          selectedTags: parseTags(restoredLead?.tags || []),
+          nextFollowUp: restoredLead.next_follow_up || "",
+          leadStartTime: new Date(),
+        }));
+        isInitialized.current = true;
+        await fetchLeadStats();
+        setLoading(false);
+        return;
+      }
+      
+      // Otherwise, fetch a new lead from API
       const endpoint = config?.apiEndpoint || "/api/leads";
       const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
@@ -540,6 +745,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
+          clearPersistedState();
           isInitialized.current = false;
           await fetchLeadStats();
           toast({
@@ -565,6 +771,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         setShowPendingCard(true);
         setCurrentLead(null);
         resetLeadState();
+        clearPersistedState();
         isInitialized.current = false;
         await fetchLeadStats();
         toast({
@@ -599,6 +806,14 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         leadStartTime: new Date(),
       }));
 
+      // Increment fetched leads count (only if limit is set)
+      if (assignedLeadsCount !== null) {
+        incrementFetchedCount();
+      }
+
+      // Persist the current lead
+      persistState(processedLead);
+
       isInitialized.current = true;
       await fetchLeadStats();
       
@@ -612,6 +827,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setShowPendingCard(true);
       setCurrentLead(null);
       resetLeadState();
+      clearPersistedState();
       isInitialized.current = false;
       await fetchLeadStats();
     } finally {
@@ -722,7 +938,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     if (extra?.nextCallAt) {
       payload.next_call_at = extra.nextCallAt;
     }
-    payload.assign_to_self = extra?.assignToSelf ? actingUserId : null;
+    // Handle assignment: set assigned_to based on assignToSelf checkbox
+    if (extra?.assignToSelf === true) {
+      payload.assign_to_self = actingUserId;
+      payload.assigned_to = actingUserId;
+    } else {
+      // When not assigning to self, explicitly set assigned_to to null
+      // Backend should respect this and set assigned_to to null in the database
+      payload.assigned_to = null;
+    }
 
     setProcessingAction(action);
     try {
@@ -733,12 +957,29 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       );
 
       if (ok) {
-        await fetchFirstLead();
         if (action === "Trial Activated") {
           // Dispatch custom event for progress bar to listen
           window.dispatchEvent(new CustomEvent('trial-activated', { 
             detail: { leadId: currentLead.id } 
           }));
+        }
+        
+        // Check limit before fetching next lead
+        if (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) {
+          // Limit reached, show pending card with message
+          setShowPendingCard(true);
+          setCurrentLead(null);
+          resetLeadState();
+          clearPersistedState();
+          isInitialized.current = false;
+          await fetchLeadStats();
+          toast({
+            title: "Limit Reached",
+            description: `You have reached your assigned leads limit of ${assignedLeadsCount}. Please contact your manager to get more leads assigned.`,
+            variant: "default",
+          });
+        } else {
+          await fetchFirstLead();
         }
       }
 
@@ -824,12 +1065,39 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     });
   }, []);
 
-  // Initialize component - fetch stats only, don't fetch lead yet
+  // Initialize component - always show pending card first
   useEffect(() => {
     fetchLeadStats();
+    fetchAssignedLeadsCount();
+    
+    // Initialize fetched leads count from localStorage
+    const persistedCount = getPersistedFetchedCount();
+    setFetchedLeadsCount(persistedCount);
+    
+    // Always show pending card when component mounts (navigation or refresh)
+    // Persisted state will only be used when user clicks "Get Leads" button
+    // This ensures users always see the pending card first when navigating to the page
     setShowPendingCard(true);
+    
     // Set random inspirational message
     setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
+  }, []);
+
+  // Check for midnight reset periodically
+  useEffect(() => {
+    const checkMidnightReset = () => {
+      if (shouldResetFetchedCount()) {
+        resetFetchedLeadsCount();
+      }
+    };
+
+    // Check immediately
+    checkMidnightReset();
+
+    // Check every minute for midnight crossing
+    const intervalId = setInterval(checkMidnightReset, 60000); // Check every minute
+
+    return () => clearInterval(intervalId);
   }, []);
 
   // Reset image error when currentLead changes
@@ -895,15 +1163,32 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               </div>
             </div>
 
+            {/* Remaining Leads Info */}
+            {assignedLeadsCount !== null && (
+              <div className="text-center mb-4">
+                <p className="text-sm text-gray-600">
+                  {fetchedLeadsCount >= assignedLeadsCount ? (
+                    <span className="text-red-600 font-semibold">
+                      You have reached your assigned leads limit ({assignedLeadsCount})
+                    </span>
+                  ) : (
+                    <span className="text-gray-700">
+                      Remaining leads: <span className="font-semibold text-blue-600">{assignedLeadsCount - fetchedLeadsCount}</span> / {assignedLeadsCount}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
             {/* Action Button */}
             <div className="text-center">
               <Button 
                 onClick={fetchFirstLead} 
-                disabled={loading}
+                disabled={loading || (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount)}
                 className="w-full max-w-xs"
                 size="lg"
               >
-                {loading ? "Loading..." : "Get Leads"}
+                {loading ? "Loading..." : (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) ? "Limit Reached" : "Get Leads"}
               </Button>
             </div>
           </div>

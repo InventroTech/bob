@@ -30,15 +30,49 @@ interface LeadStats {
 export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   const { session } = useAuth();
   
+  // Get today's date string (YYYY-MM-DD) for daily reset tracking
+  const getTodayDateString = (): string => {
+    const now = new Date();
+    return now.toISOString().split('T')[0];
+  };
+
+  // Check if we need to reset (new day after midnight)
+  const shouldResetCount = (): boolean => {
+    try {
+      const lastResetDate = localStorage.getItem('leadProgressBar_lastResetDate');
+      const today = getTodayDateString();
+      return lastResetDate !== today;
+    } catch {
+      return true;
+    }
+  };
+
+  // Reset trial count when day changes
+  const resetTrialCount = () => {
+    try {
+      const today = getTodayDateString();
+      localStorage.setItem('leadProgressBar_trialActivated', '0');
+      localStorage.setItem('leadProgressBar_lastResetDate', today);
+    } catch (e) {
+      console.warn('[LeadProgressBar] Failed to reset trial count:', e);
+    }
+  };
+
   // Load persisted trial activated count from localStorage
   const getPersistedTrialCount = (): number => {
     try {
+      // Check if we need to reset (new day)
+      if (shouldResetCount()) {
+        resetTrialCount();
+        return 0;
+      }
       const stored = localStorage.getItem('leadProgressBar_trialActivated');
       return stored ? parseInt(stored, 10) : 0;
     } catch {
       return 0;
     }
   };
+
 
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -195,17 +229,28 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
 
       // Update with API count if available, otherwise keep current persisted count
       if (apiSuccess) {
-        // Use API count if it's available (even if 0, to sync with server)
-        const finalCount = trialActivatedCount >= 0 ? trialActivatedCount : (leadStats.trialActivated || 0);
-        setLeadStats(prev => ({
-          ...prev,
-          trialActivated: finalCount,
-        }));
-        // Persist to localStorage
-        try {
-          localStorage.setItem('leadProgressBar_trialActivated', finalCount.toString());
-        } catch (e) {
-          console.warn('[LeadProgressBar] Failed to persist trial count:', e);
+        // Check if we need to reset (new day)
+        if (shouldResetCount()) {
+          resetTrialCount();
+          setLeadStats(prev => ({
+            ...prev,
+            trialActivated: 0,
+          }));
+        } else {
+          // Use API count if it's available (even if 0, to sync with server)
+          const finalCount = trialActivatedCount >= 0 ? trialActivatedCount : (leadStats.trialActivated || 0);
+          setLeadStats(prev => ({
+            ...prev,
+            trialActivated: finalCount,
+          }));
+          // Persist to localStorage
+          try {
+            const today = getTodayDateString();
+            localStorage.setItem('leadProgressBar_trialActivated', finalCount.toString());
+            localStorage.setItem('leadProgressBar_lastResetDate', today);
+          } catch (e) {
+            console.warn('[LeadProgressBar] Failed to persist trial count:', e);
+          }
         }
       }
     } catch (error) {
@@ -244,15 +289,49 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     return () => clearInterval(intervalId);
   }, [session, config?.refreshInterval, config?.apiEndpoint, config?.statusDataApiEndpoint, fetchLeadStats]);
 
+  // Check for midnight reset periodically
+  useEffect(() => {
+    const checkMidnightReset = () => {
+      if (shouldResetCount()) {
+        resetTrialCount();
+        setLeadStats(prev => ({
+          ...prev,
+          trialActivated: 0,
+        }));
+      }
+    };
+
+    // Check immediately
+    checkMidnightReset();
+
+    // Check every minute for midnight crossing
+    const intervalId = setInterval(checkMidnightReset, 60000); // Check every minute
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   // Listen for trial activation events via custom events
   useEffect(() => {
-    const handleTrialActivated = () => {
+    const handleTrialActivated = (event: CustomEvent) => {
+      const leadId = event.detail?.leadId;
+      
+      // Check if we need to reset (new day)
+      if (shouldResetCount()) {
+        resetTrialCount();
+        setLeadStats(prev => ({
+          ...prev,
+          trialActivated: 0,
+        }));
+      }
+
       // Increment local count immediately
       setLeadStats(prev => {
         const newCount = (prev.trialActivated || 0) + 1;
         // Persist to localStorage
         try {
+          const today = getTodayDateString();
           localStorage.setItem('leadProgressBar_trialActivated', newCount.toString());
+          localStorage.setItem('leadProgressBar_lastResetDate', today);
         } catch (e) {
           console.warn('[LeadProgressBar] Failed to persist trial count:', e);
         }
@@ -267,9 +346,9 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
       }
     };
 
-    window.addEventListener('trial-activated', handleTrialActivated);
+    window.addEventListener('trial-activated', handleTrialActivated as EventListener);
     return () => {
-      window.removeEventListener('trial-activated', handleTrialActivated);
+      window.removeEventListener('trial-activated', handleTrialActivated as EventListener);
     };
   }, [config?.apiEndpoint, config?.statusDataApiEndpoint, fetchLeadStats]);
 
