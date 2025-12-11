@@ -193,7 +193,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
       }
     });
     
-    // Always include user_profile_link for User ID clickability
+    // Always include user_profile_link for Praja ID clickability
     transformedLead.user_profile_link = lead.data?.user_profile_link || lead.user_profile_link || '#';
     
     // Always include whatsapp_link for phone number clickability
@@ -209,8 +209,8 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   return {
     ...lead,
     lead_stage: lead.data?.lead_stage || lead.data?.lead_status || lead.lead_stage || 'in_queue',
-    customer_full_name: lead.data?.customer_full_name || lead.name || lead.data?.name || 'N/A',
-    user_id: lead.data?.user_id || lead.id || 'N/A',
+    name: lead.name || 'N/A', // name is at top level, not in data column
+    praja_id: lead.data?.praja_id || lead.data?.user_id || lead.id || 'N/A',
     affiliated_party: lead.data?.affiliated_party || 'N/A',
     phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
     whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
@@ -222,8 +222,8 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
 // Default columns used if no custom columns are configured
 const defaultColumns: Column[] = [
   { header: 'Stage', accessor: 'lead_stage', type: 'chip' },
-  { header: 'Customer Name', accessor: 'customer_full_name', type: 'text' },
-  { header: 'User ID', accessor: 'user_id', type: 'text' },
+  { header: 'Customer Name', accessor: 'name', type: 'text' },
+  { header: 'Praja ID', accessor: 'praja_id', type: 'text' },
   { header: 'Party', accessor: 'affiliated_party', type: 'text' },
   { header: 'Phone No', accessor: 'phone_number', type: 'text' },
 ];
@@ -708,8 +708,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       );
     }
     
-    // Fallback: Special handling for User ID - make it clickable if profile link exists
-    if (column.accessor === 'user_id' && row.user_profile_link && row.user_profile_link !== '#' && row.user_profile_link !== 'N/A') {
+    // Fallback: Special handling for Praja ID - make it clickable if profile link exists
+    if (column.accessor === 'praja_id' && row.user_profile_link && row.user_profile_link !== '#' && row.user_profile_link !== 'N/A') {
       return (
         <a
           href={row.user_profile_link}
@@ -1682,11 +1682,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Customer Name</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLead.customer_full_name || 'N/A'}</p>
+                      <p className="mt-1 text-sm text-gray-900">{selectedLead.name || 'N/A'}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">User ID</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLead.user_id || 'N/A'}</p>
+                      <label className="block text-sm font-medium text-gray-700">Praja ID</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedLead.praja_id || selectedLead.user_id || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Party</label>
