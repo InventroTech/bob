@@ -50,7 +50,7 @@ interface Lead {
   id: number;
   created_at: string;
   updated_at: string;
-  user_id: string;
+  praja_id: string;
   name: string;
   email: string;
   phone: string;
@@ -946,7 +946,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                       <div>
                         <p className="font-medium text-lg">{currentLead?.name || "N/A"}</p>
                         <p className="text-xs text-muted-foreground pt-2">
-                          ID: {currentLead?.user_id || "N/A"}
+                          ID: {currentLead?.praja_id || "N/A"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">

@@ -68,8 +68,7 @@ interface LeadData {
   next_follow_up: string;
   // New fields as per requirements
   lead_stage: string;
-  customer_full_name: string;
-  user_id: string;
+  praja_id: string;
   affiliated_party: string;
   rm_dashboard: string;
   user_profile_link: string;
@@ -682,8 +681,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       // This helps with page refresh scenario, but won't interfere with navigation
       const persistedState = getPersistedState();
       if (persistedState?.currentLead && persistedState.leadId && !hasCheckedForLeads) {
-        // Check limit before restoring persisted lead
-        if (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) {
+        // Read current count from localStorage to ensure we have the correct value
+        const currentCount = getPersistedFetchedCount();
+        // Sync state with localStorage value
+        setFetchedLeadsCount(currentCount);
+        
+        // Check limit before restoring persisted lead (use the synced count)
+        if (assignedLeadsCount !== null && currentCount >= assignedLeadsCount) {
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
@@ -702,6 +706,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         
         // Restore persisted lead only if user hasn't checked for leads yet (page refresh scenario)
         // Don't increment count when restoring - it was already counted when first fetched
+        // The count state is already synced above
         const restoredLead = persistedState.currentLead;
         setCurrentLead(restoredLead);
         setShowPendingCard(false);
@@ -923,13 +928,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     const { event, success } = eventMap[action];
 
-    const actingUserId = authUser?.id || currentLead.user_id;
+    const actingUserId = authUser?.id || currentLead.praja_id;
     const payload: Record<string, any> = {
       notes: lead.notes || "",
       remarks: currentLead.latest_remarks,
       lead_id: currentLead.id,
       user_id: actingUserId,
-      lead_owner_user_id: currentLead.user_id,
+      lead_owner_user_id: currentLead.praja_id,
     };
 
     if (extra?.reason) {
@@ -1083,6 +1088,24 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
   }, []);
 
+  // Sync count from localStorage periodically
+  useEffect(() => {
+    const syncCount = () => {
+      const storedCount = getPersistedFetchedCount();
+      if (storedCount !== fetchedLeadsCount) {
+        setFetchedLeadsCount(storedCount);
+      }
+    };
+    
+    // Sync immediately
+    syncCount();
+    
+    // Sync every 2 seconds to keep it up to date
+    const syncInterval = setInterval(syncCount, 2000);
+    
+    return () => clearInterval(syncInterval);
+  }, [fetchedLeadsCount]);
+
   // Check for midnight reset periodically
   useEffect(() => {
     const checkMidnightReset = () => {
@@ -1164,32 +1187,43 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
 
             {/* Remaining Leads Info */}
-            {assignedLeadsCount !== null && (
-              <div className="text-center mb-4">
-                <p className="text-sm text-gray-600">
-                  {fetchedLeadsCount >= assignedLeadsCount ? (
-                    <span className="text-red-600 font-semibold">
-                      You have reached your assigned leads limit ({assignedLeadsCount})
-                    </span>
-                  ) : (
-                    <span className="text-gray-700">
-                      Remaining leads: <span className="font-semibold text-blue-600">{assignedLeadsCount - fetchedLeadsCount}</span> / {assignedLeadsCount}
-                    </span>
-                  )}
-                </p>
-              </div>
-            )}
+            {assignedLeadsCount !== null && (() => {
+              // Always read from localStorage to ensure we have the latest count
+              const currentCount = getPersistedFetchedCount();
+              return (
+                <div className="text-center mb-4">
+                  <p className="text-sm text-gray-600">
+                    {currentCount >= assignedLeadsCount ? (
+                      <span className="text-red-600 font-semibold">
+                        You have reached your assigned leads limit ({assignedLeadsCount})
+                      </span>
+                    ) : (
+                      <span className="text-gray-700">
+                        Remaining leads: <span className="font-semibold text-blue-600">{assignedLeadsCount - currentCount}</span> / {assignedLeadsCount}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Action Button */}
             <div className="text-center">
-              <Button 
-                onClick={fetchFirstLead} 
-                disabled={loading || (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount)}
-                className="w-full max-w-xs"
-                size="lg"
-              >
-                {loading ? "Loading..." : (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) ? "Limit Reached" : "Get Leads"}
-              </Button>
+              {(() => {
+                // Always read from localStorage to ensure we have the latest count
+                const currentCount = getPersistedFetchedCount();
+                const isLimitReached = assignedLeadsCount !== null && currentCount >= assignedLeadsCount;
+                return (
+                  <Button 
+                    onClick={fetchFirstLead} 
+                    disabled={loading || isLimitReached}
+                    className="w-full max-w-xs"
+                    size="lg"
+                  >
+                    {loading ? "Loading..." : isLimitReached ? "Limit Reached" : "Get Leads"}
+                  </Button>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1306,7 +1340,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                    !imageError ? (
                     <img
                       src={currentLead.display_pic_url}
-                      alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
+                      alt={`${currentLead?.name || "Lead"} profile`}
                       className="h-9 w-9 rounded-full object-cover"
                       loading="lazy"
                       onError={() => {
@@ -1330,11 +1364,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       className="text-2xl font-semibold text-slate-900 hover:text-primary"
                       style={titleFont}
                     >
-                      {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                      {currentLead?.name || "N/A"}
                     </a>
                   ) : (
                     <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
-                      {currentLead?.customer_full_name || currentLead?.name || "N/A"}
+                      {currentLead?.name || "N/A"}
                     </h2>
                   )}
                     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
