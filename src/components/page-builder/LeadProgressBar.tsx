@@ -82,16 +82,16 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     closed: 0,
     trialActivated: getPersistedTrialCount(),
   });
-  const [assignedLeadsCount, setAssignedLeadsCount] = useState<number | null>(null);
+  const [dailyTarget, setDailyTarget] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Calculate trial activations and remaining
   const trialActivated = leadStats.trialActivated || 0;
-  // Use fetched assigned leads count or fallback to config or default
-  const targetCount = assignedLeadsCount !== null ? assignedLeadsCount : (config?.targetCount ?? 10);
+  // Use fetched daily target or fallback to config or default
+  const targetCount = dailyTarget !== null ? dailyTarget : (config?.targetCount ?? 10);
   
-  // Automatically calculate segment count to match the number of assigned leads
-  // Use targetCount as segmentCount (one segment per lead)
+  // Automatically calculate segment count to match the daily target
+  // Use targetCount as segmentCount (one segment per target)
   // Only use config override if explicitly set
   const segmentCount = config?.segmentCount || targetCount;
   
@@ -105,65 +105,65 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   // Debug logging
   useEffect(() => {
     console.log('[LeadProgressBar] Current state:', {
-      assignedLeadsCount,
+      dailyTarget,
       configTargetCount: config?.targetCount,
       targetCount,
       trialActivated,
       remainingTrials
     });
-  }, [assignedLeadsCount, config?.targetCount, targetCount, trialActivated, remainingTrials]);
+  }, [dailyTarget, config?.targetCount, targetCount, trialActivated, remainingTrials]);
 
-  // Fetch assigned leads count from LEAD_TYPE_ASSIGNMENT record
-  const fetchAssignedLeadsCount = useCallback(async () => {
+  // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
+  const fetchDailyTarget = useCallback(async () => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        console.log('[LeadProgressBar] No session, skipping assigned leads fetch');
+        console.log('[LeadProgressBar] No session, skipping daily target fetch');
         return;
       }
 
       // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
-        console.log('[LeadProgressBar] No user, skipping assigned leads fetch');
+        console.log('[LeadProgressBar] No user, skipping daily target fetch');
         return;
       }
 
-      console.log('[LeadProgressBar] Fetching assigned leads count for user:', currentUser.id);
+      console.log('[LeadProgressBar] Fetching daily target for user:', currentUser.id);
 
-      // Get the assigned leads count from LEAD_TYPE_ASSIGNMENT record
-      // Lead types are in value column, count is in assigned_leads_count column
+      // Get the daily target from LEAD_TYPE_ASSIGNMENT record
+      // Lead types are in value column, daily target is in daily_target column
       try {
         const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
         console.log('[LeadProgressBar] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
-          assigned_leads_count: savedSetting.assigned_leads_count,
+          daily_target: savedSetting.daily_target,
           value: savedSetting.value
         });
         
-        // Get from the assigned_leads_count column
-        if (savedSetting.assigned_leads_count !== undefined && savedSetting.assigned_leads_count !== null) {
-          const savedCount = savedSetting.assigned_leads_count;
-          console.log('[LeadProgressBar] Found assigned leads count in LEAD_TYPE_ASSIGNMENT:', savedCount);
-          setAssignedLeadsCount(savedCount);
+        // Get from the daily_target column
+        if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
+          const savedTarget = savedSetting.daily_target;
+          console.log('[LeadProgressBar] Found daily target in LEAD_TYPE_ASSIGNMENT:', savedTarget);
+          setDailyTarget(savedTarget);
           return;
         } else {
-          console.log('[LeadProgressBar] assigned_leads_count is null/undefined, setting to 0');
-          setAssignedLeadsCount(0);
+          console.log('[LeadProgressBar] daily_target is null/undefined, setting to 0');
+          setDailyTarget(0);
           return;
         }
       } catch (error: any) {
         // If LEAD_TYPE_ASSIGNMENT record not found (404), set to 0
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          console.log('[LeadProgressBar] No LEAD_TYPE_ASSIGNMENT record found, setting count to 0');
-          setAssignedLeadsCount(0);
+          console.log('[LeadProgressBar] No LEAD_TYPE_ASSIGNMENT record found, setting daily target to 0');
+          setDailyTarget(0);
         } else {
-          console.error('[LeadProgressBar] Error loading assigned leads count:', error);
-          setAssignedLeadsCount(0);
+          console.error('[LeadProgressBar] Error loading daily target:', error);
+          setDailyTarget(0);
         }
       }
     } catch (error) {
-      console.error('[LeadProgressBar] Error fetching assigned leads count:', error);
-      setAssignedLeadsCount(0);
+      console.error('[LeadProgressBar] Error fetching daily target:', error);
+      setDailyTarget(0);
     }
   }, []);
 
@@ -176,8 +176,8 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         return;
       }
 
-      // Fetch assigned leads count first
-      await fetchAssignedLeadsCount();
+      // Fetch daily target first
+      await fetchDailyTarget();
 
       // Only try API if explicitly configured, otherwise rely on event tracking
       if (!config?.apiEndpoint && !config?.statusDataApiEndpoint) {
@@ -258,14 +258,14 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     } finally {
       setLoading(false);
     }
-  }, [config?.apiEndpoint, config?.statusDataApiEndpoint, fetchAssignedLeadsCount]);
+  }, [config?.apiEndpoint, config?.statusDataApiEndpoint, fetchDailyTarget]);
 
   useEffect(() => {
     if (session) {
       setLoading(true);
-      // Always fetch assigned leads count first
-      fetchAssignedLeadsCount().finally(() => {
-        // After fetching assigned leads count, continue with other fetches
+      // Always fetch daily target first
+      fetchDailyTarget().finally(() => {
+        // After fetching daily target, continue with other fetches
         // Only fetch from API if endpoint is configured, otherwise rely on event tracking
         if (config?.apiEndpoint || config?.statusDataApiEndpoint) {
           fetchLeadStats();
@@ -275,7 +275,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         }
       });
     }
-  }, [session, config?.apiEndpoint, config?.statusDataApiEndpoint, fetchLeadStats, fetchAssignedLeadsCount]);
+  }, [session, config?.apiEndpoint, config?.statusDataApiEndpoint, fetchLeadStats, fetchDailyTarget]);
 
   // Set up polling to refresh stats periodically (only if API endpoint is configured)
   useEffect(() => {

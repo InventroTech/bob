@@ -5,7 +5,7 @@ export interface UserSettings {
   user_id: string;
   key: string;
   value: any; // JSON value
-  assigned_leads_count?: number; // New column for storing the number
+  daily_target?: number; // Daily target column
   created_at: string;
   updated_at: string;
 }
@@ -14,13 +14,13 @@ export interface UserSettingsCreate {
   user_id: string;
   key: string;
   value: any;
-  assigned_leads_count?: number; // New column for storing the number
+  daily_target?: number; // Daily target column
 }
 
 export interface UserSettingsUpdate {
   key?: string;
   value?: any;
-  assigned_leads_count?: number; // New column for storing the number
+  daily_target?: number; // Daily target column
 }
 
 // Lead Type Assignment Types
@@ -34,7 +34,7 @@ export interface LeadTypeAssignment {
 export interface LeadTypeAssignmentRequest {
   user_id: string;
   lead_types: string[];
-  assigned_leads_count?: number; // Optional count to store in assigned_leads_count column
+  daily_target?: number; // Optional daily target to store in daily_target column
 }
 
 export interface UserLeadTypes {

@@ -42,7 +42,6 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   const [availableLeadTypes, setAvailableLeadTypes] = useState<string[]>([]);
   const [roleChecked, setRoleChecked] = useState(false);
   const [leadsCounts, setLeadsCounts] = useState<Record<string, number>>({});
-  const [maxLeadsCounts, setMaxLeadsCounts] = useState<Record<string, number>>({});
   const [originalLeadsCounts, setOriginalLeadsCounts] = useState<Record<string, number>>({});
   const [userUidMap, setUserUidMap] = useState<Record<string, string>>({}); // Map user_id (int) to uid (UUID)
 
@@ -128,17 +127,16 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         });
         setSelectedLeadTypes(initialSelections);
 
-        // Fetch leads count for each user and max available leads
+        // Fetch leads count for each user
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (token) {
           const counts: Record<string, number> = {};
-          const maxCounts: Record<string, number> = {};
           await Promise.all(
             data.map(async (assignment) => {
               try {
-                // Try to get saved leads count from LEAD_TYPE_ASSIGNMENT record
-                // Lead types are in value column, count is in assigned_leads_count column
+                // Try to get saved daily target from LEAD_TYPE_ASSIGNMENT record
+                // Lead types are in value column, daily target is in daily_target column
                 let savedCount = 0;
                 const userUid = uidMap[String(assignment.user_id)];
                 if (userUid) {
@@ -147,18 +145,18 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                     console.log('[LeadTypeAssignment] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
                       user_id: assignment.user_id,
                       uid: userUid,
-                      assigned_leads_count: savedSetting.assigned_leads_count,
+                      daily_target: savedSetting.daily_target,
                       value: savedSetting.value
                     });
                     
-                    // Get from the assigned_leads_count column
-                    if (savedSetting.assigned_leads_count !== undefined && savedSetting.assigned_leads_count !== null) {
-                      savedCount = savedSetting.assigned_leads_count;
-                      console.log('[LeadTypeAssignment] Loaded saved leads count from assigned_leads_count column:', savedCount, 'for user:', assignment.user_id);
+                    // Get from the daily_target column
+                    if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
+                      savedCount = savedSetting.daily_target;
+                      console.log('[LeadTypeAssignment] Loaded saved daily target from daily_target column:', savedCount, 'for user:', assignment.user_id);
                     } else {
                       // Column is null/undefined - backend might not be saving it
                       savedCount = 0;
-                      console.warn('[LeadTypeAssignment] assigned_leads_count is null/undefined in LEAD_TYPE_ASSIGNMENT for user:', assignment.user_id, '- Backend may not be saving this field');
+                      console.warn('[LeadTypeAssignment] daily_target is null/undefined in LEAD_TYPE_ASSIGNMENT for user:', assignment.user_id, '- Backend may not be saving this field');
                     }
                   } catch (error: any) {
                     // If LEAD_TYPE_ASSIGNMENT record not found (404), fetch from API
@@ -175,25 +173,14 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                   savedCount = await fetchUserLeadsCount(assignment.user_id, token);
                 }
                 counts[assignment.user_id] = savedCount;
-                
-                // Fetch max available leads for assigned lead types
-                const assignedTypes = assignment.lead_types || [];
-                if (assignedTypes.length > 0) {
-                  const maxCount = await fetchTotalLeadsForLeadTypes(assignedTypes, token);
-                  maxCounts[assignment.user_id] = maxCount;
-                } else {
-                  maxCounts[assignment.user_id] = 0;
-                }
               } catch (error) {
                 console.error(`Error fetching leads count for user ${assignment.user_id}:`, error);
                 counts[assignment.user_id] = 0;
-                maxCounts[assignment.user_id] = 0;
               }
             })
           );
           setLeadsCounts(counts);
           setOriginalLeadsCounts({ ...counts }); // Store original values for change detection
-          setMaxLeadsCounts(maxCounts);
         }
         
         // Show message if no users found
@@ -248,29 +235,6 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         [userId]: newTypes
       };
     });
-
-    // Update max available leads count when lead types change
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (token) {
-      const currentTypes = selectedLeadTypes[userId] || [];
-      const newTypes = currentTypes.includes(leadType)
-        ? currentTypes.filter(type => type !== leadType)
-        : [...currentTypes, leadType];
-      
-      if (newTypes.length > 0) {
-        const maxCount = await fetchTotalLeadsForLeadTypes(newTypes, token);
-        setMaxLeadsCounts(prev => ({
-          ...prev,
-          [userId]: maxCount
-        }));
-      } else {
-        setMaxLeadsCounts(prev => ({
-          ...prev,
-          [userId]: 0
-        }));
-      }
-    }
   };
 
   // Handle leads count change
@@ -280,17 +244,10 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       return;
     }
 
-    const maxAllowed = maxLeadsCounts[userId] || 0;
-    const finalValue = Math.min(numValue, maxAllowed);
-    
     setLeadsCounts(prev => ({
       ...prev,
-      [userId]: finalValue
+      [userId]: numValue
     }));
-
-    if (numValue > maxAllowed) {
-      toast.error(`Cannot assign more than ${maxAllowed} leads (total available for selected lead types)`);
-    }
   };
 
   // Save lead type assignment for a user
@@ -299,33 +256,25 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       setSaving(userId);
       const leadTypes = selectedLeadTypes[userId] || [];
       const assignedLeadsCount = leadsCounts[userId] ?? 0;
-      const maxAllowed = maxLeadsCounts[userId] || 0;
-      
-      // Validate leads count
-      if (assignedLeadsCount > maxAllowed) {
-        toast.error(`Cannot assign more than ${maxAllowed} leads (total available for selected lead types)`);
-        setSaving(null);
-        return;
-      }
       
       const request: LeadTypeAssignmentRequest = {
         user_id: userId,
         lead_types: leadTypes,
-        assigned_leads_count: assignedLeadsCount // Include count in the request
+        daily_target: assignedLeadsCount // Include daily target in the request
       };
 
       const assignmentsEndpoint = config?.assignmentsEndpoint;
       await leadTypeAssignmentApi.assign(request, assignmentsEndpoint);
       
-      // Save the leads count to the same LEAD_TYPE_ASSIGNMENT record
-      // Lead types are in value column, count goes in assigned_leads_count column
+      // Save the daily target to the same LEAD_TYPE_ASSIGNMENT record
+      // Lead types are in value column, daily target goes in daily_target column
       const userUid = userUidMap[String(userId)];
       if (userUid) {
         try {
-          console.log('[LeadTypeAssignment] Saving leads count to LEAD_TYPE_ASSIGNMENT record:', {
+          console.log('[LeadTypeAssignment] Saving daily target to LEAD_TYPE_ASSIGNMENT record:', {
             user_id: userUid,
             key: 'LEAD_TYPE_ASSIGNMENT',
-            assigned_leads_count: assignedLeadsCount
+            daily_target: assignedLeadsCount
           });
           
           // Wait a bit for the LEAD_TYPE_ASSIGNMENT record to be created/updated by the API
@@ -343,7 +292,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
             currentValue = leadTypes;
           }
           
-          // Update the LEAD_TYPE_ASSIGNMENT record with both value and assigned_leads_count
+          // Update the LEAD_TYPE_ASSIGNMENT record with both value and daily_target
           // Try PATCH first (partial update), then PUT if needed
           try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -352,7 +301,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
             
             const updatePayload = {
               value: currentValue, // Preserve the lead types in value column
-              assigned_leads_count: assignedLeadsCount // Store count in assigned_leads_count column
+              daily_target: assignedLeadsCount // Store daily target in daily_target column
             };
             console.log('[LeadTypeAssignment] Updating LEAD_TYPE_ASSIGNMENT with payload:', JSON.stringify(updatePayload, null, 2));
             
@@ -407,12 +356,12 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
             
             const result = await updateResponse.json();
             console.log('[LeadTypeAssignment] Successfully updated LEAD_TYPE_ASSIGNMENT:', result);
-            console.log('[LeadTypeAssignment] Response includes assigned_leads_count:', result.assigned_leads_count);
+            console.log('[LeadTypeAssignment] Response includes daily_target:', result.daily_target);
             
             // Verify the update worked
-            if (result.assigned_leads_count === undefined || result.assigned_leads_count === null) {
-              console.warn('[LeadTypeAssignment] WARNING: assigned_leads_count not in response! Backend may not be saving it.');
-              toast.warning('Lead types saved, but assigned_leads_count may not be saved. Check backend API.');
+            if (result.daily_target === undefined || result.daily_target === null) {
+              console.warn('[LeadTypeAssignment] WARNING: daily_target not in response! Backend may not be saving it.');
+              toast.warning('Lead types saved, but daily_target may not be saved. Check backend API.');
             }
           } catch (updateError: any) {
             console.error('[LeadTypeAssignment] Error updating LEAD_TYPE_ASSIGNMENT:', updateError);
@@ -502,78 +451,6 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       }
     } finally {
       setSaving(null);
-    }
-  };
-
-  // Fetch total available leads count for selected lead types
-  const fetchTotalLeadsForLeadTypes = async (leadTypes: string[], token: string): Promise<number> => {
-    try {
-      if (leadTypes.length === 0) return 0;
-
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      
-      // Normalize lead types to match database format (spaces -> underscores, lowercase)
-      const normalizedLeadTypes = leadTypes.map(lt => 
-        lt.toLowerCase().replace(/\s+/g, '_')
-      );
-      
-      // Try direct API query first
-      const params = new URLSearchParams();
-      params.append('entity_type', 'lead');
-      params.append('affiliated_party', normalizedLeadTypes.join(','));
-      params.append('page_size', '1'); // Just need count
-      
-      const leadsUrl = `${baseUrl}/crm-records/records/?${params.toString()}`;
-      
-      console.log('[LeadTypeAssignment] Fetching leads count for types:', normalizedLeadTypes, 'URL:', leadsUrl);
-      
-      const response = await fetch(leadsUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[LeadTypeAssignment] API response:', data);
-        
-        // Check for page_meta.total_count first (most common format)
-        if (data.page_meta?.total_count !== undefined) {
-          console.log('[LeadTypeAssignment] Found total_count:', data.page_meta.total_count);
-          return data.page_meta.total_count;
-        }
-        // Check for count field
-        if (data.count !== undefined) {
-          console.log('[LeadTypeAssignment] Found count:', data.count);
-          return data.count;
-        }
-        // Check for total field
-        if (data.total !== undefined) {
-          console.log('[LeadTypeAssignment] Found total:', data.total);
-          return data.total;
-        }
-        // Check if results array exists
-        if (data.results && Array.isArray(data.results)) {
-          console.log('[LeadTypeAssignment] Found results array length:', data.results.length);
-          return data.results.length;
-        }
-        // Check if data is array
-        if (Array.isArray(data)) {
-          console.log('[LeadTypeAssignment] Data is array, length:', data.length);
-          return data.length;
-        }
-      } else {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.warn('[LeadTypeAssignment] API error:', response.status, errorText);
-      }
-      
-      return 0;
-    } catch (error) {
-      console.error('[LeadTypeAssignment] Error fetching total leads for lead types:', error);
-      return 0;
     }
   };
 
@@ -852,20 +729,14 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-col gap-1">
-                          <Input
-                            type="number"
-                            min="0"
-                            max={maxLeadsCounts[assignment.user_id] || 0}
-                            value={leadsCounts[assignment.user_id] ?? 0}
-                            onChange={(e) => handleLeadsCountChange(assignment.user_id, e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-24"
-                          />
-                          <span className="text-xs text-muted-foreground">
-                            Max: {maxLeadsCounts[assignment.user_id] ?? 0}
-                          </span>
-                        </div>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={leadsCounts[assignment.user_id] ?? 0}
+                          onChange={(e) => handleLeadsCountChange(assignment.user_id, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-24"
+                        />
                       </TableCell>
                       <TableCell>
                         <div 
