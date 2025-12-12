@@ -250,7 +250,7 @@ export const leadTypeAssignmentApi = {
         body: JSON.stringify({
           user_id: data.user_id,
           lead_types: data.lead_types,
-          assigned_leads_count: data.assigned_leads_count // Include count if provided
+          daily_target: data.daily_target // Include daily target if provided
         })
       });
 

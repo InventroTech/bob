@@ -136,7 +136,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
-  const [assignedLeadsCount, setAssignedLeadsCount] = useState<number | null>(null);
+  const [dailyTarget, setDailyTarget] = useState<number | null>(null);
   const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
@@ -198,51 +198,51 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  // Fetch assigned leads count from LEAD_TYPE_ASSIGNMENT record
-  const fetchAssignedLeadsCount = async () => {
+  // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
+  const fetchDailyTarget = async () => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        console.log('[LeadCardCarousel] No session, skipping assigned leads fetch');
+        console.log('[LeadCardCarousel] No session, skipping daily target fetch');
         return;
       }
 
       // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
-        console.log('[LeadCardCarousel] No user, skipping assigned leads fetch');
+        console.log('[LeadCardCarousel] No user, skipping daily target fetch');
         return;
       }
 
-      console.log('[LeadCardCarousel] Fetching assigned leads count for user:', currentUser.id);
+      console.log('[LeadCardCarousel] Fetching daily target for user:', currentUser.id);
 
       try {
         const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
         console.log('[LeadCardCarousel] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
-          assigned_leads_count: savedSetting.assigned_leads_count,
+          daily_target: savedSetting.daily_target,
           value: savedSetting.value
         });
         
-        if (savedSetting.assigned_leads_count !== undefined && savedSetting.assigned_leads_count !== null) {
-          const savedCount = savedSetting.assigned_leads_count;
-          console.log('[LeadCardCarousel] Found assigned leads count:', savedCount);
-          setAssignedLeadsCount(savedCount);
+        if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
+          const savedTarget = savedSetting.daily_target;
+          console.log('[LeadCardCarousel] Found daily target:', savedTarget);
+          setDailyTarget(savedTarget);
         } else {
-          console.log('[LeadCardCarousel] assigned_leads_count is null/undefined, setting to null');
-          setAssignedLeadsCount(null);
+          console.log('[LeadCardCarousel] daily_target is null/undefined, setting to null');
+          setDailyTarget(null);
         }
       } catch (error: any) {
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          console.log('[LeadCardCarousel] No LEAD_TYPE_ASSIGNMENT record found, setting count to null');
-          setAssignedLeadsCount(null);
+          console.log('[LeadCardCarousel] No LEAD_TYPE_ASSIGNMENT record found, setting daily target to null');
+          setDailyTarget(null);
         } else {
-          console.error('[LeadCardCarousel] Error loading assigned leads count:', error);
-          setAssignedLeadsCount(null);
+          console.error('[LeadCardCarousel] Error loading daily target:', error);
+          setDailyTarget(null);
         }
       }
     } catch (error) {
-      console.error('[LeadCardCarousel] Error fetching assigned leads count:', error);
-      setAssignedLeadsCount(null);
+      console.error('[LeadCardCarousel] Error fetching daily target:', error);
+      setDailyTarget(null);
     }
   };
 
@@ -784,8 +784,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         leadStartTime: new Date(),
       }));
 
-      // Increment fetched leads count (only if limit is set)
-      if (assignedLeadsCount !== null) {
+      // Increment fetched leads count (only if daily target is set)
+      if (dailyTarget !== null) {
         incrementFetchedCount();
       }
 
@@ -942,9 +942,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           }));
         }
         
-        // Check limit before fetching next lead
-        if (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) {
-          // Limit reached, show pending card with message
+        // Check daily target before fetching next lead
+        if (dailyTarget !== null && fetchedLeadsCount >= dailyTarget) {
+          // Daily target reached, show pending card with message
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
@@ -952,8 +952,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           isInitialized.current = false;
           await fetchLeadStats();
           toast({
-            title: "Limit Reached",
-            description: `You have reached your assigned leads limit of ${assignedLeadsCount}. Please contact your manager to get more leads assigned.`,
+            title: "Daily Target Reached",
+            description: `You have reached your daily target of ${dailyTarget}. Please contact your manager to get more leads assigned.`,
             variant: "default",
           });
         } else {
@@ -1046,7 +1046,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Initialize component - always show pending card first
   useEffect(() => {
     fetchLeadStats();
-    fetchAssignedLeadsCount();
+    fetchDailyTarget();
     
     // Initialize fetched leads count from localStorage
     const persistedCount = getPersistedFetchedCount();
@@ -1160,19 +1160,19 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
 
             {/* Remaining Leads Info */}
-            {assignedLeadsCount !== null && (() => {
+            {dailyTarget !== null && (() => {
               // Always read from localStorage to ensure we have the latest count
               const currentCount = getPersistedFetchedCount();
               return (
                 <div className="text-center mb-4">
                   <p className="text-sm text-gray-600">
-                    {currentCount >= assignedLeadsCount ? (
+                    {currentCount >= dailyTarget ? (
                       <span className="text-red-600 font-semibold">
-                        You have reached your assigned leads limit ({assignedLeadsCount})
+                        You have reached your daily target ({dailyTarget})
                       </span>
                     ) : (
                       <span className="text-gray-700">
-                        Remaining leads: <span className="font-semibold text-blue-600">{assignedLeadsCount - currentCount}</span> / {assignedLeadsCount}
+                        Remaining for today: <span className="font-semibold text-blue-600">{dailyTarget - currentCount}</span> / {dailyTarget}
                       </span>
                     )}
                   </p>
