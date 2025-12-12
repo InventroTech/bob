@@ -664,24 +664,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     try {
       setLoading(true);
       
-      // Check if assigned leads limit has been reached
-      if (assignedLeadsCount !== null && fetchedLeadsCount >= assignedLeadsCount) {
-        setShowPendingCard(true);
-        setCurrentLead(null);
-        resetLeadState();
-        clearPersistedState();
-        setHasCheckedForLeads(true);
-        isInitialized.current = false;
-        await fetchLeadStats();
-        toast({
-          title: "Limit Reached",
-          description: `You have reached your assigned leads limit of ${assignedLeadsCount}. Please contact your manager to get more leads assigned.`,
-          variant: "default",
-        });
-        setLoading(false);
-        return;
-      }
-      
       // Check if there's a persisted lead to restore (only on explicit "Get Leads" click)
       // This helps with page refresh scenario, but won't interfere with navigation
       const persistedState = getPersistedState();
@@ -690,24 +672,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         const currentCount = getPersistedFetchedCount();
         // Sync state with localStorage value
         setFetchedLeadsCount(currentCount);
-        
-        // Check limit before restoring persisted lead (use the synced count)
-        if (assignedLeadsCount !== null && currentCount >= assignedLeadsCount) {
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          resetLeadState();
-          clearPersistedState();
-          setHasCheckedForLeads(true);
-          isInitialized.current = false;
-          await fetchLeadStats();
-          toast({
-            title: "Limit Reached",
-            description: `You have reached your assigned leads limit of ${assignedLeadsCount}. Please contact your manager to get more leads assigned.`,
-            variant: "default",
-          });
-          setLoading(false);
-          return;
-        }
         
         // Restore persisted lead only if user hasn't checked for leads yet (page refresh scenario)
         // Don't increment count when restoring - it was already counted when first fetched
@@ -1218,21 +1182,14 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
             {/* Action Button */}
             <div className="text-center">
-              {(() => {
-                // Always read from localStorage to ensure we have the latest count
-                const currentCount = getPersistedFetchedCount();
-                const isLimitReached = assignedLeadsCount !== null && currentCount >= assignedLeadsCount;
-                return (
-                  <Button 
-                    onClick={fetchFirstLead} 
-                    disabled={loading || isLimitReached}
-                    className="w-full max-w-xs"
-                    size="lg"
-                  >
-                    {loading ? "Loading..." : isLimitReached ? "Limit Reached" : "Get Leads"}
-                  </Button>
-                );
-              })()}
+              <Button 
+                onClick={fetchFirstLead} 
+                disabled={loading}
+                className="w-full max-w-xs"
+                size="lg"
+              >
+                {loading ? "Loading..." : "Get Leads"}
+              </Button>
             </div>
           </div>
         </div>
