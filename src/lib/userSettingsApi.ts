@@ -316,7 +316,7 @@ export const leadTypeAssignmentApi = {
     }
   },
 
-  // Get available lead types from records' poster field
+  // Get available lead types from records' affiliated_party field
   async getAvailableLeadTypes(endpoint?: string): Promise<string[]> {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
