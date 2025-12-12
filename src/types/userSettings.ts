@@ -5,6 +5,7 @@ export interface UserSettings {
   user_id: string;
   key: string;
   value: any; // JSON value
+  daily_target?: number; // Daily target column
   created_at: string;
   updated_at: string;
 }
@@ -13,11 +14,13 @@ export interface UserSettingsCreate {
   user_id: string;
   key: string;
   value: any;
+  daily_target?: number; // Daily target column
 }
 
 export interface UserSettingsUpdate {
   key?: string;
   value?: any;
+  daily_target?: number; // Daily target column
 }
 
 // Lead Type Assignment Types
@@ -31,6 +34,7 @@ export interface LeadTypeAssignment {
 export interface LeadTypeAssignmentRequest {
   user_id: string;
   lead_types: string[];
+  daily_target?: number; // Optional daily target to store in daily_target column
 }
 
 export interface UserLeadTypes {
@@ -38,7 +42,7 @@ export interface UserLeadTypes {
   lead_types: string[];
 }
 
-// Lead types are now dynamically fetched from records' poster field
+// Lead types are now dynamically fetched from records' affiliated_party field
 // No hardcoded lead types - they are fetched from the backend
 export type LeadType = string;
 

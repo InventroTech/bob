@@ -31,6 +31,7 @@ import {
   Briefcase,
   Users,
   Upload,
+  Calculator,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -84,12 +85,15 @@ import { JobsPageComponent } from "@/components/ATScomponents/JobsPageComponent"
 import { JobsPageConfigComponent } from "@/components/ATScomponents/configs/JobsPageConfig";
 import { ApplicantTableComponent } from "@/components/ATScomponents/ApplicantTableComponent";
 import { ApplicantTableConfigComponent } from "@/components/ATScomponents/configs/ApplicantTableConfig";
+import { DynamicScoringComponent } from "@/components/ATScomponents/DynamicScoringComponent";
+import { DynamicScoringConfig } from "@/components/ATScomponents/configs/DynamicScoringConfig";
 import { FileUploadPageComponent } from "@/components/page-builder/FileUploadPageComponent";
 import { FileUploadPageConfig } from "@/components/page-builder/FileUploadPageConfig";
 import { Carousel } from "@/components/ui/carousel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
 import { ProgressBar } from "@/components/ui/progressBar";
+import { LeadProgressBar } from "@/components/page-builder/LeadProgressBar";
 import { TicketTableComponent } from "@/components/page-builder/TicketTableComponent";
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
 import { TicketCarouselWrapper } from "@/components/page-builder/TicketCarouselWrapper";
@@ -114,6 +118,7 @@ import {
   LeadAssignmentConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
+import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 
@@ -173,6 +178,9 @@ interface ComponentConfig {
   // LeadAssignment specific fields
   leadTypesEndpoint?: string;
   rmsEndpoint?: string;
+  // LeadProgressBar specific fields
+  targetCount?: number;
+  segmentCount?: number;
 }
 
 // Update CanvasComponentData to include config
@@ -199,6 +207,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   leadCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,
   progressBar: ProgressBar,
+  leadProgressBar: LeadProgressBar,
   ticketTable: TicketTableComponent,
   ticketCarousel: TicketCarouselWrapper,
   ticketBarGraph: TicketBarGraphComponent,
@@ -213,6 +222,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   jobsPage: JobsPageComponent,
   applicantTable: ApplicantTableComponent,
   fileUpload: FileUploadPageComponent,
+  dynamicScoring: DynamicScoringComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -262,15 +272,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     acceptedFileTypes?: string;
     maxFileSize?: number;
     multiple?: boolean;
-  // Shared fields for all ATS components
-  tenantSlug?: string;
-  submitEndpoint?: string; // Used by OpenModalButton and JobsPage
-  // JobManager specific API fields
-  updateEndpoint?: string; // Separate endpoint for updates (PUT)
-  deleteEndpoint?: string; // Separate endpoint for deletes (DELETE)
-  apiMode?: 'localhost' | 'renderer'; // API mode for JobManager
-  useDemoData?: boolean; // Use demo data instead of API calls
-};
+    // Shared fields for all ATS components
+    tenantSlug?: string;
+    submitEndpoint?: string; // Used by OpenModalButton and JobsPage
+    // LeadProgressBar specific fields
+    targetCount?: number;
+    segmentCount?: number;
+    //job manager specific fields
+    updateEndpoint?: string; // Separate endpoint for updates (PUT)
+    deleteEndpoint?: string; // Separate endpoint for deletes (DELETE)
+    apiMode?: 'localhost' | 'renderer'; // API mode for JobManager
+    useDemoData?: boolean; // Use demo data instead of API calls
+  };
 
   // Local state for all input fields
   const [localConfig, setLocalConfig] = useState<LocalConfigType>({
@@ -304,6 +317,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // Shared fields for all ATS components
     tenantSlug: initialConfig.tenantSlug || '',
     submitEndpoint: initialConfig.submitEndpoint || '/crm-records/records/',
+    // LeadProgressBar fields
+    targetCount: initialConfig.targetCount || 10,
+    segmentCount: initialConfig.segmentCount || 8,
     // JobManager specific API fields
     updateEndpoint: initialConfig.updateEndpoint || '',
     deleteEndpoint: initialConfig.deleteEndpoint || '',
@@ -633,6 +649,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             onConfigChange={(key: any, value: any) => handleInputChange(key, value)}
           />
         );
+      case 'dynamicScoring':
+        return (
+          <DynamicScoringConfig
+            config={localConfig as any}
+            onConfigChange={(newConfig) => {
+              // Update all config fields
+              Object.entries(newConfig).forEach(([key, value]) => {
+                handleInputChange(key, value);
+              });
+            }}
+          />
+        );
 
       case 'fileUpload':
         return (
@@ -647,6 +675,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           <LeadAssignmentConfig
             localConfig={localConfig as any}
             handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'leadProgressBar':
+        return (
+          <LeadProgressBarConfig
+            config={localConfig as any}
+            onConfigChange={(newConfig) => {
+              Object.entries(newConfig).forEach(([key, value]) => {
+                handleInputChange(key as keyof LocalConfigType, value);
+              });
+            }}
           />
         );
 
@@ -699,7 +739,7 @@ const PageBuilder = () => {
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
 
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1102,6 +1142,11 @@ const PageBuilder = () => {
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
+                          id="leadProgressBar"
+                          label="Lead Progress Bar"
+                          icon={<Target className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
                           id="leadAssignment"
                           label="Lead Assignment"
                           icon={<Target className="h-8 w-8 mb-1 text-primary" />}
@@ -1179,6 +1224,11 @@ const PageBuilder = () => {
                           id="fileUpload"
                           label="File Upload"
                           icon={<Upload className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="dynamicScoring"
+                          label="Dynamic Scoring"
+                          icon={<Calculator className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>

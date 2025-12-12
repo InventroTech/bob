@@ -3,10 +3,11 @@ import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
-import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu } from 'lucide-react';
+import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, BarChart3, Ticket, Settings, Layers } from 'lucide-react';
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
+import { FollowUpIcon, WIPTicketIcon } from '@/components/icons/CustomIcons';
 
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -31,8 +32,17 @@ const CustomAppLayout: React.FC = () => {
     user?.email?.split('@')[0] ||
     'User';
   const navigationIconMap: Record<string, JSX.Element> = {
-    "Pending Leads": <Sparkles className="h-4 w-4" />,
-    "All Leads": <Users className="h-4 w-4" />,
+    "lead assignment": <Users className="h-4 w-4" />,
+    "analytics": <BarChart3 className="h-4 w-4" />,
+    "pending tickets": <Ticket className="h-4 w-4" />,
+    "wip tickets": <WIPTicketIcon className="h-4 w-4" />,
+    "all support tickets": <Layers className="h-4 w-4" />,
+    "settings": <Settings className="h-4 w-4" />,
+    "notifications": <Bell className="h-4 w-4" />,
+    // Legacy mappings for backwards compatibility
+    "pending leads": <Sparkles className="h-4 w-4" />,
+    "all leads": <Users className="h-4 w-4" />,
+    "follow up leads": <FollowUpIcon />,
   };
   const dataExtractedRef = useRef(false); // Track if we've already extracted data from JWT
   
@@ -138,7 +148,12 @@ const CustomAppLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen">
+    <div
+      className="flex min-h-screen"
+      style={{
+        ['--sidebar-width' as string]: `${sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded}px`
+      }}
+    >
       {/* Sidebar */}
       <div
         className="fixed left-0 top-0 h-full bg-white transition-all duration-200"
@@ -194,7 +209,11 @@ const CustomAppLayout: React.FC = () => {
                 {({ isActive }) => (
                   <>
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-[#EFF4FF] text-[#1D2939]' : 'bg-gray-100 text-gray-500'}`}>
-                      {navigationIconMap[page.name] || <Sparkles className="h-4 w-4" />}
+                      {
+                        navigationIconMap[
+                          page.name?.toLowerCase().replace(/[\s_-]+/g, " ").trim()
+                        ] || <Sparkles className="h-4 w-4" />
+                      }
                     </div>
                     {!sidebarCollapsed && <span>{page.name}</span>}
                   </>
@@ -226,10 +245,7 @@ const CustomAppLayout: React.FC = () => {
                     alt={profileName}
                     className="h-10 w-10 rounded-full object-cover"
                   />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{profileName}</p>
-                    <p className="text-xs text-gray-500">View profile</p>
-                  </div>
+                  <p className="text-sm font-semibold text-gray-900">{profileName}</p>
                 </div>
               )}
             </div>
@@ -264,10 +280,12 @@ const CustomAppLayout: React.FC = () => {
 
       {/* Main Content */}
       <main
-        className="flex-1 overflow-auto bg-white transition-all duration-200"
+        className="flex-1 bg-white transition-all duration-200 overflow-auto"
         style={{ marginLeft: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
-        <Outlet />
+        <div className="min-h-screen w-full">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

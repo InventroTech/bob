@@ -2,13 +2,16 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
+import { userSettingsApi } from "@/lib/userSettingsApi";
 import { FaWhatsapp } from "react-icons/fa";
 import {
   User,
   Phone,
   Coffee,
   CheckCircle2,
+  Check,
   XCircle,
   AlertCircle,
   Clock,
@@ -19,7 +22,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
-import { TrialActivatedModal } from "./TrialActivatedModal";
 import { CallBackModal } from "./CallBackModal";
 
 interface LeadCardCarouselProps {
@@ -60,14 +62,13 @@ interface LeadData {
   budget: number;
   location: string;
   tags: string[];
-  display_pic_url: string;
+  display_pic_url?: string | null;
   linkedin_profile: string;
   website: string;
   next_follow_up: string;
   // New fields as per requirements
   lead_stage: string;
-  customer_full_name: string;
-  user_id: string;
+  praja_id: string;
   affiliated_party: string;
   rm_dashboard: string;
   user_profile_link: string;
@@ -105,6 +106,7 @@ interface LeadState {
 
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -123,7 +125,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [animationData, setAnimationData] = useState<any>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
-  const [showTrialSuccessDialog, setShowTrialSuccessDialog] = useState(false);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -134,8 +135,150 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   });
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+  const [dailyTarget, setDailyTarget] = useState<number | null>(null);
+  const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
+
+  // Get today's date string (YYYY-MM-DD) for daily reset tracking
+  const getTodayDateString = (): string => {
+    const now = new Date();
+    return now.toISOString().split('T')[0];
+  };
+
+  // Check if we need to reset fetched leads count (new day after midnight)
+  const shouldResetFetchedCount = (): boolean => {
+    try {
+      const lastResetDate = localStorage.getItem('leadCardCarousel_lastResetDate');
+      const today = getTodayDateString();
+      return lastResetDate !== today;
+    } catch {
+      return true;
+    }
+  };
+
+  // Reset fetched leads count when day changes
+  const resetFetchedLeadsCount = () => {
+    try {
+      const today = getTodayDateString();
+      localStorage.setItem('leadCardCarousel_fetchedLeadsCount', '0');
+      localStorage.setItem('leadCardCarousel_lastResetDate', today);
+      setFetchedLeadsCount(0);
+    } catch (e) {
+      console.warn('[LeadCardCarousel] Failed to reset fetched leads count:', e);
+    }
+  };
+
+  // Load persisted fetched leads count from localStorage
+  const getPersistedFetchedCount = (): number => {
+    try {
+      // Check if we need to reset (new day)
+      if (shouldResetFetchedCount()) {
+        resetFetchedLeadsCount();
+        return 0;
+      }
+      const stored = localStorage.getItem('leadCardCarousel_fetchedLeadsCount');
+      return stored ? parseInt(stored, 10) : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Increment fetched leads count
+  const incrementFetchedCount = () => {
+    try {
+      const newCount = fetchedLeadsCount + 1;
+      setFetchedLeadsCount(newCount);
+      const today = getTodayDateString();
+      localStorage.setItem('leadCardCarousel_fetchedLeadsCount', newCount.toString());
+      localStorage.setItem('leadCardCarousel_lastResetDate', today);
+    } catch (e) {
+      console.warn('[LeadCardCarousel] Failed to persist fetched leads count:', e);
+    }
+  };
+
+  // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
+  const fetchDailyTarget = async () => {
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession) {
+        console.log('[LeadCardCarousel] No session, skipping daily target fetch');
+        return;
+      }
+
+      // Get current user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        console.log('[LeadCardCarousel] No user, skipping daily target fetch');
+        return;
+      }
+
+      console.log('[LeadCardCarousel] Fetching daily target for user:', currentUser.id);
+
+      try {
+        const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
+        console.log('[LeadCardCarousel] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
+          daily_target: savedSetting.daily_target,
+          value: savedSetting.value
+        });
+        
+        if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
+          const savedTarget = savedSetting.daily_target;
+          console.log('[LeadCardCarousel] Found daily target:', savedTarget);
+          setDailyTarget(savedTarget);
+        } else {
+          console.log('[LeadCardCarousel] daily_target is null/undefined, setting to null');
+          setDailyTarget(null);
+        }
+      } catch (error: any) {
+        if (error.message?.includes('404') || error.message?.includes('Not found')) {
+          console.log('[LeadCardCarousel] No LEAD_TYPE_ASSIGNMENT record found, setting daily target to null');
+          setDailyTarget(null);
+        } else {
+          console.error('[LeadCardCarousel] Error loading daily target:', error);
+          setDailyTarget(null);
+        }
+      }
+    } catch (error) {
+      console.error('[LeadCardCarousel] Error fetching daily target:', error);
+      setDailyTarget(null);
+    }
+  };
+
+  // Persistence functions for sessionStorage
+  const getPersistedState = () => {
+    try {
+      const persisted = sessionStorage.getItem("leadCardCarouselState");
+      return persisted ? JSON.parse(persisted) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistState = (lead: LeadData | null) => {
+    try {
+      if (lead) {
+        sessionStorage.setItem("leadCardCarouselState", JSON.stringify({
+          currentLead: lead,
+          leadId: lead.id,
+          timestamp: Date.now()
+        }));
+      } else {
+        sessionStorage.removeItem("leadCardCarouselState");
+      }
+    } catch (error) {
+      console.error("Error persisting state:", error);
+    }
+  };
+
+  const clearPersistedState = () => {
+    try {
+      sessionStorage.removeItem("leadCardCarouselState");
+    } catch (error) {
+      console.error("Error clearing persisted state:", error);
+    }
+  };
 
   // Inspirational messages for workers
   const inspirationalMessages = [
@@ -155,6 +298,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     if (Array.isArray(tags)) return tags;
     if (typeof tags === "string") return tags.split(",").map(tag => tag.trim());
     return [];
+  };
+
+  const getLeadName = (lead: LeadData | null): string => {
+    if (!lead) return "N/A";
+    return lead.data?.name || lead.name || "N/A";
   };
 
   const formatPhoneForDisplay = (phone?: string) => {
@@ -218,15 +366,36 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
 
     if (Array.isArray(source)) {
-      return source;
+      // Handle new list format: [{task: "...", status: "..."}, ...]
+      return source.map((item, index) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (typeof item === "object" && item !== null) {
+          // New format: {task: "...", status: "..."}
+          if ('task' in item) {
+            return {
+              id: String(item.task || index),
+              title: item.task,
+              name: item.task,
+              status: item.status || item.rawStatus,
+              rawStatus: item.status,
+            } as LeadTask;
+          }
+          // Legacy format: {title: "...", status: "..."} or {name: "...", status: "..."}
+          return item as LeadTask;
+        }
+        return item;
+      });
     }
 
     if (typeof source === "object" && source !== null) {
-      const taskLikeKeys = ["title", "name", "description", "status", "due_date", "dueDate"];
+      const taskLikeKeys = ["title", "name", "description", "status", "due_date", "dueDate", "task"];
       if (taskLikeKeys.some(key => key in (source as Record<string, unknown>))) {
         return [source];
       }
 
+      // Convert dict format to array: {"Task Name": "Status", ...}
       return Object.entries(source as Record<string, any>).map(([key, value]) => {
         let normalizedStatus: string | undefined;
         if (value === null || value === undefined || value === "Null") {
@@ -244,6 +413,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         return {
           id: key,
           title: key,
+          name: key,
           status: normalizedStatus,
           rawStatus: value,
         } as LeadTask;
@@ -279,13 +449,17 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         const cast = task as LeadTask;
         const statusText = (() => {
           const value = cast.status ?? cast.rawStatus;
-          if (value === null || value === undefined) return "";
+          if (value === null || value === undefined || value === "Null") return "";
           return String(value);
         })();
 
+        // Support new format: {task: "...", status: "..."}
+        // Also support legacy formats: {title: "..."} or {name: "..."}
+        const taskLabel = cast.task || cast.title || cast.name || `Task ${index + 1}`;
+
         return {
-          id: String(cast.id ?? cast.title ?? cast.name ?? `task-${index}`),
-          label: cast.title || cast.name || `Task ${index + 1}`,
+          id: String(cast.id ?? cast.task ?? cast.title ?? cast.name ?? `task-${index}`),
+          label: taskLabel,
           description: cast.description,
           statusText,
         };
@@ -350,6 +524,12 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const TaskProgressList: React.FC<{ steps: TaskStep[] }> = ({ steps }) => {
     if (!steps.length) return null;
 
+    const currentIndexRaw = steps.findIndex((step) => step.status === "current");
+    const currentIndex =
+      currentIndexRaw !== -1
+        ? currentIndexRaw
+        : steps.findIndex((step) => step.status !== "completed");
+
     return (
       <ol
         className="relative flex flex-col gap-4"
@@ -362,25 +542,32 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         }}
       >
         {steps.map((step, index) => (
-          <li key={step.id} className="flex min-h-[44px] gap-4">
+          <li key={step.id} className="flex min-h-[44px] gap-3">
             <div className="flex flex-col items-center">
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors",
-                  step.status === "completed" && "border-emerald-500 bg-emerald-100 text-emerald-600",
-                  step.status === "current" && "border-slate-900 bg-slate-900 text-white",
-                  step.status === "pending" && "border-slate-200 bg-white text-slate-300"
+                  "flex h-6 w-6 items-center justify-center rounded-full border transition-colors",
+                  step.status === "completed" && "border-slate-300 bg-slate-50",
+                  step.status === "current" && "border-slate-900 bg-slate-900",
+                  step.status === "pending" && "border-slate-200 bg-white"
                 )}
               >
                 {step.status === "completed" ? (
-                  <CheckCircle2 className="h-4 w-4" />
+                  <Check className="h-3 w-3 text-emerald-600" />
                 ) : step.status === "current" ? (
-                  <span className="block h-2.5 w-2.5 rounded-full bg-white" />
+                  <span className="block h-2 w-2 rounded-full bg-white" />
                 ) : (
-                  <span className="block h-2 w-2 rounded-full bg-slate-300" />
+                  <span className="block h-1.5 w-1.5 rounded-full bg-slate-300" />
                 )}
               </div>
-              {index !== steps.length - 1 && <div className="mt-1 h-full w-px flex-1 bg-slate-200" />}
+              {index !== steps.length - 1 && (
+                <div
+                  className={cn(
+                    "mt-1 h-full w-px flex-1",
+                    currentIndex !== -1 && index < currentIndex ? "bg-slate-900" : "bg-slate-200"
+                  )}
+                />
+              )}
             </div>
             <div className="pt-1">
               <p
@@ -451,17 +638,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       // Use configured status data API endpoint or fallback to default
       const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`;
       
-      const response = await fetch(
-        `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -470,7 +655,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const data = await response.json();
       setLeadStats(data);
     } catch (error) {
-      console.error("Error fetching lead stats:", error);
+      console.error("Error fetching lead statistics:", error);
     }
   };
 
@@ -478,6 +663,39 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const fetchFirstLead = async () => {
     try {
       setLoading(true);
+      
+      // Check if there's a persisted lead to restore (only on explicit "Get Leads" click)
+      // This helps with page refresh scenario, but won't interfere with navigation
+      const persistedState = getPersistedState();
+      if (persistedState?.currentLead && persistedState.leadId && !hasCheckedForLeads) {
+        // Read current count from localStorage to ensure we have the correct value
+        const currentCount = getPersistedFetchedCount();
+        // Sync state with localStorage value
+        setFetchedLeadsCount(currentCount);
+        
+        // Restore persisted lead only if user hasn't checked for leads yet (page refresh scenario)
+        // Don't increment count when restoring - it was already counted when first fetched
+        // The count state is already synced above
+        const restoredLead = persistedState.currentLead;
+        setCurrentLead(restoredLead);
+        setShowPendingCard(false);
+        setHasCheckedForLeads(true);
+        setLead(prev => ({
+          ...prev,
+          leadStatus: restoredLead.status || "New",
+          priority: restoredLead.priority || "Medium",
+          notes: (restoredLead?.data?.notes as string) || restoredLead?.notes || "",
+          selectedTags: parseTags(restoredLead?.tags || []),
+          nextFollowUp: restoredLead.next_follow_up || "",
+          leadStartTime: new Date(),
+        }));
+        isInitialized.current = true;
+        await fetchLeadStats();
+        setLoading(false);
+        return;
+      }
+      
+      // Otherwise, fetch a new lead from API
       const endpoint = config?.apiEndpoint || "/api/leads";
       const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
@@ -501,6 +719,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
+          clearPersistedState();
           isInitialized.current = false;
           await fetchLeadStats();
           toast({
@@ -526,6 +745,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         setShowPendingCard(true);
         setCurrentLead(null);
         resetLeadState();
+        clearPersistedState();
         isInitialized.current = false;
         await fetchLeadStats();
         toast({
@@ -538,19 +758,39 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       setHasCheckedForLeads(true);
 
-      setCurrentLead(leadData);
+      // Handle nested data structures (e.g., if data is in a 'data' or 'lead' property)
+      let processedLead = leadData;
+      if (leadData?.data && typeof leadData.data === 'object') {
+        processedLead = { ...leadData, ...leadData.data };
+        // Ensure name is accessible at top level if it's in data.name
+        if (leadData.data.name && !processedLead.name) {
+          processedLead.name = leadData.data.name;
+        }
+      }
+      if (leadData?.lead && typeof leadData.lead === 'object') {
+        processedLead = { ...leadData, ...leadData.lead };
+      }
+      setCurrentLead(processedLead);
       setShowPendingCard(false);
       setActionButtonsVisible(false);
       setProcessingAction(null);
       setLead(prev => ({
         ...prev,
-        leadStatus: leadData.status || "New",
-        priority: leadData.priority || "Medium",
-        notes: (leadData?.data?.notes as string) || leadData?.notes || "",
-        selectedTags: parseTags(leadData?.tags || []),
-        nextFollowUp: leadData.next_follow_up || "",
+        leadStatus: processedLead.status || "New",
+        priority: processedLead.priority || "Medium",
+        notes: (processedLead?.data?.notes as string) || processedLead?.notes || "",
+        selectedTags: parseTags(processedLead?.tags || []),
+        nextFollowUp: processedLead.next_follow_up || "",
         leadStartTime: new Date(),
       }));
+
+      // Increment fetched leads count (only if daily target is set)
+      if (dailyTarget !== null) {
+        incrementFetchedCount();
+      }
+
+      // Persist the current lead
+      persistState(processedLead);
 
       isInitialized.current = true;
       await fetchLeadStats();
@@ -565,6 +805,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setShowPendingCard(true);
       setCurrentLead(null);
       resetLeadState();
+      clearPersistedState();
       isInitialized.current = false;
       await fetchLeadStats();
     } finally {
@@ -603,9 +844,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       if (!token) throw new Error("Authentication required");
 
       const base = import.meta.env.VITE_RENDER_API_URL;
-      if (!base) {
-        console.warn("[LeadCardCarousel] VITE_RENDER_API_URL is not defined");
-      }
       const url = `${base}/crm-records/records/events/`;
       const body = {
         event: eventName,
@@ -663,11 +901,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     const { event, success } = eventMap[action];
 
+    const actingUserId = authUser?.id || currentLead.praja_id;
     const payload: Record<string, any> = {
       notes: lead.notes || "",
       remarks: currentLead.latest_remarks,
       lead_id: currentLead.id,
-      user_id: currentLead.user_id,
+      user_id: actingUserId,
+      lead_owner_user_id: currentLead.praja_id,
     };
 
     if (extra?.reason) {
@@ -676,8 +916,14 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     if (extra?.nextCallAt) {
       payload.next_call_at = extra.nextCallAt;
     }
-    if (typeof extra?.assignToSelf === "boolean") {
-      payload.assign_to_self = extra.assignToSelf;
+    // Handle assignment: set assigned_to based on assignToSelf checkbox
+    if (extra?.assignToSelf === true) {
+      payload.assign_to_self = actingUserId;
+      payload.assigned_to = actingUserId;
+    } else {
+      // When not assigning to self, explicitly set assigned_to to null
+      // Backend should respect this and set assigned_to to null in the database
+      payload.assigned_to = null;
     }
 
     setProcessingAction(action);
@@ -689,9 +935,29 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       );
 
       if (ok) {
-        await fetchFirstLead();
         if (action === "Trial Activated") {
-          setShowTrialSuccessDialog(true);
+          // Dispatch custom event for progress bar to listen
+          window.dispatchEvent(new CustomEvent('trial-activated', { 
+            detail: { leadId: currentLead.id } 
+          }));
+        }
+        
+        // Check daily target before fetching next lead
+        if (dailyTarget !== null && fetchedLeadsCount >= dailyTarget) {
+          // Daily target reached, show pending card with message
+          setShowPendingCard(true);
+          setCurrentLead(null);
+          resetLeadState();
+          clearPersistedState();
+          isInitialized.current = false;
+          await fetchLeadStats();
+          toast({
+            title: "Daily Target Reached",
+            description: `You have reached your daily target of ${dailyTarget}. Please contact your manager to get more leads assigned.`,
+            variant: "default",
+          });
+        } else {
+          await fetchFirstLead();
         }
       }
 
@@ -777,13 +1043,63 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     });
   }, []);
 
-  // Initialize component - fetch stats only, don't fetch lead yet
+  // Initialize component - always show pending card first
   useEffect(() => {
     fetchLeadStats();
+    fetchDailyTarget();
+    
+    // Initialize fetched leads count from localStorage
+    const persistedCount = getPersistedFetchedCount();
+    setFetchedLeadsCount(persistedCount);
+    
+    // Always show pending card when component mounts (navigation or refresh)
+    // Persisted state will only be used when user clicks "Get Leads" button
+    // This ensures users always see the pending card first when navigating to the page
     setShowPendingCard(true);
+    
     // Set random inspirational message
     setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
   }, []);
+
+  // Sync count from localStorage periodically
+  useEffect(() => {
+    const syncCount = () => {
+      const storedCount = getPersistedFetchedCount();
+      if (storedCount !== fetchedLeadsCount) {
+        setFetchedLeadsCount(storedCount);
+      }
+    };
+    
+    // Sync immediately
+    syncCount();
+    
+    // Sync every 2 seconds to keep it up to date
+    const syncInterval = setInterval(syncCount, 2000);
+    
+    return () => clearInterval(syncInterval);
+  }, [fetchedLeadsCount]);
+
+  // Check for midnight reset periodically
+  useEffect(() => {
+    const checkMidnightReset = () => {
+      if (shouldResetFetchedCount()) {
+        resetFetchedLeadsCount();
+      }
+    };
+
+    // Check immediately
+    checkMidnightReset();
+
+    // Check every minute for midnight crossing
+    const intervalId = setInterval(checkMidnightReset, 60000); // Check every minute
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Reset image error when currentLead changes
+  useEffect(() => {
+    setImageError(false);
+  }, [currentLead]);
 
   // Pending card
   if (showPendingCard) {
@@ -941,9 +1257,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
   // Showing the lead card
   return (
-    <div className="flex h-full w-full flex-col gap-6">
-      <div className="relative flex h/full w/full">
-        <Card className="relative flex w-full flex-col overflow-hidden bg-white border-0 shadow-none">
+    <div className="flex w-full flex-col relative overflow-hidden md:overflow-hidden">
+      <div className="relative w-full overflow-hidden md:overflow-hidden">
+        <Card className="relative flex w-full flex-col bg-white border-0 shadow-none overflow-hidden md:overflow-hidden">
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -952,116 +1268,114 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               </div>
             </div>
           )}
-          <CardContent className="flex flex-col gap-8 p-6 bg-white" style={bodyFont}>
-            <div className="w-full border-b border-slate-200 px-5 pb-5">
-              <div className="flex flex-wrap items-start justify-between gap-6">
-                <div
-                  className={cn(
-                    "flex items-center gap-4",
-                    profileClickable && "cursor-pointer"
-                  )}
-                  onClick={profileClickable ? handleOpenProfile : undefined}
-                >
-                  {currentLead?.display_pic_url ? (
+          {/* Header Section */}
+          <div className="w-full border-b border-slate-200 px-2 py-1.5 bg-white" style={bodyFont}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  profileClickable && "cursor-pointer"
+                )}
+                onClick={profileClickable ? handleOpenProfile : undefined}
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 flex-shrink-0 overflow-hidden">
+                  {currentLead?.display_pic_url && 
+                   typeof currentLead.display_pic_url === 'string' && 
+                   currentLead.display_pic_url.trim() !== '' && 
+                   !imageError ? (
                     <img
                       src={currentLead.display_pic_url}
-                      alt={`${currentLead?.customer_full_name || currentLead?.name || "Lead"} profile`}
-                      className="h-14 w-14 rounded-full object-cover"
+                      alt={`${getLeadName(currentLead) || "Lead"} profile`}
+                      className="h-9 w-9 rounded-full object-cover"
                       loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                      onError={() => {
+                        setImageError(true);
+                      }}
+                      onLoad={() => {
+                        setImageError(false);
                       }}
                     />
-                  ) : null}
-                  <div
-                    className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-full bg-slate-100",
-                      currentLead?.display_pic_url ? "hidden" : ""
-                    )}
-                  >
+                  ) : (
                     <User className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex flex-col gap-1">
-                    {currentLead?.user_profile_link ? (
-                      <a
-                        href={currentLead.user_profile_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-2xl font-semibold text-slate-900 hover:text-primary"
-                        style={titleFont}
-                      >
-                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
-                      </a>
-                    ) : (
-                      <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
-                        {currentLead?.customer_full_name || currentLead?.name || "N/A"}
-                      </h2>
-                    )}
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                        {currentLead?.affiliated_party && (
-                          <span className="font-medium text-slate-700">
-                            {currentLead.affiliated_party}
-                          </span>
-                        )}
-                        {currentLead?.lead_stage && (
-                          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            {currentLead.lead_stage}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {currentLead?.status && (
-                        <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          {currentLead.status}
-                        </span>
-                      )}
-                      {currentLead?.priority && (
-                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Priority: {currentLead.priority}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
-                    onClick={handleTakeBreak}
-                    disabled={updating}
-                  >
-                    <Coffee className="h-4 w-4 text-gray-500" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
-                    onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
-                    disabled={!primaryPhone || updating || fetchingNext}
-                  >
-                    <FaWhatsapp className="h-4 w-4 text-[#344054]" />
-                    WhatsApp
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
-                    onClick={() => handleCallLead(primaryPhone)}
-                    disabled={!primaryPhone || updating || fetchingNext}
-                  >
-                    <Phone className="h-4 w-4" />
-                    <span>{formattedPhoneNumber}</span>
-                  </Button>
+                <div className="space-y-1">
+                  <div className="flex flex-col gap-0.5">
+                  {currentLead?.user_profile_link ? (
+                    <a
+                      href={currentLead.user_profile_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-2xl font-semibold text-slate-900 hover:text-primary"
+                      style={titleFont}
+                    >
+                      {getLeadName(currentLead)}
+                    </a>
+                  ) : (
+                    <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
+                      {getLeadName(currentLead)}
+                    </h2>
+                  )}
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                      {currentLead?.affiliated_party && (
+                        <span className="font-medium text-slate-700">
+                          {currentLead.affiliated_party}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {currentLead?.status && (
+                      <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {currentLead.status}
+                      </span>
+                    )}
+                    {currentLead?.priority && (
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        Priority: {currentLead.priority}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  onClick={handleTakeBreak}
+                  disabled={updating}
+                >
+                  <Coffee className="h-4 w-4 text-gray-500" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                  onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
+                  disabled={!primaryPhone || updating || fetchingNext}
+                >
+                  <FaWhatsapp className="h-4 w-4 text-[#344054]" />
+                  WhatsApp
+                </Button>
+                <Button
+                  type="button"
+                  className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                  onClick={() => handleCallLead(primaryPhone)}
+                  disabled={!primaryPhone || updating || fetchingNext}
+                >
+                  <Phone className="h-4 w-4" />
+                  <span>{formattedPhoneNumber}</span>
+                </Button>
+              </div>
             </div>
+          </div>
+          
+          {/* Task Progress Section */}
+          <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-24' : 'pb-4'}`} style={bodyFont}>
             <div
               className={cn(
-                "mt-8 grid gap-6",
+                "grid gap-6",
                 currentLead?.location && "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
               )}
             >
@@ -1084,30 +1398,33 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               ) : null}
             </div>
           </CardContent>
-          <div className="border-t border-slate-100 bg-white px-6 py-4">
-            {actionButtonsVisible && postCallActions.length > 0 ? (
-              <div className="flex w-full flex-wrap items-center gap-3">
-                {postCallActions.map((action) => (
-                  <LeadActionButton
-                    key={action.id}
-                    icon={action.icon}
-                    label={action.label}
-                    onClick={action.onClick}
-                    disabled={updating || fetchingNext}
-                    loading={processingAction === action.loadingKey && updating}
-                    tone={action.tone}
-                    className="flex-1 min-w-[160px]"
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
         </Card>
       </div>
-      <TrialActivatedModal
-        open={showTrialSuccessDialog}
-        onOpenChange={setShowTrialSuccessDialog}
-      />
+      {/* Fixed Action Buttons at Bottom of Viewport */}
+      {actionButtonsVisible && postCallActions.length > 0 && (
+        <div 
+          className="fixed bottom-0 right-0 z-50 border-t border-slate-200 bg-white px-6 py-4 shadow-lg"
+          style={{ 
+            left: 'var(--sidebar-width, 288px)',
+            transition: 'left 0.2s ease-in-out'
+          }}
+        >
+          <div className="flex w-full flex-wrap items-center gap-3">
+            {postCallActions.map((action) => (
+              <LeadActionButton
+                key={action.id}
+                icon={action.icon}
+                label={action.label}
+                onClick={action.onClick}
+                disabled={updating || fetchingNext}
+                loading={processingAction === action.loadingKey && updating}
+                tone={action.tone}
+                className="flex-1 min-w-[160px]"
+              />
+            ))}
+          </div>
+        </div>
+      )}
       <NotInterestedModal
         open={showNotInterestedDialog}
         onOpenChange={setShowNotInterestedDialog}
@@ -1128,24 +1445,28 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-3">
-                {currentLead?.display_pic_url ? (
-                  <img
-                    src={currentLead.display_pic_url}
-                    alt={`${currentLead.name || "Lead"} profile`}
-                    className="h-8 w-8 rounded-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                    }}
-                  />
-                ) : null}
-                <User
-                  className={`h-4 w-4 text-primary ${
-                    currentLead?.display_pic_url ? "hidden" : ""
-                  }`}
-                />
+                <div className="h-8 w-8 rounded-full flex items-center justify-center bg-slate-100 flex-shrink-0 overflow-hidden">
+                  {currentLead?.display_pic_url && 
+                   typeof currentLead.display_pic_url === 'string' && 
+                   currentLead.display_pic_url.trim() !== '' && 
+                   !imageError ? (
+                    <img
+                      src={currentLead.display_pic_url}
+                      alt={`${getLeadName(currentLead) || "Lead"} profile`}
+                      className="h-8 w-8 rounded-full object-cover"
+                      onError={() => {
+                        setImageError(true);
+                      }}
+                      onLoad={() => {
+                        setImageError(false);
+                      }}
+                    />
+                  ) : (
+                    <User className="h-4 w-4 text-primary" />
+                  )}
+                </div>
                 <div>
-                  <h3 className="font-semibold">{currentLead?.name || "Lead Profile"}</h3>
+                  <h3 className="font-semibold">{getLeadName(currentLead) || "Lead Profile"}</h3>
                   <p className="text-sm text-muted-foreground">Profile Information</p>
                 </div>
               </div>

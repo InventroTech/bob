@@ -12,12 +12,13 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Loader2, Users, Settings, AlertCircle, Trash2, ChevronDown } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { 
   LeadTypeAssignment, 
   LeadTypeAssignmentRequest, 
   LeadType 
 } from '@/types/userSettings';
-import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
+import { leadTypeAssignmentApi, userSettingsApi } from '@/lib/userSettingsApi';
 
 interface LeadTypeAssignmentPageProps {
   // Optional props for when used as a page component
@@ -40,6 +41,9 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   const [selectedLeadTypes, setSelectedLeadTypes] = useState<Record<string, LeadType[]>>({});
   const [availableLeadTypes, setAvailableLeadTypes] = useState<string[]>([]);
   const [roleChecked, setRoleChecked] = useState(false);
+  const [leadsCounts, setLeadsCounts] = useState<Record<string, number>>({});
+  const [originalLeadsCounts, setOriginalLeadsCounts] = useState<Record<string, number>>({});
+  const [userUidMap, setUserUidMap] = useState<Record<string, string>>({}); // Map user_id (int) to uid (UUID)
 
   // Check if user has GM permissions (GM custom role only)
   // Strictly check: must be exactly 'GM', not null, undefined, or any other value
@@ -72,7 +76,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       try {
         setLoading(true);
         
-        // Fetch available lead types from records' poster field
+        // Fetch available lead types from records' affiliated_party field
         // If no endpoint is configured, getAvailableLeadTypes will use the default: /user-settings/lead-types/
         const leadTypesEndpoint = config?.leadTypesEndpoint;
         const leadTypes = await leadTypeAssignmentApi.getAvailableLeadTypes(leadTypesEndpoint);
@@ -84,12 +88,105 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         const data = await leadTypeAssignmentApi.getAll(rmsEndpoint);
         setAssignments(data);
         
+        // Build user_id to uid mapping for user_settings table (which uses UUID)
+        const uidMap: Record<string, string> = {};
+        const { data: { session: sessionForUid } } = await supabase.auth.getSession();
+        const tokenForUid = sessionForUid?.access_token;
+        if (tokenForUid) {
+          try {
+            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+            const usersEndpoint = rmsEndpoint || '/accounts/users/assignees-by-role/?role=RM';
+            const usersUrl = usersEndpoint.startsWith('http') ? usersEndpoint : `${baseUrl}${usersEndpoint}`;
+            const usersResponse = await fetch(usersUrl, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${tokenForUid}`,
+                'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              }
+            });
+            if (usersResponse.ok) {
+              const usersData = await usersResponse.json();
+              const users = Array.isArray(usersData) ? usersData : (usersData.results || []);
+              users.forEach((user: any) => {
+                if (user.uid) {
+                  uidMap[String(user.id)] = user.uid;
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Error fetching user UIDs:', error);
+          }
+        }
+        setUserUidMap(uidMap);
+        
         // Initialize selected lead types
         const initialSelections: Record<string, LeadType[]> = {};
         data.forEach(assignment => {
           initialSelections[assignment.user_id] = assignment.lead_types as LeadType[];
         });
         setSelectedLeadTypes(initialSelections);
+
+        // Fetch leads count for each user
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          const counts: Record<string, number> = {};
+          await Promise.all(
+            data.map(async (assignment) => {
+              try {
+                // Try to get saved daily target from LEAD_TYPE_ASSIGNMENT record
+                // Lead types are in value column, daily target is in daily_target column
+                let savedCount = 0;
+                const userUid = uidMap[String(assignment.user_id)];
+                if (userUid) {
+                  try {
+                    const savedSetting = await userSettingsApi.get(userUid, 'LEAD_TYPE_ASSIGNMENT');
+                    console.log('[LeadTypeAssignment] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
+                      user_id: assignment.user_id,
+                      uid: userUid,
+                      daily_target: savedSetting.daily_target,
+                      value: savedSetting.value
+                    });
+                    
+                    // Get from the daily_target column
+                    if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
+                      savedCount = savedSetting.daily_target;
+                      console.log('[LeadTypeAssignment] Loaded saved daily target from daily_target column:', savedCount, 'for user:', assignment.user_id);
+                    } else {
+                      // Column is null/undefined - backend might not be saving it
+                      savedCount = 0;
+                      console.warn('[LeadTypeAssignment] daily_target is null/undefined in LEAD_TYPE_ASSIGNMENT for user:', assignment.user_id, '- Backend may not be saving this field');
+                    }
+                  } catch (error: any) {
+                    // If LEAD_TYPE_ASSIGNMENT record not found (404), fetch from API
+                    if (error.message?.includes('404') || error.message?.includes('Not found')) {
+                      console.log('[LeadTypeAssignment] No LEAD_TYPE_ASSIGNMENT record found, fetching from API for user:', assignment.user_id);
+                      savedCount = await fetchUserLeadsCount(assignment.user_id, token);
+                    } else {
+                      console.error('[LeadTypeAssignment] Error loading leads count:', error);
+                      savedCount = await fetchUserLeadsCount(assignment.user_id, token);
+                    }
+                  }
+                } else {
+                  console.log('[LeadTypeAssignment] No UID found for user:', assignment.user_id, 'fetching from API');
+                  savedCount = await fetchUserLeadsCount(assignment.user_id, token);
+                }
+                counts[assignment.user_id] = savedCount;
+              } catch (error) {
+                console.error(`Error fetching leads count for user ${assignment.user_id}:`, error);
+                counts[assignment.user_id] = 0;
+              }
+            })
+          );
+          setLeadsCounts(counts);
+          setOriginalLeadsCounts({ ...counts }); // Store original values for change detection
+        }
+        
+        // Show message if no users found
+        if (data.length === 0) {
+          toast.info('No users found. The list is empty.');
+        }
       } catch (error: any) {
         console.error('Error fetching lead type data:', error);
         console.error('Error details:', {
@@ -120,7 +217,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   }, [user, isGM]);
 
   // Handle lead type selection for a user
-  const handleLeadTypeToggle = (userId: string, leadType: LeadType, e?: React.MouseEvent) => {
+  const handleLeadTypeToggle = async (userId: string, leadType: LeadType, e?: React.MouseEvent) => {
     // Stop event propagation to prevent opening config sidebar
     if (e) {
       e.stopPropagation();
@@ -140,19 +237,151 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     });
   };
 
+  // Handle leads count change
+  const handleLeadsCountChange = (userId: string, value: string) => {
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue) || numValue < 0) {
+      return;
+    }
+
+    setLeadsCounts(prev => ({
+      ...prev,
+      [userId]: numValue
+    }));
+  };
+
   // Save lead type assignment for a user
   const handleSaveAssignment = async (userId: string) => {
     try {
       setSaving(userId);
       const leadTypes = selectedLeadTypes[userId] || [];
+      const assignedLeadsCount = leadsCounts[userId] ?? 0;
       
       const request: LeadTypeAssignmentRequest = {
         user_id: userId,
-        lead_types: leadTypes
+        lead_types: leadTypes,
+        daily_target: assignedLeadsCount // Include daily target in the request
       };
 
       const assignmentsEndpoint = config?.assignmentsEndpoint;
       await leadTypeAssignmentApi.assign(request, assignmentsEndpoint);
+      
+      // Save the daily target to the same LEAD_TYPE_ASSIGNMENT record
+      // Lead types are in value column, daily target goes in daily_target column
+      const userUid = userUidMap[String(userId)];
+      if (userUid) {
+        try {
+          console.log('[LeadTypeAssignment] Saving daily target to LEAD_TYPE_ASSIGNMENT record:', {
+            user_id: userUid,
+            key: 'LEAD_TYPE_ASSIGNMENT',
+            daily_target: assignedLeadsCount
+          });
+          
+          // Wait a bit for the LEAD_TYPE_ASSIGNMENT record to be created/updated by the API
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Get the current record to preserve the value field
+          let currentValue = leadTypes;
+          try {
+            const currentSetting = await userSettingsApi.get(userUid, 'LEAD_TYPE_ASSIGNMENT');
+            currentValue = currentSetting.value || leadTypes;
+            console.log('[LeadTypeAssignment] Retrieved current LEAD_TYPE_ASSIGNMENT value:', currentValue);
+          } catch (e: any) {
+            // If record doesn't exist yet, use leadTypes
+            console.log('[LeadTypeAssignment] LEAD_TYPE_ASSIGNMENT record not found yet, using leadTypes:', leadTypes);
+            currentValue = leadTypes;
+          }
+          
+          // Update the LEAD_TYPE_ASSIGNMENT record with both value and daily_target
+          // Try PATCH first (partial update), then PUT if needed
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+            
+            const updatePayload = {
+              value: currentValue, // Preserve the lead types in value column
+              daily_target: assignedLeadsCount // Store daily target in daily_target column
+            };
+            console.log('[LeadTypeAssignment] Updating LEAD_TYPE_ASSIGNMENT with payload:', JSON.stringify(updatePayload, null, 2));
+            
+            const updateUrl = `${baseUrl}/user-settings/settings/${userUid}/LEAD_TYPE_ASSIGNMENT/`;
+            
+            // Try PATCH first (partial update)
+            let updateResponse = await fetch(updateUrl, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : '',
+                'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              },
+              body: JSON.stringify(updatePayload)
+            });
+            
+            // If PATCH doesn't work, try PUT
+            if (!updateResponse.ok) {
+              console.log('[LeadTypeAssignment] PATCH failed, trying PUT. Status:', updateResponse.status);
+              updateResponse = await fetch(updateUrl, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': token ? `Bearer ${token}` : '',
+                  'X-Tenant-Slug': 'bibhab-thepyro-ai'
+                },
+                body: JSON.stringify(updatePayload)
+              });
+            }
+            
+            if (!updateResponse.ok) {
+              const errorText = await updateResponse.text().catch(() => 'Unknown error');
+              console.error('[LeadTypeAssignment] Update failed:', {
+                status: updateResponse.status,
+                statusText: updateResponse.statusText,
+                error: errorText,
+                payload: updatePayload,
+                url: updateUrl
+              });
+              
+              // Try to parse error as JSON
+              let errorData;
+              try {
+                errorData = JSON.parse(errorText);
+                console.error('[LeadTypeAssignment] Error details:', errorData);
+              } catch (e) {
+                // Not JSON, use as text
+              }
+              
+              throw new Error(`Failed to update: ${updateResponse.status} - ${errorText}`);
+            }
+            
+            const result = await updateResponse.json();
+            console.log('[LeadTypeAssignment] Successfully updated LEAD_TYPE_ASSIGNMENT:', result);
+            console.log('[LeadTypeAssignment] Response includes daily_target:', result.daily_target);
+            
+            // Verify the update worked
+            if (result.daily_target === undefined || result.daily_target === null) {
+              console.warn('[LeadTypeAssignment] WARNING: daily_target not in response! Backend may not be saving it.');
+              toast.warning('Lead types saved, but daily_target may not be saved. Check backend API.');
+            }
+          } catch (updateError: any) {
+            console.error('[LeadTypeAssignment] Error updating LEAD_TYPE_ASSIGNMENT:', updateError);
+            console.error('[LeadTypeAssignment] Full error:', {
+              message: updateError.message,
+              stack: updateError.stack,
+              userUid,
+              assignedLeadsCount,
+              currentValue
+            });
+            toast.error(`Failed to save leads count: ${updateError.message || 'Unknown error'}. Check console for details.`);
+          }
+        } catch (error: any) {
+          console.error('[LeadTypeAssignment] Error saving leads count:', error);
+          toast.warning(`Lead types saved, but failed to save leads count: ${error.message || 'Unknown error'}`);
+        }
+      } else {
+        console.warn('[LeadTypeAssignment] No UID found for user:', userId);
+        toast.warning('Lead types saved, but could not save leads count (user UID not found)');
+      }
       
       // Update local state
       setAssignments(prev => 
@@ -163,7 +392,13 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         )
       );
 
-      toast.success('Lead type assignment saved successfully');
+      // Update original leads count to reflect saved value
+      setOriginalLeadsCounts(prev => ({
+        ...prev,
+        [userId]: assignedLeadsCount
+      }));
+
+      toast.success('Lead type assignment and leads count saved successfully');
     } catch (error: any) {
       console.error('Error saving lead type assignment:', error);
       // If it's a 403 error, show a more helpful message
@@ -219,13 +454,70 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     }
   };
 
+  // Fetch leads count for a user
+  const fetchUserLeadsCount = async (userId: string, token: string): Promise<number> => {
+    try {
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      // Try different possible endpoints for getting leads count
+      const possibleEndpoints = [
+        `/crm-records/records/leads/count?assigned_to=${userId}`,
+        `/api/leads/count?user_id=${userId}`,
+        `/api/leads?assigned_to=${userId}`,
+        `/membership/users/${userId}/leads/count`
+      ];
+
+      for (const endpoint of possibleEndpoints) {
+        try {
+          const apiUrl = `${baseUrl}${endpoint}`;
+          const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'X-Tenant-Slug': 'bibhab-thepyro-ai'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            // Handle different response formats
+            if (typeof data === 'number') {
+              return data;
+            } else if (data.count !== undefined) {
+              return data.count;
+            } else if (data.total !== undefined) {
+              return data.total;
+            } else if (Array.isArray(data)) {
+              return data.length;
+            } else if (data.results && Array.isArray(data.results)) {
+              return data.results.length;
+            }
+          }
+        } catch (err) {
+          // Try next endpoint
+          continue;
+        }
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error fetching leads count:', error);
+      return 0;
+    }
+  };
+
   // Check if assignment has changes
   const hasChanges = (userId: string) => {
     const currentAssignment = assignments.find(a => a.user_id === userId);
     const selectedTypes = selectedLeadTypes[userId] || [];
     const originalTypes = currentAssignment?.lead_types || [];
     
-    return JSON.stringify(selectedTypes.sort()) !== JSON.stringify(originalTypes.sort());
+    const leadTypesChanged = JSON.stringify(selectedTypes.sort()) !== JSON.stringify(originalTypes.sort());
+    
+    const currentLeadsCount = leadsCounts[userId] ?? 0;
+    const originalLeadsCount = originalLeadsCounts[userId] ?? 0;
+    const leadsCountChanged = currentLeadsCount !== originalLeadsCount;
+    
+    return leadTypesChanged || leadsCountChanged;
   };
 
   // Early access check - block non-GM users immediately
@@ -328,6 +620,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                     <TableHead className="w-[250px]">RM Name & Email</TableHead>
                     <TableHead className="w-[300px]">Lead Types</TableHead>
                     <TableHead className="w-[250px]">Currently Assigned</TableHead>
+                    <TableHead className="w-[150px]">Leads Count</TableHead>
                     <TableHead className="w-[200px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -434,6 +727,16 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                             <span className="text-xs text-muted-foreground">None</span>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={leadsCounts[assignment.user_id] ?? 0}
+                          onChange={(e) => handleLeadsCountChange(assignment.user_id, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-24"
+                        />
                       </TableCell>
                       <TableCell>
                         <div 
