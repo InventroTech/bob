@@ -1159,27 +1159,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               </div>
             </div>
 
-            {/* Remaining Leads Info */}
-            {dailyTarget !== null && (() => {
-              // Always read from localStorage to ensure we have the latest count
-              const currentCount = getPersistedFetchedCount();
-              return (
-                <div className="text-center mb-4">
-                  <p className="text-sm text-gray-600">
-                    {currentCount >= dailyTarget ? (
-                      <span className="text-red-600 font-semibold">
-                        You have reached your daily target ({dailyTarget})
-                      </span>
-                    ) : (
-                      <span className="text-gray-700">
-                        Remaining for today: <span className="font-semibold text-blue-600">{dailyTarget - currentCount}</span> / {dailyTarget}
-                      </span>
-                    )}
-                  </p>
-                </div>
-              );
-            })()}
-
             {/* Action Button */}
             <div className="text-center">
               <Button 
