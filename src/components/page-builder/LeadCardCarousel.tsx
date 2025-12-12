@@ -300,6 +300,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     return [];
   };
 
+  const getLeadName = (lead: LeadData | null): string => {
+    if (!lead) return "N/A";
+    return lead.data?.name || lead.name || "N/A";
+  };
+
   const formatPhoneForDisplay = (phone?: string) => {
     if (!phone) return "N/A";
     const digits = phone.replace(/\D/g, "");
@@ -793,6 +798,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       let processedLead = leadData;
       if (leadData?.data && typeof leadData.data === 'object') {
         processedLead = { ...leadData, ...leadData.data };
+        // Ensure name is accessible at top level if it's in data.name
+        if (leadData.data.name && !processedLead.name) {
+          processedLead.name = leadData.data.name;
+        }
       }
       if (leadData?.lead && typeof leadData.lead === 'object') {
         processedLead = { ...leadData, ...leadData.lead };
@@ -1340,7 +1349,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                    !imageError ? (
                     <img
                       src={currentLead.display_pic_url}
-                      alt={`${currentLead?.name || "Lead"} profile`}
+                      alt={`${getLeadName(currentLead) || "Lead"} profile`}
                       className="h-9 w-9 rounded-full object-cover"
                       loading="lazy"
                       onError={() => {
@@ -1364,11 +1373,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       className="text-2xl font-semibold text-slate-900 hover:text-primary"
                       style={titleFont}
                     >
-                      {currentLead?.name || "N/A"}
+                      {getLeadName(currentLead)}
                     </a>
                   ) : (
                     <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
-                      {currentLead?.name || "N/A"}
+                      {getLeadName(currentLead)}
                     </h2>
                   )}
                     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
@@ -1507,7 +1516,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                    !imageError ? (
                     <img
                       src={currentLead.display_pic_url}
-                      alt={`${currentLead.name || "Lead"} profile`}
+                      alt={`${getLeadName(currentLead) || "Lead"} profile`}
                       className="h-8 w-8 rounded-full object-cover"
                       onError={() => {
                         setImageError(true);
@@ -1521,7 +1530,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   )}
                 </div>
                 <div>
-                  <h3 className="font-semibold">{currentLead?.name || "Lead Profile"}</h3>
+                  <h3 className="font-semibold">{getLeadName(currentLead) || "Lead Profile"}</h3>
                   <p className="text-sm text-muted-foreground">Profile Information</p>
                 </div>
               </div>

@@ -209,7 +209,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   return {
     ...lead,
     lead_stage: lead.data?.lead_stage || lead.data?.lead_status || lead.lead_stage || 'in_queue',
-    name: lead.name || 'N/A', // name is at top level, not in data column
+    name: lead.data?.name || 'N/A', // name is now in data column
     praja_id: lead.data?.praja_id || lead.data?.user_id || lead.id || 'N/A',
     affiliated_party: lead.data?.affiliated_party || 'N/A',
     phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
@@ -1682,7 +1682,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Customer Name</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLead.name || 'N/A'}</p>
+                      <p className="mt-1 text-sm text-gray-900">{selectedLead.data?.name || selectedLead.name || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Praja ID</label>
