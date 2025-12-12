@@ -929,7 +929,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                     {currentLead?.display_pic_url ? (
                       <img
                         src={currentLead.display_pic_url}
-                        alt={`${currentLead.name || "Lead"} profile`}
+                        alt={`${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`}
                         className="h-12 w-12 rounded-full mr-2 object-cover"
                         onError={(e) => {
                           e.currentTarget.style.display = "none";
@@ -944,7 +944,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                     />
                     <div className="flex flex-col w-full gap-2">
                       <div>
-                        <p className="font-medium text-lg">{currentLead?.name || "N/A"}</p>
+                        <p className="font-medium text-lg">{(currentLead as any)?.data?.name || currentLead?.name || "N/A"}</p>
                         <p className="text-xs text-muted-foreground pt-2">
                           ID: {currentLead?.praja_id || "N/A"}
                         </p>
@@ -1174,7 +1174,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 {currentLead?.display_pic_url ? (
                   <img
                     src={currentLead.display_pic_url}
-                    alt={`${currentLead.name || "Lead"} profile`}
+                    alt={`${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`}
                     className="h-8 w-8 rounded-full object-cover"
                     onError={(e) => {
                       e.currentTarget.style.display = "none";
@@ -1188,7 +1188,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   }`}
                 />
                 <div>
-                  <h3 className="font-semibold text-lg">{currentLead?.name || "Lead Profile"}</h3>
+                  <h3 className="font-semibold text-lg">{(currentLead as any)?.data?.name || currentLead?.name || "Lead Profile"}</h3>
                   <p className="text-sm text-muted-foreground">Company: {currentLead?.company || "N/A"}</p>
                 </div>
               </div>
@@ -1207,7 +1207,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               <iframe
                 src={currentLead.linkedin_profile || currentLead.website}
                 className="w-full h-full border-0 rounded-md"
-                title={`${currentLead?.name || "Lead"} Profile`}
+                title={`${(currentLead as any)?.data?.name || currentLead?.name || "Lead"} Profile`}
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
               />
             </div>
