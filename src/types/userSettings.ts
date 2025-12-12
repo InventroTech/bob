@@ -42,7 +42,7 @@ export interface UserLeadTypes {
   lead_types: string[];
 }
 
-// Lead types are now dynamically fetched from records' poster field
+// Lead types are now dynamically fetched from records' affiliated_party field
 // No hardcoded lead types - they are fetched from the backend
 export type LeadType = string;
 

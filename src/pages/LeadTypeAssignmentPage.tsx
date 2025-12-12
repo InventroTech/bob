@@ -77,7 +77,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       try {
         setLoading(true);
         
-        // Fetch available lead types from records' poster field
+        // Fetch available lead types from records' affiliated_party field
         // If no endpoint is configured, getAvailableLeadTypes will use the default: /user-settings/lead-types/
         const leadTypesEndpoint = config?.leadTypesEndpoint;
         const leadTypes = await leadTypeAssignmentApi.getAvailableLeadTypes(leadTypesEndpoint);
@@ -520,7 +520,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       // Try direct API query first
       const params = new URLSearchParams();
       params.append('entity_type', 'lead');
-      params.append('poster', normalizedLeadTypes.join(','));
+      params.append('affiliated_party', normalizedLeadTypes.join(','));
       params.append('page_size', '1'); // Just need count
       
       const leadsUrl = `${baseUrl}/crm-records/records/?${params.toString()}`;
