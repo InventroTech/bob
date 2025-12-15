@@ -198,6 +198,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
+
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = async () => {
     try {
@@ -246,37 +247,66 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  // Persistence functions for sessionStorage
-  const getPersistedState = () => {
+  // Fetch current assigned lead from API
+  const fetchCurrentLead = async () => {
     try {
-      const persisted = sessionStorage.getItem("leadCardCarouselState");
-      return persisted ? JSON.parse(persisted) : null;
-    } catch {
-      return null;
-    }
-  };
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-  const persistState = (lead: LeadData | null) => {
-    try {
-      if (lead) {
-        sessionStorage.setItem("leadCardCarouselState", JSON.stringify({
-          currentLead: lead,
-          leadId: lead.id,
-          timestamp: Date.now()
-        }));
-      } else {
-        sessionStorage.removeItem("leadCardCarouselState");
+      if (!token) {
+        return null;
       }
-    } catch (error) {
-      console.error("Error persisting state:", error);
-    }
-  };
 
-  const clearPersistedState = () => {
-    try {
-      sessionStorage.removeItem("leadCardCarouselState");
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, "");
+      if (!baseUrl) {
+        return null;
+      }
+
+      const url = `${baseUrl}/crm-records/leads/current/`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // No lead assigned
+          return null;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const leadData = await response.json();
+
+      // Check if leadData is empty
+      const isEmpty = !leadData || 
+                      (Array.isArray(leadData) && leadData.length === 0) ||
+                      (typeof leadData === "object" && !Array.isArray(leadData) && Object.keys(leadData).length === 0) ||
+                      (typeof leadData === "string" && leadData.trim() === "");
+
+      if (isEmpty) {
+        return null;
+      }
+
+      // Handle nested data structures
+      let processedLead = leadData;
+      if (leadData?.data && typeof leadData.data === 'object') {
+        processedLead = { ...leadData, ...leadData.data };
+        if (leadData.data.name && !processedLead.name) {
+          processedLead.name = leadData.data.name;
+        }
+      }
+      if (leadData?.lead && typeof leadData.lead === 'object') {
+        processedLead = { ...leadData, ...leadData.lead };
+      }
+
+      return processedLead;
     } catch (error) {
-      console.error("Error clearing persisted state:", error);
+      console.error("Error fetching current lead:", error);
+      return null;
     }
   };
 
@@ -659,45 +689,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  // Fetching the first lead
+  // Fetching the next lead from API
   const fetchFirstLead = async () => {
     try {
       setLoading(true);
       
-      // Check if there's a persisted lead to restore (only on explicit "Get Leads" click)
-      // This helps with page refresh scenario, but won't interfere with navigation
-      const persistedState = getPersistedState();
-      if (persistedState?.currentLead && persistedState.leadId && !hasCheckedForLeads) {
-        // Read current count from localStorage to ensure we have the correct value
-        const currentCount = getPersistedFetchedCount();
-        // Sync state with localStorage value
-        setFetchedLeadsCount(currentCount);
-        
-        // Restore persisted lead only if user hasn't checked for leads yet (page refresh scenario)
-        // Don't increment count when restoring - it was already counted when first fetched
-        // The count state is already synced above
-        const restoredLead = persistedState.currentLead;
-        setCurrentLead(restoredLead);
-        setShowPendingCard(false);
-        setHasCheckedForLeads(true);
-        setLead(prev => ({
-          ...prev,
-          leadStatus: restoredLead.status || "New",
-          priority: restoredLead.priority || "Medium",
-          notes: (restoredLead?.data?.notes as string) || restoredLead?.notes || "",
-          selectedTags: parseTags(restoredLead?.tags || []),
-          nextFollowUp: restoredLead.next_follow_up || "",
-          leadStartTime: new Date(),
-        }));
-        isInitialized.current = true;
-        await fetchLeadStats();
-        setLoading(false);
-        return;
-      }
-      
-      // Otherwise, fetch a new lead from API
-      const endpoint = config?.apiEndpoint || "/api/leads";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -705,6 +701,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         throw new Error("Authentication required");
       }
 
+      // Use configured endpoint or fallback to default
+      const endpoint = config?.apiEndpoint || "/api/leads";
+      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
       const response = await fetch(apiUrl, {
         method: "GET",
         headers: {
@@ -719,7 +718,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
-          clearPersistedState();
           isInitialized.current = false;
           await fetchLeadStats();
           toast({
@@ -745,7 +743,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         setShowPendingCard(true);
         setCurrentLead(null);
         resetLeadState();
-        clearPersistedState();
         isInitialized.current = false;
         await fetchLeadStats();
         toast({
@@ -789,9 +786,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         incrementFetchedCount();
       }
 
-      // Persist the current lead
-      persistState(processedLead);
-
       isInitialized.current = true;
       await fetchLeadStats();
       
@@ -805,7 +799,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setShowPendingCard(true);
       setCurrentLead(null);
       resetLeadState();
-      clearPersistedState();
       isInitialized.current = false;
       await fetchLeadStats();
     } finally {
@@ -883,6 +876,80 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
+  const postTrialActivation = async (): Promise<void> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+      throw new Error("Authentication required");
+    }
+
+    const base = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, "");
+    if (!base) {
+      throw new Error("API base URL not configured");
+    }
+
+    const url = `${base}/crm-records/trials/activations/`;
+    const body = {
+      note: lead.notes || "",
+      metadata: {
+        lead_id: currentLead?.id,
+        remarks: currentLead?.latest_remarks,
+      },
+    };
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => null);
+      console.error("[LeadCardCarousel] Trial activation POST failed", { status: resp.status, body: text });
+      throw new Error(`HTTP ${resp.status}`);
+    }
+  };
+
+  const fetchTrialActivationCount = async (): Promise<number | null> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        return null;
+      }
+
+      const base = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, "");
+      if (!base) {
+        return null;
+      }
+
+      const url = `${base}/crm-records/trials/activations/today/`;
+      const resp = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!resp.ok) {
+        return null;
+      }
+
+      const data = await resp.json().catch(() => null);
+      if (data && typeof data.count === "number") {
+        return data.count;
+      }
+      return null;
+    } catch (err) {
+      console.error("[LeadCardCarousel] Failed to fetch trial activation count", err);
+      return null;
+    }
+  };
+
   const handleActionButton = async (
     action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later",
     extra?: { reason?: string; nextCallAt?: string; assignToSelf?: boolean }
@@ -936,9 +1003,16 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       if (ok) {
         if (action === "Trial Activated") {
-          // Dispatch custom event for progress bar to listen
+          let trialActivatedCount: number | null = null;
+          try {
+            await postTrialActivation();
+            trialActivatedCount = await fetchTrialActivationCount();
+          } catch (err) {
+            console.error("[LeadCardCarousel] Trial activation API failed", err);
+          }
+
           window.dispatchEvent(new CustomEvent('trial-activated', { 
-            detail: { leadId: currentLead.id } 
+            detail: { leadId: currentLead.id, trialActivatedCount } 
           }));
         }
         
@@ -948,7 +1022,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
-          clearPersistedState();
           isInitialized.current = false;
           await fetchLeadStats();
           toast({
@@ -1043,23 +1116,88 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     });
   }, []);
 
-  // Initialize component - always show pending card first
+  // Initialize component - fetch current lead on refresh
   useEffect(() => {
-    fetchLeadStats();
-    fetchDailyTarget();
+    const initializeComponent = async () => {
+      fetchLeadStats();
+      fetchDailyTarget();
+      
+      // Initialize fetched leads count from localStorage
+      const persistedCount = getPersistedFetchedCount();
+      setFetchedLeadsCount(persistedCount);
+      
+      // Set random inspirational message
+      setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
+      
+      // Fetch current assigned lead from API on refresh
+      const currentLead = await fetchCurrentLead();
+      
+      if (currentLead) {
+        // Display the current lead immediately
+        setCurrentLead(currentLead);
+        setShowPendingCard(false);
+        setHasCheckedForLeads(true);
+        setLead(prev => ({
+          ...prev,
+          leadStatus: currentLead.status || "New",
+          priority: currentLead.priority || "Medium",
+          notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
+          selectedTags: parseTags(currentLead?.tags || []),
+          nextFollowUp: currentLead.next_follow_up || "",
+          leadStartTime: new Date(),
+        }));
+        isInitialized.current = true;
+      } else {
+        // No lead assigned, show pending card
+        setShowPendingCard(true);
+        setCurrentLead(null);
+        setHasCheckedForLeads(true);
+      }
+    };
     
-    // Initialize fetched leads count from localStorage
-    const persistedCount = getPersistedFetchedCount();
-    setFetchedLeadsCount(persistedCount);
-    
-    // Always show pending card when component mounts (navigation or refresh)
-    // Persisted state will only be used when user clicks "Get Leads" button
-    // This ensures users always see the pending card first when navigating to the page
-    setShowPendingCard(true);
-    
-    // Set random inspirational message
-    setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
+    initializeComponent();
   }, []);
+
+  // Handle "Get Leads" button click - fetch current lead first, then next if none
+  const handleGetLeads = async () => {
+    try {
+      setLoading(true);
+      
+      // First try to get current assigned lead
+      const currentLead = await fetchCurrentLead();
+      
+      if (currentLead) {
+        // Display the current assigned lead
+        setCurrentLead(currentLead);
+        setShowPendingCard(false);
+        setHasCheckedForLeads(true);
+        setLead(prev => ({
+          ...prev,
+          leadStatus: currentLead.status || "New",
+          priority: currentLead.priority || "Medium",
+          notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
+          selectedTags: parseTags(currentLead?.tags || []),
+          nextFollowUp: currentLead.next_follow_up || "",
+          leadStartTime: new Date(),
+        }));
+        isInitialized.current = true;
+        await fetchLeadStats();
+        setLoading(false);
+        return;
+      }
+      
+      // No current lead, fetch next lead
+      await fetchFirstLead();
+    } catch (error) {
+      console.error("Error getting leads:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load lead. Please try again.",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
+  };
 
   // Sync count from localStorage periodically
   useEffect(() => {
@@ -1162,7 +1300,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             {/* Action Button */}
             <div className="text-center">
               <Button 
-                onClick={fetchFirstLead} 
+                onClick={handleGetLeads} 
                 disabled={loading}
                 className="w-full max-w-xs"
                 size="lg"
