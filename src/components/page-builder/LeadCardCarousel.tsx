@@ -204,37 +204,26 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        console.log('[LeadCardCarousel] No session, skipping daily target fetch');
         return;
       }
 
       // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
-        console.log('[LeadCardCarousel] No user, skipping daily target fetch');
         return;
       }
 
-      console.log('[LeadCardCarousel] Fetching daily target for user:', currentUser.id);
-
       try {
         const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
-        console.log('[LeadCardCarousel] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
-          daily_target: savedSetting.daily_target,
-          value: savedSetting.value
-        });
         
         if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
           const savedTarget = savedSetting.daily_target;
-          console.log('[LeadCardCarousel] Found daily target:', savedTarget);
           setDailyTarget(savedTarget);
         } else {
-          console.log('[LeadCardCarousel] daily_target is null/undefined, setting to null');
           setDailyTarget(null);
         }
       } catch (error: any) {
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          console.log('[LeadCardCarousel] No LEAD_TYPE_ASSIGNMENT record found, setting daily target to null');
           setDailyTarget(null);
         } else {
           console.error('[LeadCardCarousel] Error loading daily target:', error);
@@ -858,6 +847,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         console.error("[LeadCardCarousel] Event request failed", { status: resp.status, statusText: resp.statusText, body: text });
         throw new Error(`HTTP ${resp.status}`);
       }
+      
+      await resp.json().catch(() => null);
 
       if (options.successTitle || options.successDescription) {
         toast({
@@ -876,79 +867,6 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  const postTrialActivation = async (): Promise<void> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) {
-      throw new Error("Authentication required");
-    }
-
-    const base = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, "");
-    if (!base) {
-      throw new Error("API base URL not configured");
-    }
-
-    const url = `${base}/crm-records/trials/activations/`;
-    const body = {
-      note: lead.notes || "",
-      metadata: {
-        lead_id: currentLead?.id,
-        remarks: currentLead?.latest_remarks,
-      },
-    };
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => null);
-      console.error("[LeadCardCarousel] Trial activation POST failed", { status: resp.status, body: text });
-      throw new Error(`HTTP ${resp.status}`);
-    }
-  };
-
-  const fetchTrialActivationCount = async (): Promise<number | null> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        return null;
-      }
-
-      const base = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, "");
-      if (!base) {
-        return null;
-      }
-
-      const url = `${base}/crm-records/trials/activations/today/`;
-      const resp = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!resp.ok) {
-        return null;
-      }
-
-      const data = await resp.json().catch(() => null);
-      if (data && typeof data.count === "number") {
-        return data.count;
-      }
-      return null;
-    } catch (err) {
-      console.error("[LeadCardCarousel] Failed to fetch trial activation count", err);
-      return null;
-    }
-  };
 
   const handleActionButton = async (
     action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later",
@@ -974,6 +892,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       remarks: currentLead.latest_remarks,
       lead_id: currentLead.id,
       user_id: actingUserId,
+      user_supabase_uid: actingUserId, // Backend filters by this field
       lead_owner_user_id: currentLead.praja_id,
     };
 
@@ -1003,35 +922,14 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       if (ok) {
         if (action === "Trial Activated") {
-          let trialActivatedCount: number | null = null;
-          try {
-            await postTrialActivation();
-            trialActivatedCount = await fetchTrialActivationCount();
-          } catch (err) {
-            console.error("[LeadCardCarousel] Trial activation API failed", err);
-          }
-
+          // Dispatch event - progress bar will fetch count from API
           window.dispatchEvent(new CustomEvent('trial-activated', { 
-            detail: { leadId: currentLead.id, trialActivatedCount } 
+            detail: { leadId: currentLead.id } 
           }));
         }
         
-        // Check daily target before fetching next lead
-        if (dailyTarget !== null && fetchedLeadsCount >= dailyTarget) {
-          // Daily target reached, show pending card with message
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          resetLeadState();
-          isInitialized.current = false;
-          await fetchLeadStats();
-          toast({
-            title: "Daily Target Reached",
-            description: `You have reached your daily target of ${dailyTarget}. Please contact your manager to get more leads assigned.`,
-            variant: "default",
-          });
-        } else {
-          await fetchFirstLead();
-        }
+        // Fetch next lead after any action
+        await fetchFirstLead();
       }
 
       return ok;

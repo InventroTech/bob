@@ -58,59 +58,38 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     segmentCount
   );
 
-  // Debug logging
-  useEffect(() => {
-    console.log('[LeadProgressBar] Current state:', {
-      dailyTarget,
-      configTargetCount: config?.targetCount,
-      targetCount,
-      trialActivated,
-      remainingTrials
-    });
-  }, [dailyTarget, config?.targetCount, targetCount, trialActivated, remainingTrials]);
 
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = useCallback(async () => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        console.log('[LeadProgressBar] No session, skipping daily target fetch');
         return;
       }
 
       // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
-        console.log('[LeadProgressBar] No user, skipping daily target fetch');
         return;
       }
-
-      console.log('[LeadProgressBar] Fetching daily target for user:', currentUser.id);
 
       // Get the daily target from LEAD_TYPE_ASSIGNMENT record
       // Lead types are in value column, daily target is in daily_target column
       try {
         const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
-        console.log('[LeadProgressBar] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
-          daily_target: savedSetting.daily_target,
-          value: savedSetting.value
-        });
         
         // Get from the daily_target column
         if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
           const savedTarget = savedSetting.daily_target;
-          console.log('[LeadProgressBar] Found daily target in LEAD_TYPE_ASSIGNMENT:', savedTarget);
           setDailyTarget(savedTarget);
           return;
         } else {
-          console.log('[LeadProgressBar] daily_target is null/undefined, setting to 0');
           setDailyTarget(0);
           return;
         }
       } catch (error: any) {
         // If LEAD_TYPE_ASSIGNMENT record not found (404), set to 0
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          console.log('[LeadProgressBar] No LEAD_TYPE_ASSIGNMENT record found, setting daily target to 0');
           setDailyTarget(0);
         } else {
           console.error('[LeadProgressBar] Error loading daily target:', error);
@@ -124,78 +103,256 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   }, []);
 
 
-  const fetchTrialStats = useCallback(async () => {
+  const fetchTrialStats = useCallback(async (isInitialLoad = false) => {
+    let trialActivatedCount = 0;
+    
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        setLoading(false);
+        if (isInitialLoad) {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Get current user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        if (isInitialLoad) {
+          setLoading(false);
+        }
         return;
       }
 
       const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
       if (!baseUrl) {
-        setLoading(false);
+        if (isInitialLoad) {
+          setLoading(false);
+        }
         return;
       }
 
-      const url = `${baseUrl}/crm-records/trials/activations/today/`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${currentSession.access_token}`,
-          "Content-Type": "application/json",
-        },
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // Fetch event logs with query parameters to filter on backend
+      // Filter by event name only - we'll filter by date and user locally
+      // Request a large page size to get all events in one request if possible
+      const params = new URLSearchParams({
+        event: 'lead.trial_activated',
+        page_size: '1000', // Request large page size to get all events
       });
+      
+      // Fetch all pages if paginated
+      let allEvents: any[] = [];
+      let nextUrl: string | null = `${baseUrl}/crm-records/events/?${params.toString()}`;
+      let pageCount = 0;
+      
+      while (nextUrl) {
+        pageCount++;
+        
+        const response = await fetch(nextUrl, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${currentSession.access_token}`,
+            "Content-Type": "application/json",
+          },
+        });
 
-      if (!response.ok) {
-        setLoading(false);
-        return;
+        if (!response.ok) {
+          console.error('[LeadProgressBar] API error:', response.status, response.statusText);
+          break;
+        }
+
+        const data = await response.json();
+        
+        // Handle different response formats (array or paginated)
+        let events: any[] = [];
+        if (Array.isArray(data)) {
+          events = data;
+          nextUrl = null; // No pagination if array
+        } else if (data.results && Array.isArray(data.results)) {
+          events = data.results;
+          // Check for next page
+          nextUrl = data.next || null;
+        } else if (data.data && Array.isArray(data.data)) {
+          events = data.data;
+          nextUrl = data.next || null;
+        } else {
+          nextUrl = null;
+        }
+        
+        allEvents = [...allEvents, ...events];
       }
 
-      const data = await response.json();
-      const apiCount = typeof data.count === "number" ? data.count : 0;
+      // Filter events for current user's trial activations and today's date
+      // Backend filtered by event name, we filter by user and date locally
+      const filteredEvents = allEvents.filter((event: any) => {
+        // Check user (from payload or event data)
+        const userUid = event.payload?.user_supabase_uid || event.user_supabase_uid || event.user_id;
+        if (userUid !== currentUser.id) {
+          return false;
+        }
+        
+        // Filter by today's date using timestamp or created_at
+        const eventDate = event.timestamp || event.created_at || event.payload?.timestamp;
+        if (!eventDate) {
+          return false; // Skip events without date
+        }
+        
+        const eventDateStr = new Date(eventDate).toISOString().split('T')[0];
+        return eventDateStr === todayStr;
+      });
+      
+      trialActivatedCount = filteredEvents.length;
+    } catch (error) {
+      console.error('[LeadProgressBar] Error fetching trial stats:', error);
+    } finally {
+      // Always update state with the fetched count (even if 0 or error)
       setLeadStats(prev => ({
         ...prev,
-        trialActivated: apiCount,
+        trialActivated: trialActivatedCount,
       }));
-
-      if (data.daily_target !== undefined && data.daily_target !== null) {
-        setDailyTarget(data.daily_target);
+      
+      if (isInitialLoad) {
+        setLoading(false);
       }
-    } catch (error) {
-      // Silent fail; UI will just keep current state
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (session) {
       setLoading(true);
-      // Always fetch daily target first
+      // Always fetch daily target first, then fetch trial stats on initial load
+      // This runs every time component mounts (refresh or navigation back)
+      // Don't reset trialActivated to 0 - let fetchTrialStats update it
       fetchDailyTarget().finally(() => {
-        fetchTrialStats();
+        fetchTrialStats(true); // Fetch trial stats on initial load
       });
     }
-  }, [session, fetchTrialStats, fetchDailyTarget]);
+  }, [session, fetchDailyTarget, fetchTrialStats]);
 
   // Listen for trial activation events - only query DB when trial is activated
   useEffect(() => {
     const handleTrialActivated = async (event: CustomEvent) => {
-      const providedCount = typeof event.detail?.trialActivatedCount === 'number'
-        ? event.detail.trialActivatedCount
-        : null;
-
-      // Fetch fresh stats from API immediately when trial is activated
-      // This is the only time we query the database (no periodic polling)
-      await fetchTrialStats();
+      // Optimistic update: increment count immediately for better UX
+      const optimisticCount = (leadStats.trialActivated || 0) + 1;
+      setLeadStats(prev => ({
+        ...prev,
+        trialActivated: optimisticCount,
+      }));
+      
+      // Fetch stats from API after a delay to ensure backend has processed the event
+      // Retry logic: try multiple times if count hasn't increased yet
+      const fetchWithRetry = async (retries = 3, delay = 2000) => {
+        for (let i = 0; i < retries; i++) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          
+          // Fetch current count
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (!currentSession) return;
+          
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (!currentUser) return;
+          
+          const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
+          if (!baseUrl) return;
+          
+          const today = new Date();
+          const todayStr = today.toISOString().split('T')[0];
+          const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          
+          // Filter by event name only - we'll filter by date and user locally
+          // Request a large page size to get all events in one request if possible
+          const params = new URLSearchParams({
+            event: 'lead.trial_activated',
+            page_size: '1000', // Request large page size to get all events
+          });
+          
+          try {
+            // Fetch all pages if paginated
+            let allEvents: any[] = [];
+            let nextUrl: string | null = `${baseUrl}/crm-records/events/?${params.toString()}`;
+            let pageCount = 0;
+            
+            while (nextUrl) {
+              pageCount++;
+              const response = await fetch(nextUrl, {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${currentSession.access_token}`,
+                  "Content-Type": "application/json",
+                },
+              });
+              
+              if (!response.ok) {
+                console.error(`[LeadProgressBar] Retry ${i + 1}/${retries} API error:`, response.status, response.statusText);
+                break;
+              }
+              
+              const data = await response.json();
+              let events: any[] = [];
+              if (Array.isArray(data)) {
+                events = data;
+                nextUrl = null;
+              } else if (data.results && Array.isArray(data.results)) {
+                events = data.results;
+                nextUrl = data.next || null;
+              } else if (data.data && Array.isArray(data.data)) {
+                events = data.data;
+                nextUrl = data.next || null;
+              } else {
+                nextUrl = null;
+              }
+              
+              allEvents = [...allEvents, ...events];
+            }
+            
+            const fetchedCount = allEvents.filter((event: any) => {
+              // Check user (from payload or event data)
+              const userUid = event.payload?.user_supabase_uid || event.user_supabase_uid || event.user_id;
+              if (userUid !== currentUser.id) {
+                return false;
+              }
+              
+              // Filter by today's date using timestamp or created_at
+              const eventDate = event.timestamp || event.created_at || event.payload?.timestamp;
+              if (!eventDate) {
+                return false; // Skip events without date
+              }
+              
+              const eventDateStr = new Date(eventDate).toISOString().split('T')[0];
+              return eventDateStr === todayStr;
+            }).length;
+            
+            // Only update if fetched count is >= optimistic count (don't decrease)
+            if (fetchedCount >= optimisticCount) {
+              setLeadStats(prev => ({
+                ...prev,
+                trialActivated: fetchedCount,
+              }));
+              return; // Success, stop retrying
+            }
+            // If fetched count is less, continue retrying
+          } catch (error) {
+            console.error('[LeadProgressBar] Error fetching trial stats in retry:', error);
+          }
+        }
+        
+        // If all retries failed, keep the optimistic count (don't decrease)
+        console.warn('[LeadProgressBar] Could not confirm trial activation after retries, keeping optimistic count');
+      };
+      
+      fetchWithRetry();
     };
 
     window.addEventListener('trial-activated', handleTrialActivated as EventListener);
     return () => {
       window.removeEventListener('trial-activated', handleTrialActivated as EventListener);
     };
-  }, [fetchTrialStats]);
+  }, [fetchTrialStats, leadStats.trialActivated]);
 
   if (loading) {
     return (
