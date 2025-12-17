@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { userSettingsApi } from '@/lib/userSettingsApi';
+import { crmLeadsApi } from '@/lib/crmLeadsApi';
 
 interface LeadProgressBarProps {
   config?: {
@@ -104,8 +105,6 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
 
 
   const fetchTrialStats = useCallback(async (isInitialLoad = false) => {
-    let trialActivatedCount = 0;
-    
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
@@ -124,98 +123,33 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         return;
       }
 
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
-      if (!baseUrl) {
-        if (isInitialLoad) {
-          setLoading(false);
-        }
-        return;
-      }
-
-      // Get today's date in YYYY-MM-DD format
+      // Get today's date range in ISO format for backend filtering
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
-      const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Fetch event logs with query parameters to filter on backend
-      // Filter by event name only - we'll filter by date and user locally
-      // Request a large page size to get all events in one request if possible
-      const params = new URLSearchParams({
-        event: 'lead.trial_activated',
-        page_size: '1000', // Request large page size to get all events
-      });
-      
-      // Fetch all pages if paginated
-      let allEvents: any[] = [];
-      let nextUrl: string | null = `${baseUrl}/crm-records/events/?${params.toString()}`;
-      let pageCount = 0;
-      
-      while (nextUrl) {
-        pageCount++;
-        
-        const response = await fetch(nextUrl, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${currentSession.access_token}`,
-            "Content-Type": "application/json",
-          },
-        });
+      const dateFrom = today.toISOString();
+      const dateTo = tomorrow.toISOString();
 
-        if (!response.ok) {
-          console.error('[LeadProgressBar] API error:', response.status, response.statusText);
-          break;
-        }
+      // Use backend filtering - much more efficient!
+      const trialActivatedCount = await crmLeadsApi.getTrialActivationCount(
+        currentUser.id,
+        dateFrom,
+        dateTo
+      );
 
-        const data = await response.json();
-        
-        // Handle different response formats (array or paginated)
-        let events: any[] = [];
-        if (Array.isArray(data)) {
-          events = data;
-          nextUrl = null; // No pagination if array
-        } else if (data.results && Array.isArray(data.results)) {
-          events = data.results;
-          // Check for next page
-          nextUrl = data.next || null;
-        } else if (data.data && Array.isArray(data.data)) {
-          events = data.data;
-          nextUrl = data.next || null;
-        } else {
-          nextUrl = null;
-        }
-        
-        allEvents = [...allEvents, ...events];
-      }
-
-      // Filter events for current user's trial activations and today's date
-      // Backend filtered by event name, we filter by user and date locally
-      const filteredEvents = allEvents.filter((event: any) => {
-        // Check user (from payload or event data)
-        const userUid = event.payload?.user_supabase_uid || event.user_supabase_uid || event.user_id;
-        if (userUid !== currentUser.id) {
-          return false;
-        }
-        
-        // Filter by today's date using timestamp or created_at
-        const eventDate = event.timestamp || event.created_at || event.payload?.timestamp;
-        if (!eventDate) {
-          return false; // Skip events without date
-        }
-        
-        const eventDateStr = new Date(eventDate).toISOString().split('T')[0];
-        return eventDateStr === todayStr;
-      });
-      
-      trialActivatedCount = filteredEvents.length;
-    } catch (error) {
-      console.error('[LeadProgressBar] Error fetching trial stats:', error);
-    } finally {
-      // Always update state with the fetched count (even if 0 or error)
       setLeadStats(prev => ({
         ...prev,
         trialActivated: trialActivatedCount,
       }));
-      
+    } catch (error) {
+      console.error('[LeadProgressBar] Error fetching trial stats:', error);
+      setLeadStats(prev => ({
+        ...prev,
+        trialActivated: 0,
+      }));
+    } finally {
       if (isInitialLoad) {
         setLoading(false);
       }
@@ -250,82 +184,28 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         for (let i = 0; i < retries; i++) {
           await new Promise(resolve => setTimeout(resolve, delay));
           
-          // Fetch current count
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          if (!currentSession) return;
-          
-          const { data: { user: currentUser } } = await supabase.auth.getUser();
-          if (!currentUser) return;
-          
-          const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
-          if (!baseUrl) return;
-          
-          const today = new Date();
-          const todayStr = today.toISOString().split('T')[0];
-          const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-          
-          // Filter by event name only - we'll filter by date and user locally
-          // Request a large page size to get all events in one request if possible
-          const params = new URLSearchParams({
-            event: 'lead.trial_activated',
-            page_size: '1000', // Request large page size to get all events
-          });
-          
           try {
-            // Fetch all pages if paginated
-            let allEvents: any[] = [];
-            let nextUrl: string | null = `${baseUrl}/crm-records/events/?${params.toString()}`;
-            let pageCount = 0;
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            if (!currentSession) return;
             
-            while (nextUrl) {
-              pageCount++;
-              const response = await fetch(nextUrl, {
-                method: "GET",
-                headers: {
-                  Authorization: `Bearer ${currentSession.access_token}`,
-                  "Content-Type": "application/json",
-                },
-              });
-              
-              if (!response.ok) {
-                console.error(`[LeadProgressBar] Retry ${i + 1}/${retries} API error:`, response.status, response.statusText);
-                break;
-              }
-              
-              const data = await response.json();
-              let events: any[] = [];
-              if (Array.isArray(data)) {
-                events = data;
-                nextUrl = null;
-              } else if (data.results && Array.isArray(data.results)) {
-                events = data.results;
-                nextUrl = data.next || null;
-              } else if (data.data && Array.isArray(data.data)) {
-                events = data.data;
-                nextUrl = data.next || null;
-              } else {
-                nextUrl = null;
-              }
-              
-              allEvents = [...allEvents, ...events];
-            }
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            if (!currentUser) return;
             
-            const fetchedCount = allEvents.filter((event: any) => {
-              // Check user (from payload or event data)
-              const userUid = event.payload?.user_supabase_uid || event.user_supabase_uid || event.user_id;
-              if (userUid !== currentUser.id) {
-                return false;
-              }
-              
-              // Filter by today's date using timestamp or created_at
-              const eventDate = event.timestamp || event.created_at || event.payload?.timestamp;
-              if (!eventDate) {
-                return false; // Skip events without date
-              }
-              
-              const eventDateStr = new Date(eventDate).toISOString().split('T')[0];
-              return eventDateStr === todayStr;
-            }).length;
+            // Get today's date range in ISO format for backend filtering
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            const dateFrom = today.toISOString();
+            const dateTo = tomorrow.toISOString();
+
+            // Use backend filtering - much more efficient!
+            const fetchedCount = await crmLeadsApi.getTrialActivationCount(
+              currentUser.id,
+              dateFrom,
+              dateTo
+            );
             
             // Only update if fetched count is >= optimistic count (don't decrease)
             if (fetchedCount >= optimisticCount) {
@@ -337,7 +217,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
             }
             // If fetched count is less, continue retrying
           } catch (error) {
-            console.error('[LeadProgressBar] Error fetching trial stats in retry:', error);
+            console.error(`[LeadProgressBar] Retry ${i + 1}/${retries} error:`, error);
           }
         }
         
@@ -352,7 +232,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     return () => {
       window.removeEventListener('trial-activated', handleTrialActivated as EventListener);
     };
-  }, [fetchTrialStats, leadStats.trialActivated]);
+  }, [leadStats.trialActivated]);
 
   if (loading) {
     return (

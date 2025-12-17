@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { userSettingsApi } from "@/lib/userSettingsApi";
+import { crmLeadsApi } from "@/lib/crmLeadsApi";
 import { FaWhatsapp } from "react-icons/fa";
 import {
   User,
@@ -239,60 +240,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Fetch current assigned lead from API
   const fetchCurrentLead = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        return null;
-      }
-
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, "");
-      if (!baseUrl) {
-        return null;
-      }
-
-      const url = `${baseUrl}/crm-records/leads/current/`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          // No lead assigned
-          return null;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const leadData = await response.json();
-
-      // Check if leadData is empty
-      const isEmpty = !leadData || 
-                      (Array.isArray(leadData) && leadData.length === 0) ||
-                      (typeof leadData === "object" && !Array.isArray(leadData) && Object.keys(leadData).length === 0) ||
-                      (typeof leadData === "string" && leadData.trim() === "");
-
-      if (isEmpty) {
-        return null;
-      }
-
-      // Handle nested data structures
-      let processedLead = leadData;
-      if (leadData?.data && typeof leadData.data === 'object') {
-        processedLead = { ...leadData, ...leadData.data };
-        if (leadData.data.name && !processedLead.name) {
-          processedLead.name = leadData.data.name;
-        }
-      }
-      if (leadData?.lead && typeof leadData.lead === 'object') {
-        processedLead = { ...leadData, ...leadData.lead };
-      }
-
-      return processedLead;
+      return await crmLeadsApi.getCurrentLead();
     } catch (error) {
       console.error("Error fetching current lead:", error);
       return null;
@@ -652,26 +600,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Fetching the lead stats
   const fetchLeadStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      // Use configured status data API endpoint or fallback to default
-      const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`;
-      
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await crmLeadsApi.getLeadStats(config?.statusDataApiEndpoint);
       setLeadStats(data);
     } catch (error) {
       console.error("Error fetching lead statistics:", error);
@@ -682,52 +611,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const fetchFirstLead = async () => {
     try {
       setLoading(true);
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Authentication required");
-      }
 
       // Use configured endpoint or fallback to default
       const endpoint = config?.apiEndpoint || "/api/leads";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const leadData = await crmLeadsApi.getNextLead(endpoint);
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          setHasCheckedForLeads(true);
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          resetLeadState();
-          isInitialized.current = false;
-          await fetchLeadStats();
-          toast({
-            title: "Info",
-            description: "No leads available at the moment.",
-            variant: "default",
-          });
-          return;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const leadData = await response.json();
-
-      // Check if leadData is empty (handles null, undefined, empty object, empty array)
-      const isEmpty = !leadData || 
-                      (Array.isArray(leadData) && leadData.length === 0) ||
-                      (typeof leadData === "object" && !Array.isArray(leadData) && Object.keys(leadData).length === 0) ||
-                      (typeof leadData === "string" && leadData.trim() === "");
-
-      if (isEmpty) {
+      // API function returns null if no lead is available
+      if (!leadData) {
         setHasCheckedForLeads(true);
         setShowPendingCard(true);
         setCurrentLead(null);
@@ -743,30 +633,17 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       }
 
       setHasCheckedForLeads(true);
-
-      // Handle nested data structures (e.g., if data is in a 'data' or 'lead' property)
-      let processedLead = leadData;
-      if (leadData?.data && typeof leadData.data === 'object') {
-        processedLead = { ...leadData, ...leadData.data };
-        // Ensure name is accessible at top level if it's in data.name
-        if (leadData.data.name && !processedLead.name) {
-          processedLead.name = leadData.data.name;
-        }
-      }
-      if (leadData?.lead && typeof leadData.lead === 'object') {
-        processedLead = { ...leadData, ...leadData.lead };
-      }
-      setCurrentLead(processedLead);
+      setCurrentLead(leadData);
       setShowPendingCard(false);
       setActionButtonsVisible(false);
       setProcessingAction(null);
       setLead(prev => ({
         ...prev,
-        leadStatus: processedLead.status || "New",
-        priority: processedLead.priority || "Medium",
-        notes: (processedLead?.data?.notes as string) || processedLead?.notes || "",
-        selectedTags: parseTags(processedLead?.tags || []),
-        nextFollowUp: processedLead.next_follow_up || "",
+        leadStatus: leadData.status || "New",
+        priority: leadData.priority || "Medium",
+        notes: (leadData?.data?.notes as string) || leadData?.notes || "",
+        selectedTags: parseTags(leadData?.tags || []),
+        nextFollowUp: leadData.next_follow_up || "",
         leadStartTime: new Date(),
       }));
 
@@ -778,18 +655,34 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       isInitialized.current = true;
       await fetchLeadStats();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching lead:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load lead. Please try again.",
-        variant: "destructive",
-      });
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      resetLeadState();
-      isInitialized.current = false;
-      await fetchLeadStats();
+      
+      // Handle 404 as "no leads available" instead of error
+      if (error.message?.includes('404') || error.message?.includes('HTTP error! status: 404')) {
+        setHasCheckedForLeads(true);
+        setShowPendingCard(true);
+        setCurrentLead(null);
+        resetLeadState();
+        isInitialized.current = false;
+        await fetchLeadStats();
+        toast({
+          title: "Info",
+          description: "No leads available at the moment.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load lead. Please try again.",
+          variant: "destructive",
+        });
+        setShowPendingCard(true);
+        setCurrentLead(null);
+        resetLeadState();
+        isInitialized.current = false;
+        await fetchLeadStats();
+      }
     } finally {
       setLoading(false);
     }
@@ -821,34 +714,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
     try {
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Authentication required");
-
-      const base = import.meta.env.VITE_RENDER_API_URL;
-      const url = `${base}/crm-records/records/events/`;
-      const body = {
-        event: eventName,
-        record_id: currentLead.id,
-        payload,
-      };
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => null);
-        console.error("[LeadCardCarousel] Event request failed", { status: resp.status, statusText: resp.statusText, body: text });
-        throw new Error(`HTTP ${resp.status}`);
-      }
-      
-      await resp.json().catch(() => null);
+      await crmLeadsApi.sendLeadEvent(eventName, currentLead.id, payload);
 
       if (options.successTitle || options.successDescription) {
         toast({
