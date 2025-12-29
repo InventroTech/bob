@@ -43,6 +43,8 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   const [roleChecked, setRoleChecked] = useState(false);
   const [leadsCounts, setLeadsCounts] = useState<Record<string, number>>({});
   const [originalLeadsCounts, setOriginalLeadsCounts] = useState<Record<string, number>>({});
+  const [dailyLimits, setDailyLimits] = useState<Record<string, number>>({});
+  const [originalDailyLimits, setOriginalDailyLimits] = useState<Record<string, number>>({});
   const [userUidMap, setUserUidMap] = useState<Record<string, string>>({}); // Map user_id (int) to uid (UUID)
 
   // Check if user has GM permissions (GM custom role only)
@@ -127,7 +129,19 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         });
         setSelectedLeadTypes(initialSelections);
 
-        // Fetch leads count for each user
+        // Initialize daily target + daily limit from assignments payload (new endpoint fields)
+        const initialTargets: Record<string, number> = {};
+        const initialLimits: Record<string, number> = {};
+        data.forEach((assignment) => {
+          if (assignment.daily_target !== undefined && assignment.daily_target !== null) {
+            initialTargets[assignment.user_id] = assignment.daily_target;
+          }
+          if (assignment.daily_limit !== undefined && assignment.daily_limit !== null) {
+            initialLimits[assignment.user_id] = assignment.daily_limit;
+          }
+        });
+
+        // Fetch leads count (daily target) for each user (fallback to user-settings if not present in new endpoint)
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (token) {
@@ -135,6 +149,12 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           await Promise.all(
             data.map(async (assignment) => {
               try {
+                // Prefer daily_target from assignments endpoint if present
+                if (initialTargets[assignment.user_id] !== undefined) {
+                  counts[assignment.user_id] = initialTargets[assignment.user_id];
+                  return;
+                }
+
                 // Try to get saved daily target from LEAD_TYPE_ASSIGNMENT record
                 // Lead types are in value column, daily target is in daily_target column
                 let savedCount = 0;
@@ -182,6 +202,24 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           setLeadsCounts(counts);
           setOriginalLeadsCounts({ ...counts }); // Store original values for change detection
         }
+
+        // Initialize daily limits state (default to 0 if not present)
+        setDailyLimits((prev) => {
+          const merged: Record<string, number> = { ...prev };
+          data.forEach((assignment) => {
+            merged[assignment.user_id] =
+              initialLimits[assignment.user_id] ?? merged[assignment.user_id] ?? 0;
+          });
+          return merged;
+        });
+        setOriginalDailyLimits((prev) => {
+          const merged: Record<string, number> = { ...prev };
+          data.forEach((assignment) => {
+            merged[assignment.user_id] =
+              initialLimits[assignment.user_id] ?? merged[assignment.user_id] ?? 0;
+          });
+          return merged;
+        });
         
         // Show message if no users found
         if (data.length === 0) {
@@ -250,17 +288,32 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     }));
   };
 
+  // Handle daily limit change
+  const handleDailyLimitChange = (userId: string, value: string) => {
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue) || numValue < 0) {
+      return;
+    }
+
+    setDailyLimits(prev => ({
+      ...prev,
+      [userId]: numValue
+    }));
+  };
+
   // Save lead type assignment for a user
   const handleSaveAssignment = async (userId: string) => {
     try {
       setSaving(userId);
       const leadTypes = selectedLeadTypes[userId] || [];
       const assignedLeadsCount = leadsCounts[userId] ?? 0;
+      const assignedDailyLimit = dailyLimits[userId] ?? 0;
       
       const request: LeadTypeAssignmentRequest = {
         user_id: userId,
         lead_types: leadTypes,
-        daily_target: assignedLeadsCount // Include daily target in the request
+        daily_target: assignedLeadsCount, // Include daily target in the request
+        daily_limit: assignedDailyLimit // Include daily limit in the request
       };
 
       const assignmentsEndpoint = config?.assignmentsEndpoint;
@@ -301,7 +354,8 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
             
             const updatePayload = {
               value: currentValue, // Preserve the lead types in value column
-              daily_target: assignedLeadsCount // Store daily target in daily_target column
+            daily_target: assignedLeadsCount, // Store daily target in daily_target column
+            daily_limit: assignedDailyLimit // Store daily limit in daily_limit column (if supported)
             };
             console.log('[LeadTypeAssignment] Updating LEAD_TYPE_ASSIGNMENT with payload:', JSON.stringify(updatePayload, null, 2));
             
@@ -387,7 +441,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       setAssignments(prev => 
         prev.map(assignment => 
           assignment.user_id === userId 
-            ? { ...assignment, lead_types: leadTypes }
+            ? { ...assignment, lead_types: leadTypes, daily_target: assignedLeadsCount, daily_limit: assignedDailyLimit }
             : assignment
         )
       );
@@ -398,7 +452,13 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         [userId]: assignedLeadsCount
       }));
 
-      toast.success('Lead type assignment and leads count saved successfully');
+      // Update original daily limit to reflect saved value
+      setOriginalDailyLimits(prev => ({
+        ...prev,
+        [userId]: assignedDailyLimit
+      }));
+
+      toast.success('Lead type assignment saved successfully');
     } catch (error: any) {
       console.error('Error saving lead type assignment:', error);
       // If it's a 403 error, show a more helpful message
@@ -516,8 +576,12 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     const currentLeadsCount = leadsCounts[userId] ?? 0;
     const originalLeadsCount = originalLeadsCounts[userId] ?? 0;
     const leadsCountChanged = currentLeadsCount !== originalLeadsCount;
+
+    const currentDailyLimit = dailyLimits[userId] ?? 0;
+    const originalDailyLimit = originalDailyLimits[userId] ?? 0;
+    const dailyLimitChanged = currentDailyLimit !== originalDailyLimit;
     
-    return leadTypesChanged || leadsCountChanged;
+    return leadTypesChanged || leadsCountChanged || dailyLimitChanged;
   };
 
   // Early access check - block non-GM users immediately
@@ -621,6 +685,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                     <TableHead className="w-[300px]">Lead Types</TableHead>
                     <TableHead className="w-[250px]">Currently Assigned</TableHead>
                     <TableHead className="w-[150px]">Leads Count</TableHead>
+                    <TableHead className="w-[150px]">Daily Limit</TableHead>
                     <TableHead className="w-[200px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -734,6 +799,16 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                           min="0"
                           value={leadsCounts[assignment.user_id] ?? 0}
                           onChange={(e) => handleLeadsCountChange(assignment.user_id, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-24"
+                        />
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={dailyLimits[assignment.user_id] ?? 0}
+                          onChange={(e) => handleDailyLimitChange(assignment.user_id, e.target.value)}
                           onClick={(e) => e.stopPropagation()}
                           className="w-24"
                         />

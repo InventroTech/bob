@@ -29,12 +29,15 @@ export interface LeadTypeAssignment {
   user_name: string;
   user_email: string;
   lead_types: string[];
+  daily_target?: number;
+  daily_limit?: number;
 }
 
 export interface LeadTypeAssignmentRequest {
   user_id: string;
   lead_types: string[];
   daily_target?: number; // Optional daily target to store in daily_target column
+  daily_limit?: number; // Optional daily limit to store in daily_limit column
 }
 
 export interface UserLeadTypes {
