@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { userSettingsApi } from "@/lib/userSettingsApi";
+import { crmLeadsApi } from "@/lib/crmLeadsApi";
 import { FaWhatsapp } from "react-icons/fa";
 import {
   User,
@@ -198,42 +199,32 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
+
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = async () => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        console.log('[LeadCardCarousel] No session, skipping daily target fetch');
         return;
       }
 
       // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
-        console.log('[LeadCardCarousel] No user, skipping daily target fetch');
         return;
       }
 
-      console.log('[LeadCardCarousel] Fetching daily target for user:', currentUser.id);
-
       try {
         const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
-        console.log('[LeadCardCarousel] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
-          daily_target: savedSetting.daily_target,
-          value: savedSetting.value
-        });
         
         if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
           const savedTarget = savedSetting.daily_target;
-          console.log('[LeadCardCarousel] Found daily target:', savedTarget);
           setDailyTarget(savedTarget);
         } else {
-          console.log('[LeadCardCarousel] daily_target is null/undefined, setting to null');
           setDailyTarget(null);
         }
       } catch (error: any) {
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          console.log('[LeadCardCarousel] No LEAD_TYPE_ASSIGNMENT record found, setting daily target to null');
           setDailyTarget(null);
         } else {
           console.error('[LeadCardCarousel] Error loading daily target:', error);
@@ -246,37 +237,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
   };
 
-  // Persistence functions for sessionStorage
-  const getPersistedState = () => {
+  // Fetch current assigned lead from API
+  const fetchCurrentLead = async () => {
     try {
-      const persisted = sessionStorage.getItem("leadCardCarouselState");
-      return persisted ? JSON.parse(persisted) : null;
-    } catch {
+      return await crmLeadsApi.getCurrentLead();
+    } catch (error) {
+      console.error("Error fetching current lead:", error);
       return null;
-    }
-  };
-
-  const persistState = (lead: LeadData | null) => {
-    try {
-      if (lead) {
-        sessionStorage.setItem("leadCardCarouselState", JSON.stringify({
-          currentLead: lead,
-          leadId: lead.id,
-          timestamp: Date.now()
-        }));
-      } else {
-        sessionStorage.removeItem("leadCardCarouselState");
-      }
-    } catch (error) {
-      console.error("Error persisting state:", error);
-    }
-  };
-
-  const clearPersistedState = () => {
-    try {
-      sessionStorage.removeItem("leadCardCarouselState");
-    } catch (error) {
-      console.error("Error clearing persisted state:", error);
     }
   };
 
@@ -633,119 +600,28 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Fetching the lead stats
   const fetchLeadStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      // Use configured status data API endpoint or fallback to default
-      const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${statusEndpoint}`;
-      
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await crmLeadsApi.getLeadStats(config?.statusDataApiEndpoint);
       setLeadStats(data);
     } catch (error) {
       console.error("Error fetching lead statistics:", error);
     }
   };
 
-  // Fetching the first lead
+  // Fetching the next lead from API
   const fetchFirstLead = async () => {
     try {
       setLoading(true);
-      
-      // Check if there's a persisted lead to restore (only on explicit "Get Leads" click)
-      // This helps with page refresh scenario, but won't interfere with navigation
-      const persistedState = getPersistedState();
-      if (persistedState?.currentLead && persistedState.leadId && !hasCheckedForLeads) {
-        // Read current count from localStorage to ensure we have the correct value
-        const currentCount = getPersistedFetchedCount();
-        // Sync state with localStorage value
-        setFetchedLeadsCount(currentCount);
-        
-        // Restore persisted lead only if user hasn't checked for leads yet (page refresh scenario)
-        // Don't increment count when restoring - it was already counted when first fetched
-        // The count state is already synced above
-        const restoredLead = persistedState.currentLead;
-        setCurrentLead(restoredLead);
-        setShowPendingCard(false);
-        setHasCheckedForLeads(true);
-        setLead(prev => ({
-          ...prev,
-          leadStatus: restoredLead.status || "New",
-          priority: restoredLead.priority || "Medium",
-          notes: (restoredLead?.data?.notes as string) || restoredLead?.notes || "",
-          selectedTags: parseTags(restoredLead?.tags || []),
-          nextFollowUp: restoredLead.next_follow_up || "",
-          leadStartTime: new Date(),
-        }));
-        isInitialized.current = true;
-        await fetchLeadStats();
-        setLoading(false);
-        return;
-      }
-      
-      // Otherwise, fetch a new lead from API
+
+      // Use configured endpoint or fallback to default
       const endpoint = config?.apiEndpoint || "/api/leads";
-      const apiUrl = `${import.meta.env.VITE_RENDER_API_URL}${endpoint}`;
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const leadData = await crmLeadsApi.getNextLead(endpoint);
 
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          setHasCheckedForLeads(true);
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          resetLeadState();
-          clearPersistedState();
-          isInitialized.current = false;
-          await fetchLeadStats();
-          toast({
-            title: "Info",
-            description: "No leads available at the moment.",
-            variant: "default",
-          });
-          return;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const leadData = await response.json();
-
-      // Check if leadData is empty (handles null, undefined, empty object, empty array)
-      const isEmpty = !leadData || 
-                      (Array.isArray(leadData) && leadData.length === 0) ||
-                      (typeof leadData === "object" && !Array.isArray(leadData) && Object.keys(leadData).length === 0) ||
-                      (typeof leadData === "string" && leadData.trim() === "");
-
-      if (isEmpty) {
+      // API function returns null if no lead is available
+      if (!leadData) {
         setHasCheckedForLeads(true);
         setShowPendingCard(true);
         setCurrentLead(null);
         resetLeadState();
-        clearPersistedState();
         isInitialized.current = false;
         await fetchLeadStats();
         toast({
@@ -757,30 +633,17 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       }
 
       setHasCheckedForLeads(true);
-
-      // Handle nested data structures (e.g., if data is in a 'data' or 'lead' property)
-      let processedLead = leadData;
-      if (leadData?.data && typeof leadData.data === 'object') {
-        processedLead = { ...leadData, ...leadData.data };
-        // Ensure name is accessible at top level if it's in data.name
-        if (leadData.data.name && !processedLead.name) {
-          processedLead.name = leadData.data.name;
-        }
-      }
-      if (leadData?.lead && typeof leadData.lead === 'object') {
-        processedLead = { ...leadData, ...leadData.lead };
-      }
-      setCurrentLead(processedLead);
+      setCurrentLead(leadData);
       setShowPendingCard(false);
       setActionButtonsVisible(false);
       setProcessingAction(null);
       setLead(prev => ({
         ...prev,
-        leadStatus: processedLead.status || "New",
-        priority: processedLead.priority || "Medium",
-        notes: (processedLead?.data?.notes as string) || processedLead?.notes || "",
-        selectedTags: parseTags(processedLead?.tags || []),
-        nextFollowUp: processedLead.next_follow_up || "",
+        leadStatus: leadData.status || "New",
+        priority: leadData.priority || "Medium",
+        notes: (leadData?.data?.notes as string) || leadData?.notes || "",
+        selectedTags: parseTags(leadData?.tags || []),
+        nextFollowUp: leadData.next_follow_up || "",
         leadStartTime: new Date(),
       }));
 
@@ -789,25 +652,37 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         incrementFetchedCount();
       }
 
-      // Persist the current lead
-      persistState(processedLead);
-
       isInitialized.current = true;
       await fetchLeadStats();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching lead:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load lead. Please try again.",
-        variant: "destructive",
-      });
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      resetLeadState();
-      clearPersistedState();
-      isInitialized.current = false;
-      await fetchLeadStats();
+      
+      // Handle 404 as "no leads available" instead of error
+      if (error.message?.includes('404') || error.message?.includes('HTTP error! status: 404')) {
+        setHasCheckedForLeads(true);
+        setShowPendingCard(true);
+        setCurrentLead(null);
+        resetLeadState();
+        isInitialized.current = false;
+        await fetchLeadStats();
+        toast({
+          title: "Info",
+          description: "No leads available at the moment.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load lead. Please try again.",
+          variant: "destructive",
+        });
+        setShowPendingCard(true);
+        setCurrentLead(null);
+        resetLeadState();
+        isInitialized.current = false;
+        await fetchLeadStats();
+      }
     } finally {
       setLoading(false);
     }
@@ -839,32 +714,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
     try {
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Authentication required");
-
-      const base = import.meta.env.VITE_RENDER_API_URL;
-      const url = `${base}/crm-records/records/events/`;
-      const body = {
-        event: eventName,
-        record_id: currentLead.id,
-        payload,
-      };
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => null);
-        console.error("[LeadCardCarousel] Event request failed", { status: resp.status, statusText: resp.statusText, body: text });
-        throw new Error(`HTTP ${resp.status}`);
-      }
+      await crmLeadsApi.sendLeadEvent(eventName, currentLead.id, payload);
 
       if (options.successTitle || options.successDescription) {
         toast({
@@ -882,6 +732,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setUpdating(false);
     }
   };
+
 
   const handleActionButton = async (
     action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later",
@@ -907,6 +758,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       remarks: currentLead.latest_remarks,
       lead_id: currentLead.id,
       user_id: actingUserId,
+      user_supabase_uid: actingUserId, // Backend filters by this field
       lead_owner_user_id: currentLead.praja_id,
     };
 
@@ -936,29 +788,14 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
       if (ok) {
         if (action === "Trial Activated") {
-          // Dispatch custom event for progress bar to listen
+          // Dispatch event - progress bar will fetch count from API
           window.dispatchEvent(new CustomEvent('trial-activated', { 
             detail: { leadId: currentLead.id } 
           }));
         }
         
-        // Check daily target before fetching next lead
-        if (dailyTarget !== null && fetchedLeadsCount >= dailyTarget) {
-          // Daily target reached, show pending card with message
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          resetLeadState();
-          clearPersistedState();
-          isInitialized.current = false;
-          await fetchLeadStats();
-          toast({
-            title: "Daily Target Reached",
-            description: `You have reached your daily target of ${dailyTarget}. Please contact your manager to get more leads assigned.`,
-            variant: "default",
-          });
-        } else {
-          await fetchFirstLead();
-        }
+        // Fetch next lead after any action
+        await fetchFirstLead();
       }
 
       return ok;
@@ -1043,23 +880,88 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     });
   }, []);
 
-  // Initialize component - always show pending card first
+  // Initialize component - fetch current lead on refresh
   useEffect(() => {
-    fetchLeadStats();
-    fetchDailyTarget();
+    const initializeComponent = async () => {
+      fetchLeadStats();
+      fetchDailyTarget();
+      
+      // Initialize fetched leads count from localStorage
+      const persistedCount = getPersistedFetchedCount();
+      setFetchedLeadsCount(persistedCount);
+      
+      // Set random inspirational message
+      setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
+      
+      // Fetch current assigned lead from API on refresh
+      const currentLead = await fetchCurrentLead();
+      
+      if (currentLead) {
+        // Display the current lead immediately
+        setCurrentLead(currentLead);
+        setShowPendingCard(false);
+        setHasCheckedForLeads(true);
+        setLead(prev => ({
+          ...prev,
+          leadStatus: currentLead.status || "New",
+          priority: currentLead.priority || "Medium",
+          notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
+          selectedTags: parseTags(currentLead?.tags || []),
+          nextFollowUp: currentLead.next_follow_up || "",
+          leadStartTime: new Date(),
+        }));
+        isInitialized.current = true;
+      } else {
+        // No lead assigned, show pending card
+        setShowPendingCard(true);
+        setCurrentLead(null);
+        setHasCheckedForLeads(true);
+      }
+    };
     
-    // Initialize fetched leads count from localStorage
-    const persistedCount = getPersistedFetchedCount();
-    setFetchedLeadsCount(persistedCount);
-    
-    // Always show pending card when component mounts (navigation or refresh)
-    // Persisted state will only be used when user clicks "Get Leads" button
-    // This ensures users always see the pending card first when navigating to the page
-    setShowPendingCard(true);
-    
-    // Set random inspirational message
-    setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
+    initializeComponent();
   }, []);
+
+  // Handle "Get Leads" button click - fetch current lead first, then next if none
+  const handleGetLeads = async () => {
+    try {
+      setLoading(true);
+      
+      // First try to get current assigned lead
+      const currentLead = await fetchCurrentLead();
+      
+      if (currentLead) {
+        // Display the current assigned lead
+        setCurrentLead(currentLead);
+        setShowPendingCard(false);
+        setHasCheckedForLeads(true);
+        setLead(prev => ({
+          ...prev,
+          leadStatus: currentLead.status || "New",
+          priority: currentLead.priority || "Medium",
+          notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
+          selectedTags: parseTags(currentLead?.tags || []),
+          nextFollowUp: currentLead.next_follow_up || "",
+          leadStartTime: new Date(),
+        }));
+        isInitialized.current = true;
+        await fetchLeadStats();
+        setLoading(false);
+        return;
+      }
+      
+      // No current lead, fetch next lead
+      await fetchFirstLead();
+    } catch (error) {
+      console.error("Error getting leads:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load lead. Please try again.",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
+  };
 
   // Sync count from localStorage periodically
   useEffect(() => {
@@ -1162,7 +1064,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             {/* Action Button */}
             <div className="text-center">
               <Button 
-                onClick={fetchFirstLead} 
+                onClick={handleGetLeads} 
                 disabled={loading}
                 className="w-full max-w-xs"
                 size="lg"

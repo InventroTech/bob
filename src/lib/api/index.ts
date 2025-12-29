@@ -34,4 +34,5 @@ export type {
 export { authService, linkUserUidLegacy } from './services/auth';
 export { membershipService } from './services/membership';
 export type { Role, User } from './services/membership';
+export { routingRulesService } from './services/routingRules';
 

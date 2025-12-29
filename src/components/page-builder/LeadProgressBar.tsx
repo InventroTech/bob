@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { userSettingsApi } from '@/lib/userSettingsApi';
+import { crmLeadsApi } from '@/lib/crmLeadsApi';
 
 interface LeadProgressBarProps {
   config?: {
@@ -30,57 +31,13 @@ interface LeadStats {
 export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   const { session } = useAuth();
   
-  // Get today's date string (YYYY-MM-DD) for daily reset tracking
-  const getTodayDateString = (): string => {
-    const now = new Date();
-    return now.toISOString().split('T')[0];
-  };
-
-  // Check if we need to reset (new day after midnight)
-  const shouldResetCount = (): boolean => {
-    try {
-      const lastResetDate = localStorage.getItem('leadProgressBar_lastResetDate');
-      const today = getTodayDateString();
-      return lastResetDate !== today;
-    } catch {
-      return true;
-    }
-  };
-
-  // Reset trial count when day changes
-  const resetTrialCount = () => {
-    try {
-      const today = getTodayDateString();
-      localStorage.setItem('leadProgressBar_trialActivated', '0');
-      localStorage.setItem('leadProgressBar_lastResetDate', today);
-    } catch (e) {
-      console.warn('[LeadProgressBar] Failed to reset trial count:', e);
-    }
-  };
-
-  // Load persisted trial activated count from localStorage
-  const getPersistedTrialCount = (): number => {
-    try {
-      // Check if we need to reset (new day)
-      if (shouldResetCount()) {
-        resetTrialCount();
-        return 0;
-      }
-      const stored = localStorage.getItem('leadProgressBar_trialActivated');
-      return stored ? parseInt(stored, 10) : 0;
-    } catch {
-      return 0;
-    }
-  };
-
-
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
     new: 0,
     contacted: 0,
     qualified: 0,
     closed: 0,
-    trialActivated: getPersistedTrialCount(),
+    trialActivated: 0,
   });
   const [dailyTarget, setDailyTarget] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,59 +59,38 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     segmentCount
   );
 
-  // Debug logging
-  useEffect(() => {
-    console.log('[LeadProgressBar] Current state:', {
-      dailyTarget,
-      configTargetCount: config?.targetCount,
-      targetCount,
-      trialActivated,
-      remainingTrials
-    });
-  }, [dailyTarget, config?.targetCount, targetCount, trialActivated, remainingTrials]);
 
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = useCallback(async () => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        console.log('[LeadProgressBar] No session, skipping daily target fetch');
         return;
       }
 
       // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
-        console.log('[LeadProgressBar] No user, skipping daily target fetch');
         return;
       }
-
-      console.log('[LeadProgressBar] Fetching daily target for user:', currentUser.id);
 
       // Get the daily target from LEAD_TYPE_ASSIGNMENT record
       // Lead types are in value column, daily target is in daily_target column
       try {
         const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
-        console.log('[LeadProgressBar] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
-          daily_target: savedSetting.daily_target,
-          value: savedSetting.value
-        });
         
         // Get from the daily_target column
         if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
           const savedTarget = savedSetting.daily_target;
-          console.log('[LeadProgressBar] Found daily target in LEAD_TYPE_ASSIGNMENT:', savedTarget);
           setDailyTarget(savedTarget);
           return;
         } else {
-          console.log('[LeadProgressBar] daily_target is null/undefined, setting to 0');
           setDailyTarget(0);
           return;
         }
       } catch (error: any) {
         // If LEAD_TYPE_ASSIGNMENT record not found (404), set to 0
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          console.log('[LeadProgressBar] No LEAD_TYPE_ASSIGNMENT record found, setting daily target to 0');
           setDailyTarget(0);
         } else {
           console.error('[LeadProgressBar] Error loading daily target:', error);
@@ -168,189 +104,135 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   }, []);
 
 
-  const fetchLeadStats = useCallback(async () => {
+  const fetchTrialStats = useCallback(async (isInitialLoad = false) => {
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (!currentSession) {
-        setLoading(false);
-        return;
-      }
-
-      // Fetch daily target first
-      await fetchDailyTarget();
-
-      // Only try API if explicitly configured, otherwise rely on event tracking
-      if (!config?.apiEndpoint && !config?.statusDataApiEndpoint) {
-        setLoading(false);
-        return;
-      }
-
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      if (!baseUrl) {
-        setLoading(false);
-        return;
-      }
-
-      let trialActivatedCount = 0;
-      let apiSuccess = false;
-
-      // Try the configured endpoint if provided
-      if (config?.statusDataApiEndpoint || config?.apiEndpoint) {
-        try {
-          const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
-          const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
-          const endpoint = statusEndpoint.startsWith('/') ? statusEndpoint : `/${statusEndpoint}`;
-          const apiUrl = config?.apiEndpoint 
-            ? (config.apiEndpoint.startsWith('http') ? config.apiEndpoint : `${cleanBaseUrl}${config.apiEndpoint.startsWith('/') ? config.apiEndpoint : `/${config.apiEndpoint}`}`)
-            : `${cleanBaseUrl}${endpoint}`;
-          
-          const response = await fetch(apiUrl, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${currentSession.access_token}`,
-              "Content-Type": "application/json",
-            },
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            trialActivatedCount = data.leadStats?.trialActivated || 
-                                 data.leadStats?.trialsActivated || 
-                                 data.leadStats?.trial_activated ||
-                                 data.trialActivated ||
-                                 data.trialsActivated ||
-                                 0;
-            apiSuccess = true;
-          }
-        } catch (endpointError) {
-          // Silently fail - we'll rely on event tracking
+        if (isInitialLoad) {
+          setLoading(false);
         }
+        return;
       }
 
-      // Update with API count if available, otherwise keep current persisted count
-      if (apiSuccess) {
-        // Check if we need to reset (new day)
-        if (shouldResetCount()) {
-          resetTrialCount();
-          setLeadStats(prev => ({
-            ...prev,
-            trialActivated: 0,
-          }));
-        } else {
-          // Use API count if it's available (even if 0, to sync with server)
-          const finalCount = trialActivatedCount >= 0 ? trialActivatedCount : (leadStats.trialActivated || 0);
-          setLeadStats(prev => ({
-            ...prev,
-            trialActivated: finalCount,
-          }));
-          // Persist to localStorage
-          try {
-            const today = getTodayDateString();
-            localStorage.setItem('leadProgressBar_trialActivated', finalCount.toString());
-            localStorage.setItem('leadProgressBar_lastResetDate', today);
-          } catch (e) {
-            console.warn('[LeadProgressBar] Failed to persist trial count:', e);
-          }
+      // Get current user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        if (isInitialLoad) {
+          setLoading(false);
         }
+        return;
       }
+
+      // Get today's date range in ISO format for backend filtering
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const dateFrom = today.toISOString();
+      const dateTo = tomorrow.toISOString();
+
+      // Use backend filtering - much more efficient!
+      const trialActivatedCount = await crmLeadsApi.getTrialActivationCount(
+        currentUser.id,
+        dateFrom,
+        dateTo
+      );
+
+      setLeadStats(prev => ({
+        ...prev,
+        trialActivated: trialActivatedCount,
+      }));
     } catch (error) {
-      // Silently handle errors - component works via event tracking
+      console.error('[LeadProgressBar] Error fetching trial stats:', error);
+      setLeadStats(prev => ({
+        ...prev,
+        trialActivated: 0,
+      }));
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+      }
     }
-  }, [config?.apiEndpoint, config?.statusDataApiEndpoint, fetchDailyTarget]);
+  }, []);
 
   useEffect(() => {
     if (session) {
       setLoading(true);
-      // Always fetch daily target first
+      // Always fetch daily target first, then fetch trial stats on initial load
+      // This runs every time component mounts (refresh or navigation back)
+      // Don't reset trialActivated to 0 - let fetchTrialStats update it
       fetchDailyTarget().finally(() => {
-        // After fetching daily target, continue with other fetches
-        // Only fetch from API if endpoint is configured, otherwise rely on event tracking
-        if (config?.apiEndpoint || config?.statusDataApiEndpoint) {
-          fetchLeadStats();
-        } else {
-          // No API configured, just set loading to false and rely on events
-          setLoading(false);
-        }
+        fetchTrialStats(true); // Fetch trial stats on initial load
       });
     }
-  }, [session, config?.apiEndpoint, config?.statusDataApiEndpoint, fetchLeadStats, fetchDailyTarget]);
+  }, [session, fetchDailyTarget, fetchTrialStats]);
 
-  // Set up polling to refresh stats periodically (only if API endpoint is configured)
+  // Listen for trial activation events - only query DB when trial is activated
   useEffect(() => {
-    if (!session || (!config?.apiEndpoint && !config?.statusDataApiEndpoint)) return;
-
-    const refreshInterval = config?.refreshInterval || 30000; // Default 30 seconds (less frequent)
-    const intervalId = setInterval(() => {
-      fetchLeadStats();
-    }, refreshInterval);
-
-    return () => clearInterval(intervalId);
-  }, [session, config?.refreshInterval, config?.apiEndpoint, config?.statusDataApiEndpoint, fetchLeadStats]);
-
-  // Check for midnight reset periodically
-  useEffect(() => {
-    const checkMidnightReset = () => {
-      if (shouldResetCount()) {
-        resetTrialCount();
-        setLeadStats(prev => ({
-          ...prev,
-          trialActivated: 0,
-        }));
-      }
-    };
-
-    // Check immediately
-    checkMidnightReset();
-
-    // Check every minute for midnight crossing
-    const intervalId = setInterval(checkMidnightReset, 60000); // Check every minute
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  // Listen for trial activation events via custom events
-  useEffect(() => {
-    const handleTrialActivated = (event: CustomEvent) => {
-      const leadId = event.detail?.leadId;
+    const handleTrialActivated = async (event: CustomEvent) => {
+      // Optimistic update: increment count immediately for better UX
+      const optimisticCount = (leadStats.trialActivated || 0) + 1;
+      setLeadStats(prev => ({
+        ...prev,
+        trialActivated: optimisticCount,
+      }));
       
-      // Check if we need to reset (new day)
-      if (shouldResetCount()) {
-        resetTrialCount();
-        setLeadStats(prev => ({
-          ...prev,
-          trialActivated: 0,
-        }));
-      }
+      // Fetch stats from API after a delay to ensure backend has processed the event
+      // Retry logic: try multiple times if count hasn't increased yet
+      const fetchWithRetry = async (retries = 3, delay = 2000) => {
+        for (let i = 0; i < retries; i++) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          
+          try {
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            if (!currentSession) return;
+            
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            if (!currentUser) return;
+            
+            // Get today's date range in ISO format for backend filtering
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Increment local count immediately
-      setLeadStats(prev => {
-        const newCount = (prev.trialActivated || 0) + 1;
-        // Persist to localStorage
-        try {
-          const today = getTodayDateString();
-          localStorage.setItem('leadProgressBar_trialActivated', newCount.toString());
-          localStorage.setItem('leadProgressBar_lastResetDate', today);
-        } catch (e) {
-          console.warn('[LeadProgressBar] Failed to persist trial count:', e);
+            const dateFrom = today.toISOString();
+            const dateTo = tomorrow.toISOString();
+
+            // Use backend filtering - much more efficient!
+            const fetchedCount = await crmLeadsApi.getTrialActivationCount(
+              currentUser.id,
+              dateFrom,
+              dateTo
+            );
+            
+            // Only update if fetched count is >= optimistic count (don't decrease)
+            if (fetchedCount >= optimisticCount) {
+              setLeadStats(prev => ({
+                ...prev,
+                trialActivated: fetchedCount,
+              }));
+              return; // Success, stop retrying
+            }
+            // If fetched count is less, continue retrying
+          } catch (error) {
+            console.error(`[LeadProgressBar] Retry ${i + 1}/${retries} error:`, error);
+          }
         }
-        return {
-          ...prev,
-          trialActivated: newCount,
-        };
-      });
-      // Optionally fetch fresh stats from API if configured (but don't wait for it)
-      if (config?.apiEndpoint || config?.statusDataApiEndpoint) {
-        setTimeout(() => fetchLeadStats(), 1000);
-      }
+        
+        // If all retries failed, keep the optimistic count (don't decrease)
+        console.warn('[LeadProgressBar] Could not confirm trial activation after retries, keeping optimistic count');
+      };
+      
+      fetchWithRetry();
     };
 
     window.addEventListener('trial-activated', handleTrialActivated as EventListener);
     return () => {
       window.removeEventListener('trial-activated', handleTrialActivated as EventListener);
     };
-  }, [config?.apiEndpoint, config?.statusDataApiEndpoint, fetchLeadStats]);
+  }, [leadStats.trialActivated]);
 
   if (loading) {
     return (
