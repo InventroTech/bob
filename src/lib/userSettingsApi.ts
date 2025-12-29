@@ -6,7 +6,9 @@ import {
   LeadTypeAssignment,
   LeadTypeAssignmentRequest,
   UserLeadTypes,
-  LeadTypeAssignmentResponse
+  LeadTypeAssignmentResponse,
+  RoutingRule,
+  RoutingRuleUpsertPayload,
 } from '../types/userSettings';
 
 const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
@@ -366,3 +368,72 @@ export const leadTypeAssignmentApi = {
     }
   },
 };
+
+// Routing rules API functions
+export const routingRulesApi = {
+  // Get all routing rules for the current tenant
+  async getAll(): Promise<RoutingRule[]> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+
+    const response = await fetch(`${API_BASE_URL}/user-settings/routing-rules/`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to fetch routing rules: ${response.status} - ${errorText}`);
+    }
+
+    return response.json();
+  },
+
+  // Create or update a routing rule for a user + queue_type
+  async upsert(payload: RoutingRuleUpsertPayload): Promise<RoutingRule> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+
+    const response = await fetch(`${API_BASE_URL}/user-settings/routing-rules/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to save routing rule: ${response.status} - ${errorText}`);
+    }
+
+    return response.json();
+  },
+
+  // Delete a routing rule by id
+  async delete(id: number): Promise<void> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+
+    const response = await fetch(`${API_BASE_URL}/user-settings/routing-rules/${id}/`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to delete routing rule: ${response.status} - ${errorText}`);
+    }
+  },
+};
+
