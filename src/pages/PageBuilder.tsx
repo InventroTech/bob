@@ -66,6 +66,7 @@ import {
   AddUserComponent,
   LeadAssignmentComponent,
 } from "@/components/page-builder";
+import RoutingRulesComponent from "@/components/page-builder/RoutingRulesComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -115,12 +116,62 @@ import {
   DynamicFilterConfig,
   TicketCarouselConfig,
   LeadCardCarouselConfig,
-  LeadAssignmentConfig
+  LeadAssignmentConfig,
+  RoutingRulesConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
+import type { RoutingRulesConfigData, RoutingFilterField } from "@/component-config";
+
+// Wrapper component to prevent unnecessary re-renders in RoutingRulesConfig
+interface RoutingRulesConfigWrapperProps {
+  filterFields: RoutingFilterField[];
+  title: string;
+  description: string;
+  onTitleChange: (title: string) => void;
+  onDescriptionChange: (description: string) => void;
+  onFilterFieldsChange: (fields: RoutingFilterField[]) => void;
+}
+
+const RoutingRulesConfigWrapper = React.memo<RoutingRulesConfigWrapperProps>(({
+  filterFields,
+  title,
+  description,
+  onTitleChange,
+  onDescriptionChange,
+  onFilterFieldsChange,
+}) => {
+  // Memoize the config object
+  const localConfig = useMemo<RoutingRulesConfigData>(() => ({
+    filterFields,
+    title,
+    description,
+  }), [filterFields, title, description]);
+
+  // Memoize the onConfigChange callback
+  const handleConfigChange = useCallback((newConfig: Partial<RoutingRulesConfigData>) => {
+    if (newConfig.title !== undefined) {
+      onTitleChange(newConfig.title);
+    }
+    if (newConfig.description !== undefined) {
+      onDescriptionChange(newConfig.description);
+    }
+    if (newConfig.filterFields !== undefined) {
+      onFilterFieldsChange(newConfig.filterFields);
+    }
+  }, [onTitleChange, onDescriptionChange, onFilterFieldsChange]);
+
+  return (
+    <RoutingRulesConfig
+      localConfig={localConfig}
+      onConfigChange={handleConfigChange}
+    />
+  );
+});
+
+RoutingRulesConfigWrapper.displayName = 'RoutingRulesConfigWrapper';
 
 interface ComponentConfig {
   apiEndpoint?: string;
@@ -223,6 +274,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   applicantTable: ApplicantTableComponent,
   fileUpload: FileUploadPageComponent,
   dynamicScoring: DynamicScoringComponent,
+  routingRules: RoutingRulesComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -326,6 +378,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     apiMode: (initialConfig.apiMode === 'direct' ? 'localhost' : initialConfig.apiMode) || 'localhost',
     useDemoData: initialConfig.useDemoData ?? false,
   });
+
+  // Separate state for routing rules filter fields to prevent re-renders
+  const [localFilterFields, setLocalFilterFields] = useState<any[]>(
+    initialConfig.filterFields || []
+  );
 
   // Separate state for columns
   const [localColumns, setLocalColumns] = useState<ColumnConfig[]>(initialColumns);
@@ -690,6 +747,21 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'routingRules':
+        return (
+          <RoutingRulesConfigWrapper
+            filterFields={localFilterFields}
+            title={localConfig.title || ''}
+            description={localConfig.description || ''}
+            onTitleChange={(title) => handleInputChange('title', title)}
+            onDescriptionChange={(description) => handleInputChange('description', description)}
+            onFilterFieldsChange={(fields) => {
+              setLocalFilterFields(fields);
+              debouncedUpdateWithDelay({ filterFields: fields } as any);
+            }}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -739,7 +811,7 @@ const PageBuilder = () => {
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
 
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1199,6 +1271,11 @@ const PageBuilder = () => {
                           id="addUser"
                           label="Add User"
                           icon={<User className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="routingRules"
+                          label="Routing Rules"
+                          icon={<Users className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
                           id="openModalButton"

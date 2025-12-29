@@ -63,3 +63,28 @@ export interface LeadTypeAssignmentResponse {
   lead_types: string[];
   created: boolean;
 }
+
+// Routing rules types
+export type QueueType = 'ticket' | 'lead';
+
+export interface RoutingRule {
+  id: number;
+  tenant: string;
+  user_id: string;
+  queue_type: QueueType;
+  is_active: boolean;
+  conditions: any;
+  name?: string | null;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutingRuleUpsertPayload {
+  user_id: string;
+  queue_type: QueueType;
+  is_active?: boolean;
+  conditions?: any;
+  name?: string;
+  description?: string;
+}

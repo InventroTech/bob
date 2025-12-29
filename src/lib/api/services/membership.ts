@@ -19,14 +19,17 @@ export interface GetRolesResponse {
 export interface MembershipUser {
   id?: string;
   uid?: string;
+  user_id?: string; // Primary user identifier from API
   name?: string;
   full_name?: string;
   email?: string;
   created_at?: string;
   date_joined?: string;
   role_id?: string;
+  is_active?: boolean;
   role?: {
     id?: string;
+    key?: string;
     name?: string;
   };
   role_name?: string;
@@ -116,17 +119,20 @@ export const membershipService = {
       }
       
       // Transform the data to match the User interface
+      // user_id is the primary identifier (Supabase UUID), fallback to id or uid
       const transformedUsers: User[] = usersData.map((user: MembershipUser, index: number) => ({
-        id: user.id || user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
+        id: user.user_id || user.id || user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
         name: user.name || user.full_name || 'Unnamed User',
         email: user.email || 'No Email',
         role_id: user.role_id || user.role?.id || '',
         created_at: user.created_at || user.date_joined || new Date().toISOString(),
         role: user.role?.name 
           ? { name: user.role.name }
-          : user.role_name 
-            ? { name: user.role_name }
-            : null
+          : user.role?.key
+            ? { name: user.role.key }
+            : user.role_name 
+              ? { name: user.role_name }
+              : null
       }));
       
       // Sort by created_at descending (newest first)
