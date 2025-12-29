@@ -6,7 +6,9 @@ import {
   LeadTypeAssignment,
   LeadTypeAssignmentRequest,
   UserLeadTypes,
-  LeadTypeAssignmentResponse
+  LeadTypeAssignmentResponse,
+  RoutingRule,
+  RoutingRuleUpsertPayload,
 } from '../types/userSettings';
 
 const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, ''); // Remove trailing slashes
@@ -183,7 +185,8 @@ export const leadTypeAssignmentApi = {
       console.log('RM users found from API:', rmUsers.length);
 
       // Get existing lead type assignments from backend API (regardless of users response)
-      const assignmentsMap = new Map();
+      // Map by user_id (UUID) -> assignment payload (lead_types + daily_target + daily_limit)
+      const assignmentsMap = new Map<string, { lead_types: string[]; daily_target?: number; daily_limit?: number }>();
       try {
         const baseUrlClean = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
         const assignmentsUrl = `${baseUrlClean}/user-settings/lead-type-assignments/`;
@@ -198,10 +201,14 @@ export const leadTypeAssignmentApi = {
 
         if (assignmentsResponse.ok) {
           const assignmentsData = await assignmentsResponse.json();
-          // The endpoint returns an array of assignments with user_id and lead_types
+          // The endpoint returns an array of assignments with user_id and lead_types (+ daily_target, daily_limit)
           if (Array.isArray(assignmentsData)) {
             assignmentsData.forEach((assignment: any) => {
-              assignmentsMap.set(assignment.user_id, assignment.lead_types || []);
+              assignmentsMap.set(String(assignment.user_id), {
+                lead_types: assignment.lead_types || [],
+                daily_target: assignment.daily_target,
+                daily_limit: assignment.daily_limit
+              });
             });
           }
         } else {
@@ -214,11 +221,15 @@ export const leadTypeAssignmentApi = {
 
       // Transform to LeadTypeAssignment format
       const assignments: LeadTypeAssignment[] = rmUsers.map((user: any) => {
+        const userUid = user.uid ? String(user.uid) : '';
+        const assignmentRecord = userUid ? assignmentsMap.get(userUid) : undefined;
         return {
           user_id: user.id, // Keep using the integer ID for the component
           user_name: user.name || 'Unknown',
           user_email: user.email,
-          lead_types: user.uid ? assignmentsMap.get(user.uid) || [] : []
+          lead_types: assignmentRecord?.lead_types || [],
+          daily_target: assignmentRecord?.daily_target,
+          daily_limit: assignmentRecord?.daily_limit
         };
       });
 
@@ -250,7 +261,8 @@ export const leadTypeAssignmentApi = {
         body: JSON.stringify({
           user_id: data.user_id,
           lead_types: data.lead_types,
-          daily_target: data.daily_target // Include daily target if provided
+          daily_target: data.daily_target, // Include daily target if provided
+          daily_limit: data.daily_limit // Include daily limit if provided
         })
       });
 
@@ -356,3 +368,72 @@ export const leadTypeAssignmentApi = {
     }
   },
 };
+
+// Routing rules API functions
+export const routingRulesApi = {
+  // Get all routing rules for the current tenant
+  async getAll(): Promise<RoutingRule[]> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+
+    const response = await fetch(`${API_BASE_URL}/user-settings/routing-rules/`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to fetch routing rules: ${response.status} - ${errorText}`);
+    }
+
+    return response.json();
+  },
+
+  // Create or update a routing rule for a user + queue_type
+  async upsert(payload: RoutingRuleUpsertPayload): Promise<RoutingRule> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+
+    const response = await fetch(`${API_BASE_URL}/user-settings/routing-rules/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to save routing rule: ${response.status} - ${errorText}`);
+    }
+
+    return response.json();
+  },
+
+  // Delete a routing rule by id
+  async delete(id: number): Promise<void> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const authToken = sessionData?.session?.access_token;
+
+    const response = await fetch(`${API_BASE_URL}/user-settings/routing-rules/${id}/`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authToken ? `Bearer ${authToken}` : '',
+        'X-Tenant-Slug': 'bibhab-thepyro-ai',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to delete routing rule: ${response.status} - ${errorText}`);
+    }
+  },
+};
+
