@@ -644,7 +644,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                     <TableHead className="w-[250px]">RM Name & Email</TableHead>
                     <TableHead className="w-[300px]">Lead Types</TableHead>
                     <TableHead className="w-[250px]">Currently Assigned</TableHead>
-                    <TableHead className="w-[150px]">Leads Count</TableHead>
+                    <TableHead className="w-[150px]">Daily Target</TableHead>
                     <TableHead className="w-[150px]">Daily Limit</TableHead>
                     <TableHead className="w-[200px]">Actions</TableHead>
                   </TableRow>
