@@ -11,6 +11,7 @@ interface LeadProgressBarConfigProps {
     targetCount?: number;
     segmentCount?: number;
     refreshInterval?: number;
+    progressBarColor?: string;
   };
   onConfigChange: (config: {
     apiEndpoint?: string;
@@ -19,6 +20,7 @@ interface LeadProgressBarConfigProps {
     targetCount?: number;
     segmentCount?: number;
     refreshInterval?: number;
+    progressBarColor?: string;
   }) => void;
 }
 
@@ -33,6 +35,7 @@ export const LeadProgressBarConfig: React.FC<LeadProgressBarConfigProps> = ({
     targetCount: config.targetCount || 10,
     segmentCount: config.segmentCount || 8,
     refreshInterval: config.refreshInterval || 5000,
+    progressBarColor: config.progressBarColor || '#1f2937', // Default gray-800
   });
 
   useEffect(() => {
@@ -132,6 +135,64 @@ export const LeadProgressBarConfig: React.FC<LeadProgressBarConfigProps> = ({
           />
           <p className="text-xs text-gray-500">
             How often to refresh the progress (in milliseconds). Default: 5000ms (5 seconds)
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="progressBarColor">Progress Bar Color</Label>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Input
+                id="progressBarColor"
+                type="color"
+                value={localConfig.progressBarColor}
+                onChange={(e) => handleChange('progressBarColor', e.target.value)}
+                className="w-16 h-10 cursor-pointer"
+              />
+              <Input
+                type="text"
+                value={localConfig.progressBarColor}
+                onChange={(e) => handleChange('progressBarColor', e.target.value)}
+                placeholder="#1f2937"
+                className="flex-1"
+              />
+            </div>
+            <div className="grid grid-cols-8 gap-2">
+              {[
+                '#1f2937', // gray-800
+                '#3b82f6', // blue-500
+                '#10b981', // green-500
+                '#f59e0b', // amber-500
+                '#ef4444', // red-500
+                '#8b5cf6', // violet-500
+                '#ec4899', // pink-500
+                '#06b6d4', // cyan-500
+                '#6366f1', // indigo-500
+                '#14b8a6', // teal-500
+                '#f97316', // orange-500
+                '#84cc16', // lime-500
+                '#eab308', // yellow-500
+                '#22c55e', // emerald-500
+                '#0ea5e9', // sky-500
+                '#a855f7', // purple-500
+              ].map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => handleChange('progressBarColor', color)}
+                  className={`w-8 h-8 rounded border-2 transition-all ${
+                    localConfig.progressBarColor === color
+                      ? 'border-gray-900 scale-110 shadow-md'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            Choose a color for the progress bar. You can use the color picker or select from the palette.
           </p>
         </div>
       </CardContent>
