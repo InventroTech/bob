@@ -271,7 +271,9 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
               className="h-full transition-all duration-300 rounded-full"
               style={{ 
                 width: `${progress}%`,
-                backgroundColor: config?.progressBarColor || '#1f2937'
+                backgroundColor: (config?.progressBarColor !== undefined && config?.progressBarColor !== null && config?.progressBarColor !== '') 
+                  ? config.progressBarColor 
+                  : '#000000' // Default to black if not set in config
               }}
             />
           </div>
