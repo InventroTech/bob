@@ -16,6 +16,7 @@ interface LeadProgressBarProps {
     targetCount?: number;
     segmentCount?: number;
     refreshInterval?: number;
+    progressBarColor?: string;
   };
 }
 
@@ -267,8 +268,13 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
           {/* Progress Bar */}
           <div className="w-48 h-2.5 bg-gray-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gray-800 transition-all duration-300 rounded-full"
-              style={{ width: `${progress}%` }}
+              className="h-full transition-all duration-300 rounded-full"
+              style={{ 
+                width: `${progress}%`,
+                backgroundColor: (config?.progressBarColor !== undefined && config?.progressBarColor !== null && config?.progressBarColor !== '') 
+                  ? config.progressBarColor 
+                  : '#000000' // Default to black if not set in config
+              }}
             />
           </div>
         </div>
