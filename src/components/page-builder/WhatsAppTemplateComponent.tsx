@@ -4,8 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase } from '@/lib/supabase';
-import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Loader2, MessageSquare, Edit, Trash2 } from 'lucide-react';
 import {
@@ -18,12 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
-interface Template {
-  id: number;
-  title: string;
-  description: string;
-}
+import { whatsappTemplateService, type WhatsAppTemplate } from '@/lib/api/services/whatsappTemplate';
 
 interface WhatsAppTemplateComponentProps {
   config?: {
@@ -35,76 +28,23 @@ interface WhatsAppTemplateComponentProps {
 export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps> = ({ 
   config = {} 
 }) => {
-  const { tenantId } = useTenant();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Use configured endpoint if provided, otherwise use default
-  // Same pattern as other components (LeadTableComponent, TicketTableComponent, etc.)
   const apiEndpoint = config?.apiEndpoint || '/api/whatsapp-templates';
   const componentTitle = config?.title || 'WhatsApp Template';
 
-  // Helper function to construct full URL
-  const getFullUrl = (endpoint: string) => {
-    if (endpoint.startsWith('http')) {
-      return endpoint;
-    }
-    // Normalize endpoint: ensure it starts with / if it's a relative path
-    // Remove trailing slash if present (except for root)
-    let normalizedEndpoint = endpoint.trim();
-    if (!normalizedEndpoint.startsWith('/')) {
-      normalizedEndpoint = `/${normalizedEndpoint}`;
-    }
-    // Remove trailing slash unless it's just "/"
-    if (normalizedEndpoint.length > 1 && normalizedEndpoint.endsWith('/')) {
-      normalizedEndpoint = normalizedEndpoint.slice(0, -1);
-    }
-    const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL;
-    return baseUrl ? `${baseUrl}${normalizedEndpoint}` : normalizedEndpoint;
-  };
-
-  // Helper function to get headers
-  const getHeaders = async () => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-
-    if (tenantId) {
-      headers['X-Tenant-Slug'] = tenantId;
-    }
-
-    return headers;
-  };
-
-  // Fetch templates
+  // Fetch templates using centralized service
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const url = getFullUrl(apiEndpoint);
-      const headers = await getHeaders();
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch templates: ${response.status}`);
-      }
-
-      const data = await response.json();
-      // Handle both array and object with results property
-      const templatesList = Array.isArray(data) ? data : (data.results || data.templates || []);
+      const templatesList = await whatsappTemplateService.getAll(apiEndpoint);
       setTemplates(templatesList);
     } catch (error: any) {
       console.error('Error fetching templates:', error);
@@ -114,13 +54,13 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
     }
   };
 
-  // Fetch templates on mount
+  // Fetch templates on mount and when endpoint changes
   useEffect(() => {
     fetchTemplates();
-  }, [apiEndpoint, tenantId]);
+  }, [apiEndpoint]);
 
   // Handle edit - populate form with template data
-  const handleEdit = (template: Template) => {
+  const handleEdit = (template: WhatsAppTemplate) => {
     setTitle(template.title);
     setDescription(template.description);
     setEditingId(template.id);
@@ -133,7 +73,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
     setEditingId(null);
   };
 
-  // Handle submit (create or update)
+  // Handle submit (create or update) using centralized service
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -150,43 +90,20 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
     setIsSubmitting(true);
 
     try {
-      const headers = await getHeaders();
-      const requestBody = {
+      const payload = {
         title: title.trim(),
         description: description.trim(),
       };
 
-      let url: string;
-      let method: string;
-
       if (editingId) {
-        // Update existing template - append /id/ to endpoint
-        // Ensure endpoint ends without slash, then add /id/
-        const baseEndpoint = apiEndpoint.endsWith('/') ? apiEndpoint.slice(0, -1) : apiEndpoint;
-        const fullUrl = getFullUrl(`${baseEndpoint}/${editingId}`);
-        url = fullUrl.endsWith('/') ? fullUrl : `${fullUrl}/`;
-        method = 'PUT';
+        // Update existing template using centralized service
+        await whatsappTemplateService.update(editingId, payload, apiEndpoint);
+        toast.success('WhatsApp template updated successfully!');
       } else {
-        // Create new template - ensure endpoint ends with / for POST
-        const fullUrl = getFullUrl(apiEndpoint);
-        url = fullUrl.endsWith('/') ? fullUrl : `${fullUrl}/`;
-        method = 'POST';
+        // Create new template using centralized service
+        await whatsappTemplateService.create(payload, apiEndpoint);
+        toast.success('WhatsApp template created successfully!');
       }
-
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`Failed to ${editingId ? 'update' : 'create'} template: ${response.status} - ${errorText}`);
-      }
-
-      await response.json();
-
-      toast.success(`WhatsApp template ${editingId ? 'updated' : 'created'} successfully!`);
       
       // Reset form and refresh templates
       setTitle('');
@@ -201,27 +118,12 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
     }
   };
 
-  // Handle delete
+  // Handle delete using centralized service
   const handleDelete = async () => {
     if (!deleteId) return;
 
     try {
-      // Ensure endpoint ends without slash, then add /id/
-      const baseEndpoint = apiEndpoint.endsWith('/') ? apiEndpoint.slice(0, -1) : apiEndpoint;
-      const fullUrl = getFullUrl(`${baseEndpoint}/${deleteId}`);
-      const url = fullUrl.endsWith('/') ? fullUrl : `${fullUrl}/`;
-      const headers = await getHeaders();
-
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`Failed to delete template: ${response.status} - ${errorText}`);
-      }
-
+      await whatsappTemplateService.delete(deleteId, apiEndpoint);
       toast.success('WhatsApp template deleted successfully!');
       
       // Refresh templates
@@ -234,13 +136,13 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
   };
 
   return (
-    <Card className="w-full shadow-sm">
-      <CardHeader className="pb-4">
+    <Card className="w-full shadow-sm bg-white border border-gray-300">
+      <CardHeader className="pb-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          <CardTitle className="text-xl">{componentTitle}</CardTitle>
+          <MessageSquare className="h-5 w-5 text-black" />
+          <CardTitle className="text-xl text-black">{componentTitle}</CardTitle>
         </div>
-        <CardDescription className="text-sm mt-1">
+        <CardDescription className="text-sm mt-1 text-gray-600">
           Create and manage WhatsApp message templates
         </CardDescription>
       </CardHeader>
@@ -248,18 +150,18 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
         {/* Create/Edit Form */}
         <div className={`rounded-lg border-2 p-5 transition-all ${
           editingId 
-            ? 'border-primary bg-primary/5' 
-            : 'border-border bg-muted/30'
+            ? 'border-black bg-gray-50' 
+            : 'border-gray-300 bg-white'
         }`}>
           {editingId && (
-            <div className="mb-4 flex items-center gap-2 text-sm text-primary">
+            <div className="mb-4 flex items-center gap-2 text-sm text-black">
               <Edit className="h-4 w-4" />
               <span className="font-medium">Editing template</span>
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="template-title" className="text-sm font-medium">
+              <Label htmlFor="template-title" className="text-sm font-medium text-black">
                 Template Title
               </Label>
               <Input
@@ -270,12 +172,12 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                 placeholder="e.g., Welcome Message"
                 required
                 disabled={isSubmitting}
-                className="h-10"
+                className="h-10 border-gray-300 text-black bg-white"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="template-description" className="text-sm font-medium">
+              <Label htmlFor="template-description" className="text-sm font-medium text-black">
                 Message Content
               </Label>
               <Textarea
@@ -286,7 +188,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                 rows={4}
                 required
                 disabled={isSubmitting}
-                className="resize-none"
+                className="resize-none border-gray-300 text-black bg-white"
               />
             </div>
 
@@ -294,7 +196,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
               <Button 
                 type="submit" 
                 disabled={isSubmitting}
-                className="flex-1"
+                className="flex-1 bg-black text-white hover:bg-gray-800 disabled:bg-gray-400"
                 size="lg"
               >
                 {isSubmitting ? (
@@ -325,6 +227,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                   onClick={handleCancelEdit}
                   disabled={isSubmitting}
                   size="lg"
+                  className="border-gray-300 text-black hover:bg-gray-100"
                 >
                   Cancel
                 </Button>
@@ -336,11 +239,11 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
         {/* Templates List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-muted-foreground" />
+            <h3 className="text-lg font-semibold flex items-center gap-2 text-black">
+              <MessageSquare className="h-5 w-5 text-gray-600" />
               Saved Templates
               {templates.length > 0 && (
-                <span className="text-sm font-normal text-muted-foreground">
+                <span className="text-sm font-normal text-gray-600">
                   ({templates.length})
                 </span>
               )}
@@ -349,15 +252,15 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
           
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <Loader2 className="h-6 w-6 animate-spin text-black" />
             </div>
           ) : templates.length === 0 ? (
-            <div className="rounded-lg border-2 border-dashed border-muted-foreground/25 p-12 text-center">
-              <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-              <p className="text-sm font-medium text-muted-foreground mb-1">
+            <div className="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center bg-gray-50">
+              <MessageSquare className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+              <p className="text-sm font-medium text-gray-700 mb-1">
                 No templates yet
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-gray-600">
                 Create your first WhatsApp template above
               </p>
             </div>
@@ -366,15 +269,15 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
               {templates.map((template) => (
                 <Card 
                   key={template.id} 
-                  className="border transition-all hover:shadow-md hover:border-primary/20 group"
+                  className="border border-gray-300 transition-all hover:shadow-md hover:border-black bg-white group"
                 >
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-base mb-2 text-foreground">
+                        <h4 className="font-semibold text-base mb-2 text-black">
                           {template.title}
                         </h4>
-                        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                           {template.description}
                         </p>
                       </div>
@@ -384,7 +287,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                           size="sm"
                           onClick={() => handleEdit(template)}
                           disabled={isSubmitting || (editingId !== null && editingId !== template.id)}
-                          className="h-9 px-3"
+                          className="h-9 px-3 border-gray-300 text-black hover:bg-gray-100"
                         >
                           <Edit className="h-4 w-4 mr-1.5" />
                           Edit
@@ -394,7 +297,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                           size="sm"
                           onClick={() => setDeleteId(template.id)}
                           disabled={isSubmitting || editingId !== null}
-                          className="h-9 w-9 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20"
+                          className="h-9 w-9 p-0 text-black hover:text-white hover:bg-black border-gray-300"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -410,18 +313,20 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-white border border-gray-300">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Template</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-black">Delete Template</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-700">
               Are you sure you want to delete this template? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="border-gray-300 text-black hover:bg-gray-100">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-black text-white hover:bg-gray-800"
             >
               Delete
             </AlertDialogAction>
