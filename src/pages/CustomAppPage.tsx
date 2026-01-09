@@ -21,6 +21,9 @@ const CustomAppPage: React.FC = () => {
     const tenantId = localStorage.getItem('tenant_id');
     if (!tenantId || !pageId) return;
     
+    // Track if component is still mounted
+    let isMounted = true;
+    
     // Check cache first
     const cacheKey = `${tenantId}-${pageId}`;
     const cached = pageCache.get(cacheKey);
@@ -28,8 +31,10 @@ const CustomAppPage: React.FC = () => {
     
     if (cached && (now - cached.timestamp) < PAGE_CACHE_TTL) {
       console.log('Using cached page data for:', pageId);
-      setPage(cached.data);
-      setLoading(false);
+      if (isMounted) {
+        setPage(cached.data);
+        setLoading(false);
+      }
       return;
     }
     
@@ -39,32 +44,57 @@ const CustomAppPage: React.FC = () => {
     }
     
     fetchingRef.current = pageId;
-    setLoading(true);
+    if (isMounted) {
+      setLoading(true);
+      setError(null);
+    }
     
-    supabase
+    const fetchPromise = supabase
       .from('pages')
       .select('name, config')
       .eq('id', pageId)
       .eq('tenant_id', tenantId)
-      .single()
-      .then(({ data, error }) => {
+      .single();
+    
+    fetchPromise.then(({ data, error }) => {
+      fetchingRef.current = null;
+      
+      // Only update state if component is still mounted
+      if (!isMounted) return;
+      
+      if (error) {
+        setError(error.message);
+        toast.error('Failed to load page');
+      } else if (data) {
+        const pageData = { name: data.name, config: data.config };
+        setPage(pageData);
+        // Cache the result
+        pageCache.set(cacheKey, { data: pageData, timestamp: now });
+      }
+      setLoading(false);
+    }).catch((err) => {
+      fetchingRef.current = null;
+      
+      // Only update state if component is still mounted and it's not an abort error
+      if (!isMounted) return;
+      
+      // Don't show error for aborted requests
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        return;
+      }
+      
+      setError(err.message);
+      setLoading(false);
+    });
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      // Abort the Supabase query if possible
+      if (fetchingRef.current === pageId) {
         fetchingRef.current = null;
-        
-        if (error) {
-          setError(error.message);
-          toast.error('Failed to load page');
-        } else if (data) {
-          const pageData = { name: data.name, config: data.config };
-          setPage(pageData);
-          // Cache the result
-          pageCache.set(cacheKey, { data: pageData, timestamp: now });
-        }
-        setLoading(false);
-      }, (err) => {
-        fetchingRef.current = null;
-        setError(err.message);
-        setLoading(false);
-      });
+      }
+    };
   }, [pageId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;
