@@ -20,6 +20,14 @@ const IGNORED_ERRORS = [
   "NetworkError",
   "Network request failed",
   "Failed to fetch",
+  // Abort errors (expected when components unmount or requests are cancelled)
+  "AbortError",
+  "signal is aborted",
+  "signal is aborted without reason",
+  "Request was cancelled",
+  "canceled",
+  "ERR_CANCELED",
+  "CanceledError",
   // ResizeObserver errors (common browser quirk, not actionable)
   "ResizeObserver loop limit exceeded",
   "ResizeObserver loop completed with undelivered notifications",
@@ -50,8 +58,30 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
   // Filter ignored errors
   if (event.exception) {
     const errorMessage = event.exception.values?.[0]?.value || '';
+    const errorType = event.exception.values?.[0]?.type || '';
+    
+    // Check error message
     if (IGNORED_ERRORS.some(ignored => errorMessage.includes(ignored))) {
       return null; // Drop the event
+    }
+    
+    // Check error type (AbortError, CanceledError, etc.)
+    if (errorType.includes('Abort') || errorType.includes('Cancel')) {
+      return null; // Drop the event
+    }
+    
+    // Check for abort-related error codes
+    if (hint.originalException && typeof hint.originalException === 'object') {
+      const originalError = hint.originalException as any;
+      if (
+        originalError.code === 'ERR_CANCELED' || 
+        originalError.name === 'AbortError' || 
+        originalError.name === 'CanceledError' ||
+        originalError.message?.includes('aborted') ||
+        originalError.message?.includes('canceled')
+      ) {
+        return null; // Drop the event
+      }
     }
   }
 
@@ -157,7 +187,15 @@ export function initSentry(config: SentryConfig): void {
     beforeSend: sanitizeEvent,
     
     // Error filtering
-    ignoreErrors: [...IGNORED_ERRORS],
+    ignoreErrors: [
+      ...IGNORED_ERRORS,
+      // AbortError patterns
+      /^AbortError/i,
+      /signal is aborted/i,
+      /ERR_CANCELED/i,
+      /CanceledError/i,
+      /Request was cancelled/i,
+    ],
     denyUrls: [...DENIED_URLS],
     
     // Additional options
