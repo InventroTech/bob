@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { userSettingsApi } from '@/lib/userSettingsApi';
 import { crmLeadsApi } from '@/lib/crmLeadsApi';
+import { TrophyIcon } from '@/components/icons/CustomIcons';
 
 interface LeadProgressBarProps {
   config?: {
@@ -59,6 +60,21 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     Math.ceil((trialActivated / targetCount) * segmentCount),
     segmentCount
   );
+
+  // Determine the state: below, achieved, or overdone
+  const isAchieved = trialActivated >= targetCount;
+  const isOverdone = trialActivated > targetCount;
+  const isBelow = trialActivated < targetCount;
+  
+  // Calculate progress for display (can exceed 100% for overdone case)
+  const displayProgress = (trialActivated / targetCount) * 100;
+  
+  // Get progress bar color - use green for all states, config color override for below if provided
+  const progressBarColor = isAchieved 
+    ? '#16a34a' // Dark green for achieved/overdone
+    : (config?.progressBarColor !== undefined && config?.progressBarColor !== null && config?.progressBarColor !== '') 
+      ? config.progressBarColor 
+      : '#16a34a'; // Default to green for below limit
 
 
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
@@ -251,31 +267,64 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
           <h2 className="text-base font-bold text-gray-900">
             {config?.title || "Target Progress"}
           </h2>
-          <p className="text-base text-gray-600 font-normal">
-            {remainingTrials} trial subscriptions remaining for today.
-          </p>
+          {isBelow ? (
+            <p className="text-base text-gray-600 font-normal">
+              {remainingTrials} trial subscriptions remaining for today.
+            </p>
+          ) : (
+            <p className="text-base text-gray-900 font-normal">
+              Hurray! You achieved your target (<span className="font-bold">{targetCount}</span>). Trying for more will give you additional incentives.
+            </p>
+          )}
         </div>
 
         {/* Right Section: Progress Count Bubble and Progress Bar */}
         <div className="flex flex-col gap-2 items-end">
           {/* Progress Count Bubble */}
-          <div className="bg-gray-200 rounded-lg px-3 py-1.5">
-            <span className="text-sm font-medium text-gray-900">
-              {trialActivated}/{targetCount} Trail subscriptions
-            </span>
-          </div>
+          {isBelow ? (
+            <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
+              <span className="text-sm font-medium text-green-800">
+                {trialActivated}/{targetCount} Trial subscriptions
+              </span>
+            </div>
+          ) : isAchieved && !isOverdone ? (
+            <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
+              <span className="text-sm font-medium text-green-800">
+                {targetCount}/{targetCount} Target Achieved
+              </span>
+            </div>
+          ) : (
+            <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
+              <span className="text-sm font-medium text-green-800">
+                {trialActivated - targetCount} More Than Daily Target
+              </span>
+            </div>
+          )}
           
           {/* Progress Bar */}
-          <div className="w-48 h-2.5 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full transition-all duration-300 rounded-full"
-              style={{ 
-                width: `${progress}%`,
-                backgroundColor: (config?.progressBarColor !== undefined && config?.progressBarColor !== null && config?.progressBarColor !== '') 
-                  ? config.progressBarColor 
-                  : '#000000' // Default to black if not set in config
-              }}
-            />
+          <div className="w-48 relative overflow-visible py-2">
+            <div className="h-2.5 bg-gray-200 rounded-full relative">
+              {/* Progress fill - shows actual progress, capped at 100% visually */}
+              <div
+                className="h-full transition-all duration-300 rounded-full"
+                style={{ 
+                  width: `${Math.min(displayProgress, 100)}%`,
+                  backgroundColor: progressBarColor
+                }}
+              />
+              {/* Trophy icon - at 100% when just achieved, fixed under "e" when overdone */}
+              {isAchieved && (
+                <div
+                  className="absolute top-1/2 z-20"
+                  style={{
+                    left: isOverdone ? '85%' : '100%', // Fixed under "e" for overflow, at end for just achieved
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                >
+                  <TrophyIcon className="h-6 w-6 drop-shadow-sm" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
