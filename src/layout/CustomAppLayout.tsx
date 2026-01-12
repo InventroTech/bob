@@ -171,7 +171,7 @@ const CustomAppLayout: React.FC = () => {
             </button>
           )}
 
-            <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center px-0' : 'px-4'} pt-6 pb-4`}>
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-start px-4'} pt-6 pb-4 w-full`}>
             {sidebarCollapsed ? (
               <button
                 onClick={() => setSidebarCollapsed(false)}
@@ -181,15 +181,9 @@ const CustomAppLayout: React.FC = () => {
                 <Menu className="h-5 w-5 text-gray-700" />
               </button>
             ) : (
-              <>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-                  <img src="/fire-logo.png" alt="Pyro" className="h-8 w-8" />
-                </div>
-                <div>
-                  <p className="text-base font-semibold text-gray-900">Pyro</p>
-                  <p className="text-xs text-gray-500">Lead Workspace</p>
-                </div>
-              </>
+              <div className="flex items-center justify-start w-full">
+                <img src="/fire-logo.png" alt="Pyro" className="h-auto w-auto max-h-12 object-contain" />
+              </div>
             )}
           </div>
 
@@ -199,16 +193,16 @@ const CustomAppLayout: React.FC = () => {
                 key={page.id}
                 to={`/app/${tenantSlug}/pages/${page.id}`}
                 className={({ isActive }) =>
-                  `flex items-center rounded-xl border ${sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'} text-sm font-medium transition ${
+                  `flex items-center rounded-xl ${sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'} text-sm font-medium transition ${
                     isActive
-                      ? 'border-[#1D2939] bg-[#EFF4FF] text-[#1D2939] shadow-sm'
-                      : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50'
+                      ? 'bg-[#F2F4F5] text-gray-900'
+                      : 'text-gray-600 hover:bg-gray-50'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-[#EFF4FF] text-[#1D2939]' : 'bg-gray-100 text-gray-500'}`}>
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-gray-900' : 'bg-transparent text-gray-500'}`}>
                       {
                         navigationIconMap[
                           page.name?.toLowerCase().replace(/[\s_-]+/g, " ").trim()
