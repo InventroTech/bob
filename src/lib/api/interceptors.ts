@@ -60,8 +60,18 @@ export const setupResponseInterceptor = (instance: any) => {
       return response;
     },
     (error: AxiosError) => {
+      // Handle aborted/cancelled requests silently
+      if (error.code === 'ERR_CANCELED' || error.message?.includes('canceled') || error.message?.includes('aborted')) {
+        // Return a special error that can be checked but won't trigger error handlers
+        return Promise.reject(new Error('Request was cancelled'));
+      }
+      
       // Handle network errors
       if (!error.response) {
+        // Check if it's an abort error
+        if (error.message?.includes('aborted') || error.name === 'AbortError') {
+          return Promise.reject(new Error('Request was cancelled'));
+        }
         return Promise.reject(new NetworkError(error.message || 'Network error occurred'));
       }
 

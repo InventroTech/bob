@@ -32,6 +32,7 @@ import {
   Users,
   Upload,
   Calculator,
+  MessageSquare,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -121,6 +122,8 @@ import {
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
+import { WhatsAppTemplateComponent } from "@/components/page-builder/WhatsAppTemplateComponent";
+import { WhatsAppTemplateConfig } from "@/components/page-builder/component-config/WhatsAppTemplateConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 import type { RoutingRulesConfigData, RoutingFilterField } from "@/component-config";
@@ -275,6 +278,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   fileUpload: FileUploadPageComponent,
   dynamicScoring: DynamicScoringComponent,
   routingRules: RoutingRulesComponent,
+  whatsappTemplate: WhatsAppTemplateComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -330,6 +334,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar specific fields
     targetCount?: number;
     segmentCount?: number;
+    // WhatsAppTemplate specific fields
+    // (apiEndpoint and title are already in the base type)
     //job manager specific fields
     updateEndpoint?: string; // Separate endpoint for updates (PUT)
     deleteEndpoint?: string; // Separate endpoint for deletes (DELETE)
@@ -762,6 +768,16 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'whatsappTemplate':
+        return (
+          <WhatsAppTemplateConfig
+            localConfig={localConfig as any}
+            handleInputChange={(field: string, value: string | number | boolean) => {
+              handleInputChange(field as keyof LocalConfigType, value);
+            }}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -811,7 +827,7 @@ const PageBuilder = () => {
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
 
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1306,6 +1322,11 @@ const PageBuilder = () => {
                           id="dynamicScoring"
                           label="Dynamic Scoring"
                           icon={<Calculator className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="whatsappTemplate"
+                          label="WhatsApp Template"
+                          icon={<MessageSquare className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
