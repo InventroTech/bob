@@ -43,7 +43,7 @@ const ProfileSettings = () => {
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <h3>Settings</h3>
           <p className="text-muted-foreground mt-1">
             Manage your account preferences and settings
           </p>
@@ -99,11 +99,11 @@ const ProfileSettings = () => {
                     </Button>
                   </div>
                   <div className="space-y-1 text-center sm:text-left">
-                    <h3 className="font-medium text-lg">Jane Doe</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <h3>Jane Doe</h3>
+                    <p className="text-body-sm text-muted">
                       Product Manager
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-body-sm text-muted">
                       Member since April 2025
                     </p>
                   </div>
@@ -187,12 +187,12 @@ const ProfileSettings = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Email Notifications</h3>
+                  <h3>Email Notifications</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label className="cursor-pointer">Task Updates</Label>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-body-sm text-muted">
                           Receive updates when tasks are created or modified
                         </p>
                       </div>
@@ -202,7 +202,7 @@ const ProfileSettings = () => {
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label className="cursor-pointer">Lead Activity</Label>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-body-sm text-muted">
                           Notifications about lead status changes
                         </p>
                       </div>
@@ -212,7 +212,7 @@ const ProfileSettings = () => {
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label className="cursor-pointer">System Updates</Label>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-body-sm text-muted">
                           Important system announcements and updates
                         </p>
                       </div>
@@ -222,12 +222,12 @@ const ProfileSettings = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">In-App Notifications</h3>
+                  <h3>In-App Notifications</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label className="cursor-pointer">Task Reminders</Label>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-body-sm text-muted">
                           Receive reminders for upcoming and due tasks
                         </p>
                       </div>
@@ -237,7 +237,7 @@ const ProfileSettings = () => {
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label className="cursor-pointer">Mentions</Label>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-body-sm text-muted">
                           Notifications when you're mentioned in comments
                         </p>
                       </div>
@@ -263,7 +263,7 @@ const ProfileSettings = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Theme</h3>
+                  <h3>Theme</h3>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="border rounded-md p-4 cursor-pointer hover:border-primary transition-colors">
                       <div className="flex items-center justify-between mb-4">
@@ -290,7 +290,7 @@ const ProfileSettings = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Density</h3>
+                  <h3>Density</h3>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="border rounded-md p-4 cursor-pointer hover:border-primary transition-colors">
                       <div className="flex flex-col gap-1 mb-4">
@@ -335,7 +335,7 @@ const ProfileSettings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-destructive mb-4">
+                <p className="text-body-sm text-destructive mb-4">
                   Warning: Running setup actions might modify your database schema.
                   Ensure you have backups or understand the implications.
                 </p>
@@ -346,7 +346,7 @@ const ProfileSettings = () => {
                   <Database className="mr-2 h-4 w-4" />
                   {isSettingUp ? 'Setting Up Database...' : 'Run Initial DB Setup'}
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="text-body-xs text-muted mt-2">
                   Attempts to create the 'pages' table and necessary RLS policies.
                   This may fail due to permissions. Check console output.
                 </p>

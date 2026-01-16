@@ -46,7 +46,7 @@ const TaskTemplate = () => {
                 <ChevronLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <h1 className="text-2xl font-bold">Follow Up with John Smith</h1>
+            <h3 className="text-2xl font-bold">Follow Up with John Smith</h3>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline">

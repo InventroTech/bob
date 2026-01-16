@@ -414,7 +414,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         {(showTitle || showDescription) && (
           <CardHeader className="pb-4">
             {showTitle && (
-              <CardTitle className="text-2xl font-bold text-gray-900">{title}</CardTitle>
+              <CardTitle className="text-gray-900">{title}</CardTitle>
             )}
             {showDescription && description && (
               <p className="text-gray-600 mt-2">{description}</p>
@@ -427,11 +427,11 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50">
-                  <TableHead className="font-semibold text-gray-900 w-[30%]">attr.</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[20%]">operator</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[30%]">value.</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[15%]">weight</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[5%]"></TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[30%]">attr.</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[20%]">operator</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[30%]">value.</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[15%]">weight</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[5%]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -526,7 +526,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                 type="button"
                 onClick={handleCalculate}
                 disabled={calculating}
-                className="bg-gray-900 text-white hover:bg-gray-800 font-semibold px-6 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="bg-gray-900 text-white hover:bg-gray-800 text-body-lg-semibold px-6 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {calculating ? (
                   <>
@@ -543,7 +543,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             </div>
             {pyroValue !== null && (
               <div className="flex items-center gap-3">
-                <Badge variant="outline" className="text-lg font-semibold px-4 py-2 bg-gray-50 text-gray-900 border-gray-300">
+                <Badge variant="outline" className="text-body-lg-semibold px-4 py-2 bg-gray-50 text-gray-900 border-gray-300">
                   pyro_value = {pyroValue}
                 </Badge>
               </div>

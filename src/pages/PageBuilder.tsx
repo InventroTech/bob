@@ -786,7 +786,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   return (
     <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Component Configuration</h3>
+        <h3>Component Configuration</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
@@ -1192,7 +1192,7 @@ const PageBuilder = () => {
                   <div className="p-4 space-y-4">
                     {/* Layout Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Layout Components</h3>
+                      <h3 className="text-subheading-sm">Layout Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="container"
@@ -1251,7 +1251,7 @@ const PageBuilder = () => {
 
                     {/* Data Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Data Components</h3>
+                      <h3 className="text-subheading-sm">Data Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="form"
@@ -1333,7 +1333,7 @@ const PageBuilder = () => {
                     <Separator />
                     {/* Analytical Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Analytical Components</h3>
+                      <h3 className="text-subheading-sm">Analytical Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="stackedBarChart"
@@ -1357,7 +1357,7 @@ const PageBuilder = () => {
 
                     {/* Basic Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Basic Components</h3>
+                      <h3 className="text-subheading-sm">Basic Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="text"
@@ -1381,7 +1381,7 @@ const PageBuilder = () => {
 
                     {/* Analytics Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Analytics</h3>
+                      <h3 className="text-subheading-sm">Analytics</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="barGraph"
@@ -1445,10 +1445,10 @@ const PageBuilder = () => {
               {canvasComponents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center text-muted-foreground flex-1">
                   <Grid3X3 className="h-12 w-12 mb-4" />
-                  <p className="text-lg font-medium">
+                  <p className="text-body-lg-medium">
                     Drop components here
                   </p>
-                  <p className="text-sm mt-1">
+                  <p className="text-body-sm mt-1">
                     Drag from the sidebar onto this area
                   </p>
                   <div className="mt-6">
