@@ -781,7 +781,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             localConfig={localConfig as any}
             handleInputChange={(field: string, value: string | number | boolean) => {
               handleInputChange(field as keyof LocalConfigType, value);
-            }}}
+            }}
           />
         );
 
