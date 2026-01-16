@@ -160,35 +160,27 @@ const CustomAppLayout: React.FC = () => {
         style={{ width: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
-          {/* Toggle button - only show when expanded */}
-          {!sidebarCollapsed && (
-            <button
-              onClick={() => setSidebarCollapsed(true)}
-              className="absolute -right-4 top-8 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow transition hover:bg-gray-100 hover:text-black"
-              aria-label="Collapse sidebar"
-            >
-              <PanelLeft className="h-4 w-4" />
-            </button>
-          )}
-
-            <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center px-0' : 'px-4'} pt-6 pb-4`}>
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'} pt-6 pb-4 w-full`}>
             {sidebarCollapsed ? (
               <button
                 onClick={() => setSidebarCollapsed(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 transition hover:bg-gray-200 cursor-pointer"
+                className="flex h-8 w-8 items-center justify-center transition hover:bg-gray-100 cursor-pointer rounded-lg"
                 aria-label="Expand sidebar"
               >
-                <Menu className="h-5 w-5 text-gray-700" />
+                <img src="/menu_close.svg" alt="Menu" className="h-5 w-5" />
               </button>
             ) : (
               <>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-                  <img src="/fire-logo.png" alt="Pyro" className="h-8 w-8" />
+                <div className="flex items-center justify-start flex-1">
+                  <img src="/fire-logo.png" alt="Pyro" className="h-auto w-auto max-h-12 object-contain" />
                 </div>
-                <div>
-                  <p className="text-base font-semibold text-gray-900">Pyro</p>
-                  <p className="text-xs text-gray-500">Lead Workspace</p>
-                </div>
+                <button
+                  onClick={() => setSidebarCollapsed(true)}
+                  className="flex h-8 w-8 items-center justify-center transition hover:bg-gray-100 cursor-pointer rounded-lg"
+                  aria-label="Collapse sidebar"
+                >
+                  <img src="/menu_open.svg" alt="Close Menu" className="h-5 w-5" />
+                </button>
               </>
             )}
           </div>
@@ -199,16 +191,16 @@ const CustomAppLayout: React.FC = () => {
                 key={page.id}
                 to={`/app/${tenantSlug}/pages/${page.id}`}
                 className={({ isActive }) =>
-                  `flex items-center rounded-xl border ${sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'} text-sm font-medium transition ${
+                  `flex items-center rounded-xl ${sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'} text-sm font-medium transition ${
                     isActive
-                      ? 'border-[#1D2939] bg-[#EFF4FF] text-[#1D2939] shadow-sm'
-                      : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50'
+                      ? 'bg-black text-white'
+                      : 'text-gray-700 hover:bg-gray-50'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-[#EFF4FF] text-[#1D2939]' : 'bg-gray-100 text-gray-500'}`}>
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-white' : 'bg-transparent text-gray-600'}`}>
                       {
                         navigationIconMap[
                           page.name?.toLowerCase().replace(/[\s_-]+/g, " ").trim()
