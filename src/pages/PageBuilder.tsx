@@ -107,6 +107,7 @@ import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLog
 import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChart";
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
+import { TeamDashboardComponent, TeamDashboardConfig } from "@/components/page-builder";
 // Import configuration components
 import {
   DataCardConfig,
@@ -279,6 +280,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   dynamicScoring: DynamicScoringComponent,
   routingRules: RoutingRulesComponent,
   whatsappTemplate: WhatsAppTemplateComponent,
+  teamDashboard: TeamDashboardComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -378,6 +380,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar fields
     targetCount: initialConfig.targetCount || 10,
     segmentCount: initialConfig.segmentCount || 8,
+    // TeamDashboard fields
+    allottedLeads: initialConfig.allottedLeads || 1600,
+    trailTarget: initialConfig.trailTarget || 160,
+    totalTeamSize: initialConfig.totalTeamSize || 18,
+    showDatePicker: initialConfig.showDatePicker !== false,
     // JobManager specific API fields
     updateEndpoint: initialConfig.updateEndpoint || '',
     deleteEndpoint: initialConfig.deleteEndpoint || '',
@@ -774,7 +781,15 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             localConfig={localConfig as any}
             handleInputChange={(field: string, value: string | number | boolean) => {
               handleInputChange(field as keyof LocalConfigType, value);
-            }}
+            }}}
+          />
+        );
+
+      case 'teamDashboard':
+        return (
+          <TeamDashboardConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
           />
         );
 
@@ -826,8 +841,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1396,6 +1410,11 @@ const PageBuilder = () => {
                         <DraggableSidebarItem
                           id="stackedBarChart"
                           label="Stacked Bar"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="teamDashboard"
+                          label="Team Dashboard"
                           icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
