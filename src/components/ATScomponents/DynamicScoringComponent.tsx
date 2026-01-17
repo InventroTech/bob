@@ -492,11 +492,11 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                     </TableCell>
                     <TableCell>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         onClick={() => handleRemoveRule(rule.id)}
                         disabled={rules.length === 1}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="hover:bg-muted hover:text-foreground"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -512,7 +512,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             <Button
               variant="outline"
               onClick={handleAddRule}
-              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="hover:bg-muted hover:text-foreground"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Rule
@@ -524,9 +524,10 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             <div className="flex items-center gap-3">
               <Button
                 type="button"
+                variant="outline"
                 onClick={handleCalculate}
                 disabled={calculating}
-                className="bg-gray-900 text-white hover:bg-gray-800 text-body-lg-semibold px-6 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="hover:bg-muted hover:text-foreground text-body-lg-semibold px-6"
               >
                 {calculating ? (
                   <>
