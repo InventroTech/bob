@@ -46,14 +46,14 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ progress }) => {
     return (
         <div>
             <div className="flex flex-col gap-2 items-center justify-between"> 
-                <h1 className="text-sm font-semibold">{styleData.info}</h1>
+                <h3 className="text-sm font-semibold">{styleData.info}</h3>
                 <div className="bottom flex flex-row gap-2 w-full justify-center items-center">
-                <h1 className="text-sm font-semibold">{styleData.title}</h1>
+                <h3 className="text-sm font-semibold">{styleData.title}</h3>
                 <div className="w-full h-2 bg-gray-200 rounded-full">
                     <div className={`h-full ${styleData.color} rounded-full`} 
                          style={{ width: styleData.width }}></div>
                 </div>
-                <h1 className="text-sm font-semibold bg-gray-200 rounded-full p-2">{styleData.number}/{styleData.total}</h1>
+                <h3 className="text-sm font-semibold bg-gray-200 rounded-full p-2">{styleData.number}/{styleData.total}</h3>
                 </div>
                 
 

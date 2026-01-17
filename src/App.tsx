@@ -27,6 +27,7 @@ import AuthCallbackPage from "./pages/AuthCallBackPage";
 import LeadTypeAssignmentPageWrapper from "./pages/LeadTypeAssignmentPageWrapper";
 import { JobsPage } from "./pages/JobsPage";
 import PublicTenantPage from "./pages/PublicTenantPage";
+import TeamDashboardPage from "./pages/TeamDashboardPage";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/add-user" element={<AddUserPage />} />
             <Route path="/lead-type-assignment" element={<LeadTypeAssignmentPageWrapper />} />
             <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/team-dashboard" element={<TeamDashboardPage />} />
           </Route>
 
           {/* Custom App Routes */}

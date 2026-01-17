@@ -1228,10 +1228,10 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-4xl font-bold flex items-center gap-3 text-gray-900">
+            <h3 className="text-4xl font-bold flex items-center gap-3 text-gray-900">
               <Briefcase className="h-8 w-8" />
               {title}
-            </h2>
+            </h3>
             {showStats && (
               <div className="flex items-center gap-6 mt-4 text-lg text-gray-600">
                 <span className="flex items-center gap-2">

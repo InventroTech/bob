@@ -1011,7 +1011,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
             {/* Header */}
             <div className="text-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-2">
+              <h3 className="text-gray-800 mb-2">
                 {config?.title || "Lead Management"}
               </h3>
             </div>
@@ -1214,9 +1214,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       {getLeadName(currentLead)}
                     </a>
                   ) : (
-                    <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
+                    <h3 className="text-slate-900" style={titleFont}>
                       {getLeadName(currentLead)}
-                    </h2>
+                    </h3>
                   )}
                     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                       {currentLead?.affiliated_party && (
@@ -1283,7 +1283,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             >
               <div className="rounded-2xl border border-slate-200 p-5 w-full">
                 <div className="mb-4 flex items-center justify-between pl-2">
-                  <h3 className="text-lg font-semibold text-slate-900" style={titleFont}>Task Progress</h3>
+                  <h3 className="text-slate-900" style={titleFont}>Task Progress</h3>
                 </div>
                 {taskSteps.length ? (
                   <div className="pl-4">

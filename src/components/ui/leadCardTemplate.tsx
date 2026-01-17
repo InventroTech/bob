@@ -14,15 +14,15 @@ const LeadCardTemplate = ({attributes}: {attributes: any}) => {
             </div>
             <div className="right-Details flex flex-col gap-2">
                 <div className='flex gap-2'>
-                <h1 className='text-2xl font-bold'>{attributes.name} </h1>
+                <h3 className='text-2xl font-bold'>{attributes.name} </h3>
                 
                 </div>
                 
 
                 <div className=' gap-2 flex flex-col'>
                   <div className="inner flex gap-2 flex-row">
-                  <h2 className='text-black '> {attributes.age} years</h2>
-                  <h2 className='text-black '>📍 {attributes.address}</h2>
+                  <h3 className='text-black '> {attributes.age} years</h3>
+                  <h3 className='text-black '>📍 {attributes.address}</h3>
                   
                   </div>
                   <div className="partyTag max-w-[100px]  rounded-full item-fit font-bold flex flex-row items-center justify-center" style={{backgroundColor: attributes.partyColor}}>
@@ -42,8 +42,8 @@ const LeadCardTemplate = ({attributes}: {attributes: any}) => {
         </div>
         <div className="right-icons  w-[50%] h-[100%] flex flex-col justify-end  items-end gap-4 p-4 ">
         
-        <h2 className='text-[#7F56D9] hover:border-b-2 hover:border-[#FCFAFF] hover:bg-[#FCFAFF]'>📞 {attributes.phone}</h2>
-        <h2 className='text-[#7F56D9] hover:border-b-2 hover:border-[#FCFAFF] hover:bg-[#FCFAFF]'>📧 {attributes.email}</h2>
+        <h3 className='text-[#7F56D9] hover:border-b-2 hover:border-[#FCFAFF] hover:bg-[#FCFAFF]'>📞 {attributes.phone}</h3>
+        <h3 className='text-[#7F56D9] hover:border-b-2 hover:border-[#FCFAFF] hover:bg-[#FCFAFF]'>📧 {attributes.email}</h3>
         
         </div>
     </div>

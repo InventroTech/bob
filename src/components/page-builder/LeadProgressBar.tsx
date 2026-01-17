@@ -264,16 +264,16 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
       <div className="flex items-start justify-between gap-6">
         {/* Left Section: Title and Description */}
         <div className="flex flex-col gap-1">
-          <h2 className="text-base font-bold text-gray-900">
+          <h3 className="text-heading-4">
             {config?.title || "Target Progress"}
-          </h2>
+          </h3>
           {isBelow ? (
-            <p className="text-base text-gray-600 font-normal">
+            <p className="text-body text-muted-foreground">
               {remainingTrials} trial subscriptions remaining for today.
             </p>
           ) : (
-            <p className="text-base text-gray-900 font-normal">
-              Hurray! You achieved your target (<span className="font-bold">{targetCount}</span>). Trying for more will give you additional incentives.
+            <p className="text-body">
+              Hurray! You achieved your target (<span className="text-body-bold">{targetCount}</span>). Trying for more will give you additional incentives.
             </p>
           )}
         </div>
@@ -283,19 +283,19 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
           {/* Progress Count Bubble */}
           {isBelow ? (
             <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-              <span className="text-sm font-medium text-green-800">
+              <span className="text-body-sm-medium text-green-800">
                 {trialActivated}/{targetCount} Trial subscriptions
               </span>
             </div>
           ) : isAchieved && !isOverdone ? (
             <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-              <span className="text-sm font-medium text-green-800">
+              <span className="text-body-sm-medium text-green-800">
                 {targetCount}/{targetCount} Target Achieved
               </span>
             </div>
           ) : (
             <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-              <span className="text-sm font-medium text-green-800">
+              <span className="text-body-sm-medium text-green-800">
                 {trialActivated - targetCount} More Than Daily Target
               </span>
             </div>

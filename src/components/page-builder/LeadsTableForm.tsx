@@ -492,7 +492,7 @@ export const LeadFormComponent = () => {
     <DashboardLayout>
       {/* CSV Upload Section */}
       <div className="mb-8 p-4 border rounded-lg bg-gray-50">
-        <h2 className="text-xl font-semibold mb-4">Bulk Upload Leads</h2>
+        <h3 className="text-xl font-semibold mb-4">Bulk Upload Leads</h3>
         <div className="space-y-4">
           <div className="flex flex-col space-y-4">
             <button
@@ -546,7 +546,7 @@ export const LeadFormComponent = () => {
 
       {/* Single Lead Form */}
       <div className="p-4 border rounded-lg">
-        <h2 className="text-xl font-semibold mb-4">Add Single Lead</h2>
+        <h3 className="text-xl font-semibold mb-4">Add Single Lead</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           {Object.entries(formData).map(([key, value]) => (
             <div key={key}>

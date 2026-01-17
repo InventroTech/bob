@@ -306,7 +306,7 @@ const AddUserComponent: React.FC = () => {
       <CardContent className="space-y-6">
         {/* Add User Form */}
         <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
-          <h3 className="font-medium">Add New User</h3>
+          <h3>Add New User</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -372,7 +372,7 @@ const AddUserComponent: React.FC = () => {
           {/* Collapsible Role Creation Fields */}
           {showRoleFields && (
             <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-              <h4 className="font-medium">Create New Role</h4>
+              <h4>Create New Role</h4>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div className="space-y-2">
@@ -418,7 +418,7 @@ const AddUserComponent: React.FC = () => {
 
         {/* Users List */}
         <div className="space-y-4">
-          <h3 className="font-medium">Users</h3>
+          <h3>Users</h3>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -444,7 +444,7 @@ const AddUserComponent: React.FC = () => {
                     .filter(user => user.name && user.email) // Only show users with name and email
                     .map((user, index) => (
                       <TableRow key={`${user.uid}-${index}`}>
-                        <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell className="text-body-medium">{user.name}</TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>{user.role?.name || 'No Role'}</TableCell>
                         <TableCell>

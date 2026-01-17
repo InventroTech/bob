@@ -24,10 +24,10 @@ const TaskCard: React.FC<TaskCardProps> = ({attributes = {}}) => {
     <div>
       <div className="flex flex-col gap-4 bg-[#FCFAFF] p-4 rounded-lg">
         <div className="flex flex-col gap-2">
-            <h1 className="text-md font-semibold">{attributes.title || 'Tasks'}</h1>
+            <h3 className="text-md font-semibold">{attributes.title || 'Tasks'}</h3>
             {attributes.tasks.map((item) => (  
                 <div key={item.id} className='flex flex-row gap-2'>
-                  <h2 className='text-sm'>📝 {item.title}</h2>
+                  <h3 className='text-sm'>📝 {item.title}</h3>
                   <p className='text-sm font-semibold'>{item.description}</p>
                 </div>
             ))}

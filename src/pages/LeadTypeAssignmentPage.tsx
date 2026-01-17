@@ -553,7 +553,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         <Card className="max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
+                    <h3 className="mb-2">Access Denied</h3>
                     <p className="text-muted-foreground text-center">
                       You need GM (General Manager) role to access this page.
                     </p>
@@ -576,7 +576,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         <Card className="max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
+                    <h3 className="mb-2">Access Denied</h3>
                     <p className="text-muted-foreground text-center">
                       You need GM (General Manager) role to access this page.
                     </p>
@@ -607,8 +607,8 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       {showHeader && (
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lead Type Assignment</h1>
-            <p className="text-muted-foreground">
+            <h3>Lead Type Assignment</h3>
+            <p className="text-muted">
               Assign lead types to Relationship Managers (RMs)
             </p>
           </div>
@@ -622,13 +622,13 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
 
       {/* Lead Type Assignments */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">RM Lead Type Assignments</h2>
+        <h3>RM Lead Type Assignments</h3>
         
         {assignments.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-8">
               <Users className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No RMs Found</h3>
+              <h3 className="mb-2">No RMs Found</h3>
               <p className="text-muted-foreground text-center">
                 No Relationship Managers found in your tenant. 
                 Please add RMs first before assigning lead types.

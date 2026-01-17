@@ -1184,10 +1184,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-4xl font-bold text-gray-900 flex items-center gap-3">
+            <h3 className="text-4xl font-bold text-gray-900 flex items-center gap-3">
               <Users className="h-8 w-8" />
               {title}
-            </h2>
+            </h3>
             <p className="text-xl text-gray-600 mt-2">{description}</p>
           </div>
           
