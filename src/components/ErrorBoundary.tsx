@@ -58,7 +58,7 @@ const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, resetError }) => {
         }}
       >
         <div style={{ marginBottom: '1.5rem' }}>
-          <h1
+          <h3
             style={{
               fontSize: '1.5rem',
               fontWeight: '600',
@@ -67,7 +67,7 @@ const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, resetError }) => {
             }}
           >
             Something went wrong
-          </h1>
+          </h3>
           <p style={{ color: '#6c757d', fontSize: '0.875rem' }}>
             We're sorry, but something unexpected happened. Our team has been notified.
           </p>

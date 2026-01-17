@@ -65,7 +65,7 @@ const Index = () => {
       <div className="space-y-8 animate-fade-in">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Welcome to CRM Builder</h1>
+            <h3>Welcome to CRM Builder</h3>
             <p className="text-muted-foreground mt-1">
               Build, customize, and manage your CRM pages
             </p>

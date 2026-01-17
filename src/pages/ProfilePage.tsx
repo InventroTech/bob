@@ -53,25 +53,25 @@ const ProfilePage = () => {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-slate-100 text-3xl font-semibold text-slate-500">
+                  <div className="flex h-full w-full items-center justify-center bg-slate-100 text-heading-1 text-slate-500">
                     {profileName[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
                   </div>
                 )}
               </div>
-              <CardTitle className="mt-4 text-2xl font-semibold text-slate-900">
+              <CardTitle className="mt-4 text-slate-900">
                 {profileName}
               </CardTitle>
-              <p className="text-sm text-slate-500">{user?.email || "user@example.com"}</p>
+              <p className="text-body-sm text-slate-500">{user?.email || "user@example.com"}</p>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-slate-600">
               <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Account</p>
-                <p className="mt-2 font-medium text-slate-900">Member since</p>
+                <p className="text-body-xs uppercase tracking-wide text-slate-500">Account</p>
+                <p className="mt-2 text-body-medium text-slate-900">Member since</p>
                 <p>{user?.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}</p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-xs uppercase tracking-wide text-slate-500">User ID</p>
-                <p className="mt-2 font-mono text-sm text-slate-900">
+                <p className="text-body-xs uppercase tracking-wide text-slate-500">User ID</p>
+                <p className="mt-2 font-mono text-body-sm text-slate-900">
                   {user?.id || "Not available"}
                 </p>
               </div>
@@ -86,54 +86,54 @@ const ProfilePage = () => {
                 <LogOut className="mr-2 h-4 w-4" />
                 {loading ? "Signing Out..." : "Sign Out"}
               </Button>
-              {error && <p className="text-sm text-red-600">Error: {error}</p>}
+              {error && <p className="text-body-sm text-red-600">Error: {error}</p>}
             </CardFooter>
           </Card>
 
           <div className="flex-1 space-y-6">
             <Card className="border-none shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
+                <CardTitle className="text-slate-900">
                   Personal Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-body-xs-semibold uppercase tracking-wide text-slate-500">
                     Full Name
                   </p>
-                  <p className="text-sm text-slate-900">{profileName}</p>
+                  <p className="text-body-sm text-slate-900">{profileName}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-body-xs-semibold uppercase tracking-wide text-slate-500">
                     Email
                   </p>
-                  <p className="text-sm text-slate-900">{user?.email || "Not set"}</p>
+                  <p className="text-body-sm text-slate-900">{user?.email || "Not set"}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-body-xs-semibold uppercase tracking-wide text-slate-500">
                     Role
                   </p>
-                  <p className="text-sm text-slate-900">{user?.app_metadata?.role || "Member"}</p>
+                  <p className="text-body-sm text-slate-900">{user?.app_metadata?.role || "Member"}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="text-body-xs-semibold uppercase tracking-wide text-slate-500">
                     Status
                   </p>
-                  <p className="text-sm text-slate-900">Active</p>
+                  <p className="text-body-sm text-slate-900">Active</p>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="border-none shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">Security</CardTitle>
+                <CardTitle className="text-slate-900">Security</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">Password</p>
-                    <p className="text-xs text-slate-500">Last changed recently</p>
+                    <p className="text-body-sm-semibold text-slate-900">Password</p>
+                    <p className="text-body-xs text-slate-500">Last changed recently</p>
                   </div>
                   <Button variant="outline" size="sm">
                     Update
@@ -141,8 +141,8 @@ const ProfilePage = () => {
                 </div>
                 <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">Two-factor authentication</p>
-                    <p className="text-xs text-slate-500">Add extra layer of security</p>
+                    <p className="text-body-sm-semibold text-slate-900">Two-factor authentication</p>
+                    <p className="text-body-xs text-slate-500">Add extra layer of security</p>
                   </div>
                   <Button variant="outline" size="sm">
                     Enable

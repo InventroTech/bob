@@ -319,7 +319,7 @@ const AddUserPage = () => {
     <DashboardLayout>
       <div className="p-6 max-w-4xl mx-auto space-y-8">
         <div className="space-y-6">
-          <h1 className="text-2xl font-semibold">Add User</h1>
+          <h3>Add User</h3>
 
           <div className="space-y-2">
             <Label htmlFor="name">Full Name</Label>
@@ -428,7 +428,7 @@ const AddUserPage = () => {
         </div>
 
         <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Users</h2>
+          <h3 className="mb-4">Users</h3>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

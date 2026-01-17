@@ -9,7 +9,7 @@ interface NotesProps {
 const Notes = ({ notes, setNotes }: NotesProps) => {
   return (
     <div className="flex flex-col gap-2">
-      <h1 className="text-md font-semibold">Notes</h1>
+      <h3 className="text-md font-semibold">Notes</h3>
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}

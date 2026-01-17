@@ -245,7 +245,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4 relative">
       {title && (
         <div className="mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
         </div>
       )}
 

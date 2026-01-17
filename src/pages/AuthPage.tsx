@@ -70,7 +70,7 @@ const AuthPage = () => {
             <CardHeader className="text-center">
               <KeyRound className="mx-auto h-10 w-10 text-primary mb-2" />
               <CardTitle className="text-2xl">Sign In</CardTitle>
-              <CardDescription>Enter your email and password to access your account.</CardDescription>
+              <CardDescription className="text-gray-700">Enter your email and password to access your account.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={(e) => handleAuthAction(e, 'signIn')} className="space-y-4">

@@ -1067,9 +1067,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         {/* Filter Section */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">
+            <h3 className="text-gray-800">
               {config?.title || "Support Tickets"}
-            </h2>
+            </h3>
             <Button
               variant="outline"
               size="sm"
@@ -1085,7 +1085,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             <div className="bg-gray-50 p-4 rounded-lg border">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Resolution Status
                   </label>
                   <Popover>
@@ -1104,7 +1104,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverTrigger>
                     <PopoverContent className="w-60 p-4" align="start">
                       <div className="space-y-3">
-                        <h4 className="font-medium text-sm">Select Resolution Statuses</h4>
+                        <h4>Select Resolution Statuses</h4>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
                           {getUniqueResolutionStatuses().map((status) => (
                             <div key={status} className="flex items-center space-x-2">
@@ -1121,7 +1121,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                               />
                               <label
                                 htmlFor={`resolution-${status}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                               >
                                 {status === null ? 'Open' : status}
                               </label>
@@ -1146,7 +1146,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Poster Status
                   </label>
                   <Popover>
@@ -1165,7 +1165,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverTrigger>
                     <PopoverContent className="w-60 p-4" align="start">
                       <div className="space-y-3">
-                        <h4 className="font-medium text-sm">Select Poster Statuses</h4>
+                        <h4>Select Poster Statuses</h4>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
                           {getUniquePosterStatuses().map((status) => (
                             <div key={status} className="flex items-center space-x-2">
@@ -1182,7 +1182,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                               />
                               <label
                                 htmlFor={`poster-${status}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                               >
                                 {status}
                               </label>
@@ -1207,7 +1207,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Assigned To
                   </label>
                   <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
@@ -1231,7 +1231,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               {/* Date Range Filters - 2nd Line */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Start Date
                   </label>
                   <Popover>
@@ -1261,7 +1261,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverContent>
                   </Popover>
                   <div className="mt-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-gray-600 mb-1">
                       Start Time
                     </label>
                     <Input
@@ -1277,7 +1277,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     End Date
                   </label>
                   <Popover>
@@ -1307,7 +1307,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverContent>
                   </Popover>
                   <div className="mt-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-gray-600 mb-1">
                       End Time
                     </label>
                     <Input
