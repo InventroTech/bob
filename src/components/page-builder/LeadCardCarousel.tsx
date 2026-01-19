@@ -537,18 +537,25 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               )}
             </div>
             <div className="pt-1">
-              <p
-                className={cn(
-                  "text-sm font-medium",
-                  step.status === "current"
-                    ? "text-slate-900"
-                    : step.status === "completed"
-                    ? "text-slate-600"
-                    : "text-slate-500"
+              <div className="flex items-center gap-2">
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    step.status === "current"
+                      ? "text-slate-900"
+                      : step.status === "completed"
+                      ? "text-slate-600"
+                      : "text-slate-500"
+                  )}
+                >
+                  {step.label}
+                </p>
+                {step.label.toLowerCase().includes('layout feedback') && ((currentLead as any)?.data?.reject_reason) && (
+                  <span className="text-sm text-red-600 font-medium">
+                    ({((currentLead as any)?.data?.reject_reason)})
+                  </span>
                 )}
-              >
-                {step.label}
-              </p>
+              </div>
               {step.description && <p className="text-xs text-slate-400">{step.description}</p>}
             </div>
           </li>
