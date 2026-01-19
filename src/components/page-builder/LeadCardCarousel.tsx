@@ -475,9 +475,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const firstPendingIndex = normalised.findIndex(step => step.status === "pending");
       if (firstPendingIndex >= 0) {
         normalised[firstPendingIndex].status = "current";
-      } else if (normalised.length) {
-        normalised[0].status = "current";
       }
+      // Don't set any task as current if all tasks are completed
     }
 
     return normalised.map(step => ({
