@@ -66,6 +66,7 @@ import {
   ImageComponent,
   AddUserComponent,
   LeadAssignmentComponent,
+  CallAttemptMatrixComponent,
 } from "@/components/page-builder";
 import RoutingRulesComponent from "@/components/page-builder/RoutingRulesComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
@@ -119,6 +120,7 @@ import {
   TicketCarouselConfig,
   LeadCardCarouselConfig,
   LeadAssignmentConfig,
+  CallAttemptMatrixConfig,
   RoutingRulesConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
@@ -233,6 +235,7 @@ interface ComponentConfig {
   // LeadAssignment specific fields
   leadTypesEndpoint?: string;
   rmsEndpoint?: string;
+  // CallAttemptMatrix specific fields (apiEndpoint already defined above)
   // LeadProgressBar specific fields
   targetCount?: number;
   segmentCount?: number;
@@ -272,6 +275,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   barGraph: BarGraph,
   addUser: AddUserComponent,
   leadAssignment: LeadAssignmentComponent,
+  callAttemptMatrix: CallAttemptMatrixComponent,
   openModalButton: OpenModalButton,
   jobManager: JobManagerComponent,
   jobsPage: JobsPageComponent,
@@ -380,11 +384,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar fields
     targetCount: initialConfig.targetCount || 10,
     segmentCount: initialConfig.segmentCount || 8,
-    // TeamDashboard fields
-    allottedLeads: initialConfig.allottedLeads || 1600,
-    trailTarget: initialConfig.trailTarget || 160,
-    totalTeamSize: initialConfig.totalTeamSize || 18,
-    showDatePicker: initialConfig.showDatePicker !== false,
+    // TeamDashboard fields (if needed, add to ComponentConfig interface first)
+    // allottedLeads: initialConfig.allottedLeads || 1600,
+    // trailTarget: initialConfig.trailTarget || 160,
+    // totalTeamSize: initialConfig.totalTeamSize || 18,
+    // showDatePicker: initialConfig.showDatePicker !== false,
     // JobManager specific API fields
     updateEndpoint: initialConfig.updateEndpoint || '',
     deleteEndpoint: initialConfig.deleteEndpoint || '',
@@ -394,7 +398,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   // Separate state for routing rules filter fields to prevent re-renders
   const [localFilterFields, setLocalFilterFields] = useState<any[]>(
-    initialConfig.filterFields || []
+    (initialConfig as any).filterFields || []
   );
 
   // Separate state for columns
@@ -726,7 +730,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             onConfigChange={(newConfig) => {
               // Update all config fields
               Object.entries(newConfig).forEach(([key, value]) => {
-                handleInputChange(key, value);
+                handleInputChange(key as any, value);
               });
             }}
           />
@@ -743,6 +747,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'leadAssignment':
         return (
           <LeadAssignmentConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'callAttemptMatrix':
+        return (
+          <CallAttemptMatrixConfig
             localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
@@ -841,7 +853,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1252,6 +1264,11 @@ const PageBuilder = () => {
                           id="leadAssignment"
                           label="Lead Assignment"
                           icon={<Target className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="callAttemptMatrix"
+                          label="Call Attempt Matrix"
+                          icon={<Settings className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
                           id="temporaryLogout"
