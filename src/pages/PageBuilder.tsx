@@ -107,6 +107,7 @@ import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLog
 import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChart";
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
+import { TeamDashboardComponent, TeamDashboardConfig } from "@/components/page-builder";
 // Import configuration components
 import {
   DataCardConfig,
@@ -279,6 +280,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   dynamicScoring: DynamicScoringComponent,
   routingRules: RoutingRulesComponent,
   whatsappTemplate: WhatsAppTemplateComponent,
+  teamDashboard: TeamDashboardComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -378,6 +380,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar fields
     targetCount: initialConfig.targetCount || 10,
     segmentCount: initialConfig.segmentCount || 8,
+    // TeamDashboard fields
+    allottedLeads: initialConfig.allottedLeads || 1600,
+    trailTarget: initialConfig.trailTarget || 160,
+    totalTeamSize: initialConfig.totalTeamSize || 18,
+    showDatePicker: initialConfig.showDatePicker !== false,
     // JobManager specific API fields
     updateEndpoint: initialConfig.updateEndpoint || '',
     deleteEndpoint: initialConfig.deleteEndpoint || '',
@@ -778,6 +785,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'teamDashboard':
+        return (
+          <TeamDashboardConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -786,7 +801,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   return (
     <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Component Configuration</h3>
+        <h3>Component Configuration</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
@@ -826,8 +841,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1192,7 +1206,7 @@ const PageBuilder = () => {
                   <div className="p-4 space-y-4">
                     {/* Layout Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Layout Components</h3>
+                      <h3 className="text-subheading-sm">Layout Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="container"
@@ -1251,7 +1265,7 @@ const PageBuilder = () => {
 
                     {/* Data Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Data Components</h3>
+                      <h3 className="text-subheading-sm">Data Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="form"
@@ -1333,7 +1347,7 @@ const PageBuilder = () => {
                     <Separator />
                     {/* Analytical Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Analytical Components</h3>
+                      <h3 className="text-subheading-sm">Analytical Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="stackedBarChart"
@@ -1357,7 +1371,7 @@ const PageBuilder = () => {
 
                     {/* Basic Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Basic Components</h3>
+                      <h3 className="text-subheading-sm">Basic Components</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="text"
@@ -1381,7 +1395,7 @@ const PageBuilder = () => {
 
                     {/* Analytics Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Analytics</h3>
+                      <h3 className="text-subheading-sm">Analytics</h3>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="barGraph"
@@ -1396,6 +1410,11 @@ const PageBuilder = () => {
                         <DraggableSidebarItem
                           id="stackedBarChart"
                           label="Stacked Bar"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="teamDashboard"
+                          label="Team Dashboard"
                           icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
@@ -1445,10 +1464,10 @@ const PageBuilder = () => {
               {canvasComponents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center text-muted-foreground flex-1">
                   <Grid3X3 className="h-12 w-12 mb-4" />
-                  <p className="text-lg font-medium">
+                  <p className="text-body-lg-medium">
                     Drop components here
                   </p>
-                  <p className="text-sm mt-1">
+                  <p className="text-body-sm mt-1">
                     Drag from the sidebar onto this area
                   </p>
                   <div className="mt-6">

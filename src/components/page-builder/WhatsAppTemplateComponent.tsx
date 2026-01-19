@@ -142,7 +142,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
           <MessageSquare className="h-5 w-5 text-black" />
           <CardTitle className="text-xl text-black">{componentTitle}</CardTitle>
         </div>
-        <CardDescription className="text-sm mt-1 text-gray-600">
+        <CardDescription className="text-body-sm mt-1 text-gray-600">
           Create and manage WhatsApp message templates
         </CardDescription>
       </CardHeader>
@@ -154,14 +154,14 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
             : 'border-gray-300 bg-white'
         }`}>
           {editingId && (
-            <div className="mb-4 flex items-center gap-2 text-sm text-black">
+            <div className="mb-4 flex items-center gap-2 text-body-sm text-black">
               <Edit className="h-4 w-4" />
-              <span className="font-medium">Editing template</span>
+              <span className="text-body-sm-medium">Editing template</span>
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="template-title" className="text-sm font-medium text-black">
+              <Label htmlFor="template-title" className="text-black">
                 Template Title
               </Label>
               <Input
@@ -177,7 +177,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="template-description" className="text-sm font-medium text-black">
+              <Label htmlFor="template-description" className="text-black">
                 Message Content
               </Label>
               <Textarea
@@ -239,11 +239,11 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
         {/* Templates List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold flex items-center gap-2 text-black">
+            <h3 className="flex items-center gap-2 text-black">
               <MessageSquare className="h-5 w-5 text-gray-600" />
               Saved Templates
               {templates.length > 0 && (
-                <span className="text-sm font-normal text-gray-600">
+                <span className="text-body-sm text-gray-600">
                   ({templates.length})
                 </span>
               )}
@@ -257,10 +257,10 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
           ) : templates.length === 0 ? (
             <div className="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center bg-gray-50">
               <MessageSquare className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <p className="text-sm font-medium text-gray-700 mb-1">
+              <p className="text-body-sm-medium text-gray-700 mb-1">
                 No templates yet
               </p>
-              <p className="text-xs text-gray-600">
+              <p className="text-body-xs text-gray-600">
                 Create your first WhatsApp template above
               </p>
             </div>
@@ -274,10 +274,10 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-base mb-2 text-black">
+                        <h4 className="text-heading-4 mb-2 text-black">
                           {template.title}
                         </h4>
-                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-body-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                           {template.description}
                         </p>
                       </div>

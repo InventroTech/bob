@@ -764,16 +764,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             <div className="text-center mb-6">
               <div className="flex items-center justify-center mb-4">
                 <User className="h-8 w-8 text-primary mr-2" />
-                <h2 className="text-2xl font-semibold text-gray-800">
+                <h3 className="text-gray-800">
                   {config?.title || "Lead Management"}
-                </h2>
+                </h3>
               </div>
               <p className="text-gray-600 mb-6">Click to start working on leads</p>
             </div>
 
             <div className="mb-6">
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-800">{leadStats.total}</div>
+                <div className="text-heading-2 text-gray-800">{leadStats.total}</div>
                 <div className="text-xs text-gray-600">Total Leads</div>
               </div>
             </div>

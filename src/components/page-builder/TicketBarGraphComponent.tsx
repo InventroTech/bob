@@ -125,7 +125,7 @@ export const TicketBarGraphComponent: React.FC<TicketBarGraphProps> = ({ config 
           {config?.title || "Ticket Resolution Trends"}
         </CardTitle>
         {error && (
-          <p className="text-sm text-muted-foreground">{error}</p>
+          <p className="text-body-sm text-muted">{error}</p>
         )}
       </CardHeader>
       <CardContent>
@@ -189,22 +189,22 @@ export const TicketBarGraphComponent: React.FC<TicketBarGraphProps> = ({ config 
         {/* Summary Stats */}
         <div className="mt-6 grid grid-cols-3 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-heading-2 text-green-600">
               {data.reduce((sum, item) => sum + item.resolved, 0)}
             </div>
-            <div className="text-sm text-muted-foreground">Total Resolved</div>
+            <div className="text-body-sm text-muted">Total Resolved</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-heading-2 text-red-600">
               {data.reduce((sum, item) => sum + item.unresolved, 0)}
             </div>
-            <div className="text-sm text-muted-foreground">Total Unresolved</div>
+            <div className="text-body-sm text-muted">Total Unresolved</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="text-heading-2 text-blue-600">
               {data.reduce((sum, item) => sum + item.total, 0)}
             </div>
-            <div className="text-sm text-muted-foreground">Total Tickets</div>
+            <div className="text-body-sm text-muted">Total Tickets</div>
           </div>
         </div>
       </CardContent>

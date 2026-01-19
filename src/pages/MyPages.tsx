@@ -143,7 +143,7 @@ const MyPages = () => {
         )}
 
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">My Pages</h1>
+          <h3>My Pages</h3>
           <Button asChild>
             <Link to="/builder/new">
               <PlusCircle className="mr-2 h-4 w-4" /> Create New Page
@@ -160,11 +160,11 @@ const MyPages = () => {
         ) : (
           Object.entries(pagesByRole).map(([roleName, pages]) => (
             <div key={roleName}>
-              <h2 className="text-xl font-bold mt-6 mb-2">
+              <h3 className="mt-6 mb-2">
                 {roleName === 'public' || roleName === 'Unassigned' 
                   ? '🌐 Open Access (No Login Required)' 
                   : `${roleName} Pages :-`}
-              </h2>
+              </h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {pages.map((page) => {
                   const isPublic = roleName === 'public' || roleName === 'Unassigned';

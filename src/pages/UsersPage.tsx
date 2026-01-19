@@ -58,7 +58,7 @@ const UsersPage = () => {
     <DashboardLayout>
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold">Users</h1>
+          <h3>Users</h3>
           <Button onClick={() => navigate('/add-user')}>
             Add New User
           </Button>
@@ -68,16 +68,16 @@ const UsersPage = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-body-xs-medium text-gray-500 uppercase tracking-wider">
                   Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-body-xs-medium text-gray-500 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-body-xs-medium text-gray-500 uppercase tracking-wider">
                   Role
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-body-xs-medium text-gray-500 uppercase tracking-wider">
                   Created At
                 </th>
               </tr>
@@ -86,24 +86,24 @@ const UsersPage = () => {
               {users.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                    <div className="text-body-sm-medium text-gray-900">{user.name}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{user.email}</div>
+                    <div className="text-body-sm text-gray-500">{user.email}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">
+                    <div className="text-body-sm text-gray-500">
                       {user.role?.name || 'No Role'}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{formatDate(user.created_at)}</div>
+                    <div className="text-body-sm text-gray-500">{formatDate(user.created_at)}</div>
                   </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={4} className="px-6 py-4 text-center text-body text-gray-500">
                     No users found
                   </td>
                 </tr>

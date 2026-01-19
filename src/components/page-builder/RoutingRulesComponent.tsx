@@ -341,7 +341,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
     return (
       <Card className="bg-white border-0 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-2xl font-bold text-gray-900">{componentTitle}</CardTitle>
+          <CardTitle className="text-gray-900">{componentTitle}</CardTitle>
           <p className="text-gray-600 mt-2">You need GM role to manage routing rules.</p>
         </CardHeader>
       </Card>
@@ -398,7 +398,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       {/* Create/Edit Rule Card */}
       <Card className="bg-white border-0 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-2xl font-bold text-gray-900">{componentTitle}</CardTitle>
+          <CardTitle className="text-gray-900">{componentTitle}</CardTitle>
           <p className="text-gray-600 mt-2">{componentDescription}</p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -449,7 +449,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
           {/* Dynamic filter fields based on config */}
           {filterFields.length > 0 && (
             <div className="py-4 bg-white">
-              <h4 className="font-semibold text-gray-900 mb-4">Filter Conditions</h4>
+              <h4 className="text-gray-900 mb-4">Filter Conditions</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filterFields.map((field) => (
                   <div key={field.key} className="space-y-2">
@@ -601,7 +601,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       {/* Existing Rules Card */}
       <Card className="bg-white border-0 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-2xl font-bold text-gray-900">Existing Rules</CardTitle>
+          <CardTitle className="text-gray-900">Existing Rules</CardTitle>
           <p className="text-gray-600 mt-2">Current routing rules configured for this tenant.</p>
         </CardHeader>
         <CardContent>
@@ -611,7 +611,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
               <span className="text-gray-600">Loading routing rules…</span>
             </div>
           ) : rules.length === 0 ? (
-            <p className="text-sm text-gray-500 py-4">No routing rules configured yet.</p>
+            <p className="text-body-sm text-gray-500 py-4">No routing rules configured yet.</p>
           ) : (
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <Table>

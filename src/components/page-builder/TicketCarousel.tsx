@@ -1018,7 +1018,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                   </PopoverTrigger>
                   <PopoverContent className="w-80 p-4" align="start">
                     <div className="space-y-3">
-                      <h4 className="font-medium text-sm">Select Other Reasons</h4>
+                      <h4>Select Other Reasons</h4>
                       <div className="space-y-2 max-h-60 overflow-y-auto">
                         {OTHER_REASONS_OPTIONS.map((reason) => (
                           <div key={reason} className="flex items-center space-x-2">
@@ -1032,7 +1032,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                             />
                             <label
                               htmlFor={`reason-${reason}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                             >
                               {reason}
                             </label>

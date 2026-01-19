@@ -36,7 +36,7 @@ const FileUploadDemo: React.FC = () => {
               Back
             </Button>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-gray-900">File Upload Component Demo</h1>
+              <h3 className="text-gray-900">File Upload Component Demo</h3>
               <p className="text-sm text-gray-600 mt-1">
                 Test the file upload component with different configurations
               </p>
@@ -53,7 +53,7 @@ const FileUploadDemo: React.FC = () => {
       {/* Footer with Instructions */}
       <div className="max-w-7xl mx-auto px-8 py-8">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-3">📝 Demo Instructions</h3>
+          <h3 className="text-blue-900 mb-3">📝 Demo Instructions</h3>
           <div className="text-sm text-blue-800 space-y-2">
             <p>
               This demo page shows various configurations of the FileUploadComponent.
@@ -71,7 +71,7 @@ const FileUploadDemo: React.FC = () => {
 
         {/* Quick Links */}
         <div className="mt-6 bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">📚 Documentation</h3>
+          <h3 className="text-gray-900 mb-4">📚 Documentation</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <h4 className="font-medium text-gray-900">Files Created:</h4>
@@ -101,7 +101,7 @@ const FileUploadDemo: React.FC = () => {
 
         {/* Code Example */}
         <div className="mt-6 bg-gray-900 text-gray-100 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">💻 Quick Start Code</h3>
+          <h3 className="mb-4">💻 Quick Start Code</h3>
           <pre className="text-xs overflow-x-auto">
 {`import { FileUploadComponent } from '@/components/ATScomponents/FileUploadComponent';
 
