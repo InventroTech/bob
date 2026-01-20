@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { Trash2, UserPlus } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
 
@@ -298,15 +298,15 @@ const AddUserComponent: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <h5 className="flex items-center gap-2">
           <UserPlus className="h-5 w-5" />
           User Management
-        </CardTitle>
+        </h5>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Add User Form */}
         <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
-          <h3>Add New User</h3>
+          <h5>Add New User</h5>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -372,7 +372,7 @@ const AddUserComponent: React.FC = () => {
           {/* Collapsible Role Creation Fields */}
           {showRoleFields && (
             <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-              <h4>Create New Role</h4>
+              <h5>Create New Role</h5>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div className="space-y-2">
@@ -418,7 +418,7 @@ const AddUserComponent: React.FC = () => {
 
         {/* Users List */}
         <div className="space-y-4">
-          <h3>Users</h3>
+          <h5>Users</h5>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

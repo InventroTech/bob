@@ -1015,7 +1015,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
               <div>
                 <div className="font-semibold text-gray-900">{application.applicantName}</div>
                 {isNewApplication(application.submittedAt) && (
-                  <Badge className="bg-blue-100 text-blue-800 text-xs mt-1">New</Badge>
+                  <Badge className="bg-blue-100 text-blue-800 text-sm mt-1">New</Badge>
                 )}
               </div>
             </div>
@@ -1033,7 +1033,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                 <Badge 
                   key={idx} 
                   variant="secondary" 
-                  className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
+                  className="text-sm bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
                 >
                   {skill}
                 </Badge>

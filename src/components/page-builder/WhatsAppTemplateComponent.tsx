@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -140,7 +140,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
       <CardHeader className="pb-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-black" />
-          <CardTitle className="text-xl text-black">{componentTitle}</CardTitle>
+          <h5 className="text-black">{componentTitle}</h5>
         </div>
         <CardDescription className="text-body-sm mt-1 text-gray-600">
           Create and manage WhatsApp message templates
@@ -239,7 +239,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
         {/* Templates List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-black">
+            <h5 className="flex items-center gap-2 text-black">
               <MessageSquare className="h-5 w-5 text-gray-600" />
               Saved Templates
               {templates.length > 0 && (
@@ -247,7 +247,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                   ({templates.length})
                 </span>
               )}
-            </h3>
+            </h5>
           </div>
           
           {loading ? (
@@ -274,9 +274,9 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-heading-4 mb-2 text-black">
+                        <h5 className="mb-2 text-black">
                           {template.title}
-                        </h4>
+                        </h5>
                         <p className="text-body-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                           {template.description}
                         </p>

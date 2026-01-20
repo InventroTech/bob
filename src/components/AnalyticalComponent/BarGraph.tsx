@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { TrendingUp } from "lucide-react";
@@ -143,10 +143,10 @@ export const BarGraph: React.FC<BarGraphProps> = ({ config }) => {
     return (
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <h5 className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
             {config?.title || "Bar Graph"}
-          </CardTitle>
+          </h5>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-64">
@@ -160,10 +160,10 @@ export const BarGraph: React.FC<BarGraphProps> = ({ config }) => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <h5 className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
           {config?.title || "Bar Graph"}
-        </CardTitle>
+        </h5>
         {error && (
           <p className="text-sm text-muted-foreground">{error}</p>
         )}

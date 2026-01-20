@@ -202,8 +202,8 @@ const PagesGallery = () => {
               <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
                 <Plus className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="font-medium text-lg mb-1">Create New Page</h3>
-              <p className="text-muted-foreground mb-4">
+              <h5>Create New Page</h5>
+              <p>
                 Build a custom page from scratch or use a template
               </p>
               <Button asChild>

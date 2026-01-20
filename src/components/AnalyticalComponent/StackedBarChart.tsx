@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { TrendingUp, Calendar } from "lucide-react";
@@ -337,10 +337,10 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     return (
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <h5 className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
             {config?.title || "Stacked Bar Chart"}
-          </CardTitle>
+          </h5>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-64">
@@ -354,10 +354,10 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
   return (
     <Card className="w-full ">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <h5 className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
           {config?.title || "Stacked Bar Chart"}
-        </CardTitle>
+        </h5>
         
         {/* Date Filter */}
         <div className="flex items-center gap-2 mt-2">

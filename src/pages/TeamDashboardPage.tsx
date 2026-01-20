@@ -441,7 +441,7 @@ const TeamDashboardPage: React.FC = () => {
     <div className="container mx-auto p-6 space-y-6">
       {/* Header with Date Picker */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Team Dashboard</h1>
+        <h5>Team Dashboard</h5>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-muted-foreground" />
@@ -469,7 +469,7 @@ const TeamDashboardPage: React.FC = () => {
         {/* Overview Card - 60% width */}
         <Card className="flex-[0_0_60%]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Overview</CardTitle>
+            <h5>Overview</h5>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -498,7 +498,7 @@ const TeamDashboardPage: React.FC = () => {
         {/* Connected to Trail Ratio Card - 40% width */}
         <Card className="flex-[0_0_40%]">
           <CardHeader>
-            <CardTitle>Connected to Trail ratio</CardTitle>
+            <h5>Connected to Trail ratio</h5>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -520,7 +520,7 @@ const TeamDashboardPage: React.FC = () => {
         {/* Trail Activation Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Trail Activation</CardTitle>
+            <h5>Trail Activation</h5>
             <div className="text-sm text-muted-foreground">
               Overall: Current {overview?.trials_activated || 0} ({Math.round(((overview?.trials_activated || 0) / trailTarget) * 100)}% of Target {trailTarget})
             </div>
@@ -535,7 +535,7 @@ const TeamDashboardPage: React.FC = () => {
         {/* Average Time Spent Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Average Time Spent</CardTitle>
+            <h5>Average Time Spent</h5>
             <div className="text-sm text-muted-foreground">
               Overall: {formatTime(overview?.average_time_spent_seconds || null)}{' '}
               {(() => {
@@ -563,7 +563,7 @@ const TeamDashboardPage: React.FC = () => {
       {/* Call Breakdown Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Call Breakdown</CardTitle>
+          <h5>Call Breakdown</h5>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Summary Metrics Row */}

@@ -126,8 +126,8 @@ const CustomAppDashboard: React.FC = () => {
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-center max-w-md mx-auto p-6">
         <div className="mb-6">
-          <h3 className="text-gray-900 mb-2">Welcome to {tenantSlug}</h3>
-          <p className="text-gray-600">You don't have any pages yet.</p>
+          <h5>Welcome to {tenantSlug}</h5>
+          <p>You don't have any pages yet.</p>
         </div>
         
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">

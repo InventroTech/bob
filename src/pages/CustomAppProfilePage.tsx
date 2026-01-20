@@ -26,7 +26,7 @@ const CustomAppProfilePage: React.FC = () => {
 
   return (
     <div className="p-6">
-      <h3 className="mb-4">Profile</h3>
+      <h5>Profile</h5>
       <p><strong>Email:</strong> {user?.email}</p>
       <p><strong>User ID:</strong> {user?.id}</p>
       <p><strong>Role:</strong> {role}</p>
