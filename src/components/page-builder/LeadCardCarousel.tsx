@@ -18,6 +18,7 @@ import {
   Clock,
   MessageSquare,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -141,6 +142,37 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
+
+  // Persist actionButtonsVisible state to sessionStorage (survives page navigation)
+  const persistActionButtonsState = (leadId: string | number | undefined, visible: boolean) => {
+    try {
+      if (leadId && visible) {
+        sessionStorage.setItem('leadCardCarousel_actionButtonsVisible', JSON.stringify({ leadId: String(leadId), visible }));
+      } else {
+        sessionStorage.removeItem('leadCardCarousel_actionButtonsVisible');
+      }
+    } catch (e) {
+      console.warn('[LeadCardCarousel] Failed to persist action buttons state:', e);
+    }
+  };
+
+  // Restore actionButtonsVisible state from sessionStorage
+  const restoreActionButtonsState = (leadId: string | number | undefined): boolean => {
+    try {
+      if (!leadId) return false;
+      const stored = sessionStorage.getItem('leadCardCarousel_actionButtonsVisible');
+      if (stored) {
+        const { leadId: storedLeadId, visible } = JSON.parse(stored);
+        // Compare as strings to handle both string and number IDs
+        if (String(storedLeadId) === String(leadId) && visible) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
 
   // Get today's date string (YYYY-MM-DD) for daily reset tracking
   const getTodayDateString = (): string => {
@@ -293,6 +325,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     const clean = normalizePhoneForLinks(phone);
     if (!clean) return;
     setActionButtonsVisible(true);
+    persistActionButtonsState(currentLead?.id, true);
     window.open(`tel:${clean}`);
   };
 
@@ -641,7 +674,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setHasCheckedForLeads(true);
       setCurrentLead(leadData);
       setShowPendingCard(false);
-      setActionButtonsVisible(false);
+      // Restore actionButtonsVisible state if this is the same lead that had buttons visible
+      const shouldShowButtons = restoreActionButtonsState(leadData?.id);
+      setActionButtonsVisible(shouldShowButtons);
       setProcessingAction(null);
       setLead(prev => ({
         ...prev,
@@ -704,6 +739,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       leadStartTime: new Date(),
     });
     setActionButtonsVisible(false);
+    persistActionButtonsState(undefined, false);
     setProcessingAction(null);
   };
 
@@ -800,6 +836,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           }));
         }
         
+        // Clear action buttons state before fetching next lead
+        persistActionButtonsState(undefined, false);
+        
         // Fetch next lead after any action
         await fetchFirstLead();
       }
@@ -839,6 +878,45 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       resetLeadState();
       isInitialized.current = false;
       await fetchLeadStats();
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!currentLead?.id) {
+      return;
+    }
+    
+    try {
+      setUpdating(true);
+      // Preserve the current actionButtonsVisible state
+      const currentButtonsVisible = actionButtonsVisible;
+      
+      // Fetch the current lead again to refresh the data
+      const refreshedLead = await fetchCurrentLead();
+      
+      if (refreshedLead) {
+        // Update the lead data but preserve actionButtonsVisible state
+        setCurrentLead(refreshedLead);
+        // Restore actionButtonsVisible state if it was visible before or if this lead had buttons visible
+        const shouldShowButtons = currentButtonsVisible || restoreActionButtonsState(refreshedLead?.id);
+        setActionButtonsVisible(shouldShowButtons);
+        if (shouldShowButtons) {
+          persistActionButtonsState(refreshedLead?.id, true);
+        }
+        setLead(prev => ({
+          ...prev,
+          leadStatus: refreshedLead.status || prev.leadStatus,
+          priority: refreshedLead.priority || prev.priority,
+          notes: (refreshedLead?.data?.notes as string) || refreshedLead?.notes || prev.notes,
+          selectedTags: parseTags(refreshedLead?.tags || []),
+          nextFollowUp: refreshedLead.next_follow_up || prev.nextFollowUp,
+          // Keep leadStartTime unchanged
+        }));
+      }
+    } catch (error: any) {
+      console.error("Error refreshing lead:", error);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -907,6 +985,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         setCurrentLead(currentLead);
         setShowPendingCard(false);
         setHasCheckedForLeads(true);
+        // Restore actionButtonsVisible state if this is the same lead that had buttons visible
+        const shouldShowButtons = restoreActionButtonsState(currentLead?.id);
+        setActionButtonsVisible(shouldShowButtons);
         setLead(prev => ({
           ...prev,
           leadStatus: currentLead.status || "New",
@@ -941,6 +1022,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         setCurrentLead(currentLead);
         setShowPendingCard(false);
         setHasCheckedForLeads(true);
+        // Restore actionButtonsVisible state if this is the same lead that had buttons visible
+        const shouldShowButtons = restoreActionButtonsState(currentLead?.id);
+        setActionButtonsVisible(shouldShowButtons);
         setLead(prev => ({
           ...prev,
           leadStatus: currentLead.status || "New",
@@ -1088,7 +1172,17 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   if (loading) {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
+        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0 gap-2">
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            disabled={updating || !currentLead}
+          >
+            <RefreshCw className="h-3 w-3" />
+            Refresh
+          </Button>
           <Button
             onClick={handleTakeBreak}
             variant="outline"
@@ -1247,6 +1341,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  onClick={handleRefresh}
+                  disabled={updating || !currentLead}
+                >
+                  <RefreshCw className="h-4 w-4 text-gray-500" />
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
