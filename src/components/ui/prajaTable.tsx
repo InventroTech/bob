@@ -160,7 +160,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
         return (
           <Badge 
             variant="outline" 
-            className={`${getStatusColor(row[col.accessor])} text-xs font-medium px-2 py-1`}
+            className={`${getStatusColor(row[col.accessor])} text-sm font-medium px-2 py-1`}
           >
             {row[col.accessor]}
           </Badge>
@@ -168,7 +168,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
       } else if (col.accessor === 'poster') {
         const posterInfo = formatPosterStatus(row[col.accessor]);
         return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
+          <span className={`px-2 py-1 rounded-full text-sm font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
             {posterInfo.label}
           </span>
         );
@@ -180,7 +180,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
         return (
           <Badge 
             variant="outline" 
-            className="bg-gray-100 text-gray-800 border-gray-200 text-xs font-medium px-2 py-1"
+            className="bg-gray-100 text-gray-800 border-gray-200 text-sm font-medium px-2 py-1"
           >
             {row[col.accessor]}
           </Badge>
@@ -245,7 +245,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
     <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4 relative">
       {title && (
         <div className="mb-4">
-          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+          <h5>{title}</h5>
         </div>
       )}
 
@@ -264,7 +264,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
           <thead>
             <tr className="bg-gray-100 text-gray-500 font-normal border-b border-gray-200 text-sm rounded-lg">
               {columns.map((col) => (
-                <th key={col.accessor} className="py-3 px-6 text-left">
+                <th key={col.accessor} className="py-3 px-6 text-left text-sm">
                   {col.header}
                 </th>
               ))}
@@ -281,7 +281,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
                 onClick={() => onRowClick && onRowClick(row)}
               >
                 {columns.map((col) => (
-                  <td key={col.accessor} className="py-3 px-6 text-left">
+                  <td key={col.accessor} className="py-3 px-6 text-left text-sm">
                     <div className="flex items-center">
                       {renderCell(col, row)}
                     </div>

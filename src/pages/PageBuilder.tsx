@@ -5,7 +5,6 @@ import {
   CardContent,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -813,7 +812,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   return (
     <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
-        <h3>Component Configuration</h3>
+        <h5>Component Configuration</h5>
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
@@ -1218,7 +1217,7 @@ const PageBuilder = () => {
                   <div className="p-4 space-y-4">
                     {/* Layout Components */}
                     <div className="space-y-2">
-                      <h3 className="text-subheading-sm">Layout Components</h3>
+                      <h5>Layout Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="container"
@@ -1282,7 +1281,7 @@ const PageBuilder = () => {
 
                     {/* Data Components */}
                     <div className="space-y-2">
-                      <h3 className="text-subheading-sm">Data Components</h3>
+                      <h5>Data Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="form"
@@ -1364,7 +1363,7 @@ const PageBuilder = () => {
                     <Separator />
                     {/* Analytical Components */}
                     <div className="space-y-2">
-                      <h3 className="text-subheading-sm">Analytical Components</h3>
+                      <h5>Analytical Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="stackedBarChart"
@@ -1388,7 +1387,7 @@ const PageBuilder = () => {
 
                     {/* Basic Components */}
                     <div className="space-y-2">
-                      <h3 className="text-subheading-sm">Basic Components</h3>
+                      <h5>Basic Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="text"
@@ -1412,7 +1411,7 @@ const PageBuilder = () => {
 
                     {/* Analytics Components */}
                     <div className="space-y-2">
-                      <h3 className="text-subheading-sm">Analytics</h3>
+                      <h5>Analytics</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="barGraph"

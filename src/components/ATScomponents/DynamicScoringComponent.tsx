@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -414,7 +414,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         {(showTitle || showDescription) && (
           <CardHeader className="pb-4">
             {showTitle && (
-              <CardTitle className="text-gray-900">{title}</CardTitle>
+              <h5 className="text-gray-900">{title}</h5>
             )}
             {showDescription && description && (
               <p className="text-gray-600 mt-2">{description}</p>

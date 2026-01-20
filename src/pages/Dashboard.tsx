@@ -5,7 +5,7 @@ const Dashboard = () => {
   return (
     <DashboardLayout>
       <div className="p-4">
-        <h3>Dashboard</h3>
+        <h5>Dashboard</h5>
         <p className="text-gray-700">Welcome to your dashboard!</p>
         {/* Add dashboard content here */}
       </div>

@@ -319,7 +319,7 @@ const AddUserPage = () => {
     <DashboardLayout>
       <div className="p-6 max-w-4xl mx-auto space-y-8">
         <div className="space-y-6">
-          <h3>Add User</h3>
+          <h5>Add User</h5>
 
           <div className="space-y-2">
             <Label htmlFor="name">Full Name</Label>
@@ -383,7 +383,7 @@ const AddUserPage = () => {
           {/* Collapsible Role Creation Fields */}
           {showRoleFields && (
             <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-              <h4 className="font-medium">Create New Role</h4>
+              <h5>Create New Role</h5>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div className="space-y-2">
@@ -428,7 +428,7 @@ const AddUserPage = () => {
         </div>
 
         <div className="mt-8">
-          <h3 className="mb-4">Users</h3>
+          <h5>Users</h5>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

@@ -7,7 +7,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Eye,
@@ -127,7 +126,7 @@ const LeadsTemplate = () => {
       <div className="space-y-6 animate-fade-in">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h3>Leads</h3>
+            <h5>Leads</h5>
             <p className="text-muted-foreground mt-1">
               Manage and track your potential customers
             </p>
@@ -144,7 +143,7 @@ const LeadsTemplate = () => {
           <CardHeader className="pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <CardTitle>All Leads</CardTitle>
+                <h5>All Leads</h5>
                 <CardDescription>
                   Showing {filteredLeads.length} leads
                 </CardDescription>
@@ -262,7 +261,7 @@ const LeadsTemplate = () => {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <CardTitle className="text-lg">{lead.name}</CardTitle>
+                              <h5>{lead.name}</h5>
                               <CardDescription>{lead.company}</CardDescription>
                             </div>
                           </div>

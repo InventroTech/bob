@@ -264,9 +264,9 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
       <div className="flex items-start justify-between gap-6">
         {/* Left Section: Title and Description */}
         <div className="flex flex-col gap-1">
-          <h3 className="text-heading-4">
+          <h5>
             {config?.title || "Target Progress"}
-          </h3>
+          </h5>
           {isBelow ? (
             <p className="text-body text-muted-foreground">
               {remainingTrials} trial subscriptions remaining for today.
