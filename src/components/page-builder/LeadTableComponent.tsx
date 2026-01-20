@@ -6,9 +6,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Filter, User, MessageCircle, ExternalLink } from 'lucide-react';
+import { Filter, User, MessageCircle, ExternalLink, Search, ChevronDown } from 'lucide-react';
+import ShortProfileCard from '../ui/ShortProfileCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
@@ -21,37 +23,50 @@ interface Column {
   linkField?: string; // Field to use as link for this column
 }
 
-// Status color mapping - configurable; falls back to defaults when no map provided
+// Status color mapping - matching design colors
 const getStatusColor = (status: string, statusColors?: Record<string, string>) => {
   if (statusColors && statusColors[status]) {
     return statusColors[status];
   }
   
-  // Default fallback colors
+  // Default fallback colors - matching design
   const statusLower = status.toLowerCase();
   switch (statusLower) {
+    case 'paid':
+    case 'active':
+      return 'bg-green-50 text-green-700 border-green-200';
+    case 'auto pay not set':
+    case 'autopay_setup_no_layout':
+    case 'auto_pay_not_set_up':
+      return 'bg-orange-50 text-orange-700 border-orange-200';
+    case 'in trial':
+    case 'in_trial':
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    case 'trial expired':
+    case 'trial_expired':
+      return 'bg-red-50 text-red-700 border-red-200';
     case 'in_queue':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      return 'bg-yellow-50 text-yellow-700 border-yellow-200';
     case 'assigned':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-blue-50 text-blue-700 border-blue-200';
     case 'call_later':
-      return 'bg-purple-100 text-purple-800 border-purple-200';
+      return 'bg-purple-50 text-purple-700 border-purple-200';
     case 'scheduled':
-      return 'bg-cyan-100 text-cyan-800 border-cyan-200';
+      return 'bg-cyan-50 text-cyan-700 border-cyan-200';
     case 'won':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-green-50 text-green-700 border-green-200';
     case 'lost':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-red-50 text-red-700 border-red-200';
     case 'closed':
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-gray-50 text-gray-700 border-gray-200';
     case 'resolved':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-green-50 text-green-700 border-green-200';
     case 'wip':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-blue-50 text-blue-700 border-blue-200';
     case 'open':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      return 'bg-yellow-50 text-yellow-700 border-yellow-200';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-gray-50 text-gray-700 border-gray-200';
   }
 };
 
@@ -536,7 +551,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   });
 
   // Custom cell renderer - completely generic
-  const renderCell = useCallback((row: any, column: Column, columnIndex: number) => {
+  const renderCell = useCallback((row: any, column: Column, columnIndex: number, rowIndex: number = 0) => {
     let value = row[column.accessor];
     
     // Handle case where value is an object - extract the actual value
@@ -587,7 +602,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     // Render link type columns
     if (column.type === 'link') {
       if (!displayValue || displayValue === '#' || displayValue === 'N/A') {
-        return <span className="text-gray-400 text-xs">-</span>;
+        return <span className="text-xs text-gray-400">-</span>;
       }
       
       // Check if it's a profile link
@@ -637,10 +652,21 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       );
     }
     
+    // Special handling for name column - show avatar, name, and email
+    if (column.accessor === 'name' || column.header.toLowerCase().includes('name')) {
+      return (
+        <ShortProfileCard
+          image={row.display_pic_url || row.image}
+          name={row.name || displayValue}
+          address={row.email_id || row.email || row.address || ''}
+        />
+      );
+    }
+    
     // Render chip/badge for chip type columns
     if (column.type === 'chip') {
       return (
-        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-xs px-2 py-0.5`} title={displayValue}>
+        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-xs font-medium px-3 py-1 rounded-full border`} title={displayValue}>
           {truncateText(displayValue, columnIndex)}
         </Badge>
       );
@@ -725,7 +751,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     }
     
     // Default text rendering
-    return <span className="text-xs block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
+    return <span className="text-sm text-gray-600" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
   }, [config?.statusColors]);
 
   // Memoize table columns
@@ -1113,19 +1139,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     debouncedSearch(value);
   }, [debouncedSearch]);
 
-  // Memoized search input component
-  const SearchInputComponent = useMemo(() => 
-    React.memo(({ searchTerm, onChange }: { searchTerm: string; onChange: (value: string) => void }) => (
-      <input
-        type="text"
-        placeholder="Search by customer name, phone, user ID..."
-        value={searchTerm}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-    ), (prevProps, nextProps) => prevProps.searchTerm === nextProps.searchTerm),
-    []
-  );
 
   // Memoized row click handler
   const handleRowClick = useCallback((row: any) => {
@@ -1225,6 +1238,136 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       } finally {
         setTableLoading(false);
       }
+    }
+  };
+
+  // Handle page selection from dropdown
+  const handlePageChange = async (pageNumber: string) => {
+    const page = parseInt(pageNumber, 10);
+    if (isNaN(page) || page < 1 || page > pagination.numberOfPages) {
+      return;
+    }
+
+    try {
+      setTableLoading(true);
+
+      if (!effectiveApiEndpoint) {
+        console.warn('LeadTableComponent: apiEndpoint is not configured.');
+        setTableLoading(false);
+        return;
+      }
+
+      const authToken = session?.access_token;
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const endpoint = effectiveApiEndpoint;
+      const apiUrl = `${baseUrl}${endpoint}`;
+
+      // Build query parameters
+      let params: URLSearchParams;
+
+      // Use new dynamic filter system if filters are configured
+      if (hasActiveFilters) {
+        params = filterService.generateQueryParams(filterState.values);
+        // Add pagination with selected page
+        params.set('page', page.toString());
+        params.set('page_size', '10');
+      } else {
+        // Fallback to legacy filter system
+        params = new URLSearchParams();
+
+        // Only add entity_type if using generic records endpoint and entityType is configured
+        if (endpoint.includes('/crm-records/records') && config?.entityType) {
+          params.append('entity_type', config.entityType);
+        }
+
+        // Add lead stage filters
+        if (leadStatusFilter.length > 0) {
+          params.append('lead_stage', leadStatusFilter.join(','));
+        }
+
+        // Add source filter
+        if (sourceFilter !== 'all') {
+          params.append('source', sourceFilter);
+        }
+
+        // Add date range filters
+        if (dateRangeFilter.startDate) {
+          const startDateTime = new Date(dateRangeFilter.startDate);
+          const [startHour, startMinute] = dateRangeFilter.startTime.split(':').map(Number);
+          startDateTime.setHours(startHour, startMinute, 0, 0);
+          params.append('created_at__gte', startDateTime.toISOString());
+        }
+        if (dateRangeFilter.endDate) {
+          const endDateTime = new Date(dateRangeFilter.endDate);
+          const [endHour, endMinute] = dateRangeFilter.endTime.split(':').map(Number);
+          endDateTime.setHours(endHour, endMinute, 59, 999);
+          params.append('created_at__lte', endDateTime.toISOString());
+        }
+
+        // Include search and search_fields
+        if (searchTerm && searchTerm.trim() !== '') {
+          params.append('search', searchTerm.trim());
+          if (config?.searchFields) {
+            params.append('search_fields', config.searchFields);
+          }
+        }
+        
+        // Add pagination with selected page
+        params.append('page', page.toString());
+        params.append('page_size', '10');
+      }
+
+      const fullUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch page ${page}: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      
+      let leads = [];
+      let pageMeta = null;
+
+      if (responseData.results && Array.isArray(responseData.results)) {
+        leads = responseData.results;
+        pageMeta = responseData.page_meta;
+      } else if (responseData.data && Array.isArray(responseData.data)) {
+        leads = responseData.data;
+        pageMeta = responseData.page_meta;
+      } else if (Array.isArray(responseData)) {
+        leads = responseData;
+      }
+
+      // Transform the data
+      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+
+      setData(transformedData);
+      setFilteredData(transformedData);
+      
+      if (pageMeta) {
+        setPagination({
+          totalCount: pageMeta.total_count || 0,
+          numberOfPages: pageMeta.number_of_pages || 0,
+          currentPage: pageMeta.current_page || 1,
+          pageSize: pageMeta.page_size || 10,
+          nextPageLink: pageMeta.next_page_link || null,
+          previousPageLink: pageMeta.previous_page_link || null
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching page:', error);
+      toast({ title: 'Error', description: `Failed to load page ${page}`, variant: 'destructive' });
+    } finally {
+      setTableLoading(false);
     }
   };
 
@@ -1420,28 +1563,37 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
   return (
     <>
-    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
+    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-6">
+        {/* Search and Filters Row */}
+        <div className="mb-6">
+          <div className="flex justify-end items-center gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search"
+                value={displaySearchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowFilters(!showFilters);
+              }}
+              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 rounded-md"
+            >
+              <Filter className="h-4 w-4" />
+              Filters
+            </Button>
+          </div>
+        </div>
+
         {/* Filter Section */}
         <div className="mb-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">
-              {config?.title || "Leads"}
-            </h2>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowFilters(!showFilters);
-                }}
-                className="flex items-center gap-2"
-              >
-                <Filter className="h-4 w-4" />
-                {showFilters ? 'Hide Filters' : 'Show Filters'}
-              </Button>
-            </div>
-          </div>
 
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
@@ -1488,85 +1640,32 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         </div>
 
 
-        {/* Search Bar Section */}
-        <div className="mb-6">
-          <div className="flex justify-end items-center">
-            <Input
-              type="text"
-              placeholder="Search..."
-              value={displaySearchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
 
         {/* Table Section */}
         {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full">
-          <style>{`
-            /* Fixed width table - no horizontal scroll */
-            .table-container {
-              width: 100%;
-              border: 1px solid #e5e7eb;
-              border-radius: 0.5rem;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-              overflow: hidden;
-            }
-            
-            /* Table styles */
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              table-layout: fixed; /* Fixed layout for consistent column widths */
-            }
-            
-            th, td {
-              padding: 8px 12px;
-              text-align: left;
-              border-bottom: 1px solid #e5e7eb;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            }
-            
-            th {
-              background-color: #f9fafb;
-              font-weight: 600;
-              font-size: 0.875rem;
-              color: #374151;
-            }
-            
-            td {
-              font-size: 0.875rem;
-              color: #111827;
-            }
-            
-            tr:hover {
-              background-color: #f9fafb;
-            }
-            
-            tbody tr:nth-child(even) {
-              background-color: #fafafa;
-            }
-            
-            /* Equal column widths - distribute evenly */
-            ${config?.columns?.map((col, idx) => 
-              col.width ? 
-                `table th:nth-child(${idx + 1}), table td:nth-child(${idx + 1}) { width: ${col.width}; }` : 
-                `table th:nth-child(${idx + 1}), table td:nth-child(${idx + 1}) { width: ${100 / (config?.columns?.length || 5)}%; }`
-            ).filter(Boolean).join('\n')}
-          `}</style>
-          <div className="table-container">
-            <table className="w-full" style={{ tableLayout: 'fixed' }}>
+        <div className="w-full relative">
+          {/* Loading Overlay */}
+          {tableLoading && (
+            <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <span className="text-gray-600">Loading...</span>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-hidden w-full">
+            <table className="min-w-full bg-white">
               <thead>
-                <tr>
+                <tr className="bg-black border-b border-gray-200">
                   {tableColumns.map((col, idx) => (
-                    <th key={idx}>{col.header}</th>
+                    <th key={idx} className="py-3 px-6 text-left text-sm font-semibold text-white">
+                      {col.header}
+                    </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="text-gray-600 text-sm bg-white">
                 {tableLoading ? (
                   <tr>
                     <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
@@ -1584,11 +1683,15 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                     <tr 
                       key={rowIdx} 
                       onClick={() => handleRowClick(row)}
-                      className="cursor-pointer"
+                      className={`border-b border-gray-200 hover:bg-gray-50 bg-white ${
+                        handleRowClick ? 'cursor-pointer' : ''
+                      }`}
                     >
                       {tableColumns.map((col, colIdx) => (
-                        <td key={colIdx}>
-                          {renderCell(row, col, colIdx)}
+                        <td key={colIdx} className="py-3 px-6 text-left">
+                          <div className="flex items-center">
+                            {renderCell(row, col, colIdx, rowIdx)}
+                          </div>
                         </td>
                       ))}
                     </tr>
@@ -1601,9 +1704,26 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         
         {/* Server-side pagination controls - works for both search and normal view */}
         {pagination.totalCount > 0 && filteredData.length > 0 && (
-          <div className="flex justify-between items-center mt-4 p-4 border-t">
-            <div className="text-sm text-gray-600">
-              Showing {filteredData.length} of {pagination.totalCount} leads
+          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Page</span>
+              <Select
+                value={pagination.currentPage.toString()}
+                onValueChange={handlePageChange}
+                disabled={tableLoading}
+              >
+                <SelectTrigger className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-3 py-1.5 h-auto w-[70px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: pagination.numberOfPages }, (_, i) => i + 1).map((pageNum) => (
+                    <SelectItem key={pageNum} value={pageNum.toString()} className="hover:bg-gray-100 focus:bg-gray-100">
+                      {pageNum}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-gray-600">of {pagination.numberOfPages}</span>
             </div>
             
             <div className="flex items-center gap-2">
@@ -1612,19 +1732,17 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                 size="sm"
                 onClick={handlePreviousPage}
                 disabled={!pagination.previousPageLink || tableLoading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </Button>
-              
-              <span className="text-sm text-gray-600 px-3">
-                Page {pagination.currentPage} of {pagination.numberOfPages}
-              </span>
               
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleNextPage}
                 disabled={!pagination.nextPageLink || tableLoading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
               </Button>

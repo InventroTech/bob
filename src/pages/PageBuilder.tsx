@@ -95,6 +95,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
 import { ProgressBar } from "@/components/ui/progressBar";
 import { LeadProgressBar } from "@/components/page-builder/LeadProgressBar";
+import { HeaderComponent } from "@/components/page-builder/HeaderComponent";
 import { TicketTableComponent } from "@/components/page-builder/TicketTableComponent";
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
 import { TicketCarouselWrapper } from "@/components/page-builder/TicketCarouselWrapper";
@@ -381,7 +382,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   // Separate state for routing rules filter fields to prevent re-renders
   const [localFilterFields, setLocalFilterFields] = useState<any[]>(
-    initialConfig.filterFields || []
+    (initialConfig as any).filterFields || []
   );
 
   // Separate state for columns
@@ -713,7 +714,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             onConfigChange={(newConfig) => {
               // Update all config fields
               Object.entries(newConfig).forEach(([key, value]) => {
-                handleInputChange(key, value);
+                handleInputChange(key as keyof LocalConfigType, value);
               });
             }}
           />
@@ -788,6 +789,7 @@ const PageBuilder = () => {
   const { tenantId } = useTenant();
   const [isSaving, setIsSaving] = useState(false);
   const [pageName, setPageName] = useState("Untitled Page");
+  const [headerTitle, setHeaderTitle] = useState("");
   const [activeTab, setActiveTab] = useState("components");
   const [canvasComponents, setCanvasComponents] = useState<CanvasComponentData[]>([]);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -842,6 +844,8 @@ const PageBuilder = () => {
             // Supabase `pages.config` stores the canvas components. Older rows might be arrays.
             // Normalize to array of CanvasComponentData.
             setPageName(data.name || 'Untitled Page');
+            // Try to get header_title if column exists, otherwise use empty string
+            setHeaderTitle((data as any).header_title || '');
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
             if (data.role) setSelectedRole(data.role);
           } else {
@@ -1016,7 +1020,8 @@ const PageBuilder = () => {
       const targetIndex = canvasComponents.findIndex(comp => comp.id === targetId);
       
       if (targetIndex !== -1) {
-        // Insert the new component at this index
+        // Always insert above the target component (at target index)
+        // This ensures the new component appears on top when dropped on an existing component
         setCanvasComponents(prev => {
           const newList = [...prev];
           newList.splice(targetIndex, 0, newComponent);
@@ -1063,7 +1068,7 @@ const PageBuilder = () => {
 
     setIsSaving(true);
     try {
-      const pageData = {
+      const pageData: any = {
         user_id: user.id,
         tenant_id: tenantId,
         name: pageName.trim(),
@@ -1071,6 +1076,11 @@ const PageBuilder = () => {
         updated_at: new Date().toISOString(),
         role: selectedRole || null,
       };
+      
+      // Only include header_title if it has a value (optional field)
+      if (headerTitle.trim()) {
+        pageData.header_title = headerTitle.trim();
+      }
 
       let response;
       if (pageId && pageId !== 'new') {
@@ -1088,9 +1098,34 @@ const PageBuilder = () => {
           .single();
       }
 
-      if (response.error) throw response.error;
-
-      toast.success("Page saved successfully!");
+      if (response.error) {
+        // If error is about missing column, try saving without header_title
+        if (response.error.message?.includes('header_title') || response.error.message?.includes('column')) {
+          const pageDataWithoutHeader = { ...pageData };
+          delete pageDataWithoutHeader.header_title;
+          
+          let retryResponse;
+          if (pageId && pageId !== 'new') {
+            retryResponse = await supabase
+              .from('pages')
+              .update(pageDataWithoutHeader)
+              .eq('id', pageId);
+          } else {
+            retryResponse = await supabase
+              .from('pages')
+              .insert([pageDataWithoutHeader])
+              .select('id')
+              .single();
+          }
+          
+          if (retryResponse.error) throw retryResponse.error;
+          toast.success("Page saved successfully! (Header title column not available in database)");
+        } else {
+          throw response.error;
+        }
+      } else {
+        toast.success("Page saved successfully!");
+      }
 
       // If it was a new page, navigate to the edit URL with the new ID
       if (!(pageId && pageId !== 'new') && response.data?.id) {
@@ -1133,6 +1168,12 @@ const PageBuilder = () => {
                 value={pageName}
                 onChange={(e) => setPageName(e.target.value)}
                 placeholder="Page Name"
+                className="w-1/3"
+              />
+              <Input
+                value={headerTitle}
+                onChange={(e) => setHeaderTitle(e.target.value)}
+                placeholder="Header Title"
                 className="w-1/3"
               />
               <Button variant="outline" size="sm"> {/* Preview functionality TBD */}
@@ -1400,7 +1441,7 @@ const PageBuilder = () => {
               setCanvasRef(node);
               canvasRef.current = node;
             }}
-            className={`flex-1 bg-muted/30 overflow-visible p-8 border-2 ${
+            className={`flex-1 bg-muted/30 overflow-visible border-2 ${
               isOver ? 'border-primary border-dashed' : 'border-dashed'
             } flex-1 flex flex-col bg-background shadow-sm ${
               activeDragId ? 'ring-2 ring-primary/20' : ''
@@ -1416,7 +1457,7 @@ const PageBuilder = () => {
 
             {/* Content area within the droppable div */}
             <div
-              className={`flex-1 flex flex-col gap-4 ${
+              className={`flex-1 flex flex-col ${
                 isOver ? 'bg-primary/5 transition-colors duration-150' : ''
               }`}
             >
