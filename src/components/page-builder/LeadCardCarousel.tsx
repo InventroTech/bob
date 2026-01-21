@@ -31,6 +31,7 @@ interface LeadCardCarouselProps {
     title?: string;
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    leadAssignmentWebhookUrl?: string;
   };
 }
 
@@ -692,6 +693,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         incrementFetchedCount();
       }
 
+      // Send lead assignment event to external server
+      const { data: { user } } = await supabase.auth.getUser();
+      await crmLeadsApi.sendLeadAssignmentEvent(leadData, user?.id, config?.leadAssignmentWebhookUrl);
+
       isInitialized.current = true;
       await fetchLeadStats();
       
@@ -1017,7 +1022,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const currentLead = await fetchCurrentLead();
       
       if (currentLead) {
-        // Display the current assigned lead
+        // Display the current assigned lead (already assigned, no need to send event)
         setCurrentLead(currentLead);
         setShowPendingCard(false);
         setHasCheckedForLeads(true);
