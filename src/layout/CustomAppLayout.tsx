@@ -158,7 +158,7 @@ const CustomAppLayout: React.FC = () => {
         style={{ width: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
-            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'} pt-6 pb-4 w-full`}>
+            <div className={`flex items-center flex-shrink-0 ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'} pt-6 pb-4 w-full`}>
             {sidebarCollapsed ? (
               <button
                 onClick={() => setSidebarCollapsed(false)}
@@ -183,7 +183,7 @@ const CustomAppLayout: React.FC = () => {
             )}
           </div>
 
-          <nav className={`flex-1 space-y-2 py-2 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+          <nav className={`flex-1 overflow-y-auto space-y-2 py-2 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
             {pages.map((page) => (
               <NavLink
                 key={page.id}
@@ -212,7 +212,7 @@ const CustomAppLayout: React.FC = () => {
             ))}
           </nav>
 
-          <div className={`mt-auto py-4 space-y-3 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+          <div className={`flex-shrink-0 bg-white border-t py-4 space-y-3 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
             <button className={`flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500">
                 <Bell className="h-4 w-4" />

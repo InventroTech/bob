@@ -6,6 +6,7 @@ interface LeadAssignmentComponentProps {
     leadTypesEndpoint?: string;
     rmsEndpoint?: string;
     title?: string;
+    assignmentsEndpoint?: string;
   };
 }
 
