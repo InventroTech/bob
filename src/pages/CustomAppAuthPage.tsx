@@ -122,8 +122,8 @@ const CustomAppAuthPage: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
       <form onSubmit={handleLogin} className="space-y-4 p-6 bg-white rounded shadow w-full max-w-sm">
-        <h3 className="text-center">Login to Your App</h3>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        <h5>Login to Your App</h5>
+        {error && <p>{error}</p>}
         <Input
           placeholder="Email"
           type="email"

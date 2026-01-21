@@ -1,4 +1,13 @@
+
 import { supabase } from '@/lib/supabase';
+import { userSettingsApi } from '@/lib/userSettingsApi';
+
+import { createApiClient } from '@/lib/api/client';
+
+const BASE_URL = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '') || '';
+
+// Create API client for this service
+const apiClient = createApiClient(BASE_URL);
 
 /**
  * Centralized API service for CRM Leads
@@ -10,36 +19,13 @@ export const crmLeadsApi = {
    */
   async getCurrentLead(): Promise<any | null> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const response = await apiClient.get('/crm-records/leads/current/');
+      const leadData = response.data;
 
-      if (!token) {
+      // Backend returns empty object {} with 200 status when no lead is found
+      if (!leadData || (typeof leadData === 'object' && !Array.isArray(leadData) && Object.keys(leadData).length === 0)) {
         return null;
       }
-
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
-      if (!baseUrl) {
-        return null;
-      }
-
-      const url = `${baseUrl}/crm-records/leads/current/`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          // No lead assigned
-          return null;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const leadData = await response.json();
 
       // Backend returns empty object {} with 200 status when no lead is found
       if (!leadData || (typeof leadData === 'object' && !Array.isArray(leadData) && Object.keys(leadData).length === 0)) {
@@ -59,7 +45,11 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error) {
+    } catch (error: any) {
+      // 404 means no lead assigned
+      if (error.response?.status === 404) {
+        return null;
+      }
       console.error('[crmLeadsApi] Error fetching current lead:', error);
       return null;
     }
@@ -70,38 +60,16 @@ export const crmLeadsApi = {
    */
   async getNextLead(endpoint?: string): Promise<any | null> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
-      if (!baseUrl) {
-        throw new Error('API base URL not configured');
-      }
-
       // Use configured endpoint or fallback to default
       const apiEndpoint = endpoint || '/api/leads';
-      const apiUrl = `${baseUrl}${apiEndpoint}`;
+      
+      const response = await apiClient.get(apiEndpoint);
+      const leadData = response.data;
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null; // No leads available
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // Backend returns empty object {} with 200 status when no lead is found
+      if (!leadData || (typeof leadData === 'object' && !Array.isArray(leadData) && Object.keys(leadData).length === 0)) {
+        return null;
       }
-
-      const leadData = await response.json();
 
       // Backend returns empty object {} with 200 status when no lead is found
       if (!leadData || (typeof leadData === 'object' && !Array.isArray(leadData) && Object.keys(leadData).length === 0)) {
@@ -121,7 +89,11 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error) {
+    } catch (error: any) {
+      // 404 means no leads available
+      if (error.response?.status === 404) {
+        return null;
+      }
       console.error('[crmLeadsApi] Error fetching next lead:', error);
       throw error;
     }
@@ -132,32 +104,10 @@ export const crmLeadsApi = {
    */
   async getLeadStats(statusEndpoint?: string): Promise<any> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Authentication required');
-      }
-
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
-      if (!baseUrl) {
-        throw new Error('API base URL not configured');
-      }
-
       const endpoint = statusEndpoint || '/get-lead-status';
-      const apiUrl = `${baseUrl}${endpoint}`;
-
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      const response = await apiClient.get(endpoint);
+      
+      return response.data;
     } catch (error) {
       console.error('[crmLeadsApi] Error fetching lead statistics:', error);
       throw error;
@@ -173,48 +123,20 @@ export const crmLeadsApi = {
     payload: Record<string, any>
   ): Promise<boolean> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
-      if (!baseUrl) {
-        throw new Error('API base URL not configured');
-      }
-
-      const url = `${baseUrl}/crm-records/records/events/`;
       const body = {
         event: eventName,
         record_id: recordId,
         payload,
       };
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => null);
-        console.error('[crmLeadsApi] Event request failed', {
-          status: response.status,
-          statusText: response.statusText,
-          body: text,
-        });
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      await response.json().catch(() => null);
+      await apiClient.post('/crm-records/records/events/', body);
       return true;
-    } catch (error) {
-      console.error('[crmLeadsApi] Error sending event:', error);
+    } catch (error: any) {
+      console.error('[crmLeadsApi] Event request failed', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+      });
       throw error;
     }
   },
@@ -229,48 +151,156 @@ export const crmLeadsApi = {
     dateTo?: string
   ): Promise<number> {
     try {
+      // Build query parameters for backend filtering
+      const params: Record<string, string> = {
+        event: 'lead.trial_activated',
+        user_supabase_uid: userSupabaseUid,
+      };
+
+      if (dateFrom) {
+        params.timestamp__gte = dateFrom;
+      }
+      if (dateTo) {
+        params.timestamp__lte = dateTo;
+      }
+
+      const response = await apiClient.get('/crm-records/events/count/', {
+        params
+      });
+
+      return response.data.count || 0;
+    } catch (error) {
+      console.error('[crmLeadsApi] Error fetching trial activation count:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Send lead assignment event to external server via backend proxy
+   * This is called when a lead is successfully assigned to a user
+   */
+  async sendLeadAssignmentEvent(leadData: any, userId?: string, webhookUrlOverride?: string): Promise<void> {
+    try {
+      // Priority: 1. Config webhook URL (from Lead Management component), 2. User settings, 3. Environment variable
+      let webhookUrl: string | null = webhookUrlOverride || null;
+      
+      // If not provided via config, try user settings
+      if (!webhookUrl) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            try {
+              const webhookSetting = await userSettingsApi.get(user.id, 'LEAD_ASSIGNMENT_WEBHOOK_URL');
+              if (webhookSetting && webhookSetting.value) {
+                webhookUrl = typeof webhookSetting.value === 'string' 
+                  ? webhookSetting.value 
+                  : String(webhookSetting.value);
+              }
+            } catch (error: any) {
+              // 404 is expected if the setting doesn't exist - silently ignore
+              if (!error?.message?.includes('404') && !error?.message?.includes('Not found')) {
+                console.warn('[crmLeadsApi] Could not fetch webhook URL from user settings:', error);
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('[crmLeadsApi] Error getting user for webhook URL:', error);
+        }
+      }
+      
+      // Fallback to environment variable if not found in config or user settings
+      if (!webhookUrl) {
+        webhookUrl = import.meta.env.VITE_LEAD_ASSIGNMENT_WEBHOOK_URL || null;
+      }
+      
+      // If webhook URL is not configured, silently skip
+      if (!webhookUrl) {
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Authentication required');
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!session?.access_token) {
+        console.warn('[crmLeadsApi] No session token available for webhook request');
+        return;
       }
 
       const baseUrl = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '');
       if (!baseUrl) {
-        throw new Error('API base URL not configured');
+        console.warn('[crmLeadsApi] Backend API URL not configured');
+        return;
       }
 
-      // Build query parameters for backend filtering
-      const params = new URLSearchParams({
-        event: 'lead.trial_activated',
-        user_supabase_uid: userSupabaseUid,
-      });
+      // Prepare the payload with clean lead assignment data
+      // Extract only essential lead attributes, avoid nested objects
+      const payload = {
+        event: 'lead_crm_lead_assigned',
+        timestamp: new Date().toISOString(),
+        lead: {
+          id: leadData?.id,
+          name: leadData?.name,
+          phone: leadData?.phone || leadData?.phone_no || leadData?.phone_number || leadData?.data?.phone_number,
+          praja_id: leadData?.praja_id,
+          lead_status: leadData?.lead_status || leadData?.status || leadData?.data?.lead_stage,
+          lead_score: leadData?.lead_score || leadData?.data?.lead_score,
+          lead_type: leadData?.lead_type,
+          assigned_to: leadData?.assigned_to || leadData?.data?.assigned_to,
+          attempt_count: leadData?.attempt_count || leadData?.data?.call_attempts,
+          last_call_outcome: leadData?.last_call_outcome,
+          next_call_at: leadData?.next_call_at,
+          do_not_call: leadData?.do_not_call,
+          resolved_at: leadData?.resolved_at,
+          premium_poster_count: leadData?.premium_poster_count,
+          package_to_pitch: leadData?.package_to_pitch,
+          last_active_date_time: leadData?.last_active_date_time,
+          latest_remarks: leadData?.latest_remarks,
+          lead_description: leadData?.lead_description,
+          affiliated_party: leadData?.affiliated_party || leadData?.data?.affiliated_party,
+          rm_dashboard: leadData?.rm_dashboard,
+          user_profile_link: leadData?.user_profile_link || leadData?.data?.user_profile_link,
+          whatsapp_link: leadData?.whatsapp_link || leadData?.data?.whatsapp_link,
+          lead_source: leadData?.lead_source,
+          created_at: leadData?.created_at,
+          updated_at: leadData?.updated_at,
+          display_pic_url: leadData?.display_pic_url || leadData?.data?.display_pic_url,
+          lead_stage: leadData?.lead_stage || leadData?.data?.lead_stage,
+          tasks: leadData?.tasks || leadData?.data?.tasks,
+        },
+        user: {
+          id: userId || user?.id,
+          email: user?.email,
+        },
+        assignment_time: new Date().toISOString(),
+      };
 
-      if (dateFrom) {
-        params.append('timestamp__gte', dateFrom);
-      }
-      if (dateTo) {
-        params.append('timestamp__lte', dateTo);
-      }
-
-      // Use dedicated count endpoint
-      const url = `${baseUrl}/crm-records/events/count/?${params.toString()}`;
-      const response = await fetch(url, {
-        method: 'GET',
+      // Send webhook through backend proxy (handles CORS and forwarding)
+      const proxyUrl = `${baseUrl}/crm-records/webhooks/lead-assigned/`;
+      const proxyResponse = await fetch(proxyUrl, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
+        body: JSON.stringify({
+          webhook_url: webhookUrl,
+          payload,
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (proxyResponse.ok) {
+        console.log('[crmLeadsApi] Webhook sent successfully via backend proxy');
+      } else {
+        const errorText = await proxyResponse.text().catch(() => 'Unknown error');
+        console.warn('[crmLeadsApi] Backend webhook proxy returned error:', {
+          status: proxyResponse.status,
+          statusText: proxyResponse.statusText,
+          error: errorText,
+        });
       }
-
-      const data = await response.json();
-      return data.count || 0;
     } catch (error) {
-      console.error('[crmLeadsApi] Error fetching trial activation count:', error);
-      throw error;
+      // Log error but don't throw - webhook failures shouldn't break the lead assignment flow
+      console.error('[crmLeadsApi] Error sending lead assignment event:', error);
     }
   },
 };

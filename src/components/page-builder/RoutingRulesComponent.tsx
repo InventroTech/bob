@@ -341,8 +341,8 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
     return (
       <Card className="bg-white border-0 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-gray-900">{componentTitle}</CardTitle>
-          <p className="text-gray-600 mt-2">You need GM role to manage routing rules.</p>
+          <h5>{componentTitle}</h5>
+          <p>You need GM role to manage routing rules.</p>
         </CardHeader>
       </Card>
     );
@@ -398,8 +398,8 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       {/* Create/Edit Rule Card */}
       <Card className="bg-white border-0 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-gray-900">{componentTitle}</CardTitle>
-          <p className="text-gray-600 mt-2">{componentDescription}</p>
+          <h5>{componentTitle}</h5>
+          <p>{componentDescription}</p>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* User and Queue Type Selection */}
@@ -449,7 +449,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
           {/* Dynamic filter fields based on config */}
           {filterFields.length > 0 && (
             <div className="py-4 bg-white">
-              <h4 className="text-gray-900 mb-4">Filter Conditions</h4>
+              <h5>Filter Conditions</h5>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filterFields.map((field) => (
                   <div key={field.key} className="space-y-2">
@@ -601,8 +601,8 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       {/* Existing Rules Card */}
       <Card className="bg-white border-0 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-gray-900">Existing Rules</CardTitle>
-          <p className="text-gray-600 mt-2">Current routing rules configured for this tenant.</p>
+          <h5>Existing Rules</h5>
+          <p>Current routing rules configured for this tenant.</p>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -632,14 +632,14 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
                         <TableCell>
                           {ruleUser ? (
                             <div>
-                              <div className="font-medium text-gray-900">{ruleUser.name}</div>
-                              <div className="text-xs text-gray-500">{ruleUser.email}</div>
+                              <div className="font-medium text-sm text-gray-900">{ruleUser.name}</div>
+                              <div className="text-sm text-gray-500">{ruleUser.email}</div>
                             </div>
                           ) : (
-                            <span className="font-mono text-xs text-gray-700">{rule.user_id}</span>
+                            <span className="font-mono text-sm text-gray-700">{rule.user_id}</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-gray-700">
+                        <TableCell className="text-sm text-gray-700">
                           {rule.queue_type === 'ticket' ? 'Support Tickets' : 'Leads'}
                         </TableCell>
                         <TableCell>
@@ -654,7 +654,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="max-w-xl">
+                          <div className="max-w-xl text-sm">
                             {formatConditionsReadable(rule.conditions)}
                           </div>
                         </TableCell>

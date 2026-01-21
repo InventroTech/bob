@@ -53,6 +53,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 export type ApplicantStage = 'Initial' | 'Assignment Pending' | 'Interview' | 'HR' | 'Rejected' | 'Hire';
@@ -336,6 +337,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   className = ''
 }) => {
   const { tenantId } = useTenant(); // Get tenant ID from hook
+  const { session } = useAuth();
   const {
     title = 'Job Applications',
     description = 'Manage and review job applications',
@@ -543,7 +545,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -860,7 +861,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           'Content-Type': 'application/json'
         };
 
-        const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           headers['Authorization'] = `Bearer ${session.access_token}`;
         }
@@ -1015,7 +1015,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
               <div>
                 <div className="font-semibold text-gray-900">{application.applicantName}</div>
                 {isNewApplication(application.submittedAt) && (
-                  <Badge className="bg-blue-100 text-blue-800 text-xs mt-1">New</Badge>
+                  <Badge className="bg-blue-100 text-blue-800 text-sm mt-1">New</Badge>
                 )}
               </div>
             </div>
@@ -1033,7 +1033,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                 <Badge 
                   key={idx} 
                   variant="secondary" 
-                  className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
+                  className="text-sm bg-blue-100 text-blue-800 hover:bg-blue-200 border-0"
                 >
                   {skill}
                 </Badge>

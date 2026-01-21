@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Loader2, Settings, AlertCircle, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
@@ -194,7 +194,7 @@ const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: Ca
         <Card className="max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="mb-2">Access Denied</h3>
+            <h5>Access Denied</h5>
             <p className="text-muted-foreground text-center">
               You need GM (General Manager) role to access this page.
             </p>
@@ -219,7 +219,7 @@ const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: Ca
       {showHeader && (
         <div className="flex items-center justify-between">
           <div>
-            <h3>{config?.title || 'Call Attempt Matrix'}</h3>
+            <h5>{config?.title || 'Call Attempt Matrix'}</h5>
             <p className="text-muted-foreground">
               Configure call attempt limits, SLA, and minimum time between calls per lead type
             </p>
@@ -236,7 +236,7 @@ const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: Ca
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>{config?.title || 'Call Attempt Matrix Configuration'}</CardTitle>
+              <h5>{config?.title || 'Call Attempt Matrix Configuration'}</h5>
               <CardDescription className="text-gray-600">
                 Define max call attempts, SLA in days, and minimum time between calls for each lead type
               </CardDescription>

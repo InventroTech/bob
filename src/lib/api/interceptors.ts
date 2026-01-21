@@ -59,7 +59,7 @@ export const setupResponseInterceptor = (instance: any) => {
       // Services can access response.data for the actual data
       return response;
     },
-    (error: AxiosError) => {
+    async (error: AxiosError) => {
       // Handle aborted/cancelled requests silently
       if (error.code === 'ERR_CANCELED' || error.message?.includes('canceled') || error.message?.includes('aborted')) {
         // Return a special error that can be checked but won't trigger error handlers
@@ -81,7 +81,45 @@ export const setupResponseInterceptor = (instance: any) => {
       // Map HTTP status codes to custom error classes
       switch (status) {
         case 401:
+          // Attempt to refresh token and retry request once
+          const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+          
+          if (!originalRequest._retry) {
+            originalRequest._retry = true;
+            
+            try {
+              console.log('[Interceptor] 401 error - attempting to refresh session and retry request');
+              
+              // Force a session refresh
+              const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+              
+              if (refreshError) {
+                console.error('[Interceptor] Session refresh failed:', refreshError);
+                return Promise.reject(new AuthenticationError(errorMessage, status, data));
+              }
+              
+              if (session?.access_token) {
+                console.log('[Interceptor] Session refreshed successfully - retrying request with new token');
+                
+                // Update the Authorization header with the new token
+                originalRequest.headers.Authorization = `Bearer ${session.access_token}`;
+                
+                // Retry the original request with the new token
+                return instance(originalRequest);
+              } else {
+                console.warn('[Interceptor] Session refresh returned no token');
+                return Promise.reject(new AuthenticationError(errorMessage, status, data));
+              }
+            } catch (refreshError) {
+              console.error('[Interceptor] Error during token refresh:', refreshError);
+              return Promise.reject(new AuthenticationError(errorMessage, status, data));
+            }
+          }
+          
+          // Already retried once, fail with authentication error
+          console.log('[Interceptor] Request already retried - authentication failed');
           return Promise.reject(new AuthenticationError(errorMessage, status, data));
+          
         case 403:
           return Promise.reject(new AuthorizationError(errorMessage, status, data));
         case 404:

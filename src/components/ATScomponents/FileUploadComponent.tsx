@@ -5,6 +5,7 @@ import { Upload, X, FileIcon, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 
 interface FileUploadComponentProps {
   title?: string;
@@ -46,6 +47,7 @@ export const FileUploadComponent: React.FC<FileUploadComponentProps> = ({
   onUploadError
 }) => {
   const { tenantId } = useTenant(); // Get tenant ID from hook
+  const { session } = useAuth();
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -301,7 +303,6 @@ export const FileUploadComponent: React.FC<FileUploadComponentProps> = ({
       const headers: HeadersInit = {};
       
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }

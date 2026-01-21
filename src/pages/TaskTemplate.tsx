@@ -8,7 +8,6 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Calendar,
@@ -46,7 +45,7 @@ const TaskTemplate = () => {
                 <ChevronLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <h3 className="text-2xl font-bold">Follow Up with John Smith</h3>
+            <h5>Follow Up with John Smith</h5>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline">
@@ -84,7 +83,7 @@ const TaskTemplate = () => {
           <div className="md:col-span-2 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Task Details</CardTitle>
+                <h5>Task Details</h5>
                 <CardDescription>Information about this follow-up task</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -94,8 +93,8 @@ const TaskTemplate = () => {
                       <Clock className="h-4 w-4 text-amber-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Due Date</p>
-                      <p className="font-medium">April 15, 2025 at 3:00 PM</p>
+                      <p>Due Date</p>
+                      <p>April 15, 2025 at 3:00 PM</p>
                     </div>
                   </div>
                   <Badge className="w-fit" variant="outline">
@@ -109,8 +108,8 @@ const TaskTemplate = () => {
                 <Separator />
 
                 <div>
-                  <h3 className="font-medium mb-2">Description</h3>
-                  <p className="text-muted-foreground">
+                  <h5>Description</h5>
+                  <p>
                     Follow up with John regarding the proposal we sent last week. Discuss pricing options and timeline considerations.
                     Be prepared to address questions about implementation and support.
                   </p>
@@ -119,21 +118,21 @@ const TaskTemplate = () => {
                 <Separator />
 
                 <div>
-                  <h3 className="font-medium mb-2">Notes</h3>
+                  <h5>Notes</h5>
                   <div className="space-y-3">
                     <div className="bg-muted p-3 rounded-md">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium">Initial Contact</p>
-                        <p className="text-xs text-muted-foreground">April 5, 2025</p>
+                        <p>Initial Contact</p>
+                        <p>April 5, 2025</p>
                       </div>
-                      <p className="text-sm">John expressed interest in our premium plan but had concerns about the implementation timeline.</p>
+                      <p>John expressed interest in our premium plan but had concerns about the implementation timeline.</p>
                     </div>
                     <div className="bg-muted p-3 rounded-md">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium">Proposal Sent</p>
-                        <p className="text-xs text-muted-foreground">April 8, 2025</p>
+                        <p>Proposal Sent</p>
+                        <p>April 8, 2025</p>
                       </div>
-                      <p className="text-sm">Sent comprehensive proposal with three pricing tiers and implementation options.</p>
+                      <p>Sent comprehensive proposal with three pricing tiers and implementation options.</p>
                     </div>
                   </div>
                 </div>
@@ -149,7 +148,7 @@ const TaskTemplate = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Activity Timeline</CardTitle>
+                <h5>Activity Timeline</h5>
               </CardHeader>
               <CardContent>
                 <div className="relative pl-6 border-l">
@@ -173,7 +172,7 @@ const TaskTemplate = () => {
                     <div key={i} className="mb-6 relative">
                       <div className="absolute -left-[23px] w-4 h-4 rounded-full bg-primary"></div>
                       <p className="text-xs text-muted-foreground mb-1">{activity.date}</p>
-                      <h4 className="font-medium">{activity.title}</h4>
+                      <h5>{activity.title}</h5>
                       <p className="text-sm text-muted-foreground">{activity.description}</p>
                     </div>
                   ))}
@@ -185,7 +184,7 @@ const TaskTemplate = () => {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Contact Information</CardTitle>
+                <h5>Contact Information</h5>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-3">
@@ -194,7 +193,7 @@ const TaskTemplate = () => {
                     <AvatarFallback className="text-lg">JS</AvatarFallback>
                   </Avatar>
                   <div>
-                    <h3 className="font-medium text-lg">John Smith</h3>
+                    <h5>John Smith</h5>
                     <p className="text-sm text-muted-foreground">Technology Director at Acme Inc.</p>
                   </div>
                 </div>
@@ -221,7 +220,7 @@ const TaskTemplate = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Related Items</CardTitle>
+                <h5>Related Items</h5>
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="tasks">

@@ -587,7 +587,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     // Render link type columns
     if (column.type === 'link') {
       if (!displayValue || displayValue === '#' || displayValue === 'N/A') {
-        return <span className="text-gray-400 text-xs">-</span>;
+        return <span className="text-gray-400 text-sm">-</span>;
       }
       
       // Check if it's a profile link
@@ -601,7 +601,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             onClick={(e) => e.stopPropagation()}
           >
             <User className="h-4 w-4" />
-            <span className="text-xs">{truncateText('Profile', columnIndex)}</span>
+            <span className="text-sm">{truncateText('Profile', columnIndex)}</span>
           </a>
         );
       }
@@ -617,7 +617,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             onClick={(e) => e.stopPropagation()}
           >
             <MessageCircle className="h-4 w-4" />
-            <span className="text-xs">{truncateText('WhatsApp', columnIndex)}</span>
+            <span className="text-sm">{truncateText('WhatsApp', columnIndex)}</span>
           </a>
         );
       }
@@ -632,7 +632,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink className="h-4 w-4" />
-            <span className="text-xs">{truncateText('Link', columnIndex)}</span>
+            <span className="text-sm">{truncateText('Link', columnIndex)}</span>
         </a>
       );
     }
@@ -640,7 +640,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     // Render chip/badge for chip type columns
     if (column.type === 'chip') {
       return (
-        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-xs px-2 py-0.5`} title={displayValue}>
+        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-sm px-2 py-0.5`} title={displayValue}>
           {truncateText(displayValue, columnIndex)}
         </Badge>
       );
@@ -665,7 +665,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             title="Click to open WhatsApp"
           >
             <MessageCircle className="h-3 w-3" />
-            <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+            <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
           </a>
         );
       }
@@ -684,7 +684,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
               title="Click to open WhatsApp"
             >
               <MessageCircle className="h-3 w-3" />
-              <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+              <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
             </a>
           );
         }
@@ -703,7 +703,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <User className="h-3 w-3" />
-          <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+          <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
         </a>
       );
     }
@@ -719,13 +719,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <User className="h-3 w-3" />
-          <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+          <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
         </a>
       );
     }
     
     // Default text rendering
-    return <span className="text-xs block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
+    return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
   }, [config?.statusColors]);
 
   // Memoize table columns
@@ -1424,9 +1424,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         {/* Filter Section */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-gray-800">
+            <h5>
               {config?.title || "Leads"}
-            </h3>
+            </h5>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -1482,7 +1482,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                     )}
                   </div>
                 </div>
-              ) : (<h3>No filters configured</h3>)}
+              ) : (<h5>No filters configured</h5>)}
             </div>
           )}
         </div>
@@ -1562,20 +1562,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
               <thead>
                 <tr>
                   {tableColumns.map((col, idx) => (
-                    <th key={idx}>{col.header}</th>
+                    <th key={idx} className="text-sm">{col.header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {tableLoading ? (
                   <tr>
-                    <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                    <td colSpan={tableColumns.length} className="text-center py-8 text-sm text-gray-500">
                       Loading...
                     </td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                    <td colSpan={tableColumns.length} className="text-center py-8 text-sm text-gray-500">
                       {config?.emptyMessage || 'No data found'}
                     </td>
                   </tr>
@@ -1587,7 +1587,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                       className="cursor-pointer"
                     >
                       {tableColumns.map((col, colIdx) => (
-                        <td key={colIdx}>
+                        <td key={colIdx} className="text-sm">
                           {renderCell(row, col, colIdx)}
                         </td>
                       ))}

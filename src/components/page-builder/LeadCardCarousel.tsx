@@ -31,6 +31,7 @@ interface LeadCardCarouselProps {
     title?: string;
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    leadAssignmentWebhookUrl?: string;
   };
 }
 
@@ -108,7 +109,7 @@ interface LeadState {
 
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
-  const { user: authUser } = useAuth();
+  const { user: authUser, session } = useAuth();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -235,8 +236,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = async () => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (!currentSession) {
+      if (!session) {
         return;
       }
 
@@ -693,6 +693,10 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         incrementFetchedCount();
       }
 
+      // Send lead assignment event to external server
+      const { data: { user } } = await supabase.auth.getUser();
+      await crmLeadsApi.sendLeadAssignmentEvent(leadData, user?.id, config?.leadAssignmentWebhookUrl);
+
       isInitialized.current = true;
       await fetchLeadStats();
       
@@ -1018,7 +1022,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const currentLead = await fetchCurrentLead();
       
       if (currentLead) {
-        // Display the current assigned lead
+        // Display the current assigned lead (already assigned, no need to send event)
         setCurrentLead(currentLead);
         setShowPendingCard(false);
         setHasCheckedForLeads(true);
@@ -1101,9 +1105,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
             {/* Header */}
             <div className="text-center mb-6">
-              <h3 className="text-gray-800 mb-2">
+              <h5>
                 {config?.title || "Lead Management"}
-              </h3>
+              </h5>
             </div>
 
             {/* Inspirational Messages for Workers */}
@@ -1314,9 +1318,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       {getLeadName(currentLead)}
                     </a>
                   ) : (
-                    <h3 className="text-slate-900" style={titleFont}>
+                    <h5>
                       {getLeadName(currentLead)}
-                    </h3>
+                    </h5>
                   )}
                     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                       {currentLead?.affiliated_party && (
@@ -1392,7 +1396,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             >
               <div className="rounded-2xl border border-slate-200 p-5 w-full">
                 <div className="mb-4 flex items-center justify-between pl-2">
-                  <h3 className="text-slate-900" style={titleFont}>Task Progress</h3>
+                  <h5>Task Progress</h5>
                 </div>
                 {taskSteps.length ? (
                   <div className="pl-4">
@@ -1477,8 +1481,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   )}
                 </div>
                 <div>
-                  <h3 className="font-semibold">{getLeadName(currentLead) || "Lead Profile"}</h3>
-                  <p className="text-sm text-muted-foreground">Profile Information</p>
+                  <h5>{getLeadName(currentLead) || "Lead Profile"}</h5>
+                  <p>Profile Information</p>
                 </div>
               </div>
               <Button variant="ghost" size="sm" onClick={handleCloseProfile}>
@@ -1491,7 +1495,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {currentLead?.linkedin_profile && (
                   <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium mb-2">LinkedIn Profile</h4>
+                    <h5>LinkedIn Profile</h5>
                     <a
                       href={currentLead.linkedin_profile}
                       target="_blank"
@@ -1505,7 +1509,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 
                 {currentLead?.website && (
                   <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium mb-2">Website</h4>
+                    <h5>Website</h5>
                     <a
                       href={currentLead.website}
                       target="_blank"

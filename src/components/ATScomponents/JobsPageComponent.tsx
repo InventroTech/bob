@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { DynamicForm, DynamicFormData } from './DynamicForm';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 import { FileUploadComponent } from './FileUploadComponent';
 
 // Job interface
@@ -308,6 +309,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   className = ''
 }) => {
   const { tenantId } = useTenant(); // Get tenant ID from hook
+  const { session } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
@@ -496,7 +498,6 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -749,9 +750,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
       // Prepare headers for upload
       const uploadHeaders: HeadersInit = {};
-      const { data: { session: uploadSession } } = await supabase.auth.getSession();
-      if (uploadSession?.access_token) {
-        uploadHeaders['Authorization'] = `Bearer ${uploadSession.access_token}`;
+      if (session?.access_token) {
+        uploadHeaders['Authorization'] = `Bearer ${session.access_token}`;
       }
       const effectiveTenantSlug = tenantSlug || tenantId;
       if (effectiveTenantSlug) {
@@ -882,9 +882,8 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         'Content-Type': 'application/json',
       };
 
-      const { data: { session: submitSession } } = await supabase.auth.getSession();
-      if (submitSession?.access_token) {
-        headers['Authorization'] = `Bearer ${submitSession.access_token}`;
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
       }
 
       if (effectiveTenantSlug) {

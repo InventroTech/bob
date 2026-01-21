@@ -8,7 +8,7 @@ import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const dataFetchedRef = useRef(false); // Track if we've already fetched data
@@ -38,17 +38,16 @@ const CustomAppDashboard: React.FC = () => {
 
       try {
         // Get session to extract JWT token
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
-        if (sessionError || !sessionData.session?.access_token) {
-          console.error('No session found:', sessionError);
+        if (!session?.access_token) {
+          console.error('No session found');
           toast.error('Failed to load user data');
           setLoading(false);
           return;
         }
 
         // Extract tenant_id and role_id from JWT token (no API call needed)
-        const token = sessionData.session.access_token;
+        const token = session.access_token;
         const tenantId = getTenantIdFromJWT(token);
         const roleId = getRoleIdFromJWT(token);
 
@@ -126,8 +125,8 @@ const CustomAppDashboard: React.FC = () => {
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-center max-w-md mx-auto p-6">
         <div className="mb-6">
-          <h3 className="text-gray-900 mb-2">Welcome to {tenantSlug}</h3>
-          <p className="text-gray-600">You don't have any pages yet.</p>
+          <h5>Welcome to {tenantSlug}</h5>
+          <p>You don't have any pages yet.</p>
         </div>
         
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">

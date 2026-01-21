@@ -11,7 +11,7 @@ import {
   Legend,
   Filler,
 } from "chart.js";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { TrendingUp, Calendar } from "lucide-react";
@@ -239,7 +239,6 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       setLoading(true);
       setError(null);
       
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -436,10 +435,10 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
     return (
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <h5 className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
             {config?.title || "Line Chart"}
-          </CardTitle>
+          </h5>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-64">
@@ -453,10 +452,10 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <h5 className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
           {config?.title || "Line Chart"}
-        </CardTitle>
+        </h5>
         
         {/* Date Filter */}
         <div className="flex items-center gap-2 mt-2">
