@@ -342,6 +342,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar specific fields
     targetCount?: number;
     segmentCount?: number;
+    // LeadCardCarousel specific fields
+    leadAssignmentWebhookUrl?: string;
     // WhatsAppTemplate specific fields
     // (apiEndpoint and title are already in the base type)
     //job manager specific fields
@@ -386,6 +388,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar fields
     targetCount: initialConfig.targetCount || 10,
     segmentCount: initialConfig.segmentCount || 8,
+    // LeadCardCarousel fields
+    leadAssignmentWebhookUrl: initialConfig.leadAssignmentWebhookUrl || '',
     // TeamDashboard fields (if needed, add to ComponentConfig interface first)
     // allottedLeads: initialConfig.allottedLeads || 1600,
     // trailTarget: initialConfig.trailTarget || 160,
