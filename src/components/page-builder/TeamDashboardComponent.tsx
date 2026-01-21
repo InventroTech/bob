@@ -451,7 +451,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
       {/* Header with Date Picker */}
       {(config.title || showDatePicker) && (
         <div className="flex items-center justify-between mb-6">
-          {config.title && <h1 className="text-3xl font-bold text-black">{config.title}</h1>}
+          {config.title && <h5>{config.title}</h5>}
           {showDatePicker && (
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -482,7 +482,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
         {/* Overview Card - 60% width */}
         <Card className="border border-gray-200 flex-[0_0_60%]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Overview</CardTitle>
+            <h5>Overview</h5>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -511,7 +511,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
         {/* Connected to Trail Ratio Card - 40% width */}
         <Card className="border border-gray-200 flex-[0_0_40%]">
           <CardHeader>
-            <CardTitle className="text-black">Connected to Trial ratio</CardTitle>
+            <h5>Connected to Trial ratio</h5>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -536,7 +536,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
         {/* Trail Activation Chart */}
         <Card className="border border-gray-200">
           <CardHeader>
-            <CardTitle className="text-black">Trial Activation</CardTitle>
+            <h5>Trial Activation</h5>
             <div className="text-sm text-gray-600">
               Overall: Current {overview?.trials_activated || 0} ({Math.round(((overview?.trials_activated || 0) / trailTarget) * 100)}% of Target {trailTarget})
             </div>
@@ -551,7 +551,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
         {/* Average Time Spent Chart */}
         <Card className="border border-gray-200">
           <CardHeader>
-            <CardTitle className="text-black">Average Time Spent</CardTitle>
+            <h5>Average Time Spent</h5>
             <div className="text-sm text-gray-600">
               Overall: {formatTime(overview?.average_time_spent_seconds || null)}{' '}
               {(() => {
@@ -579,7 +579,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
       {/* Call Breakdown Section */}
       <Card className="border border-gray-200">
         <CardHeader>
-          <CardTitle className="text-black">Call Breakdown</CardTitle>
+          <h5>Call Breakdown</h5>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Summary Metrics Row */}

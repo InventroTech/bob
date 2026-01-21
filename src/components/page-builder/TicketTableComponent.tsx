@@ -1067,9 +1067,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         {/* Filter Section */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-gray-800">
+            <h5>
               {config?.title || "Support Tickets"}
-            </h3>
+            </h5>
             <Button
               variant="outline"
               size="sm"
@@ -1104,7 +1104,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverTrigger>
                     <PopoverContent className="w-60 p-4" align="start">
                       <div className="space-y-3">
-                        <h4>Select Resolution Statuses</h4>
+                        <h5>Select Resolution Statuses</h5>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
                           {getUniqueResolutionStatuses().map((status) => (
                             <div key={status} className="flex items-center space-x-2">
