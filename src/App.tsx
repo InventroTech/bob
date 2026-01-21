@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from './hooks/useAuth';
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import PageBuilder from "./pages/PageBuilder";
@@ -32,10 +33,11 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <Router>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <Routes>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Routes>
           {/* Public Route - Login/Signup */}
           <Route path="/auth" element={<AuthPage />} />
 
@@ -74,7 +76,8 @@ const App = () => (
           {/* Add a catch-all or 404 route if needed */}
           {/* <Route path="*" element={<NotFoundPage />} /> */}
         </Routes>
-      </TooltipProvider>
+        </TooltipProvider>
+      </AuthProvider>
     </Router>
   </QueryClientProvider>
 );

@@ -109,7 +109,7 @@ interface LeadState {
 
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
-  const { user: authUser } = useAuth();
+  const { user: authUser, session } = useAuth();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -236,8 +236,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = async () => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (!currentSession) {
+      if (!session) {
         return;
       }
 

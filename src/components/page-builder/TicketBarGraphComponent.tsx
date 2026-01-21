@@ -59,7 +59,6 @@ export const TicketBarGraphComponent: React.FC<TicketBarGraphProps> = ({ config 
         const endpoint = config?.apiEndpoint || '/api/ticket-stats-daily';
         const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}?days=${days}`;
         
-        const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
 
         if (!token) {
