@@ -8,7 +8,7 @@ import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const dataFetchedRef = useRef(false); // Track if we've already fetched data
@@ -38,17 +38,16 @@ const CustomAppDashboard: React.FC = () => {
 
       try {
         // Get session to extract JWT token
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
-        if (sessionError || !sessionData.session?.access_token) {
-          console.error('No session found:', sessionError);
+        if (!session?.access_token) {
+          console.error('No session found');
           toast.error('Failed to load user data');
           setLoading(false);
           return;
         }
 
         // Extract tenant_id and role_id from JWT token (no API call needed)
-        const token = sessionData.session.access_token;
+        const token = session.access_token;
         const tenantId = getTenantIdFromJWT(token);
         const roleId = getRoleIdFromJWT(token);
 

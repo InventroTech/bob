@@ -214,7 +214,6 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
       setLoading(true);
       setError(null);
       
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {

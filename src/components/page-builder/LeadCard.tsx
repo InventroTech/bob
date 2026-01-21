@@ -228,7 +228,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   initialLead,
   onUpdate,
 }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { tenantId } = useTenant();
 
   const isInitialized = React.useRef(false);
@@ -354,7 +354,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   // Fetching the lead stats
   const fetchLeadStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       // Use configured status data API endpoint or fallback to default
@@ -430,7 +429,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const fetchNextLead = async (currentLeadId: number) => {
     try {
       const nextLeadUrl = `${import.meta.env.VITE_API_URI}${config?.apiEndpoint || "/api/leads"}`;
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -513,7 +511,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const handleTakeBreak = async () => {
     try {
       const apiUrl = `${import.meta.env.VITE_API_URI}/take-a-break`;
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -587,7 +584,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       }
 
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error("Authentication required");
       }
@@ -665,7 +661,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       setLoading(true);
       const endpoint = config?.apiEndpoint || "/api/leads";
       const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {

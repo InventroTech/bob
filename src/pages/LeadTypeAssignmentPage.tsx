@@ -33,7 +33,7 @@ interface LeadTypeAssignmentPageProps {
 }
 
 const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: LeadTypeAssignmentPageProps) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { role, customRole } = useTenant();
   const [assignments, setAssignments] = useState<LeadTypeAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,8 +92,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         
         // Build user_id to uid mapping for user_settings table (which uses UUID)
         const uidMap: Record<string, string> = {};
-        const { data: { session: sessionForUid } } = await supabase.auth.getSession();
-        const tokenForUid = sessionForUid?.access_token;
+        const tokenForUid = session?.access_token;
         if (tokenForUid) {
           try {
             const baseUrl = import.meta.env.VITE_RENDER_API_URL;
@@ -144,7 +143,6 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         // Fetch leads count (daily target) for each user (fallback to user-settings if not present in new endpoint)
         // Fetch assigned_leads_count per user from LEAD_TYPE_ASSIGNMENT (one request per user)
 
-        const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (token) {
           const counts: Record<string, number> = {};
@@ -358,7 +356,6 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           // Update the LEAD_TYPE_ASSIGNMENT record with both value and daily_target
           // Try PATCH first (partial update), then PUT if needed
           try {
-            const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
             const baseUrl = import.meta.env.VITE_RENDER_API_URL;
             

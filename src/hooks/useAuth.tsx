@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -21,6 +22,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Helper function to extract tenant slug from current path
+  const getTenantSlugFromPath = (): string | null => {
+    const match = location.pathname.match(/^\/app\/([^\/]+)/);
+    return match ? match[1] : null;
+  };
+
+  // Helper function to get appropriate login URL
+  const getLoginUrl = (): string => {
+    const tenantSlug = getTenantSlugFromPath();
+    if (tenantSlug && tenantSlug !== 'login' && tenantSlug !== 'auth') {
+      return `/app/${tenantSlug}/login`;
+    }
+    return '/auth';
+  };
 
   const logout = async () => {
     try {
@@ -84,8 +102,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        console.log('Supabase auth state changed:', _event, session);
+      async (event, session) => {
+        console.log('Supabase auth state changed:', event, session);
+        
+        // Handle sign out or token expiration
+        if (event === 'SIGNED_OUT') {
+          console.log('User signed out - redirecting to login');
+          setSession(null);
+          setUser(null);
+          clearSentryUser();
+          setLoading(false);
+          
+          // Redirect to appropriate login page
+          const loginUrl = getLoginUrl();
+          toast.error('Your session has expired. Please login again.');
+          navigate(loginUrl, { replace: true });
+          return;
+        }
+
+        // Handle token refresh failure
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          console.log('Token refresh failed - session lost');
+          setSession(null);
+          setUser(null);
+          clearSentryUser();
+          setLoading(false);
+          
+          const loginUrl = getLoginUrl();
+          toast.error('Your session has expired. Please login again.');
+          navigate(loginUrl, { replace: true });
+          return;
+        }
+
+        // Handle user update/sign in
         setSession(session);
         const user = session?.user ?? null;
         setUser(user);
@@ -109,7 +158,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, []);
+  }, [navigate, location.pathname]);
 
   const value = useMemo(() => ({
     session,

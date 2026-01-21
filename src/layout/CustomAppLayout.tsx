@@ -12,7 +12,7 @@ import { FollowUpIcon, WIPTicketIcon } from '@/components/icons/CustomIcons';
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, session } = useAuth();
   const [pages, setPages] = useState<{ id: string; name: string }[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -71,15 +71,13 @@ const CustomAppLayout: React.FC = () => {
         return;
       }
       
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    
-      if (sessionError || !sessionData.session?.access_token) {
-        console.error('No session found:', sessionError);
+      if (!session?.access_token) {
+        console.error('No session found');
         return;
       }
     
       // Extract tenant_id and role_id from JWT token
-      const token = sessionData.session.access_token;
+      const token = session.access_token;
       const extractedTenantId = getTenantIdFromJWT(token);
       const extractedRoleId = getRoleIdFromJWT(token);
       

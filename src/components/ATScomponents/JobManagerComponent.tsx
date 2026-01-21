@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { DynamicForm, DynamicFormData, FormQuestion, QUESTION_TYPES, QuestionType } from './DynamicForm';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 
 // Question with answer type interface
 interface QuestionWithType {
@@ -94,6 +95,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   className = ''
 }) => {
   const { tenantId } = useTenant(); // Get tenant ID from hook
+  const { session } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -409,7 +411,6 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -527,7 +528,6 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -829,7 +829,6 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -928,7 +927,6 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         };
 
         // Add Bearer token from Supabase session
-        const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           headers['Authorization'] = `Bearer ${session.access_token}`;
         }

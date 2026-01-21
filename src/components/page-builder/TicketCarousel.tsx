@@ -192,7 +192,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   initialTicket,
   onUpdate,
 }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const isInitialized = React.useRef(false);
@@ -315,7 +315,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the ticket stats
   const fetchTicketStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       // Use renderer URL with analytics endpoint
@@ -421,7 +420,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Fetching next ticket from:', nextTicketUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -510,7 +508,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Taking break from:', apiUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -587,7 +584,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
 
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error("Authentication required");
       }
@@ -689,7 +685,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       
       console.log('Fetching first ticket from:', apiUrl);
       
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {

@@ -62,7 +62,6 @@ export const BarGraph: React.FC<BarGraphProps> = ({ config }) => {
       setLoading(true);
       setError(null);
       
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
