@@ -89,7 +89,6 @@ const AddUserPage = () => {
     setIsLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -204,7 +203,6 @@ const AddUserPage = () => {
       return;
     }
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -262,7 +260,6 @@ const AddUserPage = () => {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {

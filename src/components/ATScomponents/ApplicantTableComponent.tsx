@@ -53,6 +53,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 export type ApplicantStage = 'Initial' | 'Assignment Pending' | 'Interview' | 'HR' | 'Rejected' | 'Hire';
@@ -336,6 +337,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   className = ''
 }) => {
   const { tenantId } = useTenant(); // Get tenant ID from hook
+  const { session } = useAuth();
   const {
     title = 'Job Applications',
     description = 'Manage and review job applications',
@@ -543,7 +545,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -860,7 +861,6 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           'Content-Type': 'application/json'
         };
 
-        const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           headers['Authorization'] = `Bearer ${session.access_token}`;
         }

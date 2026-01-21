@@ -7,7 +7,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { AuthProvider } from './hooks/useAuth.tsx';
 import './utils/apiDebugger.tsx'; // Load API debugger for console testing
 import { initSentry } from './lib/sentry';
 import { getSentryConfig } from './lib/sentry/config';
@@ -72,9 +71,7 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <SentryErrorBoundary>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <App />
     </SentryErrorBoundary>
   </React.StrictMode>
 );

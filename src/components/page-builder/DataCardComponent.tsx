@@ -66,7 +66,6 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
         const endpoint = config?.apiEndpoint || '/api/card-stats';
         const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
         
-        const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
 
         const response = await fetch(apiUrl, {

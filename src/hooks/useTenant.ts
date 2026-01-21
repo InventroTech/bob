@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { apiClient } from '@/lib/api/client';
 
 export interface TenantContext {
   tenantId: string | null;
@@ -9,7 +10,7 @@ export interface TenantContext {
 }
 
 export function useTenant(): TenantContext {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [role, setRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
   const [customRole, setCustomRole] = useState<string | null>(null);
@@ -35,35 +36,19 @@ export function useTenant(): TenantContext {
         
         // Fetch custom role from backend API (uses TenantMembership - source of truth)
         // This ensures frontend role matches what backend permissions check against
-        const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-        const { data: sessionData } = await supabase.auth.getSession();
-        const authToken = sessionData?.session?.access_token;
-        
-        if (authToken) {
+        if (session?.access_token) {
           try {
-            const baseUrlClean = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
-            const roleResponse = await fetch(`${baseUrlClean}/membership/me/role`, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`,
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
-              }
-            });
+            const roleResponse = await apiClient.get('/membership/me/role');
+            const roleData = roleResponse.data;
             
-            if (roleResponse.ok) {
-              const roleData = await roleResponse.json();
-              if (roleData.role_key) {
-                console.log('useTenant: Setting custom role from backend:', roleData.role_key);
-                setCustomRole(roleData.role_key);
-              } else {
-                console.log('useTenant: No role_key in backend response');
-              }
+            if (roleData.role_key) {
+              console.log('useTenant: Setting custom role from backend:', roleData.role_key);
+              setCustomRole(roleData.role_key);
             } else {
-              console.log('useTenant: Failed to fetch role from backend:', roleResponse.status);
+              console.log('useTenant: No role_key in backend response');
             }
-          } catch (error) {
-            console.error('useTenant: Error fetching role from backend:', error);
+          } catch (error: any) {
+            console.log('useTenant: Failed to fetch role from backend:', error.response?.status || error.message);
           }
         }
       } else {

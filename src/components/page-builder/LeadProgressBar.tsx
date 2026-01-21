@@ -80,8 +80,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = useCallback(async () => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (!currentSession) {
+      if (!session) {
         return;
       }
 
@@ -123,8 +122,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
 
   const fetchTrialStats = useCallback(async (isInitialLoad = false) => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (!currentSession) {
+      if (!session) {
         if (isInitialLoad) {
           setLoading(false);
         }
@@ -202,8 +200,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
           await new Promise(resolve => setTimeout(resolve, delay));
           
           try {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            if (!currentSession) return;
+            if (!session) return;
             
             const { data: { user: currentUser } } = await supabase.auth.getUser();
             if (!currentUser) return;
