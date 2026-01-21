@@ -9,6 +9,7 @@ import { Plus, Trash2, Play, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface ScoringRule {
   id: string;
@@ -55,6 +56,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
   className = ''
 }) => {
   const { tenantId } = useTenant();
+  const { session } = useAuth();
   
   const {
     title = 'Dynamic Scoring',
@@ -126,7 +128,6 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         };
 
         // Add Bearer token from Supabase session
-        const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           headers['Authorization'] = `Bearer ${session.access_token}`;
         }
@@ -284,7 +285,6 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }

@@ -1,6 +1,9 @@
-import { supabase } from '@/lib/supabase';
+import { createApiClient } from '@/lib/api/client';
 
 const BASE_URL = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '') || import.meta.env.VITE_API_URI?.replace(/\/+$/, '');
+
+// Create API client for this service
+const apiClient = createApiClient(BASE_URL || '');
 
 /**
  * Team Analytics API Client
@@ -21,31 +24,11 @@ export const teamAnalyticsApi = {
     allotted_leads: number;
   }> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-
-      if (!BASE_URL) {
-        throw new Error('API base URL not configured');
-      }
-
-      const url = `${BASE_URL}/analytics/team/overview/?date=${date}`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await apiClient.get('/analytics/team/overview/', {
+        params: { date }
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      return response.data;
     } catch (error) {
       console.error('[teamAnalyticsApi] Error fetching team overview:', error);
       throw error;
@@ -71,36 +54,11 @@ export const teamAnalyticsApi = {
     average_time_spent_seconds: number;
   }>> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-
-      if (!BASE_URL) {
-        throw new Error('API base URL not configured');
-      }
-
-      const searchParams = new URLSearchParams();
-      if (params.date) searchParams.append('date', params.date);
-      if (params.from) searchParams.append('from', params.from);
-      if (params.to) searchParams.append('to', params.to);
-
-      const url = `${BASE_URL}/analytics/team/members/?${searchParams.toString()}`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await apiClient.get('/analytics/team/members/', {
+        params
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      return response.data;
     } catch (error) {
       console.error('[teamAnalyticsApi] Error fetching team members:', error);
       throw error;
@@ -115,36 +73,11 @@ export const teamAnalyticsApi = {
     count: number;
   }>> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-
-      if (!BASE_URL) {
-        throw new Error('API base URL not configured');
-      }
-
-      const searchParams = new URLSearchParams();
-      if (params.date) searchParams.append('date', params.date);
-      if (params.from) searchParams.append('from', params.from);
-      if (params.to) searchParams.append('to', params.to);
-
-      const url = `${BASE_URL}/analytics/team/events/?${searchParams.toString()}`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await apiClient.get('/analytics/team/events/', {
+        params
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      return response.data;
     } catch (error) {
       console.error('[teamAnalyticsApi] Error fetching team events:', error);
       throw error;
@@ -162,31 +95,11 @@ export const teamAnalyticsApi = {
     total_events: number;
   }>> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-
-      if (!BASE_URL) {
-        throw new Error('API base URL not configured');
-      }
-
-      const url = `${BASE_URL}/analytics/team/time-series/?from=${from}&to=${to}`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await apiClient.get('/analytics/team/time-series/', {
+        params: { from, to }
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
+      return response.data;
     } catch (error) {
       console.error('[teamAnalyticsApi] Error fetching team time series:', error);
       throw error;

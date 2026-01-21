@@ -5,6 +5,7 @@ import { DynamicForm, DynamicFormData } from './DynamicForm';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface OpenModalButtonConfig {
   buttonTitle?: string;
@@ -44,6 +45,7 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
   className = ''
 }) => {
   const { tenantId } = useTenant(); // Get tenant ID from hook
+  const { session } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -159,7 +161,6 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
