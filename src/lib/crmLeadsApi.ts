@@ -187,10 +187,10 @@ export const crmLeadsApi = {
       // If not provided via config, try user settings
       if (!webhookUrl) {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (currentUser) {
             try {
-              const webhookSetting = await userSettingsApi.get(user.id, 'LEAD_ASSIGNMENT_WEBHOOK_URL');
+              const webhookSetting = await userSettingsApi.get(currentUser.id, 'LEAD_ASSIGNMENT_WEBHOOK_URL');
               if (webhookSetting && webhookSetting.value) {
                 webhookUrl = typeof webhookSetting.value === 'string' 
                   ? webhookSetting.value 
@@ -215,11 +215,18 @@ export const crmLeadsApi = {
       
       // If webhook URL is not configured, silently skip
       if (!webhookUrl) {
+        console.log('[crmLeadsApi] Webhook URL not configured, skipping webhook notification');
         return;
       }
 
       const { data: { session } } = await supabase.auth.getSession();
       const { data: { user } } = await supabase.auth.getUser();
+
+      console.log('[crmLeadsApi] Preparing to send lead assignment webhook', {
+        webhook_url: webhookUrl,
+        lead_id: leadData?.id,
+        user_id: userId || user?.id,
+      });
 
       if (!session?.access_token) {
         console.warn('[crmLeadsApi] No session token available for webhook request');
@@ -276,6 +283,16 @@ export const crmLeadsApi = {
 
       // Send webhook through backend proxy (handles CORS and forwarding)
       const proxyUrl = `${baseUrl}/crm-records/webhooks/lead-assigned/`;
+      
+      console.log('[crmLeadsApi] 📤 Sending lead assignment webhook', {
+        proxy_url: proxyUrl,
+        webhook_url: webhookUrl,
+        event: payload.event,
+        lead_id: payload.lead?.id,
+        user_id: payload.user?.id,
+        lead_name: payload.lead?.name,
+      });
+      
       const proxyResponse = await fetch(proxyUrl, {
         method: 'POST',
         headers: {
@@ -289,10 +306,19 @@ export const crmLeadsApi = {
       });
 
       if (proxyResponse.ok) {
-        console.log('[crmLeadsApi] Webhook sent successfully via backend proxy');
+        const responseData = await proxyResponse.json().catch(() => ({}));
+        console.log('[crmLeadsApi] ✅ Webhook sent successfully via backend proxy', {
+          webhook_url: webhookUrl,
+          event: payload.event,
+          lead_id: payload.lead?.id,
+          user_id: payload.user?.id,
+          backend_response: responseData,
+          mixpanel_note: 'Mixpanel event should be sent by backend if configured',
+        });
       } else {
         const errorText = await proxyResponse.text().catch(() => 'Unknown error');
-        console.warn('[crmLeadsApi] Backend webhook proxy returned error:', {
+        console.warn('[crmLeadsApi] ⚠️ Backend webhook proxy returned error:', {
+          webhook_url: webhookUrl,
           status: proxyResponse.status,
           statusText: proxyResponse.statusText,
           error: errorText,
