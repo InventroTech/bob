@@ -5,7 +5,6 @@ import {
   CardContent,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +31,7 @@ import {
   Users,
   Upload,
   Calculator,
+  MessageSquare,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -65,6 +65,7 @@ import {
   ImageComponent,
   AddUserComponent,
   LeadAssignmentComponent,
+  CallAttemptMatrixComponent,
 } from "@/components/page-builder";
 import RoutingRulesComponent from "@/components/page-builder/RoutingRulesComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
@@ -107,6 +108,7 @@ import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLog
 import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChart";
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
+import { TeamDashboardComponent, TeamDashboardConfig } from "@/components/page-builder";
 // Import configuration components
 import {
   DataCardConfig,
@@ -118,10 +120,13 @@ import {
   TicketCarouselConfig,
   LeadCardCarouselConfig,
   LeadAssignmentConfig,
+  CallAttemptMatrixConfig,
   RoutingRulesConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
+import { WhatsAppTemplateComponent } from "@/components/page-builder/WhatsAppTemplateComponent";
+import { WhatsAppTemplateConfig } from "@/components/page-builder/component-config/WhatsAppTemplateConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 import type { RoutingRulesConfigData, RoutingFilterField } from "@/component-config";
@@ -230,6 +235,11 @@ interface ComponentConfig {
   // LeadAssignment specific fields
   leadTypesEndpoint?: string;
   rmsEndpoint?: string;
+  assignmentsEndpoint?: string;
+  // LeadCardCarousel specific fields
+  leadAssignmentWebhookUrl?: string;
+  whatsappTemplatesApiEndpoint?: string;
+  // CallAttemptMatrix specific fields (apiEndpoint already defined above)
   // LeadProgressBar specific fields
   targetCount?: number;
   segmentCount?: number;
@@ -269,6 +279,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   barGraph: BarGraph,
   addUser: AddUserComponent,
   leadAssignment: LeadAssignmentComponent,
+  callAttemptMatrix: CallAttemptMatrixComponent,
   openModalButton: OpenModalButton,
   jobManager: JobManagerComponent,
   jobsPage: JobsPageComponent,
@@ -276,6 +287,8 @@ export const componentMap: Record<string, React.FC<any>> = {
   fileUpload: FileUploadPageComponent,
   dynamicScoring: DynamicScoringComponent,
   routingRules: RoutingRulesComponent,
+  whatsappTemplate: WhatsAppTemplateComponent,
+  teamDashboard: TeamDashboardComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -331,6 +344,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar specific fields
     targetCount?: number;
     segmentCount?: number;
+    // WhatsAppTemplate specific fields
+    // (apiEndpoint and title are already in the base type)
     //job manager specific fields
     updateEndpoint?: string; // Separate endpoint for updates (PUT)
     deleteEndpoint?: string; // Separate endpoint for deletes (DELETE)
@@ -373,6 +388,11 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // LeadProgressBar fields
     targetCount: initialConfig.targetCount || 10,
     segmentCount: initialConfig.segmentCount || 8,
+    // TeamDashboard fields (if needed, add to ComponentConfig interface first)
+    // allottedLeads: initialConfig.allottedLeads || 1600,
+    // trailTarget: initialConfig.trailTarget || 160,
+    // totalTeamSize: initialConfig.totalTeamSize || 18,
+    // showDatePicker: initialConfig.showDatePicker !== false,
     // JobManager specific API fields
     updateEndpoint: initialConfig.updateEndpoint || '',
     deleteEndpoint: initialConfig.deleteEndpoint || '',
@@ -714,7 +734,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             onConfigChange={(newConfig) => {
               // Update all config fields
               Object.entries(newConfig).forEach(([key, value]) => {
-                handleInputChange(key as keyof LocalConfigType, value);
+                handleInputChange(key as any, value);
               });
             }}
           />
@@ -731,6 +751,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'leadAssignment':
         return (
           <LeadAssignmentConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'callAttemptMatrix':
+        return (
+          <CallAttemptMatrixConfig
             localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
@@ -763,6 +791,24 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'whatsappTemplate':
+        return (
+          <WhatsAppTemplateConfig
+            localConfig={localConfig as any}
+            handleInputChange={(field: string, value: string | number | boolean) => {
+              handleInputChange(field as keyof LocalConfigType, value);
+            }}
+          />
+        );
+
+      case 'teamDashboard':
+        return (
+          <TeamDashboardConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -771,7 +817,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   return (
     <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Component Configuration</h3>
+        <h5>Component Configuration</h5>
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
@@ -812,8 +858,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1217,7 +1262,7 @@ const PageBuilder = () => {
                   <div className="p-4 space-y-4">
                     {/* Layout Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Layout Components</h3>
+                      <h5>Layout Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="container"
@@ -1265,6 +1310,11 @@ const PageBuilder = () => {
                           icon={<Target className="h-8 w-8 mb-1 text-primary" />}
                         />
                         <DraggableSidebarItem
+                          id="callAttemptMatrix"
+                          label="Call Attempt Matrix"
+                          icon={<Settings className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
                           id="temporaryLogout"
                           label="Temporary Logout"
                           icon={<LogOut className="h-8 w-8 mb-1 text-red-500" />}
@@ -1276,7 +1326,7 @@ const PageBuilder = () => {
 
                     {/* Data Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Data Components</h3>
+                      <h5>Data Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="form"
@@ -1348,12 +1398,17 @@ const PageBuilder = () => {
                           label="Dynamic Scoring"
                           icon={<Calculator className="h-8 w-8 mb-1 text-primary" />}
                         />
+                        <DraggableSidebarItem
+                          id="whatsappTemplate"
+                          label="WhatsApp Template"
+                          icon={<MessageSquare className="h-8 w-8 mb-1 text-primary" />}
+                        />
                       </div>
                     </div>
                     <Separator />
                     {/* Analytical Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Analytical Components</h3>
+                      <h5>Analytical Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="stackedBarChart"
@@ -1377,7 +1432,7 @@ const PageBuilder = () => {
 
                     {/* Basic Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Basic Components</h3>
+                      <h5>Basic Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="text"
@@ -1401,7 +1456,7 @@ const PageBuilder = () => {
 
                     {/* Analytics Components */}
                     <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Analytics</h3>
+                      <h5>Analytics</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="barGraph"
@@ -1416,6 +1471,11 @@ const PageBuilder = () => {
                         <DraggableSidebarItem
                           id="stackedBarChart"
                           label="Stacked Bar"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="teamDashboard"
+                          label="Team Dashboard"
                           icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
@@ -1465,10 +1525,10 @@ const PageBuilder = () => {
               {canvasComponents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center text-muted-foreground flex-1">
                   <Grid3X3 className="h-12 w-12 mb-4" />
-                  <p className="text-lg font-medium">
+                  <p className="text-body-lg-medium">
                     Drop components here
                   </p>
-                  <p className="text-sm mt-1">
+                  <p className="text-body-sm mt-1">
                     Drag from the sidebar onto this area
                   </p>
                   <div className="mt-6">

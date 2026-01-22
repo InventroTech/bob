@@ -45,6 +45,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
 
 interface Lead {
   id: number;
@@ -155,15 +156,7 @@ const getCleanPhoneNumber = (phone: string): string => {
   return phone.replace(/\D/g, '');
 };
 
-// Function to handle WhatsApp action
-const handleWhatsApp = (phone: string) => {
-  const cleanNumber = getCleanPhoneNumber(phone);
-  if (cleanNumber) {
-    const message = `Hi, I'm reaching out regarding your inquiry.`;
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  }
-};
+// Note: handleWhatsApp is now handled via the modal component
 
 // Function to handle email action
 const handleEmail = (email: string) => {
@@ -218,6 +211,8 @@ interface LeadCardProps {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
     title?: string;
+    whatsappTemplatesApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
   initialLead?: any;
   onUpdate?: (updatedLead: any) => void;
@@ -228,7 +223,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   initialLead,
   onUpdate,
 }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { tenantId } = useTenant();
 
   const isInitialized = React.useRef(false);
@@ -314,6 +309,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
 
   // Function to handle opening profile modal
   const handleOpenProfile = () => {
@@ -325,6 +322,25 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   // Function to close profile modal
   const handleCloseProfile = () => {
     setShowProfileModal(false);
+  };
+
+  // Function to handle WhatsApp action - opens modal
+  const handleWhatsApp = (phone: string) => {
+    setWhatsappPhone(phone);
+    setShowWhatsAppModal(true);
+  };
+
+  // Function to handle template selection and open WhatsApp
+  const handleTemplateSelected = (templateText: string | null) => {
+    const cleanNumber = getCleanPhoneNumber(whatsappPhone);
+    if (!cleanNumber) return;
+    
+    if (templateText) {
+      const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(templateText)}`;
+      window.open(whatsappUrl, '_blank');
+    } else {
+      window.open(`https://wa.me/${cleanNumber}`, '_blank');
+    }
   };
 
   useEffect(() => {
@@ -354,7 +370,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   // Fetching the lead stats
   const fetchLeadStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       // Use configured status data API endpoint or fallback to default
@@ -430,7 +445,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const fetchNextLead = async (currentLeadId: number) => {
     try {
       const nextLeadUrl = `${import.meta.env.VITE_API_URI}${config?.apiEndpoint || "/api/leads"}`;
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -513,7 +527,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const handleTakeBreak = async () => {
     try {
       const apiUrl = `${import.meta.env.VITE_API_URI}/take-a-break`;
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -587,7 +600,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       }
 
       setUpdating(true);
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error("Authentication required");
       }
@@ -665,7 +677,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       setLoading(true);
       const endpoint = config?.apiEndpoint || "/api/leads";
       const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -764,16 +775,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             <div className="text-center mb-6">
               <div className="flex items-center justify-center mb-4">
                 <User className="h-8 w-8 text-primary mr-2" />
-                <h2 className="text-2xl font-semibold text-gray-800">
+                <h3 className="text-gray-800">
                   {config?.title || "Lead Management"}
-                </h2>
+                </h3>
               </div>
               <p className="text-gray-600 mb-6">Click to start working on leads</p>
             </div>
 
             <div className="mb-6">
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-800">{leadStats.total}</div>
+                <div className="text-heading-2 text-gray-800">{leadStats.total}</div>
                 <div className="text-xs text-gray-600">Total Leads</div>
               </div>
             </div>
@@ -1214,6 +1225,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           </div>
         </div>
       )}
+      
+      {/* WhatsApp Template Modal */}
+      <WhatsAppTemplateModal
+        open={showWhatsAppModal}
+        onOpenChange={setShowWhatsAppModal}
+        phone={whatsappPhone}
+        apiEndpoint={config?.whatsappTemplatesApiEndpoint}
+        apiPrefix={config?.apiPrefix || 'renderer'}
+        onSelectTemplate={handleTemplateSelected}
+      />
     </div>
   );
 };

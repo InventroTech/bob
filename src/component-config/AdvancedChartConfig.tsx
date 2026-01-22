@@ -86,7 +86,7 @@ export const AdvancedChartConfig: React.FC<AdvancedChartConfigProps> = ({
           const dataset = localDatasets[index] || { label: `Dataset ${index + 1}`, backgroundColor: `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.5)` };
           return (
             <div key={index} className="space-y-2 p-4 border rounded-lg">
-              <h4 className="font-medium">Dataset {index + 1}</h4>
+              <h4>Dataset {index + 1}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Dataset Label</Label>

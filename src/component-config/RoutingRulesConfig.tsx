@@ -161,7 +161,7 @@ const DebouncedFieldInput = memo(({ value: externalValue, onChange, placeholder,
         onChange={handleChange}
         placeholder={placeholder}
       />
-      {helpText && <p className="text-xs text-gray-500 mt-1">{helpText}</p>}
+      {helpText && <p className="text-body-xs text-gray-500 mt-1">{helpText}</p>}
     </>
   );
 });
@@ -359,14 +359,14 @@ export const RoutingRulesConfig: React.FC<RoutingRulesConfigProps> = ({
 
       <div className="border-t pt-4 mt-4">
         <div className="flex items-center justify-between mb-4">
-          <Label className="text-base font-semibold">Filter Fields</Label>
-          <span className="text-xs text-muted-foreground">
+          <Label>Filter Fields</Label>
+          <span className="text-body-xs text-muted">
             {displayFilterFields.length} field{displayFilterFields.length !== 1 ? 's' : ''} configured
           </span>
         </div>
 
         {displayFilterFields.length === 0 && (
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-body-sm text-muted mb-4">
             No filter fields configured. Add fields like "state", "poster", "source" to customize routing conditions.
           </p>
         )}
@@ -468,7 +468,7 @@ export const RoutingRulesConfig: React.FC<RoutingRulesConfigProps> = ({
                 ))}
 
                 {(!field.options || field.options.length === 0) && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-body-xs text-muted">
                     Add options for the dropdown select.
                   </p>
                 )}

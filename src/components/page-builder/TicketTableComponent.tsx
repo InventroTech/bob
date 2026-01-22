@@ -1193,25 +1193,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   return (
     <>
-      <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-6">
-        {/* Search and Filters Row */}
-        <div className="mb-6">
-          <div className="flex justify-end items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="Search"
-                value={displaySearchTerm}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {rateLimited && (
-                <div className="absolute -top-8 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded border border-yellow-300">
-                  Rate limited - waiting...
-                </div>
-              )}
-            </div>
+      <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
+        {/* Filter Section */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-4">
+            <h5>
+              {config?.title || "Support Tickets"}
+            </h5>
             <Button
               variant="outline"
               size="sm"
@@ -1230,7 +1218,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             <div className="bg-gray-50 p-4 rounded-lg border">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Resolution Status
                   </label>
                   <Popover>
@@ -1249,7 +1237,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverTrigger>
                     <PopoverContent className="w-60 p-4" align="start">
                       <div className="space-y-3">
-                        <h4 className="font-medium text-sm">Select Resolution Statuses</h4>
+                        <h5>Select Resolution Statuses</h5>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
                           {getUniqueResolutionStatuses().map((status) => (
                             <div key={status} className="flex items-center space-x-2">
@@ -1266,7 +1254,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                               />
                               <label
                                 htmlFor={`resolution-${status}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                               >
                                 {status === null ? 'Open' : status}
                               </label>
@@ -1291,7 +1279,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Poster Status
                   </label>
                   <Popover>
@@ -1310,7 +1298,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverTrigger>
                     <PopoverContent className="w-60 p-4" align="start">
                       <div className="space-y-3">
-                        <h4 className="font-medium text-sm">Select Poster Statuses</h4>
+                        <h4>Select Poster Statuses</h4>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
                           {getUniquePosterStatuses().map((status) => (
                             <div key={status} className="flex items-center space-x-2">
@@ -1327,7 +1315,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                               />
                               <label
                                 htmlFor={`poster-${status}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                               >
                                 {status}
                               </label>
@@ -1352,7 +1340,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Assigned To
                   </label>
                   <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
@@ -1376,7 +1364,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               {/* Date Range Filters - 2nd Line */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     Start Date
                   </label>
                   <Popover>
@@ -1406,7 +1394,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverContent>
                   </Popover>
                   <div className="mt-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-gray-600 mb-1">
                       Start Time
                     </label>
                     <Input
@@ -1422,7 +1410,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-gray-700 mb-2">
                     End Date
                   </label>
                   <Popover>
@@ -1452,7 +1440,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </PopoverContent>
                   </Popover>
                   <div className="mt-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-gray-600 mb-1">
                       End Time
                     </label>
                     <Input

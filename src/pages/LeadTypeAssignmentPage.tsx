@@ -33,7 +33,7 @@ interface LeadTypeAssignmentPageProps {
 }
 
 const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: LeadTypeAssignmentPageProps) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { role, customRole } = useTenant();
   const [assignments, setAssignments] = useState<LeadTypeAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,8 +92,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         
         // Build user_id to uid mapping for user_settings table (which uses UUID)
         const uidMap: Record<string, string> = {};
-        const { data: { session: sessionForUid } } = await supabase.auth.getSession();
-        const tokenForUid = sessionForUid?.access_token;
+        const tokenForUid = session?.access_token;
         if (tokenForUid) {
           try {
             const baseUrl = import.meta.env.VITE_RENDER_API_URL;
@@ -144,7 +143,6 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         // Fetch leads count (daily target) for each user (fallback to user-settings if not present in new endpoint)
         // Fetch assigned_leads_count per user from LEAD_TYPE_ASSIGNMENT (one request per user)
 
-        const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (token) {
           const counts: Record<string, number> = {};
@@ -358,7 +356,6 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           // Update the LEAD_TYPE_ASSIGNMENT record with both value and daily_target
           // Try PATCH first (partial update), then PUT if needed
           try {
-            const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
             const baseUrl = import.meta.env.VITE_RENDER_API_URL;
             
@@ -553,7 +550,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         <Card className="max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
+                    <h5>Access Denied</h5>
                     <p className="text-muted-foreground text-center">
                       You need GM (General Manager) role to access this page.
                     </p>
@@ -576,7 +573,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         <Card className="max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-8">
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
+                    <h5>Access Denied</h5>
                     <p className="text-muted-foreground text-center">
                       You need GM (General Manager) role to access this page.
                     </p>
@@ -607,8 +604,8 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       {showHeader && (
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lead Type Assignment</h1>
-            <p className="text-muted-foreground">
+            <h5>Lead Type Assignment</h5>
+            <p className="text-muted">
               Assign lead types to Relationship Managers (RMs)
             </p>
           </div>
@@ -622,13 +619,13 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
 
       {/* Lead Type Assignments */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">RM Lead Type Assignments</h2>
+        <h5>RM Lead Type Assignments</h5>
         
         {assignments.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-8">
               <Users className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No RMs Found</h3>
+              <h5>No RMs Found</h5>
               <p className="text-muted-foreground text-center">
                 No Relationship Managers found in your tenant. 
                 Please add RMs first before assigning lead types.
@@ -644,7 +641,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                     <TableHead className="w-[250px]">RM Name & Email</TableHead>
                     <TableHead className="w-[300px]">Lead Types</TableHead>
                     <TableHead className="w-[250px]">Currently Assigned</TableHead>
-                    <TableHead className="w-[150px]">Leads Count</TableHead>
+                    <TableHead className="w-[150px]">Daily Target</TableHead>
                     <TableHead className="w-[150px]">Daily Limit</TableHead>
                     <TableHead className="w-[200px]">Actions</TableHead>
                   </TableRow>

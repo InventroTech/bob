@@ -21,6 +21,9 @@ const CustomAppPage: React.FC = () => {
     const tenantId = localStorage.getItem('tenant_id');
     if (!tenantId || !pageId) return;
     
+    // Track if component is still mounted
+    let isMounted = true;
+    
     // Check cache first
     const cacheKey = `${tenantId}-${pageId}`;
     const cached = pageCache.get(cacheKey);
@@ -28,8 +31,10 @@ const CustomAppPage: React.FC = () => {
     
     if (cached && (now - cached.timestamp) < PAGE_CACHE_TTL) {
       console.log('Using cached page data for:', pageId);
-      setPage(cached.data);
-      setLoading(false);
+      if (isMounted) {
+        setPage(cached.data);
+        setLoading(false);
+      }
       return;
     }
     
@@ -39,66 +44,57 @@ const CustomAppPage: React.FC = () => {
     }
     
     fetchingRef.current = pageId;
-    setLoading(true);
+    if (isMounted) {
+      setLoading(true);
+      setError(null);
+    }
     
-    // Try to fetch with header_title, fallback to without it if column doesn't exist
-    supabase
+    const fetchPromise = supabase
       .from('pages')
       .select('name, config, header_title')
       .eq('id', pageId)
       .eq('tenant_id', tenantId)
-      .single()
-      .then(({ data, error }) => {
+      .single();
+    
+    fetchPromise.then(({ data, error }) => {
+      fetchingRef.current = null;
+      
+      // Only update state if component is still mounted
+      if (!isMounted) return;
+      
+      if (error) {
+        setError(error.message);
+        toast.error('Failed to load page');
+      } else if (data) {
+        const pageData = { name: data.name, config: data.config };
+        setPage(pageData);
+        // Cache the result
+        pageCache.set(cacheKey, { data: pageData, timestamp: now });
+      }
+      setLoading(false);
+    }).catch((err) => {
+      fetchingRef.current = null;
+      
+      // Only update state if component is still mounted and it's not an abort error
+      if (!isMounted) return;
+      
+      // Don't show error for aborted requests
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        return;
+      }
+      
+      setError(err.message);
+      setLoading(false);
+    });
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      // Abort the Supabase query if possible
+      if (fetchingRef.current === pageId) {
         fetchingRef.current = null;
-        
-        if (error) {
-          // If error is about missing column, try fetching without header_title
-          if (error.message?.includes('header_title') || error.message?.includes('column')) {
-            supabase
-              .from('pages')
-              .select('name, config')
-              .eq('id', pageId)
-              .eq('tenant_id', tenantId)
-              .single()
-              .then(({ data: fallbackData, error: fallbackError }) => {
-                if (fallbackError) {
-                  setError(fallbackError.message);
-                  toast.error('Failed to load page');
-                } else if (fallbackData) {
-                  const pageData = { 
-                    name: fallbackData.name, 
-                    config: fallbackData.config, 
-                    header_title: undefined 
-                  };
-                  setPage(pageData);
-                  pageCache.set(cacheKey, { data: pageData, timestamp: now });
-                }
-                setLoading(false);
-              });
-          } else {
-            setError(error.message);
-            toast.error('Failed to load page');
-            setLoading(false);
-          }
-        } else if (data) {
-          const headerTitle = (data as any).header_title;
-          console.log('Fetched header_title:', headerTitle);
-          const pageData = { 
-            name: data.name, 
-            config: data.config, 
-            header_title: headerTitle || undefined
-          };
-          console.log('Page data with header_title:', pageData);
-          setPage(pageData);
-          // Cache the result
-          pageCache.set(cacheKey, { data: pageData, timestamp: now });
-          setLoading(false);
-        }
-      }, (err) => {
-        fetchingRef.current = null;
-        setError(err.message);
-        setLoading(false);
-      });
+      }
+    };
   }, [pageId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;

@@ -66,7 +66,6 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
         const endpoint = config?.apiEndpoint || '/api/card-stats';
         const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
         
-        const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
 
         const response = await fetch(apiUrl, {
@@ -128,7 +127,7 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
   return (
     <div className="space-y-6">
       {config?.title && (
-        <div className="text-xl font-bold">{config.title}</div>
+        <div className="text-heading-2">{config.title}</div>
       )}
 
       <div className='cardlist grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-6 w-full'>
@@ -138,12 +137,12 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
             className="bg-white border-2 border-gray-200 shadow-sm rounded-lg p-6 flex flex-col"
           >
             <div className="flex flex-row justify-between items-start mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">{card.title}</h2>
+              <h3 className="text-gray-800">{card.title}</h3>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-2">
-                <div className="text-3xl font-bold text-primary">{card.number}</div>
-                <p className="text-sm text-gray-500">
+                <div className="text-display-md-bold text-primary">{card.number}</div>
+                <p className="text-body-sm text-gray-500">
                   {card.description}
                 </p>
               </div>

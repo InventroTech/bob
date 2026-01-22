@@ -3,7 +3,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, PlusCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -143,7 +143,7 @@ const MyPages = () => {
         )}
 
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">My Pages</h1>
+          <h5>My Pages</h5>
           <Button asChild>
             <Link to="/builder/new">
               <PlusCircle className="mr-2 h-4 w-4" /> Create New Page
@@ -160,11 +160,11 @@ const MyPages = () => {
         ) : (
           Object.entries(pagesByRole).map(([roleName, pages]) => (
             <div key={roleName}>
-              <h2 className="text-xl font-bold mt-6 mb-2">
+              <h5>
                 {roleName === 'public' || roleName === 'Unassigned' 
                   ? '🌐 Open Access (No Login Required)' 
                   : `${roleName} Pages :-`}
-              </h2>
+              </h5>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {pages.map((page) => {
                   const isPublic = roleName === 'public' || roleName === 'Unassigned';
@@ -175,7 +175,7 @@ const MyPages = () => {
                   return (
                     <Card key={page.id}>
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
+                        <h5 className="flex items-center gap-2">
                           <FileText className="h-5 w-5 text-primary" />
                           {page.name}
                           {isPublic && (
@@ -183,7 +183,7 @@ const MyPages = () => {
                               Open Access
                             </span>
                           )}
-                        </CardTitle>
+                        </h5>
                       </CardHeader>
                       <CardContent className="text-sm text-muted-foreground space-y-2">
                         <div>

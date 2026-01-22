@@ -7,6 +7,7 @@ export * from './ButtonComponent';
 export * from './ImageComponent';
 export { default as AddUserComponent } from './AddUserComponent';
 export { default as LeadAssignmentComponent } from './LeadAssignmentComponent';
+export { default as CallAttemptMatrixComponent } from './CallAttemptMatrixComponent';
 export { default as RoutingRulesComponent } from './RoutingRulesComponent';
 export { TicketCarouselConfig } from './component-config/TicketCarouselConfig';
 export { TicketTableConfig } from './component-config/TicketTableConfig';
@@ -17,3 +18,5 @@ export { LeadCardCarouselConfig } from './component-config/LeadCardCarouselConfi
 export { FileUploadPageComponent } from './FileUploadPageComponent';
 export { FileUploadPageConfig } from './FileUploadPageConfig';
 export { LeadProgressBar } from './LeadProgressBar'; 
+export { default as TeamDashboardComponent } from './TeamDashboardComponent';
+export { TeamDashboardConfig } from './component-config/TeamDashboardConfig'; 

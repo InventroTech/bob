@@ -44,6 +44,88 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* ============================================
+       TYPOGRAPHY SYSTEM - Based on Figma Design
+       ============================================
+       
+       To customize for your Figma design:
+       1. Open your Figma file and check the text styles
+       2. Update the CSS variables below with your Figma values
+       3. Convert pixels to rem (divide by 16, e.g., 24px = 1.5rem)
+       4. Update font families if using custom fonts
+       
+       Usage in your components:
+       - <h1 className="text-h1">Heading 1</h1>
+       - <h2 className="text-title">Title</h2>
+       - <p className="text-subtitle">Subtitle</p>
+       - <p className="text-body">Body text</p>
+       - <span className="text-caption">Caption</span>
+       
+       All classes are available globally in any component!
+       ============================================ */
+
+    /* Typography Variables - Based on Pyro Design System (Figma) */
+    
+    /* Font Families */
+    --font-family-heading: Georgia, serif;  /* For Display sizes */
+    --font-family-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;  /* For Body text */
+    --font-family-base: var(--font-family-body);
+    
+    /* Display Sizes - Georgia font for headings */
+    /* Display 2xl: 72px / 4.5rem, Line height: 90px / 5.625rem, Tracking: -2% */
+    --font-size-display-2xl: 4.5rem;
+    --line-height-display-2xl: 5.625rem;
+    
+    /* Display xl: 60px / 3.75rem, Line height: 72px / 4.5rem, Tracking: -2% */
+    --font-size-display-xl: 3.75rem;
+    --line-height-display-xl: 4.5rem;
+    
+    /* Display lg: 48px / 3rem, Line height: 60px / 3.75rem, Tracking: -2% */
+    --font-size-display-lg: 3rem;
+    --line-height-display-lg: 3.75rem;
+    
+    /* Display md: 36px / 2.25rem, Line height: 44px / 2.75rem, Tracking: -2% */
+    --font-size-display-md: 2.25rem;
+    --line-height-display-md: 2.75rem;
+    
+    /* Display sm: 30px / 1.875rem, Line height: 38px / 2.375rem, Tracking: -2% */
+    --font-size-display-sm: 1.875rem;
+    --line-height-display-sm: 2.375rem;
+    
+    /* Display xs: 24px / 1.5rem, Line height: 32px / 2rem, Tracking: -2% */
+    --font-size-display-xs: 1.5rem;
+    --line-height-display-xs: 2rem;
+    
+    /* Letter Spacing - -2% tracking for all display sizes */
+    --letter-spacing-display: -0.02em;
+    
+    /* Body Text Sizes - IBM Plex Sans font */
+    /* Text xl: 20px / 1.25rem, Line height: 30px / 1.875rem */
+    --font-size-text-xl: 1.25rem;
+    --line-height-text-xl: 1.875rem;
+    
+    /* Text lg: 18px / 1.125rem, Line height: 28px / 1.75rem */
+    --font-size-text-lg: 1.125rem;
+    --line-height-text-lg: 1.75rem;
+    
+    /* Text md: 16px / 1rem, Line height: 24px / 1.5rem */
+    --font-size-text-md: 1rem;
+    --line-height-text-md: 1.5rem;
+    
+    /* Text sm: 14px / 0.875rem, Line height: 20px / 1.25rem */
+    --font-size-text-sm: 0.875rem;
+    --line-height-text-sm: 1.25rem;
+    
+    /* Text xs: 12px / 0.75rem, Line height: 18px / 1.125rem */
+    --font-size-text-xs: 0.75rem;
+    --line-height-text-xs: 1.125rem;
+    
+    /* Font Weights */
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
   }
 
   .dark {
@@ -129,4 +211,473 @@
 
 .draggable-component:active {
   cursor: grabbing;
+}
+
+/* Typography Utility Classes - Pyro Design System (Based on Figma) */
+
+@layer components {
+  /* Display 2xl - 72px / 4.5rem, Line height: 90px / 5.625rem, Tracking: -2% */
+  .text-display-2xl {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-2xl);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-display-2xl);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  .text-display-2xl-bold {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-2xl);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-display-2xl);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  /* Display xl - 60px / 3.75rem, Line height: 72px / 4.5rem, Tracking: -2% */
+  .text-display-xl {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-xl);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-display-xl);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  .text-display-xl-bold {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-xl);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-display-xl);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  /* Display lg - 48px / 3rem, Line height: 60px / 3.75rem, Tracking: -2% */
+  .text-display-lg {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-lg);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-display-lg);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  .text-display-lg-bold {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-lg);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-display-lg);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  /* Display md - 36px / 2.25rem, Line height: 44px / 2.75rem, Tracking: -2% */
+  .text-display-md {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-md);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-display-md);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  .text-display-md-bold {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-md);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-display-md);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  /* Display sm - 30px / 1.875rem, Line height: 38px / 2.375rem, Tracking: -2% */
+  .text-display-sm {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-sm);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-display-sm);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  .text-display-sm-bold {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-sm);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-display-sm);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  /* Display xs - 24px / 1.5rem, Line height: 32px / 2rem, Tracking: -2% */
+  .text-display-xs {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-xs);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-display-xs);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  .text-display-xs-bold {
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-display-xs);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-display-xs);
+    letter-spacing: var(--letter-spacing-display);
+  }
+
+  /* Body Text Variants - IBM Plex Sans */
+  /* Text xl - 20px / 1.25rem, Line height: 30px / 1.875rem */
+  .text-xl {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xl);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-xl);
+  }
+
+  .text-xl-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-xl);
+  }
+
+  .text-xl-semibold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xl);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-text-xl);
+  }
+
+  .text-xl-bold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xl);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-text-xl);
+  }
+
+  .text-xl-italic {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xl);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-xl);
+    font-style: italic;
+  }
+
+  .text-xl-italic-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-xl);
+    font-style: italic;
+  }
+
+  /* Text lg - 18px / 1.125rem, Line height: 28px / 1.75rem */
+  .text-lg {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-lg);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-lg);
+  }
+
+  .text-lg-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-lg);
+  }
+
+  .text-lg-semibold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-lg);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-text-lg);
+  }
+
+  .text-lg-bold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-lg);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-text-lg);
+  }
+
+  .text-lg-italic {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-lg);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-lg);
+    font-style: italic;
+  }
+
+  .text-lg-italic-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-lg);
+    font-style: italic;
+  }
+
+  /* Text md - 16px / 1rem, Line height: 24px / 1.5rem */
+  .text-md {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-md);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-md);
+  }
+
+  .text-md-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-md);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-md);
+  }
+
+  .text-md-semibold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-md);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-text-md);
+  }
+
+  .text-md-bold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-md);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-text-md);
+  }
+
+  .text-md-italic {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-md);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-md);
+    font-style: italic;
+  }
+
+  .text-md-italic-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-md);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-md);
+    font-style: italic;
+  }
+
+  /* Text sm - 14px / 0.875rem, Line height: 20px / 1.25rem */
+  .text-sm {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-sm);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-sm);
+  }
+
+  .text-sm-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-sm);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-sm);
+  }
+
+  .text-sm-semibold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-sm);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-text-sm);
+  }
+
+  .text-sm-bold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-sm);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-text-sm);
+  }
+
+  .text-sm-italic {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-sm);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-sm);
+    font-style: italic;
+  }
+
+  .text-sm-italic-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-sm);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-sm);
+    font-style: italic;
+  }
+
+  /* Text xs - 12px / 0.75rem, Line height: 18px / 1.125rem */
+  .text-xs {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xs);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-xs);
+  }
+
+  .text-xs-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xs);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-xs);
+  }
+
+  .text-xs-semibold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-text-xs);
+  }
+
+  .text-xs-bold {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xs);
+    font-weight: var(--font-weight-bold);
+    line-height: var(--line-height-text-xs);
+  }
+
+  .text-xs-italic {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xs);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-text-xs);
+    font-style: italic;
+  }
+
+  .text-xs-italic-medium {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-text-xs);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-text-xs);
+    font-style: italic;
+  }
+
+  /* Heading Convenience Classes - Use Display typography (Georgia) */
+  .text-heading-1 {
+    @apply text-display-lg-bold;
+  }
+
+  .text-heading-2 {
+    @apply text-display-md-bold;
+  }
+
+  .text-heading-3 {
+    @apply text-display-sm-bold;
+  }
+
+  .text-heading-4 {
+    @apply text-display-xs-bold;
+  }
+
+  .text-heading-5 {
+    @apply text-display-xs;
+  }
+
+  .text-heading-6 {
+    @apply text-display-xs;
+  }
+
+  /* Subheading Classes - Use Display xs or Text xl/lg (between heading and body) */
+  .text-subheading-lg {
+    @apply text-display-xs-bold;  /* 24px - Larger subheadings */
+  }
+
+  .text-subheading {
+    @apply text-xl-semibold;  /* 20px - Standard subheadings */
+  }
+
+  .text-subheading-sm {
+    @apply text-lg-semibold;  /* 18px - Smaller subheadings */
+  }
+
+  /* Body Text Convenience Classes - Use Text typography (IBM Plex Sans) */
+  .text-body-xl {
+    @apply text-xl;
+  }
+
+  .text-body-lg {
+    @apply text-lg;
+  }
+
+  .text-body-lg-medium {
+    @apply text-lg-medium;
+  }
+
+  .text-body-lg-semibold {
+    @apply text-lg-semibold;
+  }
+
+  .text-body {
+    @apply text-md;
+  }
+
+  .text-body-bold {
+    @apply text-md-bold;
+  }
+
+  .text-body-sm {
+    @apply text-sm;
+  }
+
+  .text-body-sm-medium {
+    @apply text-sm-medium;
+  }
+
+  .text-body-sm-semibold {
+    @apply text-sm-semibold;
+  }
+
+  .text-body-medium {
+    @apply text-md-medium;
+  }
+
+  .text-body-xs {
+    @apply text-xs;
+  }
+
+  .text-body-xs-semibold {
+    @apply text-xs-semibold;
+  }
+
+  .text-body-xs-medium {
+    @apply text-xs-medium;
+  }
+
+  /* Muted text variant */
+  .text-muted {
+    color: hsl(var(--muted-foreground));
+  }
+}
+
+/* Apply default typography to semantic HTML elements */
+@layer base {
+  /* Headings use Display typography (Georgia) */
+  h1 {
+    @apply text-heading-1;
+  }
+
+  h2 {
+    @apply text-heading-2;
+  }
+
+  h3 {
+    @apply text-heading-3;
+  }
+
+  h4 {
+    @apply text-heading-4;
+  }
+
+  h5 {
+    @apply text-heading-5;
+  }
+
+  h6 {
+    @apply text-heading-6;
+  }
+
+  /* Body text uses Text typography (IBM Plex Sans) */
+  p {
+    @apply text-body;
+  }
+
+  small {
+    @apply text-body-sm;
+  }
+
+  label {
+    @apply text-sm-medium;
+  }
 }

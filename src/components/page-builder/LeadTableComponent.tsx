@@ -6,8 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Filter, User, MessageCircle, ExternalLink, Search, ChevronDown } from 'lucide-react';
-import ShortProfileCard from '../ui/ShortProfileCard';
+import { Filter, User, MessageCircle, ExternalLink, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -602,7 +601,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     // Render link type columns
     if (column.type === 'link') {
       if (!displayValue || displayValue === '#' || displayValue === 'N/A') {
-        return <span className="text-xs text-gray-400">-</span>;
+        return <span className="text-gray-400 text-sm">-</span>;
       }
       
       // Check if it's a profile link
@@ -616,7 +615,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             onClick={(e) => e.stopPropagation()}
           >
             <User className="h-4 w-4" />
-            <span className="text-xs">{truncateText('Profile', columnIndex)}</span>
+            <span className="text-sm">{truncateText('Profile', columnIndex)}</span>
           </a>
         );
       }
@@ -632,7 +631,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             onClick={(e) => e.stopPropagation()}
           >
             <MessageCircle className="h-4 w-4" />
-            <span className="text-xs">{truncateText('WhatsApp', columnIndex)}</span>
+            <span className="text-sm">{truncateText('WhatsApp', columnIndex)}</span>
           </a>
         );
       }
@@ -647,7 +646,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink className="h-4 w-4" />
-            <span className="text-xs">{truncateText('Link', columnIndex)}</span>
+            <span className="text-sm">{truncateText('Link', columnIndex)}</span>
         </a>
       );
     }
@@ -666,7 +665,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     // Render chip/badge for chip type columns
     if (column.type === 'chip') {
       return (
-        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-xs font-medium px-3 py-1 rounded-full border`} title={displayValue}>
+        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-sm px-2 py-0.5`} title={displayValue}>
           {truncateText(displayValue, columnIndex)}
         </Badge>
       );
@@ -691,7 +690,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             title="Click to open WhatsApp"
           >
             <MessageCircle className="h-3 w-3" />
-            <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+            <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
           </a>
         );
       }
@@ -710,7 +709,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
               title="Click to open WhatsApp"
             >
               <MessageCircle className="h-3 w-3" />
-              <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+              <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
             </a>
           );
         }
@@ -729,7 +728,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <User className="h-3 w-3" />
-          <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+          <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
         </a>
       );
     }
@@ -745,13 +744,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <User className="h-3 w-3" />
-          <span className="text-xs">{truncateText(displayValue, columnIndex)}</span>
+          <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
         </a>
       );
     }
     
     // Default text rendering
-    return <span className="text-sm text-gray-600" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
+    return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
   }, [config?.statusColors]);
 
   // Memoize table columns
@@ -1563,19 +1562,26 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
   return (
     <>
-    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-6">
-        {/* Search and Filters Row */}
-        <div className="mb-6">
-          <div className="flex justify-end items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="Search"
-                value={displaySearchTerm}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
+        {/* Filter Section */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-4">
+            <h5>
+              {config?.title || "Leads"}
+            </h5>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowFilters(!showFilters);
+                }}
+                className="flex items-center gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                {showFilters ? 'Hide Filters' : 'Show Filters'}
+              </Button>
             </div>
             <Button
               variant="outline"
@@ -1634,7 +1640,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                     )}
                   </div>
                 </div>
-              ) : (<h1>No filters configured</h1>)}
+              ) : (<h5>No filters configured</h5>)}
             </div>
           )}
         </div>
@@ -1659,22 +1665,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
               <thead>
                 <tr className="bg-black border-b border-gray-200">
                   {tableColumns.map((col, idx) => (
-                    <th key={idx} className="py-3 px-6 text-left text-sm font-semibold text-white">
-                      {col.header}
-                    </th>
+                    <th key={idx} className="text-sm">{col.header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="text-gray-600 text-sm bg-white">
                 {tableLoading ? (
                   <tr>
-                    <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                    <td colSpan={tableColumns.length} className="text-center py-8 text-sm text-gray-500">
                       Loading...
                     </td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                    <td colSpan={tableColumns.length} className="text-center py-8 text-sm text-gray-500">
                       {config?.emptyMessage || 'No data found'}
                     </td>
                   </tr>
@@ -1688,10 +1692,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                       }`}
                     >
                       {tableColumns.map((col, colIdx) => (
-                        <td key={colIdx} className="py-3 px-6 text-left">
-                          <div className="flex items-center">
-                            {renderCell(row, col, colIdx, rowIdx)}
-                          </div>
+                        <td key={colIdx} className="text-sm">
+                          {renderCell(row, col, colIdx)}
                         </td>
                       ))}
                     </tr>
@@ -1753,72 +1755,354 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
       {/* Lead Modal */}
       <Dialog open={isLeadModalOpen} onOpenChange={setIsLeadModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex justify-between items-center">
-              <DialogTitle>{config?.title || 'Record'} Details</DialogTitle>
+              <DialogTitle>{config?.title || 'Record'} Details - All Attributes</DialogTitle>
             </div>
           </DialogHeader>
-          {selectedLead && (
-            <div className="mt-2 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                {config?.columns ? (
-                  // Show configured columns
-                  config.columns.map((col, idx) => (
-                    <div key={idx}>
-                      <label className="block text-sm font-medium text-gray-700">{col.label}</label>
-                      {col.type === 'link' ? (
-                        selectedLead[col.key] !== '#' && selectedLead[col.key] !== 'N/A' ? (
-                          <a 
-                            href={selectedLead[col.key]} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="mt-1 text-sm text-blue-600 hover:underline"
-                          >
-                            Open Link
-                          </a>
-                        ) : (
-                          <p className="mt-1 text-sm text-gray-900">N/A</p>
-                        )
-                      ) : col.type === 'chip' ? (
-                        <Badge className={`mt-1 ${getStatusColor(selectedLead[col.key], config?.statusColors)}`}>
-                          {selectedLead[col.key]}
-                        </Badge>
-                      ) : (
-                        <p className="mt-1 text-sm text-gray-900">{selectedLead[col.key] || 'N/A'}</p>
-                      )}
+          {selectedLead && (() => {
+            // Helper function to format field names (convert snake_case to Title Case)
+            const formatFieldName = (key: string): string => {
+              return key
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+            };
+
+            // Helper function to parse and normalize tasks
+            const parseTasks = (tasks: any): Array<{ title: string; status?: string; description?: string; dueDate?: string }> => {
+              if (!tasks) return [];
+
+              // Handle string (JSON or comma-separated)
+              if (typeof tasks === 'string') {
+                try {
+                  const parsed = JSON.parse(tasks);
+                  if (Array.isArray(parsed)) {
+                    return parsed.map((item, idx) => {
+                      if (typeof item === 'string') {
+                        return { title: item };
+                      }
+                      if (typeof item === 'object' && item !== null) {
+                        return {
+                          title: item.task || item.title || item.name || String(item),
+                          status: item.status || item.rawStatus,
+                          description: item.description,
+                          dueDate: item.dueDate || item.due_date
+                        };
+                      }
+                      return { title: String(item) };
+                    });
+                  }
+                } catch {
+                  // Fall back to comma-separated list
+                  return tasks.split(',').map((task: string) => ({ title: task.trim() })).filter((t: any) => t.title);
+                }
+              }
+
+              // Handle arrays
+              if (Array.isArray(tasks)) {
+                return tasks.map((item, idx) => {
+                  if (typeof item === 'string') {
+                    return { title: item };
+                  }
+                  if (typeof item === 'object' && item !== null) {
+                    return {
+                      title: item.task || item.title || item.name || String(item),
+                      status: item.status || item.rawStatus,
+                      description: item.description,
+                      dueDate: item.dueDate || item.due_date
+                    };
+                  }
+                  return { title: String(item) };
+                });
+              }
+
+              // Handle objects (dict format: {"Task Name": "Status", ...})
+              if (typeof tasks === 'object' && tasks !== null) {
+                const taskLikeKeys = ["title", "name", "description", "status", "due_date", "dueDate", "task"];
+                if (taskLikeKeys.some(k => k in tasks)) {
+                  // Single task object
+                  return [{
+                    title: (tasks as any).task || (tasks as any).title || (tasks as any).name || 'Task',
+                    status: (tasks as any).status || (tasks as any).rawStatus,
+                    description: (tasks as any).description,
+                    dueDate: (tasks as any).dueDate || (tasks as any).due_date
+                  }];
+                }
+                // Dict format
+                return Object.entries(tasks).map(([key, value]) => ({
+                  title: key,
+                  status: typeof value === 'string' ? value : undefined
+                }));
+              }
+
+              return [];
+            };
+
+            // Helper function to get task status color
+            const getTaskStatusColor = (status?: string): string => {
+              if (!status) return 'bg-gray-100 text-gray-800 border-gray-200';
+              const statusLower = status.toLowerCase();
+              if (statusLower.includes('complete') || statusLower.includes('done') || statusLower.includes('finished')) {
+                return 'bg-green-100 text-green-800 border-green-200';
+              }
+              if (statusLower.includes('pending') || statusLower.includes('waiting')) {
+                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+              }
+              if (statusLower.includes('in progress') || statusLower.includes('current')) {
+                return 'bg-blue-100 text-blue-800 border-blue-200';
+              }
+              if (statusLower.includes('cancel') || statusLower.includes('fail')) {
+                return 'bg-red-100 text-red-800 border-red-200';
+              }
+              return 'bg-gray-100 text-gray-800 border-gray-200';
+            };
+
+            // Helper function to format values based on type
+            const formatValue = (value: any, key: string): React.ReactNode => {
+              if (value === null || value === undefined) {
+                return <span className="text-muted-foreground italic">null</span>;
+              }
+
+              // Handle tasks specially
+              if (key === 'tasks' || key.toLowerCase().includes('task')) {
+                const tasks = parseTasks(value);
+                if (tasks.length === 0) {
+                  return <span className="text-muted-foreground">No tasks</span>;
+                }
+                return (
+                  <div className="space-y-2">
+                    {tasks.map((task, idx) => (
+                      <div key={idx} className="border rounded-lg p-3 bg-card hover:bg-accent/50 transition-colors">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              {task.status && (
+                                task.status.toLowerCase().includes('complete') || task.status.toLowerCase().includes('done') ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                                ) : (
+                                  <Clock className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                                )
+                              )}
+                              <span className="font-medium text-sm">{task.title}</span>
+                            </div>
+                            {task.description && (
+                              <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
+                            )}
+                            {task.dueDate && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Due: {new Date(task.dueDate).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          {task.status && (
+                            <Badge className={`${getTaskStatusColor(task.status)} text-xs`}>
+                              {task.status}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
+              // Handle arrays
+              if (Array.isArray(value)) {
+                if (value.length === 0) {
+                  return <span className="text-muted-foreground">[]</span>;
+                }
+                return (
+                  <div className="space-y-1">
+                    {value.map((item, idx) => (
+                      <div key={idx} className="text-sm bg-muted p-2 rounded">
+                        {typeof item === 'object' ? JSON.stringify(item, null, 2) : String(item)}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
+              // Handle objects
+              if (typeof value === 'object') {
+                return (
+                  <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+                    {JSON.stringify(value, null, 2)}
+                  </pre>
+                );
+              }
+
+              // Handle URLs/links
+              if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                return (
+                  <a 
+                    href={value} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-blue-600 hover:underline break-all"
+                  >
+                    {value}
+                  </a>
+                );
+              }
+
+              // Handle email addresses
+              if (typeof value === 'string' && value.includes('@') && !value.startsWith('http')) {
+                return (
+                  <a 
+                    href={`mailto:${value}`} 
+                    className="text-blue-600 hover:underline"
+                  >
+                    {value}
+                  </a>
+                );
+              }
+
+              // Handle phone numbers with WhatsApp links
+              if (key === 'whatsapp_link' && typeof value === 'string' && value) {
+                return (
+                  <a 
+                    href={value} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-green-600 hover:underline"
+                  >
+                    {value}
+                  </a>
+                );
+              }
+
+              // Handle user profile links
+              if (key === 'user_profile_link' && typeof value === 'string' && value && value !== '#') {
+                return (
+                  <a 
+                    href={value} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-blue-600 hover:underline"
+                  >
+                    View Profile
+                  </a>
+                );
+              }
+
+              // Handle dates
+              if (typeof value === 'string' && (value.includes('T') || value.match(/^\d{4}-\d{2}-\d{2}/))) {
+                try {
+                  const date = new Date(value);
+                  if (!isNaN(date.getTime())) {
+                    return (
+                      <div className="space-y-1">
+                        <div>{date.toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">{formatRelativeTime(value)}</div>
+                      </div>
+                    );
+                  }
+                } catch (e) {
+                  // Not a valid date, continue
+                }
+              }
+
+              // Handle status/chip fields
+              if (key.includes('status') || key.includes('stage') || key.includes('state')) {
+                return (
+                  <Badge className={getStatusColor(String(value), config?.statusColors)}>
+                    {String(value)}
+                  </Badge>
+                );
+              }
+
+              // Default: string representation
+              return <span className="break-words">{String(value)}</span>;
+            };
+
+            // Try to find the original lead from the data array
+            const originalLead = data.find(lead => 
+              lead.id === selectedLead.id || 
+              lead.id === selectedLead.user_id ||
+              (selectedLead.praja_id && (lead.data?.praja_id === selectedLead.praja_id || lead.data?.user_id === selectedLead.praja_id))
+            ) || selectedLead;
+
+            // Collect all attributes from the lead object
+            const allAttributes: Array<{ key: string; value: any; source: 'root' | 'data' | 'original' }> = [];
+            
+            // Add all root-level properties from original lead (excluding 'data' to avoid duplication)
+            Object.keys(originalLead).forEach(key => {
+              if (key !== 'data' && originalLead[key] !== undefined) {
+                // Check if this attribute already exists
+                const existingIndex = allAttributes.findIndex(attr => attr.key === key);
+                if (existingIndex === -1) {
+                  allAttributes.push({
+                    key,
+                    value: originalLead[key],
+                    source: 'original'
+                  });
+                }
+              }
+            });
+
+            // Add all root-level properties from selectedLead (transformed)
+            Object.keys(selectedLead).forEach(key => {
+              if (key !== 'data' && selectedLead[key] !== undefined) {
+                const existingIndex = allAttributes.findIndex(attr => attr.key === key);
+                if (existingIndex === -1) {
+                  allAttributes.push({
+                    key,
+                    value: selectedLead[key],
+                    source: 'root'
+                  });
+                }
+              }
+            });
+
+            // Add all properties from the 'data' object (JSONB field) - check both original and selected
+            const dataObjects = [
+              { data: originalLead.data, source: 'original' as const },
+              { data: selectedLead.data, source: 'data' as const }
+            ];
+
+            dataObjects.forEach(({ data: dataObj, source }) => {
+              if (dataObj && typeof dataObj === 'object') {
+                Object.keys(dataObj).forEach(key => {
+                  const existingIndex = allAttributes.findIndex(attr => attr.key === key);
+                  if (existingIndex === -1) {
+                    allAttributes.push({
+                      key,
+                      value: dataObj[key],
+                      source
+                    });
+                  }
+                });
+              }
+            });
+
+            // Sort attributes alphabetically
+            allAttributes.sort((a, b) => a.key.localeCompare(b.key));
+
+            return (
+              <div className="mt-4 space-y-6">
+                <div className="text-sm text-muted-foreground mb-4">
+                  Showing all {allAttributes.length} attributes
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {allAttributes.map((attr, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`space-y-1 ${(attr.key === 'tasks' || attr.key.toLowerCase().includes('task')) ? 'md:col-span-2' : ''}`}
+                    >
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {formatFieldName(attr.key)}
+                      </label>
+                      <div className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                        {formatValue(attr.value, attr.key)}
+                      </div>
                     </div>
-                  ))
-                ) : (
-                  // Show fallback columns only
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Stage</label>
-                      <Badge className={`mt-1 ${getStatusColor(selectedLead.lead_stage, config?.statusColors)}`}>
-                        {selectedLead.lead_stage || 'N/A'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Customer Name</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLead.data?.name || selectedLead.name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Praja ID</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLead.praja_id || selectedLead.user_id || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Party</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLead.affiliated_party || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedLead.phone_number || 'N/A'}</p>
-                    </div>
-                  </>
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

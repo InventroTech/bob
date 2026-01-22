@@ -62,7 +62,7 @@ export const DynamicScoringConfig: React.FC<DynamicScoringConfigProps> = ({
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="showTitle">Show Title</Label>
-              <p className="text-sm text-gray-500">Display the title in the component</p>
+              <p className="text-body-sm text-gray-500">Display the title in the component</p>
             </div>
             <Switch
               id="showTitle"
@@ -74,7 +74,7 @@ export const DynamicScoringConfig: React.FC<DynamicScoringConfigProps> = ({
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="showDescription">Show Description</Label>
-              <p className="text-sm text-gray-500">Display the description in the component</p>
+              <p className="text-body-sm text-gray-500">Display the description in the component</p>
             </div>
             <Switch
               id="showDescription"
@@ -116,7 +116,7 @@ export const DynamicScoringConfig: React.FC<DynamicScoringConfigProps> = ({
               placeholder="/api/attributes"
               className="mt-2"
             />
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-body-sm text-gray-500 mt-1">
               GET endpoint to fetch available attributes (e.g., /api/attributes)
             </p>
           </div>
@@ -130,7 +130,7 @@ export const DynamicScoringConfig: React.FC<DynamicScoringConfigProps> = ({
               placeholder="/api/calculate-score"
               className="mt-2"
             />
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-body-sm text-gray-500 mt-1">
               POST endpoint to calculate the score (e.g., /api/calculate-score)
             </p>
           </div>
@@ -144,7 +144,7 @@ export const DynamicScoringConfig: React.FC<DynamicScoringConfigProps> = ({
               placeholder="Leave empty to use default tenant"
               className="mt-2"
             />
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-body-sm text-gray-500 mt-1">
               Override the default tenant slug for API requests
             </p>
           </div>

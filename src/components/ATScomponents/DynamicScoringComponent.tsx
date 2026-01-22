@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,6 +9,7 @@ import { Plus, Trash2, Play, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface ScoringRule {
   id: string;
@@ -55,6 +56,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
   className = ''
 }) => {
   const { tenantId } = useTenant();
+  const { session } = useAuth();
   
   const {
     title = 'Dynamic Scoring',
@@ -126,7 +128,6 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         };
 
         // Add Bearer token from Supabase session
-        const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           headers['Authorization'] = `Bearer ${session.access_token}`;
         }
@@ -284,7 +285,6 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
       };
 
       // Add Bearer token from Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -414,7 +414,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         {(showTitle || showDescription) && (
           <CardHeader className="pb-4">
             {showTitle && (
-              <CardTitle className="text-2xl font-bold text-gray-900">{title}</CardTitle>
+              <h5 className="text-gray-900">{title}</h5>
             )}
             {showDescription && description && (
               <p className="text-gray-600 mt-2">{description}</p>
@@ -427,11 +427,11 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50">
-                  <TableHead className="font-semibold text-gray-900 w-[30%]">attr.</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[20%]">operator</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[30%]">value.</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[15%]">weight</TableHead>
-                  <TableHead className="font-semibold text-gray-900 w-[5%]"></TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[30%]">attr.</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[20%]">operator</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[30%]">value.</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[15%]">weight</TableHead>
+                  <TableHead className="text-body-sm-semibold text-gray-900 w-[5%]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -492,11 +492,11 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                     </TableCell>
                     <TableCell>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         onClick={() => handleRemoveRule(rule.id)}
                         disabled={rules.length === 1}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="hover:bg-muted hover:text-foreground"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -512,7 +512,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             <Button
               variant="outline"
               onClick={handleAddRule}
-              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="hover:bg-muted hover:text-foreground"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Rule
@@ -524,9 +524,10 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             <div className="flex items-center gap-3">
               <Button
                 type="button"
+                variant="outline"
                 onClick={handleCalculate}
                 disabled={calculating}
-                className="bg-gray-900 text-white hover:bg-gray-800 font-semibold px-6 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="hover:bg-muted hover:text-foreground text-body-lg-semibold px-6"
               >
                 {calculating ? (
                   <>
@@ -543,7 +544,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             </div>
             {pyroValue !== null && (
               <div className="flex items-center gap-3">
-                <Badge variant="outline" className="text-lg font-semibold px-4 py-2 bg-gray-50 text-gray-900 border-gray-300">
+                <Badge variant="outline" className="text-body-lg-semibold px-4 py-2 bg-gray-50 text-gray-900 border-gray-300">
                   pyro_value = {pyroValue}
                 </Badge>
               </div>

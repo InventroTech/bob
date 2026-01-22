@@ -10,4 +10,5 @@ export { TicketCarouselConfig } from '../components/page-builder/component-confi
 export { TicketTableConfig } from '../components/page-builder/component-config/TicketTableConfig';
 export { LeadCardCarouselConfig } from '../components/page-builder/component-config/LeadCardCarouselConfig';
 export { LeadAssignmentConfig } from '../components/page-builder/component-config/LeadAssignmentConfig';
+export { CallAttemptMatrixConfig } from '../components/page-builder/component-config/CallAttemptMatrixConfig';
 export { LeadProgressBarConfig } from '../components/page-builder/component-config/LeadProgressBarConfig'; 

@@ -18,18 +18,23 @@ import {
   Clock,
   MessageSquare,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
 import { CallBackModal } from "./CallBackModal";
+import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
 
 interface LeadCardCarouselProps {
   config?: {
     title?: string;
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    leadAssignmentWebhookUrl?: string;
+    whatsappTemplatesApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
 }
 
@@ -107,7 +112,7 @@ interface LeadState {
 
 const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const { toast } = useToast();
-  const { user: authUser } = useAuth();
+  const { user: authUser, session } = useAuth();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -126,6 +131,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [animationData, setAnimationData] = useState<any>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
+  const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -141,6 +149,37 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
+
+  // Persist actionButtonsVisible state to sessionStorage (survives page navigation)
+  const persistActionButtonsState = (leadId: string | number | undefined, visible: boolean) => {
+    try {
+      if (leadId && visible) {
+        sessionStorage.setItem('leadCardCarousel_actionButtonsVisible', JSON.stringify({ leadId: String(leadId), visible }));
+      } else {
+        sessionStorage.removeItem('leadCardCarousel_actionButtonsVisible');
+      }
+    } catch (e) {
+      console.warn('[LeadCardCarousel] Failed to persist action buttons state:', e);
+    }
+  };
+
+  // Restore actionButtonsVisible state from sessionStorage
+  const restoreActionButtonsState = (leadId: string | number | undefined): boolean => {
+    try {
+      if (!leadId) return false;
+      const stored = sessionStorage.getItem('leadCardCarousel_actionButtonsVisible');
+      if (stored) {
+        const { leadId: storedLeadId, visible } = JSON.parse(stored);
+        // Compare as strings to handle both string and number IDs
+        if (String(storedLeadId) === String(leadId) && visible) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
 
   // Get today's date string (YYYY-MM-DD) for daily reset tracking
   const getTodayDateString = (): string => {
@@ -203,8 +242,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
   const fetchDailyTarget = async () => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (!currentSession) {
+      if (!session) {
         return;
       }
 
@@ -293,17 +331,34 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     const clean = normalizePhoneForLinks(phone);
     if (!clean) return;
     setActionButtonsVisible(true);
+    persistActionButtonsState(currentLead?.id, true);
     window.open(`tel:${clean}`);
   };
 
-  const handleWhatsAppLead = (phone?: string, whatsappLink?: string) => {
+  const handleWhatsAppLead = (phone?: string, link?: string) => {
+    // Open modal instead of directly opening WhatsApp
+    setWhatsappPhone(phone || "");
+    setWhatsappLink(link);
+    setShowWhatsAppModal(true);
+  };
+
+  const handleTemplateSelected = (templateText: string | null) => {
     if (whatsappLink) {
+      // If there's a direct WhatsApp link, use it
       window.open(whatsappLink, "_blank");
       return;
     }
-    const clean = normalizePhoneForLinks(phone);
+    
+    const clean = normalizePhoneForLinks(whatsappPhone);
     if (!clean) return;
-    window.open(`https://wa.me/${clean}`, "_blank");
+    
+    // Open WhatsApp with template text or without
+    if (templateText) {
+      const whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(templateText)}`;
+      window.open(whatsappUrl, "_blank");
+    } else {
+      window.open(`https://wa.me/${clean}`, "_blank");
+    }
   };
 
   const primaryPhone = useMemo(() => {
@@ -475,9 +530,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const firstPendingIndex = normalised.findIndex(step => step.status === "pending");
       if (firstPendingIndex >= 0) {
         normalised[firstPendingIndex].status = "current";
-      } else if (normalised.length) {
-        normalised[0].status = "current";
       }
+      // Don't set any task as current if all tasks are completed
     }
 
     return normalised.map(step => ({
@@ -537,18 +591,25 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               )}
             </div>
             <div className="pt-1">
-              <p
-                className={cn(
-                  "text-sm font-medium",
-                  step.status === "current"
-                    ? "text-slate-900"
-                    : step.status === "completed"
-                    ? "text-slate-600"
-                    : "text-slate-500"
+              <div className="flex items-center gap-2">
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    step.status === "current"
+                      ? "text-slate-900"
+                      : step.status === "completed"
+                      ? "text-slate-600"
+                      : "text-slate-500"
+                  )}
+                >
+                  {step.label}
+                </p>
+                {step.label.toLowerCase().includes('layout feedback') && ((currentLead as any)?.data?.reject_reason) && (
+                  <span className="text-sm text-red-600 font-medium">
+                    ({((currentLead as any)?.data?.reject_reason)})
+                  </span>
                 )}
-              >
-                {step.label}
-              </p>
+              </div>
               {step.description && <p className="text-xs text-slate-400">{step.description}</p>}
             </div>
           </li>
@@ -635,7 +696,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setHasCheckedForLeads(true);
       setCurrentLead(leadData);
       setShowPendingCard(false);
-      setActionButtonsVisible(false);
+      // Restore actionButtonsVisible state if this is the same lead that had buttons visible
+      const shouldShowButtons = restoreActionButtonsState(leadData?.id);
+      setActionButtonsVisible(shouldShowButtons);
       setProcessingAction(null);
       setLead(prev => ({
         ...prev,
@@ -651,6 +714,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       if (dailyTarget !== null) {
         incrementFetchedCount();
       }
+
+      // Note: Both Mixpanel services are called from backend when new lead is assigned
+      // No need to call from frontend
 
       isInitialized.current = true;
       await fetchLeadStats();
@@ -698,6 +764,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       leadStartTime: new Date(),
     });
     setActionButtonsVisible(false);
+    persistActionButtonsState(undefined, false);
     setProcessingAction(null);
   };
 
@@ -794,6 +861,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           }));
         }
         
+        // Clear action buttons state before fetching next lead
+        persistActionButtonsState(undefined, false);
+        
         // Fetch next lead after any action
         await fetchFirstLead();
       }
@@ -833,6 +903,45 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       resetLeadState();
       isInitialized.current = false;
       await fetchLeadStats();
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!currentLead?.id) {
+      return;
+    }
+    
+    try {
+      setUpdating(true);
+      // Preserve the current actionButtonsVisible state
+      const currentButtonsVisible = actionButtonsVisible;
+      
+      // Fetch the current lead again to refresh the data
+      const refreshedLead = await fetchCurrentLead();
+      
+      if (refreshedLead) {
+        // Update the lead data but preserve actionButtonsVisible state
+        setCurrentLead(refreshedLead);
+        // Restore actionButtonsVisible state if it was visible before or if this lead had buttons visible
+        const shouldShowButtons = currentButtonsVisible || restoreActionButtonsState(refreshedLead?.id);
+        setActionButtonsVisible(shouldShowButtons);
+        if (shouldShowButtons) {
+          persistActionButtonsState(refreshedLead?.id, true);
+        }
+        setLead(prev => ({
+          ...prev,
+          leadStatus: refreshedLead.status || prev.leadStatus,
+          priority: refreshedLead.priority || prev.priority,
+          notes: (refreshedLead?.data?.notes as string) || refreshedLead?.notes || prev.notes,
+          selectedTags: parseTags(refreshedLead?.tags || []),
+          nextFollowUp: refreshedLead.next_follow_up || prev.nextFollowUp,
+          // Keep leadStartTime unchanged
+        }));
+      }
+    } catch (error: any) {
+      console.error("Error refreshing lead:", error);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -901,6 +1010,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         setCurrentLead(currentLead);
         setShowPendingCard(false);
         setHasCheckedForLeads(true);
+        // Restore actionButtonsVisible state if this is the same lead that had buttons visible
+        const shouldShowButtons = restoreActionButtonsState(currentLead?.id);
+        setActionButtonsVisible(shouldShowButtons);
         setLead(prev => ({
           ...prev,
           leadStatus: currentLead.status || "New",
@@ -931,10 +1043,13 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       const currentLead = await fetchCurrentLead();
       
       if (currentLead) {
-        // Display the current assigned lead
+        // Display the current assigned lead (already assigned, no need to send event)
         setCurrentLead(currentLead);
         setShowPendingCard(false);
         setHasCheckedForLeads(true);
+        // Restore actionButtonsVisible state if this is the same lead that had buttons visible
+        const shouldShowButtons = restoreActionButtonsState(currentLead?.id);
+        setActionButtonsVisible(shouldShowButtons);
         setLead(prev => ({
           ...prev,
           leadStatus: currentLead.status || "New",
@@ -1011,9 +1126,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
             {/* Header */}
             <div className="text-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-2">
+              <h5>
                 {config?.title || "Lead Management"}
-              </h3>
+              </h5>
             </div>
 
             {/* Inspirational Messages for Workers */}
@@ -1082,7 +1197,17 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   if (loading) {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0">
+        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0 gap-2">
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            disabled={updating || !currentLead}
+          >
+            <RefreshCw className="h-3 w-3" />
+            Refresh
+          </Button>
           <Button
             onClick={handleTakeBreak}
             variant="outline"
@@ -1214,9 +1339,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                       {getLeadName(currentLead)}
                     </a>
                   ) : (
-                    <h2 className="text-2xl font-semibold text-slate-900" style={titleFont}>
+                    <h5>
                       {getLeadName(currentLead)}
-                    </h2>
+                    </h5>
                   )}
                     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                       {currentLead?.affiliated_party && (
@@ -1241,6 +1366,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  onClick={handleRefresh}
+                  disabled={updating || !currentLead}
+                >
+                  <RefreshCw className="h-4 w-4 text-gray-500" />
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -1283,7 +1417,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             >
               <div className="rounded-2xl border border-slate-200 p-5 w-full">
                 <div className="mb-4 flex items-center justify-between pl-2">
-                  <h3 className="text-lg font-semibold text-slate-900" style={titleFont}>Task Progress</h3>
+                  <h5>Task Progress</h5>
                 </div>
                 {taskSteps.length ? (
                   <div className="pl-4">
@@ -1339,6 +1473,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         onSubmit={handleSubmitCallBackLater}
         updating={updating}
       />
+      <WhatsAppTemplateModal
+        open={showWhatsAppModal}
+        onOpenChange={setShowWhatsAppModal}
+        phone={whatsappPhone}
+        whatsappLink={whatsappLink}
+        apiEndpoint={config?.whatsappTemplatesApiEndpoint}
+        apiPrefix={config?.apiPrefix || 'renderer'}
+        onSelectTemplate={handleTemplateSelected}
+      />
 
       {/* Profile Modal */}
       {showProfileModal && (currentLead?.linkedin_profile || currentLead?.website) && (
@@ -1368,8 +1511,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   )}
                 </div>
                 <div>
-                  <h3 className="font-semibold">{getLeadName(currentLead) || "Lead Profile"}</h3>
-                  <p className="text-sm text-muted-foreground">Profile Information</p>
+                  <h5>{getLeadName(currentLead) || "Lead Profile"}</h5>
+                  <p>Profile Information</p>
                 </div>
               </div>
               <Button variant="ghost" size="sm" onClick={handleCloseProfile}>
@@ -1382,7 +1525,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {currentLead?.linkedin_profile && (
                   <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium mb-2">LinkedIn Profile</h4>
+                    <h5>LinkedIn Profile</h5>
                     <a
                       href={currentLead.linkedin_profile}
                       target="_blank"
@@ -1396,7 +1539,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 
                 {currentLead?.website && (
                   <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium mb-2">Website</h4>
+                    <h5>Website</h5>
                     <a
                       href={currentLead.website}
                       target="_blank"

@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from './hooks/useAuth';
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import PageBuilder from "./pages/PageBuilder";
@@ -27,14 +28,16 @@ import AuthCallbackPage from "./pages/AuthCallBackPage";
 import LeadTypeAssignmentPageWrapper from "./pages/LeadTypeAssignmentPageWrapper";
 import { JobsPage } from "./pages/JobsPage";
 import PublicTenantPage from "./pages/PublicTenantPage";
+import TeamDashboardPage from "./pages/TeamDashboardPage";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <Router>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <Routes>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Routes>
           {/* Public Route - Login/Signup */}
           <Route path="/auth" element={<AuthPage />} />
 
@@ -52,6 +55,7 @@ const App = () => (
             <Route path="/add-user" element={<AddUserPage />} />
             <Route path="/lead-type-assignment" element={<LeadTypeAssignmentPageWrapper />} />
             <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/team-dashboard" element={<TeamDashboardPage />} />
           </Route>
 
           {/* Custom App Routes */}
@@ -72,7 +76,8 @@ const App = () => (
           {/* Add a catch-all or 404 route if needed */}
           {/* <Route path="*" element={<NotFoundPage />} /> */}
         </Routes>
-      </TooltipProvider>
+        </TooltipProvider>
+      </AuthProvider>
     </Router>
   </QueryClientProvider>
 );

@@ -9,8 +9,9 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
 } from "chart.js";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { TrendingUp, Calendar } from "lucide-react";
@@ -38,7 +39,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 export const LineChart: React.FC<LineChartProps> = ({ config }) => {
@@ -237,7 +239,6 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       setLoading(true);
       setError(null);
       
-      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
@@ -246,9 +247,11 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
 
       // Add date filter parameters to API endpoint
       const { start, end } = getDateRange(dateFilter);
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_URI || 'http://127.0.0.1:8000';
+      // Ensure endpoint starts with / and baseUrl doesn't end with /
+      const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
       const endpoint = config.apiEndpoint.startsWith('/') ? config.apiEndpoint : `/${config.apiEndpoint}`;
-      const url = new URL(`${baseUrl}${endpoint}`);
+      const url = new URL(`${cleanBaseUrl}${endpoint}`);
       url.searchParams.append('start', start);
       url.searchParams.append('end', end);
       console.log('LineChart - URL:', url.toString());
@@ -262,10 +265,13 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('LineChart - API error:', response.status, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const responseData = await response.json();
+      console.log('LineChart - Response data:', responseData);
       
       // Handle different response formats
       let chartData;
@@ -277,6 +283,58 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
         chartData = transformBackendData(responseData);
       } else if (responseData.labels && responseData.datasets) {
         chartData = responseData;
+      } else if (responseData.non_snoozed || responseData.snoozed) {
+        // Handle SLA time format with non_snoozed/snoozed structure
+        // Create separate datasets for both non-snoozed and snoozed data
+        const nonSnoozedValue = responseData.non_snoozed?.average_sla_time ?? 0;
+        const snoozedValue = responseData.snoozed?.average_sla_time ?? 0;
+        
+        const { start, end } = getDateRange(dateFilter);
+        const dates = [];
+        const nonSnoozedData = [];
+        const snoozedData = [];
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0];
+          dates.push(dateStr);
+          nonSnoozedData.push(nonSnoozedValue);
+          snoozedData.push(snoozedValue);
+        }
+        
+        // Get configured dataset colors or use defaults
+        const configuredDatasets = config?.datasets || [];
+        const nonSnoozedColor = configuredDatasets[0]?.backgroundColor || 'rgba(75, 192, 192, 0.2)';
+        const snoozedColor = configuredDatasets[1]?.backgroundColor || 'rgba(255, 99, 132, 0.2)';
+        const nonSnoozedBorderColor = nonSnoozedColor.includes('rgba') 
+          ? nonSnoozedColor.replace(/,\s*[\d.]+\)/, ', 1)')
+          : nonSnoozedColor;
+        const snoozedBorderColor = snoozedColor.includes('rgba')
+          ? snoozedColor.replace(/,\s*[\d.]+\)/, ', 1)')
+          : snoozedColor;
+        
+        chartData = {
+          labels: dates,
+          datasets: [
+            {
+              label: configuredDatasets[0]?.label || 'Non-Snoozed',
+              data: nonSnoozedData,
+              borderColor: nonSnoozedBorderColor,
+              backgroundColor: nonSnoozedColor,
+              fill: true,
+              tension: 0.4,
+            },
+            {
+              label: configuredDatasets[1]?.label || 'Snoozed',
+              data: snoozedData,
+              borderColor: snoozedBorderColor,
+              backgroundColor: snoozedColor,
+              fill: true,
+              tension: 0.4,
+            }
+          ]
+        };
       } else {
         throw new Error("Invalid data format received");
       }
@@ -284,9 +342,10 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
       setData(chartData);
       setUsingDemoData(false);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching line chart data:', error);
-      setError('Failed to load data. Using demo data.');
+      const errorMessage = error?.message || 'Unknown error';
+      setError(`Failed to load data: ${errorMessage}. Using demo data.`);
       
       // Fallback to demo data
       const configuredDatasets = config?.datasets || [];
@@ -376,10 +435,10 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
     return (
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <h5 className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
             {config?.title || "Line Chart"}
-          </CardTitle>
+          </h5>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-64">
@@ -393,10 +452,10 @@ export const LineChart: React.FC<LineChartProps> = ({ config }) => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <h5 className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
           {config?.title || "Line Chart"}
-        </CardTitle>
+        </h5>
         
         {/* Date Filter */}
         <div className="flex items-center gap-2 mt-2">

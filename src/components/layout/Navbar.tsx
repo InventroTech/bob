@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -53,9 +52,8 @@ const Navbar = ({ user }: NavbarProps) => {
     <header className="border-b px-6 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <SidebarTrigger />
           <div>
-            <h1 className="text-xl font-semibold">CRM Builder</h1>
+            <h5>CRM Builder</h5>
           </div>
         </div>
         <div className="flex items-center gap-4">
