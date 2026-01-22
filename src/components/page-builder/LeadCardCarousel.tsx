@@ -25,12 +25,16 @@ import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
 import { CallBackModal } from "./CallBackModal";
+import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
 
 interface LeadCardCarouselProps {
   config?: {
     title?: string;
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    leadAssignmentWebhookUrl?: string;
+    whatsappTemplatesApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
 }
 
@@ -127,6 +131,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [animationData, setAnimationData] = useState<any>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
+  const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -328,14 +335,30 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     window.open(`tel:${clean}`);
   };
 
-  const handleWhatsAppLead = (phone?: string, whatsappLink?: string) => {
+  const handleWhatsAppLead = (phone?: string, link?: string) => {
+    // Open modal instead of directly opening WhatsApp
+    setWhatsappPhone(phone || "");
+    setWhatsappLink(link);
+    setShowWhatsAppModal(true);
+  };
+
+  const handleTemplateSelected = (templateText: string | null) => {
     if (whatsappLink) {
+      // If there's a direct WhatsApp link, use it
       window.open(whatsappLink, "_blank");
       return;
     }
-    const clean = normalizePhoneForLinks(phone);
+    
+    const clean = normalizePhoneForLinks(whatsappPhone);
     if (!clean) return;
-    window.open(`https://wa.me/${clean}`, "_blank");
+    
+    // Open WhatsApp with template text or without
+    if (templateText) {
+      const whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(templateText)}`;
+      window.open(whatsappUrl, "_blank");
+    } else {
+      window.open(`https://wa.me/${clean}`, "_blank");
+    }
   };
 
   const primaryPhone = useMemo(() => {
@@ -1449,6 +1472,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         onOpenChange={setShowCallBackDialog}
         onSubmit={handleSubmitCallBackLater}
         updating={updating}
+      />
+      <WhatsAppTemplateModal
+        open={showWhatsAppModal}
+        onOpenChange={setShowWhatsAppModal}
+        phone={whatsappPhone}
+        whatsappLink={whatsappLink}
+        apiEndpoint={config?.whatsappTemplatesApiEndpoint}
+        apiPrefix={config?.apiPrefix || 'renderer'}
+        onSelectTemplate={handleTemplateSelected}
       />
 
       {/* Profile Modal */}

@@ -45,6 +45,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
 
 interface Lead {
   id: number;
@@ -155,15 +156,7 @@ const getCleanPhoneNumber = (phone: string): string => {
   return phone.replace(/\D/g, '');
 };
 
-// Function to handle WhatsApp action
-const handleWhatsApp = (phone: string) => {
-  const cleanNumber = getCleanPhoneNumber(phone);
-  if (cleanNumber) {
-    const message = `Hi, I'm reaching out regarding your inquiry.`;
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  }
-};
+// Note: handleWhatsApp is now handled via the modal component
 
 // Function to handle email action
 const handleEmail = (email: string) => {
@@ -218,6 +211,8 @@ interface LeadCardProps {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
     title?: string;
+    whatsappTemplatesApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
   initialLead?: any;
   onUpdate?: (updatedLead: any) => void;
@@ -314,6 +309,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
 
   // Function to handle opening profile modal
   const handleOpenProfile = () => {
@@ -325,6 +322,25 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   // Function to close profile modal
   const handleCloseProfile = () => {
     setShowProfileModal(false);
+  };
+
+  // Function to handle WhatsApp action - opens modal
+  const handleWhatsApp = (phone: string) => {
+    setWhatsappPhone(phone);
+    setShowWhatsAppModal(true);
+  };
+
+  // Function to handle template selection and open WhatsApp
+  const handleTemplateSelected = (templateText: string | null) => {
+    const cleanNumber = getCleanPhoneNumber(whatsappPhone);
+    if (!cleanNumber) return;
+    
+    if (templateText) {
+      const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(templateText)}`;
+      window.open(whatsappUrl, '_blank');
+    } else {
+      window.open(`https://wa.me/${cleanNumber}`, '_blank');
+    }
   };
 
   useEffect(() => {
@@ -1209,6 +1225,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           </div>
         </div>
       )}
+      
+      {/* WhatsApp Template Modal */}
+      <WhatsAppTemplateModal
+        open={showWhatsAppModal}
+        onOpenChange={setShowWhatsAppModal}
+        phone={whatsappPhone}
+        apiEndpoint={config?.whatsappTemplatesApiEndpoint}
+        apiPrefix={config?.apiPrefix || 'renderer'}
+        onSelectTemplate={handleTemplateSelected}
+      />
     </div>
   );
 };
