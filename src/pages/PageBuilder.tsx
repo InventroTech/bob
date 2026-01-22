@@ -237,6 +237,7 @@ interface ComponentConfig {
   assignmentsEndpoint?: string;
   // LeadCardCarousel specific fields
   leadAssignmentWebhookUrl?: string;
+  whatsappTemplatesApiEndpoint?: string;
   // CallAttemptMatrix specific fields (apiEndpoint already defined above)
   // LeadProgressBar specific fields
   targetCount?: number;

@@ -11,6 +11,7 @@ interface LeadCardCarouselConfigProps {
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
     leadAssignmentWebhookUrl?: string;
+    whatsappTemplatesApiEndpoint?: string;
   };
   handleInputChange: (field: string, value: string | number | boolean) => void;
 }
@@ -90,6 +91,19 @@ export const LeadCardCarouselConfig: React.FC<LeadCardCarouselConfigProps> = ({
           />
           <p className="text-xs text-muted-foreground">
             Webhook URL to send lead assignment events when a lead is assigned. Events are sent through the backend proxy to avoid CORS issues. Leave empty to disable webhook notifications.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="whatsappTemplatesApiEndpoint">WhatsApp Templates API Endpoint</Label>
+          <Input
+            id="whatsappTemplatesApiEndpoint"
+            value={localConfig.whatsappTemplatesApiEndpoint || ""}
+            onChange={(e) => handleInputChange("whatsappTemplatesApiEndpoint", e.target.value)}
+            placeholder="e.g., /api/whatsapp-templates"
+          />
+          <p className="text-xs text-muted-foreground">
+            API endpoint for fetching WhatsApp message templates (GET request). When configured, clicking the WhatsApp button will open a modal to select a template before opening WhatsApp.
           </p>
         </div>
       </CardContent>
