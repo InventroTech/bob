@@ -10,7 +10,6 @@ interface LeadCardCarouselConfigProps {
     statusDataApiEndpoint?: string;
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
-    leadAssignmentWebhookUrl?: string;
   };
   handleInputChange: (field: string, value: string | number | boolean) => void;
 }
@@ -77,19 +76,6 @@ export const LeadCardCarouselConfig: React.FC<LeadCardCarouselConfigProps> = ({
           />
           <p className="text-xs text-muted-foreground">
             API endpoint for fetching initial lead status and statistics
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="leadAssignmentWebhookUrl">Lead Assignment Webhook URL</Label>
-          <Input
-            id="leadAssignmentWebhookUrl"
-            value={localConfig.leadAssignmentWebhookUrl || ""}
-            onChange={(e) => handleInputChange("leadAssignmentWebhookUrl", e.target.value)}
-            placeholder="https://your-server.com/api/lead-assigned"
-          />
-          <p className="text-xs text-muted-foreground">
-            Webhook URL to send lead assignment events when a lead is assigned. Events are sent through the backend proxy to avoid CORS issues. Leave empty to disable webhook notifications.
           </p>
         </div>
       </CardContent>
