@@ -7,7 +7,6 @@ interface LeadCardCarouselWrapperProps {
     statusDataApiEndpoint?: string;
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
-    leadAssignmentWebhookUrl?: string;
   };
 }
 
