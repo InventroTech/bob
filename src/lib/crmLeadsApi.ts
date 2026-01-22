@@ -174,58 +174,5 @@ export const crmLeadsApi = {
     }
   },
 
-  /**
-   * Send RM assigned event to Mixpanel
-   * This is called when the "Get Leads" button is clicked and a lead is successfully fetched
-   */
-  async sendRMAssignedMixpanelEvent(
-    praja_id: number | string,
-    rm_email?: string
-  ): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Convert praja_id to integer
-      let prajaIdInt: number;
-      if (typeof praja_id === 'number') {
-        prajaIdInt = praja_id;
-      } else {
-        prajaIdInt = parseInt(praja_id, 10);
-        if (isNaN(prajaIdInt)) {
-          console.warn('[crmLeadsApi] Invalid praja_id format, must be a number');
-          return;
-        }
-      }
-      
-      // Get RM email - use provided email or fallback to current user's email
-      const email = rm_email || user?.email;
-      
-      if (!email) {
-        console.warn('[crmLeadsApi] No RM email available for RM assigned Mixpanel event');
-        return;
-      }
-
-      const payload = {
-        praja_id: prajaIdInt,
-        rm_email: email,
-      };
-
-      console.log('[crmLeadsApi] 📤 Sending RM assigned Mixpanel event', {
-        praja_id: prajaIdInt,
-        rm_email: email,
-      });
-
-      await apiClient.post('/crm-records/mixpanel/rm-assigned/', payload);
-
-      console.log('[crmLeadsApi] ✅ RM assigned Mixpanel event sent successfully');
-    } catch (error: any) {
-      // Log error but don't throw - Mixpanel failures shouldn't break the lead fetching flow
-      console.error('[crmLeadsApi] Error sending RM assigned Mixpanel event:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-      });
-    }
-  },
 };
 
