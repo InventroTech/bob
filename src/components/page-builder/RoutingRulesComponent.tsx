@@ -157,7 +157,7 @@ interface RoutingRulesComponentProps {
 
 const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config }) => {
   const { user } = useAuth();
-  const { customRole, tenantId } = useTenant();
+  const { tenantId } = useTenant();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -204,8 +204,6 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
     setFieldValue(key, newValues);
   };
 
-  const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
-
   // Fetch users using central membershipService
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -240,14 +238,11 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       }
     };
 
-    if (user && isGM) {
+    if (user) {
       fetchRules();
       fetchUsers();
-    } else if (user && !isGM) {
-      setLoading(false);
-      setLoadingUsers(false);
     }
-  }, [user, isGM, tenantId]);
+  }, [user, tenantId]);
 
   const buildConditions = () => {
     const filters: any[] = [];
@@ -335,17 +330,6 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
 
   if (!user) {
     return null;
-  }
-
-  if (!isGM) {
-    return (
-      <Card className="bg-white border-0 shadow-none">
-        <CardHeader className="pb-4">
-          <h5>{componentTitle}</h5>
-          <p>You need GM role to manage routing rules.</p>
-        </CardHeader>
-      </Card>
-    );
   }
 
   // Find selected user for display
