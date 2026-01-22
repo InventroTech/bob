@@ -31,7 +31,6 @@ interface LeadCardCarouselProps {
     title?: string;
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
-    leadAssignmentWebhookUrl?: string;
   };
 }
 
@@ -693,9 +692,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         incrementFetchedCount();
       }
 
-      // Send lead assignment event to external server
-      const { data: { user } } = await supabase.auth.getUser();
-      await crmLeadsApi.sendLeadAssignmentEvent(leadData, user?.id, config?.leadAssignmentWebhookUrl);
+      // Note: Both Mixpanel services are called from backend when new lead is assigned
+      // No need to call from frontend
 
       isInitialized.current = true;
       await fetchLeadStats();
