@@ -4,6 +4,7 @@ import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -475,15 +476,15 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
                         <PopoverContent className="w-full p-0 bg-white border-gray-200" align="start">
                           <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
                             {getFieldArrayValue(field.key).length > 0 && (
-                              <Button
+                              <CustomButton
                                 variant="ghost"
                                 size="sm"
+                                icon={<X className="h-4 w-4" />}
                                 className="w-full justify-start text-gray-500 mb-1 hover:bg-gray-100"
                                 onClick={() => setFieldValue(field.key, [])}
                               >
-                                <X className="mr-2 h-4 w-4" />
                                 Clear all
-                              </Button>
+                              </CustomButton>
                             )}
                             {field.options
                               .filter((opt) => opt.value && opt.value.trim() !== '')
@@ -561,23 +562,15 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
               />
               <Label htmlFor="active" className="text-gray-700">Rule is active</Label>
             </div>
-            <Button 
+            <CustomButton 
               onClick={handleSave} 
               disabled={saving || !formUserId}
+              loading={saving}
+              icon={!saving ? <Save className="h-4 w-4" /> : undefined}
               className="bg-gray-900 text-white hover:bg-gray-800 font-semibold px-6 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Rule
-                </>
-              )}
-            </Button>
+              Save Rule
+            </CustomButton>
           </div>
         </CardContent>
       </Card>
@@ -643,15 +636,16 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
+                          <CustomButton
                             variant="ghost"
                             size="sm"
+                            icon={<Trash2 className="h-4 w-4" />}
                             onClick={() => handleDelete(rule.id)}
                             aria-label="Delete rule"
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                            <span className="sr-only">Delete</span>
+                          </CustomButton>
                         </TableCell>
                       </TableRow>
                     );

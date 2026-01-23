@@ -101,22 +101,60 @@ const CustomAppPage: React.FC = () => {
   if (error) return <div className="p-4 text-red-600">{error}</div>;
   if (!page) return <div className="p-4">Page not found.</div>;
 
+  // Extract header title from page-level header_title or from header component in config
+  const getHeaderTitle = () => {
+    // First check page-level header_title
+    if (page.header_title) {
+      return page.header_title;
+    }
+    
+    // Then check if there's a header component in the config
+    if (Array.isArray(page.config)) {
+      const headerComponent = page.config.find((comp: any) => comp.type === 'header');
+      if (headerComponent?.config?.title) {
+        return headerComponent.config.title;
+      }
+    }
+    
+    // Fallback to page name if no header title found
+    return page.name || null;
+  };
+
+  const headerTitle = getHeaderTitle();
+  console.log('Rendering page with header_title:', headerTitle);
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        {Array.isArray(page.config)
-          ? (page.config as any[]).map((component) => {
-              const Renderer = componentMap[component.type];
-              if (!Renderer) return null;
-              return (
-                <Renderer
-                  key={component.id}
-                  {...component.props}
-                  config={component.config}
-                />
-              );
-            })
-          : null}
+    <div className="w-full">
+      {/* Fixed Header */}
+      {headerTitle && (
+        <div className="sticky top-0 z-50 w-full bg-white border-b border-gray-300 shadow-sm">
+          <div className="px-6 py-4">
+            <h2 className="text-3xl font-bold text-gray-900">
+              {headerTitle}
+            </h2>
+          </div>
+        </div>
+      )}
+      
+      {/* Page Content */}
+      <div className="w-full">
+        <div>
+          {Array.isArray(page.config)
+            ? (page.config as any[]).map((component) => {
+                const Renderer = componentMap[component.type];
+                if (!Renderer) return null;
+                // Skip header components if they exist in the config (we show it as fixed header above)
+                if (component.type === 'header') return null;
+                return (
+                  <Renderer
+                    key={component.id}
+                    {...component.props}
+                    config={component.config}
+                  />
+                );
+              })
+            : null}
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -1178,14 +1179,16 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
             {/* Action Button */}
             <div className="text-center">
-              <Button 
+              <CustomButton 
                 onClick={handleGetLeads} 
                 disabled={loading}
-                className="w-full max-w-xs"
+                loading={loading}
+                fullWidth
+                className="max-w-xs"
                 size="lg"
               >
-                {loading ? "Loading..." : "Get Leads"}
-              </Button>
+                Get Leads
+              </CustomButton>
             </div>
           </div>
         </div>
@@ -1198,26 +1201,24 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
         <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0 gap-2">
-          <Button
+          <CustomButton
             onClick={handleRefresh}
             variant="outline"
             size="sm"
-            className="flex items-center gap-2"
+            icon={<RefreshCw className="h-3 w-3" />}
             disabled={updating || !currentLead}
           >
-            <RefreshCw className="h-3 w-3" />
             Refresh
-          </Button>
-          <Button
+          </CustomButton>
+          <CustomButton
             onClick={handleTakeBreak}
             variant="outline"
             size="sm"
-            className="flex items-center gap-2"
+            icon={<Coffee className="h-3 w-3" />}
             disabled={updating}
           >
-            <Coffee className="h-3 w-3" />
             Take a Break
-          </Button>
+          </CustomButton>
         </div>
         <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
@@ -1366,43 +1367,41 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <Button
+                <CustomButton
                   type="button"
                   variant="outline"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  icon={<RefreshCw className="h-4 w-4 text-gray-500" />}
+                  className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
                   onClick={handleRefresh}
                   disabled={updating || !currentLead}
-                >
-                  <RefreshCw className="h-4 w-4 text-gray-500" />
-                </Button>
-                <Button
+                />
+                <CustomButton
                   type="button"
                   variant="outline"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  icon={<Coffee className="h-4 w-4 text-gray-500" />}
+                  className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
                   onClick={handleTakeBreak}
                   disabled={updating}
-                >
-                  <Coffee className="h-4 w-4 text-gray-500" />
-                </Button>
-                <Button
+                />
+                <CustomButton
                   type="button"
                   variant="outline"
-                  className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                  icon={<FaWhatsapp className="h-4 w-4 text-[#344054]" />}
+                  className="rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
                   onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
                   disabled={!primaryPhone || updating || fetchingNext}
                 >
-                  <FaWhatsapp className="h-4 w-4 text-[#344054]" />
                   WhatsApp
-                </Button>
-                <Button
+                </CustomButton>
+                <CustomButton
                   type="button"
-                  className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                  icon={<Phone className="h-4 w-4" />}
+                  className="rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
                   onClick={() => handleCallLead(primaryPhone)}
                   disabled={!primaryPhone || updating || fetchingNext}
                 >
-                  <Phone className="h-4 w-4" />
-                  <span>{formattedPhoneNumber}</span>
-                </Button>
+                  {formattedPhoneNumber}
+                </CustomButton>
               </div>
             </div>
           </div>
@@ -1515,9 +1514,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                   <p>Profile Information</p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleCloseProfile}>
-                <X className="h-4 w-4" />
-              </Button>
+              <CustomButton variant="ghost" size="sm" icon={<X className="h-4 w-4" />} onClick={handleCloseProfile} />
             </div>
             
             {/* Modal Content */}

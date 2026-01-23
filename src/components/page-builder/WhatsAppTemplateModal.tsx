@@ -7,6 +7,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
@@ -190,16 +191,17 @@ export const WhatsAppTemplateModal: React.FC<WhatsAppTemplateModalProps> = ({
           )}
 
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="border-gray-300 text-gray-700 hover:bg-gray-50">
+            <CustomButton variant="outline" onClick={() => onOpenChange(false)} className="border-gray-300 text-gray-700 hover:bg-gray-50">
               Cancel
-            </Button>
-            <Button
+            </CustomButton>
+            <CustomButton
               onClick={handleOpenWhatsApp}
               disabled={!selectedTemplate || loading}
+              loading={loading}
               className="bg-black text-white hover:bg-gray-800 disabled:opacity-50"
             >
               Open WhatsApp
-            </Button>
+            </CustomButton>
           </div>
         </div>
       </DialogContent>
