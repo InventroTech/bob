@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { X, Filter, Calendar, Clock, Search } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -1200,15 +1201,15 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             <h5>
               {config?.title || "Support Tickets"}
             </h5>
-            <Button
+            <CustomButton
               variant="outline"
               size="sm"
+              icon={<Filter className="h-4 w-4" />}
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 rounded-md"
+              className="bg-gray-100 hover:bg-gray-200 rounded-md"
             >
-              <Filter className="h-4 w-4" />
               Filters
-            </Button>
+            </CustomButton>
           </div>
         </div>
 
@@ -1263,14 +1264,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                         </div>
                         {resolutionStatusFilter.length > 0 && (
                           <div className="pt-2 border-t">
-                            <Button
+                            <CustomButton
                               variant="ghost"
                               size="sm"
                               onClick={() => setResolutionStatusFilter([])}
                               className="text-xs"
                             >
                               Clear All
-                            </Button>
+                            </CustomButton>
                           </div>
                         )}
                       </div>
@@ -1324,14 +1325,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                         </div>
                         {posterStatusFilter.length > 0 && (
                           <div className="pt-2 border-t">
-                            <Button
+                            <CustomButton
                               variant="ghost"
                               size="sm"
                               onClick={() => setPosterStatusFilter([])}
                               className="text-xs"
                             >
                               Clear All
-                            </Button>
+                            </CustomButton>
                           </div>
                         )}
                       </div>
@@ -1458,21 +1459,22 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
               {/* Action Buttons - 3rd Line */}
               <div className="flex items-center gap-2 mt-4">
-                <Button
+                <CustomButton
                   variant="outline"
                   onClick={resetFilters}
                   className="flex-1"
                 >
                   Reset Filters
-                </Button>
-                <Button
+                </CustomButton>
+                <CustomButton
                   variant="default"
                   onClick={() => applyFilters()}
                   className="flex-1"
                   disabled={tableLoading}
+                  loading={tableLoading}
                 >
-                  {tableLoading ? 'Applying...' : 'Apply Filters'}
-                </Button>
+                  Apply Filters
+                </CustomButton>
               </div>
 
               {/* Filter Summary */}
@@ -1613,7 +1615,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             </div>
             
             <div className="flex items-center gap-2">
-              <Button
+              <CustomButton
                 variant="outline"
                 size="sm"
                 onClick={handlePreviousPage}
@@ -1621,9 +1623,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
-              </Button>
+              </CustomButton>
               
-              <Button
+              <CustomButton
                 variant="outline"
                 size="sm"
                 onClick={handleNextPage}
@@ -1631,7 +1633,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
-              </Button>
+              </CustomButton>
             </div>
           </div>
         )}

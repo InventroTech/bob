@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -1367,13 +1368,13 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
                     </div>
                   </div>
                   
-                  <Button 
+                  <CustomButton 
                     onClick={() => handleApply(job)} 
                     disabled={!allowApplications}
                     className="bg-gray-900 text-white hover:bg-gray-800 px-6 py-3 rounded-xl font-semibold transition-colors"
                   >
                     {allowApplications ? 'Apply Now' : 'View Details'}
-                  </Button>
+                  </CustomButton>
                 </div>
               
                 <div className="mt-6">
@@ -1562,7 +1563,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
                       ))}
 
                       <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-gray-200">
-                        <Button
+                        <CustomButton
                           type="button"
                           variant="outline"
                           onClick={() => setIsApplicationModalOpen(false)}
@@ -1570,21 +1571,15 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
                           className="px-6 py-2.5 border-gray-300 text-gray-700 hover:bg-gray-50 font-medium"
                         >
                           Cancel
-                        </Button>
-                        <Button
+                        </CustomButton>
+                        <CustomButton
                           type="submit"
                           disabled={isSubmitting}
+                          loading={isSubmitting}
                           className="min-w-[140px] px-6 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white hover:from-gray-800 hover:to-gray-700 font-semibold shadow-lg transition-all"
                         >
-                          {isSubmitting ? (
-                            <span className="flex items-center gap-2">
-                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                              Submitting...
-                            </span>
-                          ) : (
-                            'Submit Application'
-                          )}
-                        </Button>
+                          Submit Application
+                        </CustomButton>
                       </div>
                     </form>
                   </div>

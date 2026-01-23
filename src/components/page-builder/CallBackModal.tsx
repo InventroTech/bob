@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -159,20 +160,21 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
               </Label>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button
+              <CustomButton
                 variant="ghost"
                 className="w-full sm:w-auto rounded-full border border-transparent text-black hover:border-black hover:bg-transparent"
                 onClick={handleClose}
               >
                 Close
-              </Button>
-              <Button
+              </CustomButton>
+              <CustomButton
                 className="w-full sm:w-auto rounded-full bg-black text-white hover:bg-black/90"
                 onClick={handleSubmit}
                 disabled={!selectedCallbackSlot || updating}
+                loading={updating}
               >
                 Save
-              </Button>
+              </CustomButton>
             </div>
           </div>
         </div>

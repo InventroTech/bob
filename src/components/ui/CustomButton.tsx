@@ -6,7 +6,7 @@ export interface CustomButtonProps extends React.ButtonHTMLAttributes<HTMLButton
   /**
    * Button text content
    */
-  children: React.ReactNode;
+  children?: React.ReactNode;
   
   /**
    * Button variant

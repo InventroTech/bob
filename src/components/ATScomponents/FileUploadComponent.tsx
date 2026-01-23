@@ -1,6 +1,7 @@
 import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Upload, X, FileIcon, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -464,18 +465,17 @@ export const FileUploadComponent: React.FC<FileUploadComponentProps> = ({
                     </p>
                   </div>
 
-                  <Button
+                  <CustomButton
                     variant="ghost"
                     size="sm"
+                    icon={<X className="h-4 w-4" />}
                     onClick={(e) => {
                       e.stopPropagation();
                       removeFile(uploadedFile.id);
                     }}
                     className="text-gray-500 hover:text-red-600 hover:bg-red-50"
                     disabled={isUploading}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  />
                 </div>
               ))}
             </div>
@@ -485,23 +485,15 @@ export const FileUploadComponent: React.FC<FileUploadComponentProps> = ({
         {/* Submit Button */}
         {!hideUploadButton && (
           <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-            <Button
+            <CustomButton
               onClick={handleSubmit}
               disabled={files.length === 0 || isUploading}
+              loading={isUploading}
+              icon={!isUploading ? <Upload className="h-4 w-4" /> : undefined}
               className="flex-1 bg-gray-900 text-white hover:bg-gray-800 disabled:bg-gray-300"
             >
-              {isUploading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload {files.length > 0 ? `${files.length} File${files.length > 1 ? 's' : ''}` : 'Files'}
-                </>
-              )}
-            </Button>
+              Upload {files.length > 0 ? `${files.length} File${files.length > 1 ? 's' : ''}` : 'Files'}
+            </CustomButton>
             
             {files.length > 0 && !isUploading && (
               <Button

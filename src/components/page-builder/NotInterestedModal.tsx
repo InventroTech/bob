@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -116,17 +117,18 @@ export const NotInterestedModal: React.FC<NotInterestedModalProps> = ({
           )}
         </div>
         <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          <Button variant="outline" className="w-full sm:w-auto" onClick={handleClose}>
+          <CustomButton variant="outline" className="w-full sm:w-auto" onClick={handleClose}>
             Cancel
-          </Button>
-          <Button
+          </CustomButton>
+          <CustomButton
             className="w-full sm:w-auto gap-2 rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold shadow-sm hover:bg-slate-800"
             onClick={handleSubmit}
             disabled={!isValid || updating}
+            loading={updating}
+            iconRight={<ChevronRight className="h-4 w-4" />}
           >
             Submit
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          </CustomButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

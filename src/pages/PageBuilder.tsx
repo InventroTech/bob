@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import {
   Card,
   CardContent,
@@ -818,9 +819,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
         <h5>Component Configuration</h5>
-        <Button variant="ghost" size="sm" onClick={onClose}>
+        <CustomButton variant="ghost" size="sm" onClick={onClose}>
           Close
-        </Button>
+        </CustomButton>
       </div>
       <Separator className="mb-4" />
       {renderConfigFields()}
@@ -1221,10 +1222,9 @@ const PageBuilder = () => {
                 placeholder="Header Title"
                 className="w-1/3"
               />
-              <Button variant="outline" size="sm"> {/* Preview functionality TBD */}
-                <Eye className="mr-2 h-4 w-4" />
+              <CustomButton variant="outline" size="sm" icon={<Eye className="h-4 w-4" />}>
                 Preview
-              </Button>
+              </CustomButton>
               <select
                 id="role"
                 className="w-full border px-3 py-2 rounded text-sm"
@@ -1238,10 +1238,9 @@ const PageBuilder = () => {
             </option>
           ))}
         </select>
-              <Button size="sm" onClick={handleSavePage} disabled={isSaving}>
-                <Save className="mr-2 h-4 w-4" />
-                {isSaving ? 'Saving...' : 'Save'}
-              </Button>
+              <CustomButton size="sm" onClick={handleSavePage} disabled={isSaving} loading={isSaving} icon={!isSaving ? <Save className="h-4 w-4" /> : undefined}>
+                Save
+              </CustomButton>
             </div>
           </div>
         </header>
