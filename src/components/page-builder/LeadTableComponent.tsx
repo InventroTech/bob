@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Filter, User, MessageCircle, ExternalLink, CheckCircle2, XCircle, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import ShortProfileCard from '../ui/ShortProfileCard';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FilterConfig } from '@/component-config/DynamicFilterConfig';
@@ -15,6 +15,8 @@ import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
 import { apiClient } from '@/lib/api';
+import { CustomButton } from '@/components/ui/CustomButton';
+import { CustomTable } from '@/components/ui/CustomTable';
 
 interface Column {
   header: string;
@@ -1479,31 +1481,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
               {config?.title || "Leads"}
             </h5>
             <div className="flex items-center gap-2">
-              <Button
+              <CustomButton
                 variant="outline"
                 size="sm"
+                icon={<Filter className="h-4 w-4" />}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowFilters(!showFilters);
                 }}
-                className="flex items-center gap-2"
               >
-                <Filter className="h-4 w-4" />
                 {showFilters ? 'Hide Filters' : 'Show Filters'}
-              </Button>
+              </CustomButton>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowFilters(!showFilters);
-              }}
-              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 rounded-md"
-            >
-              <Filter className="h-4 w-4" />
-              Filters
-            </Button>
           </div>
         </div>
 
@@ -1569,48 +1558,22 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             </div>
           )}
 
-          <div className="overflow-hidden w-full">
-            <table className="min-w-full bg-white">
-              <thead>
-                <tr className="bg-black border-b border-gray-200">
-                  {tableColumns.map((col, idx) => (
-                    <th key={idx} className="text-sm">{col.header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="text-gray-600 text-sm bg-white">
-                {tableLoading ? (
-                  <tr>
-                    <td colSpan={tableColumns.length} className="text-center py-8 text-sm text-gray-500">
-                      Loading...
-                    </td>
-                  </tr>
-                ) : filteredData.length === 0 ? (
-                  <tr>
-                    <td colSpan={tableColumns.length} className="text-center py-8 text-sm text-gray-500">
-                      {config?.emptyMessage || 'No data found'}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredData.map((row: any, rowIdx: number) => (
-                    <tr 
-                      key={rowIdx} 
-                      onClick={() => handleRowClick(row)}
-                      className={`border-b border-gray-200 hover:bg-gray-50 bg-white ${
-                        handleRowClick ? 'cursor-pointer' : ''
-                      }`}
-                    >
-                      {tableColumns.map((col, colIdx) => (
-                        <td key={colIdx} className="text-sm">
-                          {renderCell(row, col, colIdx)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <CustomTable
+            columns={tableColumns.map(col => ({
+              header: col.header,
+              accessor: col.accessor,
+              type: col.type,
+              linkField: col.linkField,
+            }))}
+            data={filteredData}
+            loading={tableLoading}
+            emptyMessage={config?.emptyMessage || 'No data found'}
+            onRowClick={handleRowClick}
+            renderCell={renderCell}
+            headerBgColor="bg-black"
+            headerTextColor="text-white"
+            hoverable={!!handleRowClick}
+          />
         </div>
         
         {/* Server-side pagination controls - works for both search and normal view */}
@@ -1638,7 +1601,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             </div>
             
             <div className="flex items-center gap-2">
-              <Button
+              <CustomButton
                 variant="outline"
                 size="sm"
                 onClick={handlePreviousPage}
@@ -1646,9 +1609,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
-              </Button>
+              </CustomButton>
               
-              <Button
+              <CustomButton
                 variant="outline"
                 size="sm"
                 onClick={handleNextPage}
@@ -1656,7 +1619,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
-              </Button>
+              </CustomButton>
             </div>
           </div>
         )}

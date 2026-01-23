@@ -12,7 +12,7 @@ const PAGE_CACHE_TTL = 5000; // 5 seconds
 const CustomAppPage: React.FC = () => {
   const { tenantSlug, pageId } = useParams<{ tenantSlug: string; pageId: string }>();
   
-  const [page, setPage] = useState<{ name: string; config: any; header_title?: string } | null>(null);
+  const [page, setPage] = useState<{ name: string; config: any } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchingRef = useRef<string | null>(null); // Track which pageId is currently being fetched
@@ -51,7 +51,7 @@ const CustomAppPage: React.FC = () => {
     
     const fetchPromise = supabase
       .from('pages')
-      .select('name, config, header_title')
+      .select('name, config')
       .eq('id', pageId)
       .eq('tenant_id', tenantId)
       .single();
