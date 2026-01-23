@@ -14,6 +14,7 @@ import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
+import { apiClient } from '@/lib/api';
 
 interface Column {
   header: string;
@@ -309,7 +310,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
-  const lastFetchedTokenRef = useRef<string | null>(null); // Track last fetched session token
   const lastFetchedConfigRef = useRef<string>(''); // Track last fetched config/filter combination
   const { session, user } = useAuth();
   const sessionUser = session?.user ?? null;
@@ -805,10 +805,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       }
 
       const currentSequence = requestSequence || ++requestSequenceRef.current;
-      const authToken = session?.access_token;
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       const endpoint = effectiveApiEndpoint;
-      const apiUrl = `${baseUrl}${endpoint}`;
 
       // Build query parameters
       let params: URLSearchParams;
@@ -869,23 +866,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page_size', '10');
       }
 
-      const fullUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+      const queryString = params.toString();
+      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-      const response = await fetch(fullUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        },
+      const response = await apiClient.get(url, {
         signal: abortController.signal
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch filtered leads: ${response.status}`);
-      }
-
-      const responseData = await response.json();
+      const responseData = response.data;
 
       // Check if this response is still relevant
       if (currentSequence !== requestSequenceRef.current) {
@@ -987,9 +975,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     // Re-fetch initial data to reset everything properly
     try {
       setTableLoading(true);
-      const authToken = session?.access_token;
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-
       const params = new URLSearchParams();
 
       if (endpoint.includes('/crm-records/records') && config?.entityType) {
@@ -1004,22 +989,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       params.append('page', '1');
       params.append('page_size', '10');
 
-      const apiUrl = `${baseUrl}${endpoint}${params.toString() ? '?' + params.toString() : ''}`;
+      const queryString = params.toString();
+      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch leads: ${response.status}`);
-      }
-
-      const responseData = await response.json();
+      const response = await apiClient.get(url);
+      const responseData = response.data;
       let leads = responseData.data || responseData.results || [];
       let pageMeta = responseData.page_meta;
 
@@ -1150,22 +1124,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     if (pagination.nextPageLink) {
       try {
         setTableLoading(true);
-        const authToken = session?.access_token;
-        
-        const response = await fetch(pagination.nextPageLink, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch next page: ${response.status}`);
-        }
-
-        const responseData = await response.json();
+        const response = await apiClient.get(pagination.nextPageLink);
+        const responseData = response.data;
         let leads = responseData.data || responseData.results || [];
         let pageMeta = responseData.page_meta;
 
@@ -1197,22 +1157,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     if (pagination.previousPageLink) {
       try {
         setTableLoading(true);
-        const authToken = session?.access_token;
-        
-        const response = await fetch(pagination.previousPageLink, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch previous page: ${response.status}`);
-        }
-
-        const responseData = await response.json();
+        const response = await apiClient.get(pagination.previousPageLink);
+        const responseData = response.data;
         let leads = responseData.data || responseData.results || [];
         let pageMeta = responseData.page_meta;
 
@@ -1256,10 +1202,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         return;
       }
 
-      const authToken = session?.access_token;
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       const endpoint = effectiveApiEndpoint;
-      const apiUrl = `${baseUrl}${endpoint}`;
 
       // Build query parameters
       let params: URLSearchParams;
@@ -1316,22 +1259,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page_size', '10');
       }
 
-      const fullUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+      const queryString = params.toString();
+      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-      const response = await fetch(fullUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch page ${page}: ${response.status}`);
-      }
-
-      const responseData = await response.json();
+      const response = await apiClient.get(url);
+      const responseData = response.data;
       
       let leads = [];
       let pageMeta = null;
@@ -1398,9 +1330,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           return;
         }
         
-        const authToken = session?.access_token;
-        
-        // Prevent redundant fetches: check if we've already fetched with this token and config
+        // Prevent redundant fetches: check if we've already fetched with this config
         const currentConfigKey = JSON.stringify({
           apiEndpoint: effectiveApiEndpoint ?? null,
           defaultFilters: config?.defaultFilters,
@@ -1409,11 +1339,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           hasActiveFilters
         });
         
-        // Only skip if token and config haven't changed and we have data
-        if (authToken && 
-            lastFetchedTokenRef.current === authToken && 
-            lastFetchedConfigRef.current === currentConfigKey) {
-          console.log('Skipping redundant fetch - same token and config');
+        // Only skip if config hasn't changed and we have data
+        if (lastFetchedConfigRef.current === currentConfigKey && data.length > 0) {
+          console.log('Skipping redundant fetch - same config');
           setLoading(false);
           return;
         }
@@ -1424,7 +1352,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           return;
         }
 
-        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
         const endpoint = effectiveApiEndpoint;
 
         // Build initial query parameters
@@ -1460,25 +1387,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         // Update URL with current parameters (including URL-restored filters)
         updateURL(params);
 
-        const apiUrl = `${baseUrl}${endpoint}${endpoint.includes('?') ? '&' : '?'}${params.toString()}`;
+        const queryString = params.toString();
+        const url = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-        const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
-          }
-        });
-
-        if (!response.ok) {
-          console.error('API Error:', response.status, response.statusText);
-          const errorText = await response.text();
-          console.error('Error response:', errorText);
-          throw new Error(`Failed to fetch leads: ${response.status} - ${response.statusText}`);
-        }
-
-        const responseData = await response.json();
+        const response = await apiClient.get(url);
+        const responseData = response.data;
         let leads = [];
         let pageMeta = null;
 
@@ -1517,10 +1430,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }));
         
         // Update refs to track what we've fetched
-        if (authToken) {
-          lastFetchedTokenRef.current = authToken;
-          lastFetchedConfigRef.current = currentConfigKey;
-        }
+        lastFetchedConfigRef.current = currentConfigKey;
       } catch (error) {
         console.error('Error fetching leads:', error);
         setData([]);
@@ -1535,7 +1445,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       fetchLeads();
     } else {
       // Reset refs when session is lost
-      lastFetchedTokenRef.current = null;
       lastFetchedConfigRef.current = '';
     }
   }, [session?.access_token, effectiveApiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, hasActiveFilters]);
