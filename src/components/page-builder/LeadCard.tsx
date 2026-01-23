@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import {
   Popover,
   PopoverContent,
@@ -820,20 +821,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               </div>
             </div>
 
-            <Button 
+            <CustomButton 
               onClick={fetchFirstLead} 
               disabled={loading}
-              className="w-full"
+              loading={loading}
+              fullWidth
             >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Loading...
-                </>
-              ) : (
-                'Get Leads'
-              )}
-            </Button>
+              Get Leads
+            </CustomButton>
           </CardContent>
         </Card>
       </div>
@@ -845,9 +840,9 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
         <p>No lead available</p>
-        <Button onClick={fetchFirstLead} disabled={loading}>
+        <CustomButton onClick={fetchFirstLead} disabled={loading} loading={loading}>
           Get Leads
-        </Button>
+        </CustomButton>
       </div>
     );
   }
@@ -865,16 +860,15 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   return (
     <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
       <div className="mt-4 flex w-[70%] justify-end">
-        <Button
+        <CustomButton
           onClick={handleTakeBreak}
           variant="outline"
           size="sm"
-          className="flex items-center gap-2"
+          icon={<Coffee className="h-3 w-3" />}
           disabled={updating}
         >
-          <Coffee className="h-3 w-3" />
           Take a Break
-        </Button>
+        </CustomButton>
       </div>
       <div className="relative w-[70%] h-full">
         <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
@@ -1064,7 +1058,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                         </div>
                         {lead.selectedTags.length > 0 && (
                           <div className="pt-2 border-t">
-                            <Button
+                            <CustomButton
                               variant="ghost"
                               size="sm"
                               onClick={() => setLead(prev => ({
@@ -1075,7 +1069,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                               className="text-xs"
                             >
                               Clear All
-                            </Button>
+                            </CustomButton>
                           </div>
                         )}
                       </div>
@@ -1118,7 +1112,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           
           <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
             <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Follow Up")}
                 size="sm"
                 variant="outline"
@@ -1126,9 +1120,9 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 disabled={updating}
               >
                 Follow Up
-              </Button>
+              </CustomButton>
               
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Disqualify")}
                 size="sm"
                 variant="outline"
@@ -1136,10 +1130,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 disabled={updating}
               >
                 Disqualify
-              </Button>
+              </CustomButton>
             </div>
             <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Qualify")}
                 size="sm"
                 variant="outline"
@@ -1147,29 +1141,18 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 disabled={updating}
               >
                 Qualify
-              </Button>
+              </CustomButton>
               
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Close")}
                 size="sm"
                 variant="outline"
                 className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
+                loading={updating || fetchingNext}
               >
-                {updating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Updating...
-                  </>
-                ) : fetchingNext ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Loading Next Lead...
-                  </>
-                ) : (
-                  "Close"
-                )}
-              </Button>
+                {updating ? 'Updating...' : fetchingNext ? 'Loading Next Lead...' : 'Close'}
+              </CustomButton>
             </div>
           </div>
         </div>
@@ -1203,14 +1186,13 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   <p className="text-sm text-muted-foreground">Company: {currentLead?.company || "N/A"}</p>
                 </div>
               </div>
-              <Button
+              <CustomButton
                 variant="ghost"
                 size="sm"
+                icon={<X className="h-4 w-4" />}
                 onClick={handleCloseProfile}
                 className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              />
             </div>
             
             {/* Modal Content - Iframe */}

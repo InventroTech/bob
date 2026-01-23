@@ -16,6 +16,7 @@ import {
 } from '../ui/select';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
+import { CustomButton } from '../ui/CustomButton';
 import { Badge } from '../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { 
@@ -1192,13 +1193,13 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           </div>
           
           {showExport && (
-            <Button 
+            <CustomButton 
               onClick={handleExport}
+              icon={<Download className="h-5 w-5" />}
               className="bg-gray-900 text-white hover:bg-gray-800 px-6 py-3 rounded-xl font-semibold"
             >
-              <Download className="h-5 w-5 mr-2" />
               Export
-            </Button>
+            </CustomButton>
           )}
         </div>
 

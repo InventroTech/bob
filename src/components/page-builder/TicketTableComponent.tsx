@@ -3,13 +3,15 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
+import ShortProfileCard from '../ui/ShortProfileCard';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { TicketCarousel } from './TicketCarousel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X, Filter, Calendar, Clock } from 'lucide-react';
+import { X, Filter, Calendar, Clock, Search } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,30 +27,41 @@ interface Column {
   type: 'text' | 'chip' | 'link';
 }
 
-// Status color mapping
+// Status color mapping - matching design colors
 const getStatusColor = (status: string) => {
   const statusLower = status.toLowerCase();
   switch (statusLower) {
+    case 'paid':
+    case 'active':
+      return 'bg-green-50 text-green-700 border-green-200';
+    case 'auto pay not set':
+    case 'autopay_setup_no_layout':
+    case 'auto_pay_not_set_up':
+      return 'bg-orange-50 text-orange-700 border-orange-200';
+    case 'in trial':
+    case 'in_trial':
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    case 'trial expired':
+    case 'trial_expired':
+      return 'bg-red-50 text-red-700 border-red-200';
     case 'open':
     case 'pending':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      return 'bg-yellow-50 text-yellow-700 border-yellow-200';
     case 'in progress':
     case 'wip':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-blue-50 text-blue-700 border-blue-200';
     case 'resolved':
     case 'completed':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-green-50 text-green-700 border-green-200';
     case 'closed':
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-gray-50 text-gray-700 border-gray-200';
     case 'cancelled':
     case 'failed':
-      return 'bg-red-100 text-red-800 border-red-200';
-    case 'paid':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-red-50 text-red-700 border-red-200';
     case 'not paid':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-red-50 text-red-700 border-red-200';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-gray-50 text-gray-700 border-gray-200';
   }
 };
 
@@ -707,22 +720,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     debouncedSearch(value);
   }, [debouncedSearch]);
 
-  // Memoized search input component to prevent re-renders
-  const SearchInputComponent = useMemo(() => 
-    React.memo(({ searchTerm, onChange }: { searchTerm: string; onChange: (value: string) => void }) => {
-      console.log('SearchInput render with term:', searchTerm);
-      return (
-        <input
-          type="text"
-          placeholder="Search tickets..."
-          value={searchTerm}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-64 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      );
-    }, (prevProps, nextProps) => prevProps.searchTerm === nextProps.searchTerm),
-    []
-  );
 
   // Memoized row click handler
   const handleRowClick = useCallback((row: any) => {
@@ -868,6 +865,140 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       } finally {
         setTableLoading(false);
       }
+    }
+  };
+
+  // Handle page selection from dropdown
+  const handlePageChange = async (pageNumber: string) => {
+    const page = parseInt(pageNumber, 10);
+    if (isNaN(page) || page < 1 || page > pagination.numberOfPages) {
+      return;
+    }
+
+    try {
+      setTableLoading(true);
+      const authToken = session?.access_token;
+
+      // Always use renderer URL for analytics endpoint
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/analytics/support-ticket/`;
+      
+      // Build query parameters with all current filters
+      const params = new URLSearchParams();
+      
+      // Add resolution status filters
+      if (resolutionStatusFilter.length > 0) {
+        resolutionStatusFilter.forEach(status => {
+          const statusToSend = status === 'Open' ? 'null' : status;
+          params.append('resolution_status', statusToSend);
+        });
+      }
+      
+      // Add assigned to filter
+      if (assignedToFilter !== 'all') {
+        if (assignedToFilter === 'myself') {
+          params.append('assigned_to', user?.id || '');
+        } else if (assignedToFilter === 'unassigned') {
+          params.append('assigned_to', 'null');
+        } else {
+          params.append('assigned_to', assignedToFilter);
+        }
+      }
+      
+      // Add poster status filters
+      if (posterStatusFilter.length > 0) {
+        posterStatusFilter.forEach(status => {
+          params.append('poster', status);
+        });
+      }
+      
+      // Add date range filters
+      if (dateRangeFilter.startDate) {
+        const startDateTime = new Date(dateRangeFilter.startDate);
+        startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
+        params.append('created_at__gte', startDateTime.toISOString());
+      }
+      if (dateRangeFilter.endDate) {
+        const endDateTime = new Date(dateRangeFilter.endDate);
+        endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
+        params.append('created_at__lte', endDateTime.toISOString());
+      }
+      
+      // Add search filter
+      const currentSearchTerm = latestSearchValueRef.current;
+      if (currentSearchTerm.trim() !== '') {
+        params.append('search_fields', currentSearchTerm.trim());
+      }
+      
+      // Add pagination with selected page
+      params.append('page', page.toString());
+      params.append('page_size', '10');
+      
+      const fullUrl = `${apiUrl}?${params.toString()}`;
+
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch page ${page}: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      
+      let tickets = [];
+      let pageMeta = null;
+      
+      if (responseData.data && Array.isArray(responseData.data)) {
+        tickets = responseData.data;
+        pageMeta = responseData.page_meta;
+      } else if (responseData.results && Array.isArray(responseData.results)) {
+        tickets = responseData.results;
+        pageMeta = responseData.page_meta;
+      } else {
+        throw new Error('Invalid data format received');
+      }
+
+      // Transform the data
+      const transformedData = tickets.map(ticket => ({
+        ...ticket,
+        created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
+        cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
+        name: ticket.first_name && ticket.last_name 
+          ? `${ticket.first_name} ${ticket.last_name}`
+          : ticket.name || 'N/A',
+        reason: ticket.reason || ticket.Description || 'No reason provided',
+        resolution_status: ticket.resolution_status || ticket.status || 'Open',
+        poster: ticket.poster || 'No Poster',
+        praja_dashboard_user_link: ticket.praja_user_id 
+          ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+          : ticket.praja_dashboard_user_link || 'N/A',
+        display_pic_url: ticket.display_pic_url || null
+      }));
+
+      setData(transformedData);
+      setFilteredData(transformedData);
+      
+      if (pageMeta) {
+        setPagination({
+          totalCount: pageMeta.total_count || 0,
+          numberOfPages: pageMeta.number_of_pages || 0,
+          currentPage: pageMeta.current_page || 1,
+          pageSize: pageMeta.page_size || 10,
+          nextPageLink: pageMeta.next_page_link || null,
+          previousPageLink: pageMeta.previous_page_link || null
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching page:', error);
+      toast.error(`Failed to load page ${page}`);
+    } finally {
+      setTableLoading(false);
     }
   };
 
@@ -1070,17 +1201,20 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             <h5>
               {config?.title || "Support Tickets"}
             </h5>
-            <Button
+            <CustomButton
               variant="outline"
               size="sm"
+              icon={<Filter className="h-4 w-4" />}
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2"
+              className="bg-gray-100 hover:bg-gray-200 rounded-md"
             >
-              <Filter className="h-4 w-4" />
-              {showFilters ? 'Hide Filters' : 'Show Filters'}
-            </Button>
+              Filters
+            </CustomButton>
           </div>
+        </div>
 
+        {/* Filter Section */}
+        <div className="mb-4">
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1130,14 +1264,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                         </div>
                         {resolutionStatusFilter.length > 0 && (
                           <div className="pt-2 border-t">
-                            <Button
+                            <CustomButton
                               variant="ghost"
                               size="sm"
                               onClick={() => setResolutionStatusFilter([])}
                               className="text-xs"
                             >
                               Clear All
-                            </Button>
+                            </CustomButton>
                           </div>
                         )}
                       </div>
@@ -1191,14 +1325,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                         </div>
                         {posterStatusFilter.length > 0 && (
                           <div className="pt-2 border-t">
-                            <Button
+                            <CustomButton
                               variant="ghost"
                               size="sm"
                               onClick={() => setPosterStatusFilter([])}
                               className="text-xs"
                             >
                               Clear All
-                            </Button>
+                            </CustomButton>
                           </div>
                         )}
                       </div>
@@ -1325,21 +1459,22 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
               {/* Action Buttons - 3rd Line */}
               <div className="flex items-center gap-2 mt-4">
-                <Button
+                <CustomButton
                   variant="outline"
                   onClick={resetFilters}
                   className="flex-1"
                 >
                   Reset Filters
-                </Button>
-                <Button
+                </CustomButton>
+                <CustomButton
                   variant="default"
                   onClick={() => applyFilters()}
                   className="flex-1"
                   disabled={tableLoading}
+                  loading={tableLoading}
                 >
-                  {tableLoading ? 'Applying...' : 'Apply Filters'}
-                </Button>
+                  Apply Filters
+                </CustomButton>
               </div>
 
               {/* Filter Summary */}
@@ -1371,63 +1506,134 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           )}
         </div>
 
-        {/* Search Bar Section */}
-        <div className="mb-6">
-          <div className="flex justify-end items-center">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <SearchInputComponent 
-                  searchTerm={displaySearchTerm}
-                  onChange={handleSearchChange}
-                />
-                {rateLimited && (
-                  <div className="absolute -top-8 right-0 bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded border border-yellow-300">
-                    Rate limited - waiting...
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Table Section */}
-        <PrajaTable 
-          columns={tableColumns} 
-          data={filteredData} 
-          onRowClick={handleRowClick}
-          disablePagination={true}
-          loading={tableLoading}
-        />
+        <div className="w-full relative">
+          {/* Loading Overlay */}
+          {tableLoading && (
+            <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <span className="text-gray-600">Loading...</span>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-hidden w-full">
+            <table className="min-w-full bg-white">
+              <thead>
+                <tr className="bg-black border-b border-gray-200">
+                  {tableColumns.map((col) => (
+                    <th key={col.accessor} className="py-3 px-6 text-left text-sm font-semibold text-white">
+                      {col.header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="text-gray-600 text-sm bg-white">
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                      No data found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredData.map((row: any, rowIndex: number) => (
+                    <tr 
+                      key={rowIndex} 
+                      className={`border-b border-gray-200 hover:bg-gray-50 bg-white ${
+                        handleRowClick ? 'cursor-pointer' : ''
+                      }`}
+                      onClick={() => handleRowClick && handleRowClick(row)}
+                    >
+                      {tableColumns.map((col) => (
+                        <td key={col.accessor} className="py-3 px-6 text-left">
+                          <div className="flex items-center">
+                            {col.accessor === 'name' ? (
+                              <ShortProfileCard
+                                image={row.display_pic_url || row.image}
+                                name={row.name}
+                                address={row.email_id || row.email || ''}
+                              />
+                            ) : col.type === 'chip' ? (
+                              <Badge 
+                                variant="outline" 
+                                className={`${getStatusColor(row[col.accessor])} text-xs font-medium px-3 py-1 rounded-full border`}
+                              >
+                                {row[col.accessor]}
+                              </Badge>
+                            ) : col.type === 'link' ? (
+                              row[col.accessor] && row[col.accessor] !== 'N/A' ? (
+                                <a
+                                  href={row[col.accessor]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 underline text-sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {row[col.accessor]}
+                                </a>
+                              ) : (
+                                <span className="text-sm text-gray-400">N/A</span>
+                              )
+                            ) : (
+                              <span className="text-sm text-gray-600">{row[col.accessor] || 'N/A'}</span>
+                            )}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
         
         {/* Server-side pagination controls */}
         {pagination.totalCount > 0 && filteredData.length > 0 && (
-          <div className="flex justify-between items-center mt-4 p-4 border-t">
-            <div className="text-sm text-gray-600">
-              Showing {filteredData.length} of {pagination.totalCount} tickets
+          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Page</span>
+              <Select
+                value={pagination.currentPage.toString()}
+                onValueChange={handlePageChange}
+                disabled={tableLoading}
+              >
+                <SelectTrigger className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-3 py-1.5 h-auto w-[70px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: pagination.numberOfPages }, (_, i) => i + 1).map((pageNum) => (
+                    <SelectItem key={pageNum} value={pageNum.toString()} className="hover:bg-gray-100 focus:bg-gray-100">
+                      {pageNum}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-gray-600">of {pagination.numberOfPages}</span>
             </div>
             
             <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePreviousPage}
-                    disabled={!pagination.previousPageLink || tableLoading}
-                  >
-                    Previous
-                  </Button>
-                  
-                  <span className="text-sm text-gray-600 px-3">
-                    Page {pagination.currentPage} of {pagination.numberOfPages}
-                  </span>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextPage}
-                    disabled={!pagination.nextPageLink || tableLoading}
-                  >
-                    Next
-                  </Button>
+              <CustomButton
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={!pagination.previousPageLink || tableLoading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </CustomButton>
+              
+              <CustomButton
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={!pagination.nextPageLink || tableLoading}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </CustomButton>
             </div>
           </div>
         )}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -1397,15 +1398,15 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                       <Label className="text-sm font-medium text-gray-700">Application Questions</Label>
                       <p className="text-xs text-gray-500 mt-1">Add custom questions for applicants</p>
                     </div>
-                    <Button
+                    <CustomButton
                       type="button"
                       size="sm"
+                      icon={<Plus className="h-4 w-4" />}
                       onClick={addQuestionField}
                       className="bg-gray-900 text-white hover:bg-gray-800"
                     >
-                      <Plus className="h-4 w-4 mr-1" />
                       Add Question
-                    </Button>
+                    </CustomButton>
                   </div>
 
                   <div className="space-y-4">
@@ -1444,16 +1445,15 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                               </SelectContent>
                             </Select>
                           </div>
-                          <Button
+                          <CustomButton
                             type="button"
                             variant="ghost"
                             size="sm"
+                            icon={<Trash2 className="h-4 w-4" />}
                             onClick={() => removeQuestionField(index)}
                             disabled={customQuestions.length === 1}
                             className="mt-6 text-gray-500 hover:text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          />
                         </div>
                         
                         {/* Options Configuration for select/radio/checkbox */}
@@ -1461,16 +1461,16 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                           <div className="mt-3 pt-3 border-t border-gray-200">
                             <div className="flex items-center justify-between mb-2">
                               <Label className="text-xs font-medium text-gray-700">Options</Label>
-                              <Button
+                              <CustomButton
                                 type="button"
                                 variant="ghost"
                                 size="sm"
+                                icon={<Plus className="h-3 w-3" />}
                                 onClick={() => addQuestionOption(index)}
                                 className="h-7 text-xs text-gray-600 hover:text-gray-900"
                               >
-                                <Plus className="h-3 w-3 mr-1" />
                                 Add Option
-                              </Button>
+                              </CustomButton>
                             </div>
                             <div className="space-y-2">
                               {question.options?.map((option, optIndex) => (
@@ -1481,16 +1481,15 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                                     placeholder={`Option ${optIndex + 1}`}
                                     className="h-8 text-xs border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                                   />
-                                  <Button
+                                  <CustomButton
                                     type="button"
                                     variant="ghost"
                                     size="sm"
+                                    icon={<Trash2 className="h-3 w-3" />}
                                     onClick={() => removeQuestionOption(index, optIndex)}
                                     disabled={question.options && question.options.length <= 1}
                                     className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -1506,19 +1505,19 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                 </div>
                 
                 <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
-                  <Button 
+                  <CustomButton 
                     variant="outline" 
                     onClick={() => setIsCreateModalOpen(false)}
                     className="px-6 py-3 border-gray-300 text-gray-700 hover:bg-gray-50"
                   >
                     Cancel
-                  </Button>
-                  <Button 
+                  </CustomButton>
+                  <CustomButton 
                     onClick={handleCreateJob}
                     className="px-6 py-3 bg-gray-900 text-white hover:bg-gray-800 font-semibold"
                   >
                     Create Job
-                  </Button>
+                  </CustomButton>
                 </div>
               </div>
             </DialogContent>
@@ -1570,13 +1569,13 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
               Create your first job posting with a custom application form
             </p>
             {showCreateButton && (
-              <Button 
+              <CustomButton 
                 onClick={() => setIsCreateModalOpen(true)}
+                icon={<Plus className="h-5 w-5" />}
                 className="bg-gray-900 text-white hover:bg-gray-800 px-6 py-3 rounded-xl font-semibold"
               >
-                <Plus className="h-5 w-5 mr-2" />
                 Create Your First Job
-              </Button>
+              </CustomButton>
             )}
           </div>
         ) : (
@@ -1645,42 +1644,39 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                   )}
                   
                   <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-                    <Button
+                    <CustomButton
                       variant="outline"
                       size="sm"
+                      icon={<Edit className="h-4 w-4" />}
                       onClick={() => handleEditForm(job)}
                       className="flex-1 border-gray-300 text-black hover:bg-gray-50"
                     >
-                      <Edit className="h-4 w-4 mr-2" />
                       Edit Job
-                    </Button>
+                    </CustomButton>
                     
-                    <Button
+                    <CustomButton
                       variant="ghost"
                       size="sm"
+                      icon={<Eye className="h-4 w-4" />}
                       onClick={() => handlePreviewForm(job)}
                       className="text-gray-600 hover:text-black hover:bg-gray-100"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    />
                     
-                    <Button
+                    <CustomButton
                       variant="ghost"
                       size="sm"
+                      icon={<Settings className="h-4 w-4" />}
                       onClick={() => toggleJobStatus(job.id)}
                       className="text-gray-600 hover:text-black hover:bg-gray-100"
-                    >
-                      <Settings className="h-4 w-4" />
-                    </Button>
+                    />
                     
-                    <Button
+                    <CustomButton
                       variant="ghost"
                       size="sm"
+                      icon={<Trash2 className="h-4 w-4" />}
                       onClick={() => handleDeleteJob(job.id)}
                       className="text-gray-600 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    />
                   </div>
                 </div>
               ))}
@@ -1828,15 +1824,15 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                   <Label className="text-sm font-medium text-gray-700">Application Questions</Label>
                   <p className="text-xs text-gray-500 mt-1">Add custom questions for applicants</p>
                 </div>
-                <Button
+                <CustomButton
                   type="button"
                   size="sm"
+                  icon={<Plus className="h-4 w-4" />}
                   onClick={addEditQuestionField}
                   className="bg-gray-900 text-white hover:bg-gray-800"
                 >
-                  <Plus className="h-4 w-4 mr-1" />
                   Add Question
-                </Button>
+                </CustomButton>
               </div>
 
               <div className="space-y-4">
@@ -1875,16 +1871,15 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button
+                      <CustomButton
                         type="button"
                         variant="ghost"
                         size="sm"
+                        icon={<Trash2 className="h-4 w-4" />}
                         onClick={() => removeEditQuestionField(index)}
                         disabled={editCustomQuestions.length === 1}
                         className="mt-6 text-gray-500 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      />
                     </div>
                     
                     {/* Options Configuration for select/radio/checkbox */}
@@ -1892,16 +1887,16 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <div className="flex items-center justify-between mb-2">
                           <Label className="text-xs font-medium text-gray-700">Options</Label>
-                          <Button
+                          <CustomButton
                             type="button"
                             variant="ghost"
                             size="sm"
+                            icon={<Plus className="h-3 w-3" />}
                             onClick={() => addEditQuestionOption(index)}
                             className="h-7 text-xs text-gray-600 hover:text-gray-900"
                           >
-                            <Plus className="h-3 w-3 mr-1" />
                             Add Option
-                          </Button>
+                          </CustomButton>
                         </div>
                         <div className="space-y-2">
                           {question.options?.map((option, optIndex) => (
@@ -1912,16 +1907,15 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                                 placeholder={`Option ${optIndex + 1}`}
                                 className="h-8 text-xs border-gray-300 focus:border-gray-900 focus:ring-gray-900"
                               />
-                              <Button
+                              <CustomButton
                                 type="button"
                                 variant="ghost"
                                 size="sm"
+                                icon={<Trash2 className="h-3 w-3" />}
                                 onClick={() => removeEditQuestionOption(index, optIndex)}
                                 disabled={question.options && question.options.length <= 1}
                                 className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                              />
                             </div>
                           ))}
                         </div>
@@ -1937,7 +1931,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
             </div>
 
             <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-              <Button
+              <CustomButton
                 type="button"
                 variant="outline"
                 onClick={() => {
@@ -1947,14 +1941,14 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                 className="px-6 py-3 border-gray-300 text-gray-700 hover:bg-gray-50"
               >
                 Cancel
-              </Button>
-              <Button
+              </CustomButton>
+              <CustomButton
                 type="button"
                 onClick={handleSaveEditedJob}
                 className="px-6 py-3 bg-gray-900 text-white hover:bg-gray-800 font-semibold"
               >
                 Save Changes
-              </Button>
+              </CustomButton>
             </div>
           </div>
         </DialogContent>

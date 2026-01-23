@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import {
   Card,
   CardContent,
@@ -96,6 +97,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
 import { ProgressBar } from "@/components/ui/progressBar";
 import { LeadProgressBar } from "@/components/page-builder/LeadProgressBar";
+import { HeaderComponent } from "@/components/page-builder/HeaderComponent";
 import { TicketTableComponent } from "@/components/page-builder/TicketTableComponent";
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
 import { TicketCarouselWrapper } from "@/components/page-builder/TicketCarouselWrapper";
@@ -817,9 +819,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
         <h5>Component Configuration</h5>
-        <Button variant="ghost" size="sm" onClick={onClose}>
+        <CustomButton variant="ghost" size="sm" onClick={onClose}>
           Close
-        </Button>
+        </CustomButton>
       </div>
       <Separator className="mb-4" />
       {renderConfigFields()}
@@ -834,6 +836,7 @@ const PageBuilder = () => {
   const { tenantId } = useTenant();
   const [isSaving, setIsSaving] = useState(false);
   const [pageName, setPageName] = useState("Untitled Page");
+  const [headerTitle, setHeaderTitle] = useState("");
   const [activeTab, setActiveTab] = useState("components");
   const [canvasComponents, setCanvasComponents] = useState<CanvasComponentData[]>([]);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -887,6 +890,8 @@ const PageBuilder = () => {
             // Supabase `pages.config` stores the canvas components. Older rows might be arrays.
             // Normalize to array of CanvasComponentData.
             setPageName(data.name || 'Untitled Page');
+            // Try to get header_title if column exists, otherwise use empty string
+            setHeaderTitle((data as any).header_title || '');
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
             if (data.role) setSelectedRole(data.role);
           } else {
@@ -1061,7 +1066,8 @@ const PageBuilder = () => {
       const targetIndex = canvasComponents.findIndex(comp => comp.id === targetId);
       
       if (targetIndex !== -1) {
-        // Insert the new component at this index
+        // Always insert above the target component (at target index)
+        // This ensures the new component appears on top when dropped on an existing component
         setCanvasComponents(prev => {
           const newList = [...prev];
           newList.splice(targetIndex, 0, newComponent);
@@ -1108,7 +1114,7 @@ const PageBuilder = () => {
 
     setIsSaving(true);
     try {
-      const pageData = {
+      const pageData: any = {
         user_id: user.id,
         tenant_id: tenantId,
         name: pageName.trim(),
@@ -1116,6 +1122,11 @@ const PageBuilder = () => {
         updated_at: new Date().toISOString(),
         role: selectedRole || null,
       };
+      
+      // Only include header_title if it has a value (optional field)
+      if (headerTitle.trim()) {
+        pageData.header_title = headerTitle.trim();
+      }
 
       let response;
       if (pageId && pageId !== 'new') {
@@ -1133,9 +1144,34 @@ const PageBuilder = () => {
           .single();
       }
 
-      if (response.error) throw response.error;
-
-      toast.success("Page saved successfully!");
+      if (response.error) {
+        // If error is about missing column, try saving without header_title
+        if (response.error.message?.includes('header_title') || response.error.message?.includes('column')) {
+          const pageDataWithoutHeader = { ...pageData };
+          delete pageDataWithoutHeader.header_title;
+          
+          let retryResponse;
+          if (pageId && pageId !== 'new') {
+            retryResponse = await supabase
+              .from('pages')
+              .update(pageDataWithoutHeader)
+              .eq('id', pageId);
+          } else {
+            retryResponse = await supabase
+              .from('pages')
+              .insert([pageDataWithoutHeader])
+              .select('id')
+              .single();
+          }
+          
+          if (retryResponse.error) throw retryResponse.error;
+          toast.success("Page saved successfully! (Header title column not available in database)");
+        } else {
+          throw response.error;
+        }
+      } else {
+        toast.success("Page saved successfully!");
+      }
 
       // If it was a new page, navigate to the edit URL with the new ID
       if (!(pageId && pageId !== 'new') && response.data?.id) {
@@ -1180,10 +1216,15 @@ const PageBuilder = () => {
                 placeholder="Page Name"
                 className="w-1/3"
               />
-              <Button variant="outline" size="sm"> {/* Preview functionality TBD */}
-                <Eye className="mr-2 h-4 w-4" />
+              <Input
+                value={headerTitle}
+                onChange={(e) => setHeaderTitle(e.target.value)}
+                placeholder="Header Title"
+                className="w-1/3"
+              />
+              <CustomButton variant="outline" size="sm" icon={<Eye className="h-4 w-4" />}>
                 Preview
-              </Button>
+              </CustomButton>
               <select
                 id="role"
                 className="w-full border px-3 py-2 rounded text-sm"
@@ -1197,10 +1238,9 @@ const PageBuilder = () => {
             </option>
           ))}
         </select>
-              <Button size="sm" onClick={handleSavePage} disabled={isSaving}>
-                <Save className="mr-2 h-4 w-4" />
-                {isSaving ? 'Saving...' : 'Save'}
-              </Button>
+              <CustomButton size="sm" onClick={handleSavePage} disabled={isSaving} loading={isSaving} icon={!isSaving ? <Save className="h-4 w-4" /> : undefined}>
+                Save
+              </CustomButton>
             </div>
           </div>
         </header>
@@ -1460,7 +1500,7 @@ const PageBuilder = () => {
               setCanvasRef(node);
               canvasRef.current = node;
             }}
-            className={`flex-1 bg-muted/30 overflow-visible p-8 border-2 ${
+            className={`flex-1 bg-muted/30 overflow-visible border-2 ${
               isOver ? 'border-primary border-dashed' : 'border-dashed'
             } flex-1 flex flex-col bg-background shadow-sm ${
               activeDragId ? 'ring-2 ring-primary/20' : ''
@@ -1476,7 +1516,7 @@ const PageBuilder = () => {
 
             {/* Content area within the droppable div */}
             <div
-              className={`flex-1 flex flex-col gap-4 ${
+              className={`flex-1 flex flex-col ${
                 isOver ? 'bg-primary/5 transition-colors duration-150' : ''
               }`}
             >
