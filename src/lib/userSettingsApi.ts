@@ -68,77 +68,38 @@ export const userSettingsApi = {
 export const leadTypeAssignmentApi = {
   // Get all lead type assignments for the tenant (GM only)
   async getAll(rmsEndpoint?: string): Promise<LeadTypeAssignment[]> {
-    let rmUsers: any[] = [];
-    
     try {
-      // Use the dedicated endpoint for fetching RMs
-      const endpoint = rmsEndpoint || '/accounts/users/assignees-by-role/?role=RM';
-      console.log('Fetching RMs from API endpoint:', endpoint);
-
-      const response = await apiClient.get(endpoint);
-      const responseData = response.data;
-
-      // The endpoint returns { count: number, results: [...] } format
-      // Response structure: { count: 3, results: [{ id, name, email, company_name, uid }] }
-      rmUsers = responseData.results || [];
-
-      console.log(`Successfully fetched ${rmUsers.length} RM users from API`);
+      // Use the lead-type-assignments endpoint directly (returns TenantMembership-based data)
+      const assignmentsResponse = await apiClient.get('/user-settings/lead-type-assignments/');
+      const assignmentsData = assignmentsResponse.data;
+      
+      // The endpoint returns an array of assignments with TenantMembership IDs
+      if (Array.isArray(assignmentsData)) {
+        return assignmentsData.map((assignment: any) => ({
+          user_id: String(assignment.user_id || assignment.tenant_membership_id), // Use TenantMembership ID
+          user_name: assignment.user_name || 'Unknown',
+          user_email: assignment.user_email || '',
+          tenant_membership_id: assignment.tenant_membership_id || assignment.user_id,
+          lead_types: assignment.lead_types || [],
+          daily_target: assignment.daily_target,
+          daily_limit: assignment.daily_limit,
+          assigned_leads_count: assignment.assigned_leads_count || 0
+        }));
+      }
+      
+      return [];
     } catch (error: any) {
       if (error.response?.status === 403) {
         throw new Error('Access denied: GM role required to access lead type assignments');
       }
       // For 404, return empty array instead of throwing (no users found is not an error)
       if (error.response?.status === 404) {
-        console.log('No RMs found (404), returning empty array');
+        console.log('No assignments found (404), returning empty array');
         return [];
       }
-      console.error('Error fetching RMs:', error);
+      console.error('Error fetching lead type assignments:', error);
       throw error;
     }
-
-    // If no RMs found, return empty array
-    if (!rmUsers || rmUsers.length === 0) {
-      console.log('No RM users found, returning empty array');
-      return [];
-    }
-
-    // Get existing lead type assignments from backend API
-    // Map by user_id (UUID) -> assignment payload (lead_types + daily_target + daily_limit)
-    const assignmentsMap = new Map<string, { lead_types: string[]; daily_target?: number; daily_limit?: number }>();
-    
-    try {
-      const assignmentsResponse = await apiClient.get('/user-settings/lead-type-assignments/');
-      const assignmentsData = assignmentsResponse.data;
-      // The endpoint returns an array of assignments with user_id and lead_types (+ daily_target, daily_limit)
-      if (Array.isArray(assignmentsData)) {
-        assignmentsData.forEach((assignment: any) => {
-          assignmentsMap.set(String(assignment.user_id), {
-            lead_types: assignment.lead_types || [],
-            daily_target: assignment.daily_target,
-            daily_limit: assignment.daily_limit
-          });
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching lead type assignments:', error);
-      // Continue without assignments - they'll be empty
-    }
-
-    // Transform to LeadTypeAssignment format
-    const assignments: LeadTypeAssignment[] = rmUsers.map((user: any) => {
-      const userUid = user.uid ? String(user.uid) : '';
-      const assignmentRecord = userUid ? assignmentsMap.get(userUid) : undefined;
-      return {
-        user_id: user.id, // Keep using the integer ID for the component
-        user_name: user.name || 'Unknown',
-        user_email: user.email,
-        lead_types: assignmentRecord?.lead_types || [],
-        daily_target: assignmentRecord?.daily_target,
-        daily_limit: assignmentRecord?.daily_limit
-      };
-    });
-
-    return assignments;
   },
 
   // Assign lead types to a user (GM only)
@@ -161,7 +122,10 @@ export const leadTypeAssignmentApi = {
       return {
         user_id: result.user_id || data.user_id,
         user_name: result.user_name || 'Unknown',
+        user_email: result.user_email || '',
         lead_types: result.lead_types || data.lead_types,
+        daily_target: result.daily_target,
+        daily_limit: result.daily_limit,
         created: result.created || false
       };
     } catch (error: any) {

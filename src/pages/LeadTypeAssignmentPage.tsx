@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/hooks/useTenant';
-import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Loader2, Users, Settings, AlertCircle, Trash2, ChevronDown } from 'lucide-react';
@@ -18,7 +16,7 @@ import {
   LeadTypeAssignmentRequest, 
   LeadType 
 } from '@/types/userSettings';
-import { leadTypeAssignmentApi, userSettingsApi } from '@/lib/userSettingsApi';
+import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
 
 interface LeadTypeAssignmentPageProps {
   // Optional props for when used as a page component
@@ -33,7 +31,7 @@ interface LeadTypeAssignmentPageProps {
 }
 
 const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: LeadTypeAssignmentPageProps) => {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const { role, customRole } = useTenant();
   const [assignments, setAssignments] = useState<LeadTypeAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,11 +39,10 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   const [selectedLeadTypes, setSelectedLeadTypes] = useState<Record<string, LeadType[]>>({});
   const [availableLeadTypes, setAvailableLeadTypes] = useState<string[]>([]);
   const [roleChecked, setRoleChecked] = useState(false);
-  const [leadsCounts, setLeadsCounts] = useState<Record<string, number>>({});
+  const [leadsCounts, setLeadsCounts] = useState<Record<string, number | ''>>({});
   const [originalLeadsCounts, setOriginalLeadsCounts] = useState<Record<string, number>>({});
-  const [dailyLimits, setDailyLimits] = useState<Record<string, number>>({});
+  const [dailyLimits, setDailyLimits] = useState<Record<string, number | ''>>({});
   const [originalDailyLimits, setOriginalDailyLimits] = useState<Record<string, number>>({});
-  const [userUidMap, setUserUidMap] = useState<Record<string, string>>({}); // Map user_id (int) to uid (UUID)
 
   // Check if user has GM permissions (GM custom role only)
   // Strictly check: must be exactly 'GM', not null, undefined, or any other value
@@ -84,42 +81,10 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         const leadTypes = await leadTypeAssignmentApi.getAvailableLeadTypes(leadTypesEndpoint);
         setAvailableLeadTypes(leadTypes);
         
-        // Fetch lead type assignments
-        // If no endpoint is configured, getAll will use the default: /accounts/users/assignees-by-role/?role=RM
+        // Fetch lead type assignments (now returns TenantMembership-based data)
         const rmsEndpoint = config?.rmsEndpoint;
         const data = await leadTypeAssignmentApi.getAll(rmsEndpoint);
         setAssignments(data);
-        
-        // Build user_id to uid mapping for user_settings table (which uses UUID)
-        const uidMap: Record<string, string> = {};
-        const tokenForUid = session?.access_token;
-        if (tokenForUid) {
-          try {
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-            const usersEndpoint = rmsEndpoint || '/accounts/users/assignees-by-role/?role=RM';
-            const usersUrl = usersEndpoint.startsWith('http') ? usersEndpoint : `${baseUrl}${usersEndpoint}`;
-            const usersResponse = await fetch(usersUrl, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${tokenForUid}`,
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
-              }
-            });
-            if (usersResponse.ok) {
-              const usersData = await usersResponse.json();
-              const users = Array.isArray(usersData) ? usersData : (usersData.results || []);
-              users.forEach((user: any) => {
-                if (user.uid) {
-                  uidMap[String(user.id)] = user.uid;
-                }
-              });
-            }
-          } catch (error) {
-            console.error('Error fetching user UIDs:', error);
-          }
-        }
-        setUserUidMap(uidMap);
         
         // Initialize selected lead types
         const initialSelections: Record<string, LeadType[]> = {};
@@ -140,93 +105,35 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           }
         });
 
-        // Fetch leads count (daily target) for each user (fallback to user-settings if not present in new endpoint)
-        // Fetch assigned_leads_count per user from LEAD_TYPE_ASSIGNMENT (one request per user)
-
-        const token = session?.access_token;
-        if (token) {
-          const counts: Record<string, number> = {};
-          await Promise.all(
-            data.map(async (assignment) => {
-              const userUid = uidMap[String(assignment.user_id)];
-              if (!userUid) {
-                counts[assignment.user_id] = 0;
-                return;
-              }
-              try {
-
-                // Prefer daily_target from assignments endpoint if present
-                if (initialTargets[assignment.user_id] !== undefined) {
-                  counts[assignment.user_id] = initialTargets[assignment.user_id];
-                  return;
-                }
-
-                // Try to get saved daily target from LEAD_TYPE_ASSIGNMENT record
-                // Lead types are in value column, daily target is in daily_target column
-                let savedCount = 0;
-                const userUid = uidMap[String(assignment.user_id)];
-                if (userUid) {
-                  try {
-                    const savedSetting = await userSettingsApi.get(userUid, 'LEAD_TYPE_ASSIGNMENT');
-                    console.log('[LeadTypeAssignment] Retrieved LEAD_TYPE_ASSIGNMENT record:', {
-                      user_id: assignment.user_id,
-                      uid: userUid,
-                      daily_target: savedSetting.daily_target,
-                      value: savedSetting.value
-                    });
-                    
-                    // Get from the daily_target column
-                    if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
-                      savedCount = savedSetting.daily_target;
-                      console.log('[LeadTypeAssignment] Loaded saved daily target from daily_target column:', savedCount, 'for user:', assignment.user_id);
-                    } else {
-                      // Column is null/undefined - backend might not be saving it
-                      savedCount = 0;
-                      console.warn('[LeadTypeAssignment] daily_target is null/undefined in LEAD_TYPE_ASSIGNMENT for user:', assignment.user_id, '- Backend may not be saving this field');
-                    }
-                  } catch (error: any) {
-                    // If LEAD_TYPE_ASSIGNMENT record not found (404), fetch from API
-                    if (error.message?.includes('404') || error.message?.includes('Not found')) {
-                      console.log('[LeadTypeAssignment] No LEAD_TYPE_ASSIGNMENT record found, fetching from API for user:', assignment.user_id);
-                      savedCount = await fetchUserLeadsCount(assignment.user_id, token);
-                    } else {
-                      console.error('[LeadTypeAssignment] Error loading leads count:', error);
-                      savedCount = await fetchUserLeadsCount(assignment.user_id, token);
-                    }
-                  }
-                } else {
-                  console.log('[LeadTypeAssignment] No UID found for user:', assignment.user_id, 'fetching from API');
-                  savedCount = await fetchUserLeadsCount(assignment.user_id, token);
-                }
-
-                counts[assignment.user_id] = savedCount;
-              } catch (error) {
-                console.error('[LeadTypeAssignment] Error fetching daily_target for user:', assignment.user_id, error);
-                counts[assignment.user_id] = 0;
-              }
-            })
-          );
-          setLeadsCounts(counts);
-          setOriginalLeadsCounts({ ...counts }); // Store original values for change detection
-        }
-
-        // Initialize daily limits state (default to 0 if not present)
-        setDailyLimits((prev) => {
-          const merged: Record<string, number> = { ...prev };
-          data.forEach((assignment) => {
-            merged[assignment.user_id] =
-              initialLimits[assignment.user_id] ?? merged[assignment.user_id] ?? 0;
-          });
-          return merged;
+        // Initialize leadsCounts from daily_target (the target value user sets)
+        // assigned_leads_count is for display only (shows current count), daily_target is what user sets
+        const counts: Record<string, number | ''> = {};
+        data.forEach((assignment) => {
+          // Use daily_target for the input field (what user sets as target)
+          // Only set to 0 if daily_target is explicitly 0, otherwise use the value or empty string
+          counts[assignment.user_id] = assignment.daily_target !== undefined && assignment.daily_target !== null ? assignment.daily_target : '';
         });
-        setOriginalDailyLimits((prev) => {
-          const merged: Record<string, number> = { ...prev };
-          data.forEach((assignment) => {
-            merged[assignment.user_id] =
-              initialLimits[assignment.user_id] ?? merged[assignment.user_id] ?? 0;
-          });
-          return merged;
+        setLeadsCounts(counts);
+        // Store original values as numbers for change detection
+        setOriginalLeadsCounts(
+          Object.fromEntries(
+            Object.entries(counts).map(([k, v]) => [k, typeof v === 'number' ? v : 0])
+          )
+        );
+
+        // Initialize daily limits state (allow empty for new users)
+        const limits: Record<string, number | ''> = {};
+        data.forEach((assignment) => {
+          // Only set to 0 if daily_limit is explicitly 0, otherwise use the value or empty string
+          limits[assignment.user_id] = assignment.daily_limit !== undefined && assignment.daily_limit !== null ? assignment.daily_limit : '';
         });
+        setDailyLimits(limits);
+        // Store original values as numbers for change detection
+        setOriginalDailyLimits(
+          Object.fromEntries(
+            Object.entries(limits).map(([k, v]) => [k, typeof v === 'number' ? v : 0])
+          )
+        );
         
         // Show message if no users found
         if (data.length === 0) {
@@ -284,6 +191,15 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
 
   // Handle leads count change
   const handleLeadsCountChange = (userId: string, value: string) => {
+    // Allow empty string to clear the field (user can type to remove 0)
+    if (value === '' || value === '-') {
+      setLeadsCounts(prev => ({
+        ...prev,
+        [userId]: ''  // Store empty string to allow clearing
+      }));
+      return;
+    }
+
     const numValue = parseInt(value, 10);
     if (isNaN(numValue) || numValue < 0) {
       return;
@@ -297,6 +213,15 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
 
   // Handle daily limit change
   const handleDailyLimitChange = (userId: string, value: string) => {
+    // Allow empty string to clear the field (user can type to remove 0)
+    if (value === '' || value === '-') {
+      setDailyLimits(prev => ({
+        ...prev,
+        [userId]: ''  // Store empty string to allow clearing
+      }));
+      return;
+    }
+
     const numValue = parseInt(value, 10);
     if (isNaN(numValue) || numValue < 0) {
       return;
@@ -313,8 +238,9 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     try {
       setSaving(userId);
       const leadTypes = selectedLeadTypes[userId] || [];
-      const assignedLeadsCount = leadsCounts[userId] ?? 0;
-      const assignedDailyLimit = dailyLimits[userId] ?? 0;
+      // Convert empty string to 0 for backend (backend expects number)
+      const assignedLeadsCount = (leadsCounts[userId] === '' || leadsCounts[userId] === undefined) ? 0 : (leadsCounts[userId] as number);
+      const assignedDailyLimit = (dailyLimits[userId] === '' || dailyLimits[userId] === undefined) ? 0 : (dailyLimits[userId] as number);
       
       const request: LeadTypeAssignmentRequest = {
         user_id: userId,
@@ -325,133 +251,48 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       };
 
       const assignmentsEndpoint = config?.assignmentsEndpoint;
-      await leadTypeAssignmentApi.assign(request, assignmentsEndpoint);
+      const response = await leadTypeAssignmentApi.assign(request, assignmentsEndpoint);
       
-      // Save the daily target to the same LEAD_TYPE_ASSIGNMENT record
-      // Lead types are in value column, daily_target goes in daily_target column
-      const userUid = userUidMap[String(userId)];
-      if (userUid) {
-        try {
-          console.log('[LeadTypeAssignment] Saving daily target to LEAD_TYPE_ASSIGNMENT record:', {
-            user_id: userUid,
-            key: 'LEAD_TYPE_ASSIGNMENT',
-            daily_target: assignedLeadsCount
-          });
-          
-          // Wait a bit for the LEAD_TYPE_ASSIGNMENT record to be created/updated by the API
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Get the current record to preserve the value field
-          let currentValue = leadTypes;
-          try {
-            const currentSetting = await userSettingsApi.get(userUid, 'LEAD_TYPE_ASSIGNMENT');
-            currentValue = currentSetting.value || leadTypes;
-            console.log('[LeadTypeAssignment] Retrieved current LEAD_TYPE_ASSIGNMENT value:', currentValue);
-          } catch (e: any) {
-            // If record doesn't exist yet, use leadTypes
-            console.log('[LeadTypeAssignment] LEAD_TYPE_ASSIGNMENT record not found yet, using leadTypes:', leadTypes);
-            currentValue = leadTypes;
-          }
-          
-          // Update the LEAD_TYPE_ASSIGNMENT record with both value and daily_target
-          // Try PATCH first (partial update), then PUT if needed
-          try {
-            const token = session?.access_token;
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-            
-            const updatePayload = {
-              value: currentValue, // Preserve the lead types in value column
-            daily_target: assignedLeadsCount, // Store daily target in daily_target column
-            daily_limit: assignedDailyLimit // Store daily limit in daily_limit column (if supported)
-            };
-            console.log('[LeadTypeAssignment] Updating LEAD_TYPE_ASSIGNMENT with payload:', JSON.stringify(updatePayload, null, 2));
-            
-            const updateUrl = `${baseUrl}/user-settings/settings/${userUid}/LEAD_TYPE_ASSIGNMENT/`;
-            
-            // Try PATCH first (partial update)
-            let updateResponse = await fetch(updateUrl, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : '',
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
-              },
-              body: JSON.stringify(updatePayload)
-            });
-            
-            // If PATCH doesn't work, try PUT
-            if (!updateResponse.ok) {
-              console.log('[LeadTypeAssignment] PATCH failed, trying PUT. Status:', updateResponse.status);
-              updateResponse = await fetch(updateUrl, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': token ? `Bearer ${token}` : '',
-                  'X-Tenant-Slug': 'bibhab-thepyro-ai'
-                },
-                body: JSON.stringify(updatePayload)
-              });
-            }
-            
-            if (!updateResponse.ok) {
-              const errorText = await updateResponse.text().catch(() => 'Unknown error');
-              console.error('[LeadTypeAssignment] Update failed:', {
-                status: updateResponse.status,
-                statusText: updateResponse.statusText,
-                error: errorText,
-                payload: updatePayload,
-                url: updateUrl
-              });
-              
-              // Try to parse error as JSON
-              let errorData;
-              try {
-                errorData = JSON.parse(errorText);
-                console.error('[LeadTypeAssignment] Error details:', errorData);
-              } catch (e) {
-                // Not JSON, use as text
-              }
-              
-              throw new Error(`Failed to update: ${updateResponse.status} - ${errorText}`);
-            }
-            
-            const result = await updateResponse.json();
-            console.log('[LeadTypeAssignment] Successfully updated LEAD_TYPE_ASSIGNMENT:', result);
-            console.log('[LeadTypeAssignment] Response includes assigned_leads_count:', result.assigned_leads_count);
-            
-            // Verify the update worked
-            if (result.assigned_leads_count === undefined || result.assigned_leads_count === null) {
-              console.warn('[LeadTypeAssignment] WARNING: assigned_leads_count not in response! Backend may not be saving it.');
-              toast.warning('Lead types saved, but assigned_leads_count may not be saved. Check backend API.');
-            }
-          } catch (updateError: any) {
-            console.error('[LeadTypeAssignment] Error updating LEAD_TYPE_ASSIGNMENT:', updateError);
-            console.error('[LeadTypeAssignment] Full error:', {
-              message: updateError.message,
-              stack: updateError.stack,
-              userUid,
-              assignedLeadsCount,
-              currentValue
-            });
-            toast.error(`Failed to save leads count: ${updateError.message || 'Unknown error'}. Check console for details.`);
-          }
-        } catch (error: any) {
-          console.error('[LeadTypeAssignment] Error saving leads count:', error);
-          toast.warning(`Lead types saved, but failed to save leads count: ${error.message || 'Unknown error'}`);
-        }
-      } else {
-        console.warn('[LeadTypeAssignment] No UID found for user:', userId);
-        toast.warning('Lead types saved, but could not save leads count (user UID not found)');
-      }
+      // The backend API now handles saving daily_target and daily_limit automatically
+      // Use the response from backend to update local state (ensures we have the saved values)
+      const savedDailyTarget = response.daily_target ?? assignedLeadsCount;
+      const savedDailyLimit = response.daily_limit ?? assignedDailyLimit;
       
-      // Update local state
+      console.log('[LeadTypeAssignment] Save response:', {
+        user_id: userId,
+        daily_target: savedDailyTarget,
+        daily_limit: savedDailyLimit,
+        response
+      });
+      
+      // Update local state with saved values from backend response
+      // Preserve user_name and user_email from existing assignment or response
       setAssignments(prev => 
         prev.map(assignment => 
           assignment.user_id === userId 
-            ? { ...assignment, lead_types: leadTypes, daily_target: assignedLeadsCount, daily_limit: assignedDailyLimit }
+            ? { 
+                ...assignment, 
+                user_name: response.user_name || assignment.user_name || 'Unknown',
+                user_email: response.user_email || assignment.user_email || '',
+                lead_types: leadTypes, 
+                daily_target: savedDailyTarget, 
+                daily_limit: savedDailyLimit 
+              }
             : assignment
         )
       );
+      
+      // Also update leadsCounts state to reflect the saved daily_target
+      setLeadsCounts(prev => ({
+        ...prev,
+        [userId]: savedDailyTarget
+      }));
+      
+      // Update dailyLimits state to reflect the saved daily_limit
+      setDailyLimits(prev => ({
+        ...prev,
+        [userId]: savedDailyLimit
+      }));
 
       // Update original leads count to reflect saved value
       setOriginalLeadsCounts(prev => ({
@@ -486,17 +327,26 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       
       const request: LeadTypeAssignmentRequest = {
         user_id: userId,
-        lead_types: [] // Empty array to remove all assignments
+        lead_types: [], // Empty array to remove all assignments
+        daily_target: 0, // Also reset daily_target to 0
+        daily_limit: 0   // Also reset daily_limit to 0
       };
 
       const assignmentsEndpoint = config?.assignmentsEndpoint;
-      await leadTypeAssignmentApi.assign(request, assignmentsEndpoint);
+      const response = await leadTypeAssignmentApi.assign(request, assignmentsEndpoint);
       
-      // Update local state
+      // Update local state - preserve user_name and user_email
       setAssignments(prev => 
         prev.map(assignment => 
           assignment.user_id === userId 
-            ? { ...assignment, lead_types: [] }
+            ? { 
+                ...assignment, 
+                user_name: response.user_name || assignment.user_name || 'Unknown',
+                user_email: response.user_email || assignment.user_email || '',
+                lead_types: [],
+                daily_target: response.daily_target ?? 0,
+                daily_limit: response.daily_limit ?? 0
+              }
             : assignment
         )
       );
@@ -505,6 +355,26 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       setSelectedLeadTypes(prev => ({
         ...prev,
         [userId]: []
+      }));
+
+      // Reset daily_target and daily_limit to 0 in state
+      setLeadsCounts(prev => ({
+        ...prev,
+        [userId]: 0
+      }));
+      setDailyLimits(prev => ({
+        ...prev,
+        [userId]: 0
+      }));
+
+      // Update original values
+      setOriginalLeadsCounts(prev => ({
+        ...prev,
+        [userId]: 0
+      }));
+      setOriginalDailyLimits(prev => ({
+        ...prev,
+        [userId]: 0
       }));
 
       toast.success('All lead type assignments removed successfully');
@@ -530,11 +400,12 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     
     const leadTypesChanged = JSON.stringify(selectedTypes.sort()) !== JSON.stringify(originalTypes.sort());
     
-    const currentLeadsCount = leadsCounts[userId] ?? 0;
+    // Convert empty string to 0 for comparison
+    const currentLeadsCount = (leadsCounts[userId] === '' || leadsCounts[userId] === undefined) ? 0 : (leadsCounts[userId] as number);
     const originalLeadsCount = originalLeadsCounts[userId] ?? 0;
     const leadsCountChanged = currentLeadsCount !== originalLeadsCount;
 
-    const currentDailyLimit = dailyLimits[userId] ?? 0;
+    const currentDailyLimit = (dailyLimits[userId] === '' || dailyLimits[userId] === undefined) ? 0 : (dailyLimits[userId] as number);
     const originalDailyLimit = originalDailyLimits[userId] ?? 0;
     const dailyLimitChanged = currentDailyLimit !== originalDailyLimit;
     
@@ -657,9 +528,11 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div>
-                          <div className="font-semibold">{assignment.user_name}</div>
+                          <div className="font-semibold">
+                            {assignment.user_name || 'Unknown User'}
+                          </div>
                           <div className="text-sm text-muted-foreground">
-                            {assignment.user_email}
+                            {assignment.user_email || 'No email'}
                           </div>
                         </div>
                       </TableCell>
@@ -754,8 +627,17 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                         <Input
                           type="number"
                           min="0"
-                          value={leadsCounts[assignment.user_id] ?? 0}
+                          value={leadsCounts[assignment.user_id] ?? ''}
                           onChange={(e) => handleLeadsCountChange(assignment.user_id, e.target.value)}
+                          onBlur={(e) => {
+                            // If empty on blur, set to 0 for display
+                            if (e.target.value === '' || leadsCounts[assignment.user_id] === '') {
+                              setLeadsCounts(prev => ({
+                                ...prev,
+                                [assignment.user_id]: 0
+                              }));
+                            }
+                          }}
                           onClick={(e) => e.stopPropagation()}
                           className="w-24"
                         />
@@ -764,8 +646,17 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                         <Input
                           type="number"
                           min="0"
-                          value={dailyLimits[assignment.user_id] ?? 0}
+                          value={dailyLimits[assignment.user_id] ?? ''}
                           onChange={(e) => handleDailyLimitChange(assignment.user_id, e.target.value)}
+                          onBlur={(e) => {
+                            // If empty on blur, set to 0 for display
+                            if (e.target.value === '' || dailyLimits[assignment.user_id] === '') {
+                              setDailyLimits(prev => ({
+                                ...prev,
+                                [assignment.user_id]: 0
+                              }));
+                            }
+                          }}
                           onClick={(e) => e.stopPropagation()}
                           className="w-24"
                         />
