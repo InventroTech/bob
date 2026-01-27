@@ -344,22 +344,43 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
   const handleTemplateSelected = (templateText: string | null) => {
+    let whatsappUrl: string;
+    
     if (whatsappLink) {
-      // If there's a direct WhatsApp link, use it
-      window.open(whatsappLink, "_blank");
-      return;
-    }
-    
-    const clean = normalizePhoneForLinks(whatsappPhone);
-    if (!clean) return;
-    
-    // Open WhatsApp with template text or without
-    if (templateText) {
-      const whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(templateText)}`;
-      window.open(whatsappUrl, "_blank");
+      // If there's a direct WhatsApp link, append template text if provided
+      if (templateText) {
+        const separator = whatsappLink.includes('?') ? '&' : '?';
+        whatsappUrl = `${whatsappLink}${separator}text=${encodeURIComponent(templateText)}`;
+      } else {
+        whatsappUrl = whatsappLink;
+      }
     } else {
-      window.open(`https://wa.me/${clean}`, "_blank");
+      const clean = normalizePhoneForLinks(whatsappPhone);
+      if (!clean) {
+        toast({
+          title: "Error",
+          description: "Invalid phone number",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Open WhatsApp with template text or without
+      if (templateText) {
+        whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(templateText)}`;
+      } else {
+        whatsappUrl = `https://wa.me/${clean}`;
+      }
     }
+    
+    // Create a temporary anchor element and click it - works better with popup blockers
+    const link = document.createElement('a');
+    link.href = whatsappUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const primaryPhone = useMemo(() => {
@@ -1178,12 +1199,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
             </div>
 
             {/* Action Button */}
-            <div className="text-center">
+            <div className="flex justify-center items-center w-full">
               <CustomButton 
                 onClick={handleGetLeads} 
                 disabled={loading}
                 loading={loading}
-                fullWidth
                 className="max-w-xs"
                 size="lg"
               >

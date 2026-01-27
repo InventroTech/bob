@@ -33,6 +33,7 @@ import {
   Upload,
   Calculator,
   MessageSquare,
+  Database,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -110,6 +111,7 @@ import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChar
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
 import { TeamDashboardComponent, TeamDashboardConfig } from "@/components/page-builder";
+import { OperationsProgramsComponent, OperationsProgramsConfig } from "@/components/page-builder";
 // Import configuration components
 import {
   DataCardConfig,
@@ -290,6 +292,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   routingRules: RoutingRulesComponent,
   whatsappTemplate: WhatsAppTemplateComponent,
   teamDashboard: TeamDashboardComponent,
+  operationsPrograms: OperationsProgramsComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -810,6 +813,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'operationsPrograms':
+        return (
+          <OperationsProgramsConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -859,7 +870,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1476,6 +1487,11 @@ const PageBuilder = () => {
                           id="teamDashboard"
                           label="Team Dashboard"
                           icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="operationsPrograms"
+                          label="Operations & Programs"
+                          icon={<Database className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
