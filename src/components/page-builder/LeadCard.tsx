@@ -334,14 +334,26 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   // Function to handle template selection and open WhatsApp
   const handleTemplateSelected = (templateText: string | null) => {
     const cleanNumber = getCleanPhoneNumber(whatsappPhone);
-    if (!cleanNumber) return;
-    
-    if (templateText) {
-      const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(templateText)}`;
-      window.open(whatsappUrl, '_blank');
-    } else {
-      window.open(`https://wa.me/${cleanNumber}`, '_blank');
+    if (!cleanNumber) {
+      toast.error('Invalid phone number');
+      return;
     }
+    
+    let whatsappUrl: string;
+    if (templateText) {
+      whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(templateText)}`;
+    } else {
+      whatsappUrl = `https://wa.me/${cleanNumber}`;
+    }
+    
+    // Create a temporary anchor element and click it - works better with popup blockers
+    const link = document.createElement('a');
+    link.href = whatsappUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -821,14 +833,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               </div>
             </div>
 
-            <CustomButton 
-              onClick={fetchFirstLead} 
-              disabled={loading}
-              loading={loading}
-              fullWidth
-            >
-              Get Leads
-            </CustomButton>
+            <div className="flex justify-center items-center w-full">
+              <CustomButton 
+                onClick={fetchFirstLead} 
+                disabled={loading}
+                loading={loading}
+                className="max-w-xs"
+              >
+                Get Leads
+              </CustomButton>
+            </div>
           </CardContent>
         </Card>
       </div>
