@@ -56,6 +56,14 @@ export const WhatsAppTemplateModal: React.FC<WhatsAppTemplateModalProps> = ({
     }
   }, [open, apiEndpoint]);
 
+  // Set default selection when templates load
+  useEffect(() => {
+    if (templates.length > 0 && !selectedTemplate) {
+      // Auto-select first template, or "none" if user prefers
+      setSelectedTemplate("none");
+    }
+  }, [templates]);
+
   const fetchTemplates = async () => {
     if (!apiEndpoint || !session?.access_token) return;
 
@@ -99,13 +107,21 @@ export const WhatsAppTemplateModal: React.FC<WhatsAppTemplateModalProps> = ({
   };
 
   const handleOpenWhatsApp = () => {
-    const templateText = selectedTemplate === "none" 
-      ? null 
-      : templates.find(t => String(t.id) === selectedTemplate)?.description ||
-        templates.find(t => String(t.id) === selectedTemplate)?.text || 
-        templates.find(t => String(t.id) === selectedTemplate)?.message ||
-        templates.find(t => String(t.id) === selectedTemplate)?.content ||
-        null;
+    let templateText: string | null = null;
+    
+    if (selectedTemplate && selectedTemplate !== "none") {
+      const selected = templates.find(t => String(t.id) === String(selectedTemplate));
+      if (selected) {
+        templateText = selected.description || selected.text || selected.message || selected.content || null;
+      }
+    }
+    
+    // Debug logging
+    console.log('Opening WhatsApp with template:', {
+      selectedTemplate,
+      templateText,
+      templatesCount: templates.length
+    });
 
     onSelectTemplate(templateText);
     onOpenChange(false);
@@ -196,7 +212,7 @@ export const WhatsAppTemplateModal: React.FC<WhatsAppTemplateModalProps> = ({
             </CustomButton>
             <CustomButton
               onClick={handleOpenWhatsApp}
-              disabled={!selectedTemplate || loading}
+              disabled={selectedTemplate === null || loading}
               loading={loading}
               className="bg-black text-white hover:bg-gray-800 disabled:opacity-50"
             >

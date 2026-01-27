@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Layout, Sparkles, UserPlus } from "lucide-react";
+import { Home, Layout, Sparkles, UserPlus, Database } from "lucide-react";
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -27,6 +27,11 @@ const sidebarItems = [
     title: "My Pages",
     path: "/pages",
     icon: Layout,
+  },
+  {
+    title: "Operations & Programs",
+    path: "/operations-programs",
+    icon: Database,
   },
   {
     title: "Add User",
