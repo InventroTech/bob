@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DynamicForm, DynamicFormData } from './DynamicForm';
 import { toast } from 'sonner';
@@ -495,21 +496,22 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
             ))}
 
             <div className="flex justify-end space-x-3 pt-4 border-t">
-              <Button
+              <CustomButton
                 type="button"
                 variant="outline"
                 onClick={() => setIsOpen(false)}
                 disabled={isSubmitting}
               >
                 Cancel
-              </Button>
-              <Button
+              </CustomButton>
+              <CustomButton
                 type="submit"
                 disabled={isSubmitting}
+                loading={isSubmitting}
                 className="min-w-[100px]"
               >
-                {isSubmitting ? 'Submitting...' : 'Submit'}
-              </Button>
+                Submit
+              </CustomButton>
             </div>
           </form>
         </DialogContent>

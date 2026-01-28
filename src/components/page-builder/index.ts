@@ -19,4 +19,6 @@ export { FileUploadPageComponent } from './FileUploadPageComponent';
 export { FileUploadPageConfig } from './FileUploadPageConfig';
 export { LeadProgressBar } from './LeadProgressBar'; 
 export { default as TeamDashboardComponent } from './TeamDashboardComponent';
-export { TeamDashboardConfig } from './component-config/TeamDashboardConfig'; 
+export { TeamDashboardConfig } from './component-config/TeamDashboardConfig';
+export { default as OperationsProgramsComponent } from './OperationsProgramsComponent';
+export { OperationsProgramsConfig } from './component-config/OperationsProgramsConfig'; 

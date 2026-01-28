@@ -43,36 +43,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       console.log('Starting logout process...');
-      
+
       // Clear any local storage items
       localStorage.removeItem('user_email');
       localStorage.removeItem('tenant_id');
+
+      // Clear Supabase auth tokens from localStorage
+      // Supabase stores tokens with pattern: sb-<project-ref>-auth-token
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (supabaseUrl) {
+        try {
+          const url = new URL(supabaseUrl);
+          const projectRef = url.hostname.split('.')[0];
+          const authTokenKey = `sb-${projectRef}-auth-token`;
+          localStorage.removeItem(authTokenKey);
+          console.log(`Cleared Supabase auth token: ${authTokenKey}`);
+        } catch (urlError) {
+          // Fallback: clear all Supabase-related auth token keys
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+              localStorage.removeItem(key);
+              console.log(`Cleared Supabase auth token: ${key}`);
+            }
+          });
+        }
+      }
       console.log('Local storage cleared');
-      
+
       // Clear session storage items
       sessionStorage.removeItem('ticketCarouselState');
       console.log('Session storage cleared');
-      
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Supabase logout error:', error);
-        toast.error('Failed to logout. Please try again.');
-        return;
-      }
-      
-      console.log('Supabase logout successful');
-      
+
       // Clear Sentry user context
       clearSentryUser();
-      
+
       // Clear session and user state
       setSession(null);
       setUser(null);
       console.log('Local state cleared');
-      
+
       toast.success('Logged out successfully');
       console.log('Logout process completed successfully');
-      
     } catch (error) {
       console.error('Unexpected logout error:', error);
       toast.error('An unexpected error occurred during logout');

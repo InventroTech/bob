@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { useNavigate } from 'react-router-dom';
 import { membershipService, User } from '@/lib/api';
 
@@ -59,9 +60,9 @@ const UsersPage = () => {
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
           <h5>Users</h5>
-          <Button onClick={() => navigate('/add-user')}>
+          <CustomButton onClick={() => navigate('/add-user')}>
             Add New User
-          </Button>
+          </CustomButton>
         </div>
 
         <div className="bg-white rounded-lg shadow overflow-hidden">

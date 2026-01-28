@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import {
   Popover,
   PopoverContent,
@@ -45,6 +46,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
 
 interface Lead {
   id: number;
@@ -155,15 +157,7 @@ const getCleanPhoneNumber = (phone: string): string => {
   return phone.replace(/\D/g, '');
 };
 
-// Function to handle WhatsApp action
-const handleWhatsApp = (phone: string) => {
-  const cleanNumber = getCleanPhoneNumber(phone);
-  if (cleanNumber) {
-    const message = `Hi, I'm reaching out regarding your inquiry.`;
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  }
-};
+// Note: handleWhatsApp is now handled via the modal component
 
 // Function to handle email action
 const handleEmail = (email: string) => {
@@ -218,6 +212,8 @@ interface LeadCardProps {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
     title?: string;
+    whatsappTemplatesApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
   initialLead?: any;
   onUpdate?: (updatedLead: any) => void;
@@ -314,6 +310,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
 
   // Function to handle opening profile modal
   const handleOpenProfile = () => {
@@ -325,6 +323,37 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   // Function to close profile modal
   const handleCloseProfile = () => {
     setShowProfileModal(false);
+  };
+
+  // Function to handle WhatsApp action - opens modal
+  const handleWhatsApp = (phone: string) => {
+    setWhatsappPhone(phone);
+    setShowWhatsAppModal(true);
+  };
+
+  // Function to handle template selection and open WhatsApp
+  const handleTemplateSelected = (templateText: string | null) => {
+    const cleanNumber = getCleanPhoneNumber(whatsappPhone);
+    if (!cleanNumber) {
+      toast.error('Invalid phone number');
+      return;
+    }
+    
+    let whatsappUrl: string;
+    if (templateText) {
+      whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(templateText)}`;
+    } else {
+      whatsappUrl = `https://wa.me/${cleanNumber}`;
+    }
+    
+    // Create a temporary anchor element and click it - works better with popup blockers
+    const link = document.createElement('a');
+    link.href = whatsappUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -804,20 +833,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               </div>
             </div>
 
-            <Button 
-              onClick={fetchFirstLead} 
-              disabled={loading}
-              className="w-full"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Loading...
-                </>
-              ) : (
-                'Get Leads'
-              )}
-            </Button>
+            <div className="flex justify-center items-center w-full">
+              <CustomButton 
+                onClick={fetchFirstLead} 
+                disabled={loading}
+                loading={loading}
+                className="max-w-xs"
+              >
+                Get Leads
+              </CustomButton>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -829,9 +854,9 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
         <p>No lead available</p>
-        <Button onClick={fetchFirstLead} disabled={loading}>
+        <CustomButton onClick={fetchFirstLead} disabled={loading} loading={loading}>
           Get Leads
-        </Button>
+        </CustomButton>
       </div>
     );
   }
@@ -849,16 +874,15 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   return (
     <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
       <div className="mt-4 flex w-[70%] justify-end">
-        <Button
+        <CustomButton
           onClick={handleTakeBreak}
           variant="outline"
           size="sm"
-          className="flex items-center gap-2"
+          icon={<Coffee className="h-3 w-3" />}
           disabled={updating}
         >
-          <Coffee className="h-3 w-3" />
           Take a Break
-        </Button>
+        </CustomButton>
       </div>
       <div className="relative w-[70%] h-full">
         <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
@@ -1048,7 +1072,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                         </div>
                         {lead.selectedTags.length > 0 && (
                           <div className="pt-2 border-t">
-                            <Button
+                            <CustomButton
                               variant="ghost"
                               size="sm"
                               onClick={() => setLead(prev => ({
@@ -1059,7 +1083,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                               className="text-xs"
                             >
                               Clear All
-                            </Button>
+                            </CustomButton>
                           </div>
                         )}
                       </div>
@@ -1102,7 +1126,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           
           <div className="buttons flex flex-row items-center justify-center gap-[200px] w-full">
             <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Follow Up")}
                 size="sm"
                 variant="outline"
@@ -1110,9 +1134,9 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 disabled={updating}
               >
                 Follow Up
-              </Button>
+              </CustomButton>
               
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Disqualify")}
                 size="sm"
                 variant="outline"
@@ -1120,10 +1144,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 disabled={updating}
               >
                 Disqualify
-              </Button>
+              </CustomButton>
             </div>
             <div className="flex justify-center items-center gap-3 mt-4 pt-3">
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Qualify")}
                 size="sm"
                 variant="outline"
@@ -1131,29 +1155,18 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                 disabled={updating}
               >
                 Qualify
-              </Button>
+              </CustomButton>
               
-              <Button
+              <CustomButton
                 onClick={() => handleActionButton("Close")}
                 size="sm"
                 variant="outline"
                 className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 disabled={updating || fetchingNext}
+                loading={updating || fetchingNext}
               >
-                {updating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Updating...
-                  </>
-                ) : fetchingNext ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                    Loading Next Lead...
-                  </>
-                ) : (
-                  "Close"
-                )}
-              </Button>
+                {updating ? 'Updating...' : fetchingNext ? 'Loading Next Lead...' : 'Close'}
+              </CustomButton>
             </div>
           </div>
         </div>
@@ -1187,14 +1200,13 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   <p className="text-sm text-muted-foreground">Company: {currentLead?.company || "N/A"}</p>
                 </div>
               </div>
-              <Button
+              <CustomButton
                 variant="ghost"
                 size="sm"
+                icon={<X className="h-4 w-4" />}
                 onClick={handleCloseProfile}
                 className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              />
             </div>
             
             {/* Modal Content - Iframe */}
@@ -1209,6 +1221,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           </div>
         </div>
       )}
+      
+      {/* WhatsApp Template Modal */}
+      <WhatsAppTemplateModal
+        open={showWhatsAppModal}
+        onOpenChange={setShowWhatsAppModal}
+        phone={whatsappPhone}
+        apiEndpoint={config?.whatsappTemplatesApiEndpoint}
+        apiPrefix={config?.apiPrefix || 'renderer'}
+        onSelectTemplate={handleTemplateSelected}
+      />
     </div>
   );
 };
