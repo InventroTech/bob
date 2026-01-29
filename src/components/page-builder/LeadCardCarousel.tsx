@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
@@ -26,12 +26,33 @@ import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
 import { CallBackModal } from "./CallBackModal";
 
+export interface LeadCardCarouselHandle {
+  handleTrialActivated: () => void;
+  handleNotInterestedClick: () => void;
+  handleCallNotConnected: () => void;
+  handleCallBackLaterClick: () => void;
+  updating: boolean;
+  currentLead: LeadData | null;
+  actionButtonsVisible: boolean;
+}
+
 interface LeadCardCarouselProps {
   config?: {
     title?: string;
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
   };
+  initialLead?: LeadData | null;
+  onLeadUpdate?: (updatedLead: LeadData | null) => void;
+  isInModal?: boolean; // Indicates if component is rendered inside a modal/Dialog
+  /** When true, do not render the action bar (parent will render it and use ref to call handlers) */
+  hideActionBar?: boolean;
+  /** Callback when actionButtonsVisible changes (for parent to sync state) */
+  onActionButtonsVisibilityChange?: (visible: boolean) => void;
+  /** Callback when CallBackModal opens/closes (for parent to hide action buttons) */
+  onCallBackModalChange?: (open: boolean) => void;
+  /** Callback when an action completes successfully (leadId = lead that was acted on, action = which action; parent closes modal and removes from list only when action is not "Call Back Later") */
+  onActionComplete?: (leadId: number | string, action?: string) => void;
 }
 
 interface LeadTask {
@@ -106,10 +127,10 @@ interface LeadState {
 }
 
 
-const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
+const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProps>(({ config, initialLead, onLeadUpdate, isInModal = false, hideActionBar = false, onActionButtonsVisibilityChange, onCallBackModalChange, onActionComplete }, ref) => {
   const { toast } = useToast();
   const { user: authUser, session } = useAuth();
-  const [currentLead, setCurrentLead] = useState<LeadData | null>(null);
+  const [currentLead, setCurrentLead] = useState<LeadData | null>(initialLead || null);
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
     fresh_leads: 0,
@@ -127,6 +148,15 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const [animationData, setAnimationData] = useState<any>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
+
+  // Ensure modals are closed when component mounts or when in modal mode
+  useEffect(() => {
+    if (isInModal) {
+      setShowCallBackDialog(false);
+      setShowNotInterestedDialog(false);
+      setShowProfileModal(false);
+    }
+  }, [isInModal]);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -136,12 +166,66 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     leadStartTime: new Date(),
   });
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
+
+  // Sync actionButtonsVisible to parent when it changes (for modal mode)
+  useEffect(() => {
+    if (onActionButtonsVisibilityChange) {
+      onActionButtonsVisibilityChange(actionButtonsVisible);
+    }
+  }, [actionButtonsVisible, onActionButtonsVisibilityChange]);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [dailyTarget, setDailyTarget] = useState<number | null>(null);
   const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
+  // Store latest handlers in ref so useImperativeHandle always calls current versions
+  const handlersRef = useRef<{
+    handleActionButton: (action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later", extra?: any) => Promise<any>;
+    handleNotInterestedClick: () => void;
+    handleOpenCallBackDialog: () => void;
+  } | null>(null);
+
+  // Handle initialLead prop - set currentLead when initialLead is provided
+  useEffect(() => {
+    if (initialLead) {
+      setCurrentLead(initialLead);
+      setShowPendingCard(false);
+      // When opened from table modal (follow-up leads page), show buttons immediately
+      // When fetching new lead (pending leads page), buttons hidden until call is made
+      if (isInModal) {
+        // For follow-up leads: show buttons immediately since it's an existing lead
+        setActionButtonsVisible(true);
+      } else {
+        // For pending leads: only show after user makes a call
+        setActionButtonsVisible(false);
+      }
+      // Close any open modals when switching leads
+      setShowNotInterestedDialog(false);
+      setShowCallBackDialog(false);
+      setShowProfileModal(false);
+      // Initialize lead state from initialLead
+      setLead({
+        leadStatus: initialLead.status || initialLead.lead_stage || "New",
+        priority: initialLead.priority || "Medium",
+        notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
+        selectedTags: parseTags(initialLead.tags || []),
+        nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
+        leadStartTime: new Date(),
+      });
+      isInitialized.current = true;
+    }
+  }, [initialLead, isInModal]);
+
+  // Call onLeadUpdate when currentLead changes (if callback provided)
+  // Only call when currentLead.id actually changes to prevent infinite loops
+  const prevLeadIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (onLeadUpdate && currentLead?.id && currentLead.id !== prevLeadIdRef.current) {
+      prevLeadIdRef.current = currentLead.id;
+      onLeadUpdate(currentLead);
+    }
+  }, [currentLead?.id, onLeadUpdate]);
 
   // Persist actionButtonsVisible state to sessionStorage (survives page navigation)
   const persistActionButtonsState = (leadId: string | number | undefined, visible: boolean) => {
@@ -637,11 +721,27 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
   // Fetching the lead stats
   const fetchLeadStats = async () => {
+    // Skip stats fetching when opened from modal - stats are not needed in modal context
+    if (isInModal || initialLead) {
+      return;
+    }
+    // Also skip if config explicitly has the old endpoint (shouldn't happen, but defensive)
+    if (config?.statusDataApiEndpoint === '/get-lead-status' || config?.statusDataApiEndpoint === 'get-lead-status') {
+      return;
+    }
     try {
       const data = await crmLeadsApi.getLeadStats(config?.statusDataApiEndpoint);
       setLeadStats(data);
     } catch (error) {
       console.error("Error fetching lead statistics:", error);
+      // Set default stats on error to prevent UI issues
+      setLeadStats({
+        total: 0,
+        fresh_leads: 0,
+        leads_won: 0,
+        wip_leads: 0,
+        lost_leads: 0,
+      });
     }
   };
 
@@ -673,9 +773,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       setHasCheckedForLeads(true);
       setCurrentLead(leadData);
       setShowPendingCard(false);
-      // Restore actionButtonsVisible state if this is the same lead that had buttons visible
-      const shouldShowButtons = restoreActionButtonsState(leadData?.id);
-      setActionButtonsVisible(shouldShowButtons);
+      // For pending leads page: buttons should only show after user makes a call
+      // Don't restore from sessionStorage - start fresh with buttons hidden
+      setActionButtonsVisible(false);
       setProcessingAction(null);
       setLead(prev => ({
         ...prev,
@@ -758,7 +858,21 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     }
     try {
       setUpdating(true);
-      await crmLeadsApi.sendLeadEvent(eventName, currentLead.id, payload);
+      const recordId = Number(currentLead.id);
+      console.log('[sendLeadEvent] Starting, recordId:', recordId, 'eventName:', eventName);
+      if (!Number.isInteger(recordId)) {
+        console.error('[sendLeadEvent] Invalid recordId:', recordId);
+        toast({ title: "Error", description: "Invalid lead id", variant: "destructive" });
+        return false;
+      }
+      console.log('[sendLeadEvent] Calling API with:', { eventName, recordId, payload });
+      try {
+        await crmLeadsApi.sendLeadEvent(eventName, recordId, payload);
+        console.log('[sendLeadEvent] API call successful');
+      } catch (apiError: any) {
+        console.error('[sendLeadEvent] API call failed:', apiError);
+        throw apiError; // Re-throw to be caught by outer catch
+      }
 
       if (options.successTitle || options.successDescription) {
         toast({
@@ -782,7 +896,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later",
     extra?: { reason?: string; nextCallAt?: string; assignToSelf?: boolean }
   ) => {
+    console.log('[handleActionButton] Called with action:', action, 'currentLead:', currentLead?.id, 'initialLead:', !!initialLead);
     if (!currentLead?.id) {
+      console.error('[handleActionButton] No currentLead.id');
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
       return;
     }
@@ -824,29 +940,58 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
 
     setProcessingAction(action);
     try {
+      console.log('[handleActionButton] Calling sendLeadEvent with:', { event, recordId: currentLead.id, payload });
       const ok = await sendLeadEvent(
         event,
         payload,
         { successTitle: "Success", successDescription: success }
       );
+      console.log('[handleActionButton] sendLeadEvent returned:', ok);
 
       if (ok) {
+        console.log('[handleActionButton] Event sent successfully, updating state. initialLead:', !!initialLead);
         if (action === "Trial Activated") {
-          // Dispatch event - progress bar will fetch count from API
           window.dispatchEvent(new CustomEvent('trial-activated', { 
             detail: { leadId: currentLead.id } 
           }));
         }
-        
-        // Clear action buttons state before fetching next lead
-        persistActionButtonsState(undefined, false);
-        
-        // Fetch next lead after any action
-        await fetchFirstLead();
+        // Same as pending leads page: update state and move on (no extra API)
+        if (initialLead && currentLead?.id) {
+          // Derive new stage from action (same as backend would set) and update local state + parent
+          const stageByAction: Record<typeof action, string> = {
+            "Trial Activated": "TRIAL_ACTIVATED",
+            "Not Interested": "NOT_INTERESTED",
+            "Call Not Connected": "CALL_NOT_CONNECTED",
+            "Call Back Later": "SNOOZED",
+          };
+          const newStage = stageByAction[action];
+          const updatedLead = {
+            ...currentLead,
+            status: newStage,
+            lead_stage: newStage,
+            data: { ...(currentLead.data || {}), lead_stage: newStage },
+          };
+          setCurrentLead(updatedLead);
+          setLead(prev => ({ ...prev, leadStatus: newStage }));
+          if (onLeadUpdate) onLeadUpdate(updatedLead);
+          // Close modal after successful action when opened from table; pass lead id and action so parent can remove from list only when not "Call Back Later"
+          if (isInModal && onActionComplete && currentLead?.id != null) {
+            onActionComplete(currentLead.id, action);
+          }
+        } else {
+          persistActionButtonsState(undefined, false);
+          await fetchFirstLead();
+        }
       }
 
       return ok;
+    } catch (error) {
+      console.error('[handleActionButton] Error caught:', error);
+      // Ensure processingAction is cleared even on error
+      setProcessingAction(null);
+      throw error;
     } finally {
+      console.log('[handleActionButton] Finally block - clearing processingAction');
       setProcessingAction(null);
     }
   };
@@ -933,6 +1078,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   };
 
   const handleOpenCallBackDialog = () => {
+    console.log('[LeadCardCarousel] handleOpenCallBackDialog called - opening CallBackModal');
     setShowCallBackDialog(true);
   };
 
@@ -941,11 +1087,50 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       toast({ title: "Select time", description: "Please choose a valid date and time.", variant: "destructive" });
       return false;
     }
-    return await handleActionButton("Call Back Later", {
+    const result = await handleActionButton("Call Back Later", {
       nextCallAt,
       assignToSelf,
     });
+    // Note: onActionComplete will be called from handleActionButton if successful
+    return result;
   };
+
+  // Update handlers ref on every render to always have latest versions
+  handlersRef.current = {
+    handleActionButton,
+    handleNotInterestedClick,
+    handleOpenCallBackDialog,
+  };
+
+  // Expose handlers via ref - use handlersRef to always call latest versions
+  useImperativeHandle(ref, () => ({
+    handleTrialActivated: () => {
+      console.log('[LeadCardCarousel] handleTrialActivated called via ref, currentLead:', currentLead?.id, 'handlersRef:', !!handlersRef.current);
+      if (handlersRef.current?.handleActionButton) {
+        console.log('[LeadCardCarousel] Calling handleActionButton from handlersRef');
+        void handlersRef.current.handleActionButton("Trial Activated");
+      } else {
+        console.error('[LeadCardCarousel] handleActionButton not available in handlersRef');
+      }
+    },
+    handleNotInterestedClick: () => {
+      console.log('[LeadCardCarousel] handleNotInterestedClick called via ref');
+      handlersRef.current?.handleNotInterestedClick();
+    },
+    handleCallNotConnected: () => {
+      console.log('[LeadCardCarousel] handleCallNotConnected called via ref');
+      if (handlersRef.current?.handleActionButton) {
+        void handlersRef.current.handleActionButton("Call Not Connected");
+      }
+    },
+    handleCallBackLaterClick: () => {
+      console.log('[LeadCardCarousel] handleCallBackLaterClick called via ref');
+      handlersRef.current?.handleOpenCallBackDialog();
+    },
+    updating,
+    currentLead,
+    actionButtonsVisible,
+  }), [updating, currentLead, actionButtonsVisible]);
 
   // Load Lottie animation (idle + cached)
   useEffect(() => {
@@ -966,9 +1151,16 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     });
   }, []);
 
-  // Initialize component - fetch current lead on refresh
+  // Initialize component - fetch current lead on refresh (skip if initialLead is provided)
   useEffect(() => {
     const initializeComponent = async () => {
+      // If initialLead is provided, skip auto-initialization and stats fetching
+      if (initialLead) {
+        // Don't fetch stats when opened from modal - not needed
+        fetchDailyTarget();
+        return;
+      }
+      
       fetchLeadStats();
       fetchDailyTarget();
       
@@ -987,7 +1179,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
         setCurrentLead(currentLead);
         setShowPendingCard(false);
         setHasCheckedForLeads(true);
-        // Restore actionButtonsVisible state if this is the same lead that had buttons visible
+        // Restore actionButtonsVisible state only if user had already made a call on this lead
+        // (stored in sessionStorage from previous interaction)
         const shouldShowButtons = restoreActionButtonsState(currentLead?.id);
         setActionButtonsVisible(shouldShowButtons);
         setLead(prev => ({
@@ -1009,7 +1202,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     };
     
     initializeComponent();
-  }, []);
+  }, [initialLead]);
 
   // Handle "Get Leads" button click - fetch current lead first, then next if none
   const handleGetLeads = async () => {
@@ -1222,7 +1415,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const postCallActions = [
     {
       id: "trial-activated",
-      label: "Trail Accepted",
+      label: "Trial Activated",
       icon: CheckCircle2,
       tone: "neutral" as const,
       onClick: () => {
@@ -1250,7 +1443,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
     },
     {
       id: "call-back",
-      label: "Call Back",
+      label: "Call Back Later",
       icon: Clock,
       tone: "neutral" as const,
       onClick: handleOpenCallBackDialog,
@@ -1261,9 +1454,9 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
   // Showing the lead card
   return (
-    <div className="flex w-full flex-col relative overflow-hidden md:overflow-hidden">
-      <div className="relative w-full overflow-hidden md:overflow-hidden">
-        <Card className="relative flex w-full flex-col bg-white border-0 shadow-none overflow-hidden md:overflow-hidden">
+    <div className={cn("flex w-full flex-col relative", !isInModal && "overflow-hidden md:overflow-hidden")}>
+      <div className={cn("relative w-full", !isInModal && "overflow-hidden md:overflow-hidden")}>
+        <Card className={cn("relative flex w-full flex-col bg-white border-0 shadow-none", !isInModal && "overflow-hidden md:overflow-hidden")}>
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -1413,11 +1606,11 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
           </CardContent>
         </Card>
       </div>
-      {/* Fixed Action Buttons at Bottom of Viewport */}
-      {actionButtonsVisible && postCallActions.length > 0 && (
+      {/* Fixed Action Buttons at Bottom of Viewport or Modal */}
+      {!hideActionBar && actionButtonsVisible && postCallActions.length > 0 && (
         <div 
-          className="fixed bottom-0 right-0 z-50 border-t border-slate-200 bg-white px-6 py-4 shadow-lg"
-          style={{ 
+          className={`${isInModal ? 'sticky bottom-0 shrink-0' : 'fixed bottom-0 right-0'} z-[100] border-t border-slate-200 bg-white px-6 py-4 shadow-lg`}
+          style={isInModal ? { pointerEvents: 'auto' } : { 
             left: 'var(--sidebar-width, 288px)',
             transition: 'left 0.2s ease-in-out'
           }}
@@ -1430,7 +1623,7 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
                 label={action.label}
                 onClick={action.onClick}
                 disabled={updating || fetchingNext}
-                loading={processingAction === action.loadingKey && updating}
+                loading={Boolean(processingAction === action.loadingKey && updating)}
                 tone={action.tone}
                 className="flex-1 min-w-[160px]"
               />
@@ -1446,7 +1639,12 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       />
       <CallBackModal
         open={showCallBackDialog}
-        onOpenChange={setShowCallBackDialog}
+        onOpenChange={(open) => {
+          setShowCallBackDialog(open);
+          if (onCallBackModalChange) {
+            onCallBackModalChange(open);
+          }
+        }}
         onSubmit={handleSubmitCallBackLater}
         updating={updating}
       />
@@ -1525,6 +1723,8 @@ const LeadCardCarousel: React.FC<LeadCardCarouselProps> = ({ config }) => {
       )}
     </div>
   );
-};
+});
+
+LeadCardCarousel.displayName = "LeadCardCarousel";
 
 export default LeadCardCarousel;

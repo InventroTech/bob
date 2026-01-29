@@ -103,13 +103,28 @@ export const crmLeadsApi = {
    */
   async getLeadStats(statusEndpoint?: string): Promise<any> {
     try {
-      const endpoint = statusEndpoint || '/get-lead-status';
+      // Map old endpoint to new one for backward compatibility
+      let endpoint = statusEndpoint || '/crm-records/leads/stats/';
+      if (endpoint === '/get-lead-status' || endpoint === 'get-lead-status') {
+        endpoint = '/crm-records/leads/stats/';
+      }
+      
       const response = await apiClient.get(endpoint);
       
       return response.data;
     } catch (error) {
       console.error('[crmLeadsApi] Error fetching lead statistics:', error);
-      throw error;
+      // Return default stats instead of throwing to prevent UI errors
+      return {
+        total_leads: 0,
+        in_queue: 0,
+        assigned: 0,
+        call_later: 0,
+        scheduled: 0,
+        won: 0,
+        lost: 0,
+        closed: 0
+      };
     }
   },
 
@@ -124,18 +139,53 @@ export const crmLeadsApi = {
     try {
       const body = {
         event: eventName,
-        record_id: recordId,
+        record_id: Number(recordId),
         payload,
       };
 
-      await apiClient.post('/crm-records/records/events/', body);
+      console.log('[crmLeadsApi] Sending event request:', { url: '/crm-records/records/events/', body });
+      const response = await apiClient.post('/crm-records/records/events/', body);
+      console.log('[crmLeadsApi] Event request successful:', response.status, response.data);
       return true;
     } catch (error: any) {
       console.error('[crmLeadsApi] Event request failed', {
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
+        error: error.message,
+        stack: error.stack,
       });
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch a specific lead/record by ID
+   */
+  async getLeadById(recordId: number): Promise<any | null> {
+    try {
+      const response = await apiClient.get(`/crm-records/records/${recordId}/`);
+      const leadData = response.data;
+
+      if (!leadData) {
+        return null;
+      }
+
+      // Handle nested data structures
+      let processedLead = leadData;
+      if (leadData?.data && typeof leadData.data === 'object') {
+        processedLead = { ...leadData, ...leadData.data };
+        if (leadData.data.name && !processedLead.name) {
+          processedLead.name = leadData.data.name;
+        }
+      }
+
+      return processedLead;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      console.error('[crmLeadsApi] Error fetching lead by ID:', error);
       throw error;
     }
   },
