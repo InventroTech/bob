@@ -3,9 +3,11 @@ import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { Dialog, DialogPortal } from "@/components/ui/dialog";
 import { format, addDays, addHours, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
 interface CallbackSlot {
   id: string;
@@ -38,6 +40,15 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
   const [callbackSlotSections, setCallbackSlotSections] = useState<CallbackSlotSection[]>([]);
   const [selectedCallbackSlot, setSelectedCallbackSlot] = useState<string | null>(null);
   const [assignCallbackToSelf, setAssignCallbackToSelf] = useState(false);
+
+  // Debug: log when modal opens unexpectedly
+  useEffect(() => {
+    if (open) {
+      console.log('[CallBackModal] Modal opened - open prop is true');
+      // Log stack trace to see what triggered it
+      console.trace('[CallBackModal] Stack trace');
+    }
+  }, [open]);
 
   const buildCallbackSections = (): CallbackSlotSection[] => {
     const now = new Date();
@@ -104,19 +115,31 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
         }
       }}
     >
-      <DialogContent
-        className="fixed inset-y-0 right-0 left-auto top-0 h-full w-full max-w-[320px] translate-x-0 translate-y-0 rounded-none border-l border-[#ded8d2] bg-[#f9f6f2] p-0 shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:w-[320px]"
-        aria-describedby="callback-dialog-description"
-      >
-        <div className="flex h-full flex-col overflow-hidden">
-          <div className="border-b border-[#e7e1db] px-4 py-4 flex-shrink-0">
-            <DialogHeader className="space-y-1 p-0">
-              <DialogTitle className="text-[20px] font-semibold text-black">Select time</DialogTitle>
-              <p id="callback-dialog-description" className="text-sm text-[#8c8176]">
-                Pick a time within the next 48 hours.
-              </p>
-            </DialogHeader>
-          </div>
+      <DialogPortal>
+        {/* No overlay - modal slides in from right without blocking main content */}
+        <DialogPrimitive.Content
+          className={cn(
+            "fixed inset-y-0 right-0 left-auto top-0 h-full w-full max-w-[320px] translate-x-0 translate-y-0 rounded-none border-l border-[#ded8d2] bg-[#f9f6f2] p-0 shadow-2xl z-[200]",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+            "sm:w-[320px]"
+          )}
+          aria-describedby="callback-dialog-description"
+          style={{ zIndex: 200 }}
+        >
+          <div className="flex h-full flex-col overflow-hidden">
+            <div className="border-b border-[#e7e1db] px-4 py-4 flex-shrink-0 flex items-center justify-between">
+              <div className="space-y-1">
+                <DialogPrimitive.Title className="text-[20px] font-semibold text-black">Select time</DialogPrimitive.Title>
+                <DialogPrimitive.Description id="callback-dialog-description" className="text-sm text-[#8c8176]">
+                  Pick a time within the next 48 hours.
+                </DialogPrimitive.Description>
+              </div>
+              <DialogPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </DialogPrimitive.Close>
+            </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 min-h-0">
             {callbackSlotSections.map((section) => (
               <div key={section.label} className="space-y-3">
@@ -178,7 +201,8 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
             </div>
           </div>
         </div>
-      </DialogContent>
+      </DialogPrimitive.Content>
+      </DialogPortal>
     </Dialog>
   );
 };
