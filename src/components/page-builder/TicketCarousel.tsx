@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import {
   Popover,
   PopoverContent,
@@ -792,9 +793,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
         <p>No ticket available</p>
-        <Button onClick={fetchFirstTicket} disabled={loading}>
+        <CustomButton onClick={fetchFirstTicket} disabled={loading} loading={loading}>
           Get Tickets
-        </Button>
+        </CustomButton>
       </div>
     );
   }
@@ -812,16 +813,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   return (
     <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
       <div className="mt-4 flex  w-[70%] justify-end">
-        <Button
+        <CustomButton
           onClick={handleTakeBreak}
           variant="outline"
           size="sm"
-          className="flex items-center gap-2"
+          icon={<Coffee className="h-3 w-3" />}
           disabled={updating}
         >
-          <Coffee className="h-3 w-3" />
           Take a Break
-        </Button>
+        </CustomButton>
       </div>
       <div className="relative w-[70%] h-full">
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
@@ -1036,7 +1036,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       </div>
                       {ticket.selectedOtherReasons.length > 0 && (
                         <div className="pt-2 border-t">
-                          <Button
+                          <CustomButton
                             variant="ghost"
                             size="sm"
                             onClick={() => setTicket(prev => ({
@@ -1047,7 +1047,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                             className="text-xs"
                           >
                             Clear All
-                          </Button>
+                          </CustomButton>
                         </div>
                       )}
                     </div>
@@ -1096,7 +1096,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         </div>
   <div className="buttons flex flex-row items-center justify-center gap-[200px]  w-full">
         <div className="flex justify-center items-center gap-3 mt-4 pt-3  ">
-          <Button
+          <CustomButton
             onClick={() => handleActionButton("Not Connected")}
             size="sm"
             variant="outline"
@@ -1104,9 +1104,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             disabled={updating}
           >
             Not Connected
-          </Button>
+          </CustomButton>
           
-          <Button
+          <CustomButton
             onClick={() => handleActionButton("Call Later")}
             size="sm"
             variant="outline"
@@ -1114,12 +1114,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             disabled={updating}
           >
             Call Later
-          </Button>
+          </CustomButton>
           
         </div>
         <div className="flex justify-center items-center gap-3 mt-4 pt-3  ">
           
-          <Button
+          <CustomButton
             onClick={() => handleActionButton("Can't Resolve")}
             size="sm"
             variant="outline"
@@ -1127,29 +1127,18 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             disabled={updating}
           >
             Can't Resolve
-          </Button>
+          </CustomButton>
          
-          <Button
+          <CustomButton
             onClick={() => handleActionButton("Resolve")}
             size="sm"
             variant="outline"
-            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={updating || fetchingNext}
+            loading={updating || fetchingNext}
           >
-            {updating ? (
-              <>
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                Updating...
-              </>
-            ) : fetchingNext ? (
-              <>
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                Loading Next Ticket...
-              </>
-            ) : (
-              "Resolve"
-            )}
-          </Button>
+            {updating ? 'Updating...' : fetchingNext ? 'Loading Next Ticket...' : 'Resolve'}
+          </CustomButton>
         </div>
         </div>
       </div>

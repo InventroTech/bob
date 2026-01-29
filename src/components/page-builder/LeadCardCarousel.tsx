@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
+import { CustomButton } from "@/components/ui/CustomButton";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
 import { CallBackModal } from "./CallBackModal";
+import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
 
 export interface LeadCardCarouselHandle {
   handleTrialActivated: () => void;
@@ -41,6 +43,9 @@ interface LeadCardCarouselProps {
     title?: string;
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
+    leadAssignmentWebhookUrl?: string;
+    whatsappTemplatesApiEndpoint?: string;
+    apiPrefix?: 'supabase' | 'renderer';
   };
   initialLead?: LeadData | null;
   onLeadUpdate?: (updatedLead: LeadData | null) => void;
@@ -149,6 +154,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
 
+
   // Ensure modals are closed when component mounts or when in modal mode
   useEffect(() => {
     if (isInModal) {
@@ -157,6 +163,10 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       setShowProfileModal(false);
     }
   }, [isInModal]);
+
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
+  const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
     priority: "Medium",
@@ -412,14 +422,51 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     window.open(`tel:${clean}`);
   };
 
-  const handleWhatsAppLead = (phone?: string, whatsappLink?: string) => {
+  const handleWhatsAppLead = (phone?: string, link?: string) => {
+    // Open modal instead of directly opening WhatsApp
+    setWhatsappPhone(phone || "");
+    setWhatsappLink(link);
+    setShowWhatsAppModal(true);
+  };
+
+  const handleTemplateSelected = (templateText: string | null) => {
+    let whatsappUrl: string;
+    
     if (whatsappLink) {
-      window.open(whatsappLink, "_blank");
-      return;
+      // If there's a direct WhatsApp link, append template text if provided
+      if (templateText) {
+        const separator = whatsappLink.includes('?') ? '&' : '?';
+        whatsappUrl = `${whatsappLink}${separator}text=${encodeURIComponent(templateText)}`;
+      } else {
+        whatsappUrl = whatsappLink;
+      }
+    } else {
+      const clean = normalizePhoneForLinks(whatsappPhone);
+      if (!clean) {
+        toast({
+          title: "Error",
+          description: "Invalid phone number",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Open WhatsApp with template text or without
+      if (templateText) {
+        whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(templateText)}`;
+      } else {
+        whatsappUrl = `https://wa.me/${clean}`;
+      }
     }
-    const clean = normalizePhoneForLinks(phone);
-    if (!clean) return;
-    window.open(`https://wa.me/${clean}`, "_blank");
+    
+    // Create a temporary anchor element and click it - works better with popup blockers
+    const link = document.createElement('a');
+    link.href = whatsappUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const primaryPhone = useMemo(() => {
@@ -1347,15 +1394,16 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
             </div>
 
             {/* Action Button */}
-            <div className="text-center">
-              <Button 
+            <div className="flex justify-center items-center w-full">
+              <CustomButton 
                 onClick={handleGetLeads} 
                 disabled={loading}
-                className="w-full max-w-xs"
+                loading={loading}
+                className="max-w-xs"
                 size="lg"
               >
-                {loading ? "Loading..." : "Get Leads"}
-              </Button>
+                Get Leads
+              </CustomButton>
             </div>
           </div>
         </div>
@@ -1368,26 +1416,24 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
         <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0 gap-2">
-          <Button
+          <CustomButton
             onClick={handleRefresh}
             variant="outline"
             size="sm"
-            className="flex items-center gap-2"
+            icon={<RefreshCw className="h-3 w-3" />}
             disabled={updating || !currentLead}
           >
-            <RefreshCw className="h-3 w-3" />
             Refresh
-          </Button>
-          <Button
+          </CustomButton>
+          <CustomButton
             onClick={handleTakeBreak}
             variant="outline"
             size="sm"
-            className="flex items-center gap-2"
+            icon={<Coffee className="h-3 w-3" />}
             disabled={updating}
           >
-            <Coffee className="h-3 w-3" />
             Take a Break
-          </Button>
+          </CustomButton>
         </div>
         <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
@@ -1536,43 +1582,41 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <Button
+                <CustomButton
                   type="button"
                   variant="outline"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  icon={<RefreshCw className="h-4 w-4 text-gray-500" />}
+                  className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
                   onClick={handleRefresh}
                   disabled={updating || !currentLead}
-                >
-                  <RefreshCw className="h-4 w-4 text-gray-500" />
-                </Button>
-                <Button
+                />
+                <CustomButton
                   type="button"
                   variant="outline"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                  icon={<Coffee className="h-4 w-4 text-gray-500" />}
+                  className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
                   onClick={handleTakeBreak}
                   disabled={updating}
-                >
-                  <Coffee className="h-4 w-4 text-gray-500" />
-                </Button>
-                <Button
+                />
+                <CustomButton
                   type="button"
                   variant="outline"
-                  className="flex items-center gap-2 rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                  icon={<FaWhatsapp className="h-4 w-4 text-[#344054]" />}
+                  className="rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
                   onClick={() => handleWhatsAppLead(primaryPhone, currentLead?.whatsapp_link)}
                   disabled={!primaryPhone || updating || fetchingNext}
                 >
-                  <FaWhatsapp className="h-4 w-4 text-[#344054]" />
                   WhatsApp
-                </Button>
-                <Button
+                </CustomButton>
+                <CustomButton
                   type="button"
-                  className="flex items-center gap-2 rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                  icon={<Phone className="h-4 w-4" />}
+                  className="rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
                   onClick={() => handleCallLead(primaryPhone)}
                   disabled={!primaryPhone || updating || fetchingNext}
                 >
-                  <Phone className="h-4 w-4" />
-                  <span>{formattedPhoneNumber}</span>
-                </Button>
+                  {formattedPhoneNumber}
+                </CustomButton>
               </div>
             </div>
           </div>
@@ -1648,6 +1692,15 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         onSubmit={handleSubmitCallBackLater}
         updating={updating}
       />
+      <WhatsAppTemplateModal
+        open={showWhatsAppModal}
+        onOpenChange={setShowWhatsAppModal}
+        phone={whatsappPhone}
+        whatsappLink={whatsappLink}
+        apiEndpoint={config?.whatsappTemplatesApiEndpoint}
+        apiPrefix={config?.apiPrefix || 'renderer'}
+        onSelectTemplate={handleTemplateSelected}
+      />
 
       {/* Profile Modal */}
       {showProfileModal && (currentLead?.linkedin_profile || currentLead?.website) && (
@@ -1681,9 +1734,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                   <p>Profile Information</p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleCloseProfile}>
-                <X className="h-4 w-4" />
-              </Button>
+              <CustomButton variant="ghost" size="sm" icon={<X className="h-4 w-4" />} onClick={handleCloseProfile} />
             </div>
             
             {/* Modal Content */}

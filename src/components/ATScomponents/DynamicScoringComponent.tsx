@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CustomButton } from '@/components/ui/CustomButton';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -491,15 +492,14 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
+                      <CustomButton
                         variant="outline"
                         size="sm"
+                        icon={<Trash2 className="h-4 w-4" />}
                         onClick={() => handleRemoveRule(rule.id)}
                         disabled={rules.length === 1}
                         className="hover:bg-muted hover:text-foreground"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -509,38 +509,30 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
 
           {/* Add Rule Button */}
           <div className="flex items-center gap-4">
-            <Button
+            <CustomButton
               variant="outline"
+              icon={<Plus className="h-4 w-4" />}
               onClick={handleAddRule}
               className="hover:bg-muted hover:text-foreground"
             >
-              <Plus className="h-4 w-4 mr-2" />
               Add Rule
-            </Button>
+            </CustomButton>
           </div>
 
           {/* Calculate Button and Result */}
           <div className="flex items-center justify-between pt-4 border-t border-gray-200">
             <div className="flex items-center gap-3">
-              <Button
+              <CustomButton
                 type="button"
                 variant="outline"
+                icon={!calculating ? <Play className="h-4 w-4" /> : undefined}
                 onClick={handleCalculate}
                 disabled={calculating}
+                loading={calculating}
                 className="hover:bg-muted hover:text-foreground text-body-lg-semibold px-6"
               >
-                {calculating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Calculating...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Run
-                  </>
-                )}
-              </Button>
+                Run
+              </CustomButton>
             </div>
             {pyroValue !== null && (
               <div className="flex items-center gap-3">

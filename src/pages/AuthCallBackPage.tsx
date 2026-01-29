@@ -1,5 +1,5 @@
 // /pages/AuthCallbackPage.tsx
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -8,8 +8,15 @@ import { authService } from '@/lib/api/services/auth';
 const AuthCallbackPage = () => {
   const navigate = useNavigate();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const hasProcessed = useRef(false);
 
   useEffect(() => {
+    // Prevent duplicate execution
+    if (hasProcessed.current) {
+      return;
+    }
+    hasProcessed.current = true;
+
     const fetchAndRedirect = async () => {
       const { data: { user }, error } = await supabase.auth.getUser();
 
@@ -80,7 +87,7 @@ const AuthCallbackPage = () => {
       }
 
       localStorage.setItem('user_email', user.email);
-      toast.success('Google login successful!');
+      toast.success('Google login successful!', { duration: 2000});
       navigate(`/app/${tenantSlug}`);
     };
 

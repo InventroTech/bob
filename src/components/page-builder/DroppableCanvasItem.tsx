@@ -17,6 +17,7 @@ export const DroppableCanvasItem: React.FC<DroppableCanvasItemProps> = ({ id, ch
     data: { // Add data to identify this as a canvas item target
       isCanvasItem: true,
       componentId: id,
+      accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','header'], // Accept all component types
     },
   });
 
@@ -31,7 +32,7 @@ export const DroppableCanvasItem: React.FC<DroppableCanvasItemProps> = ({ id, ch
     <div
       ref={setNodeRef}
       className={cn(
-        "droppable-canvas-item relative p-1 group", // Added 'group' for hover state targeting
+        "droppable-canvas-item relative group", // Removed p-1 padding to eliminate borders
         isOver && "outline-dashed outline-2 outline-offset-2 outline-primary rounded" // Highlight when dragged over
       )}
       onClick={() => onSelect?.(id)}
