@@ -7,7 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Filter, User, MessageCircle, ExternalLink, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { Filter, User, MessageCircle, ExternalLink, CheckCircle2, XCircle, Clock, AlertCircle, Search } from 'lucide-react';
 import LeadCardCarousel from './LeadCardCarousel';
 import { Button } from '@/components/ui/button';
 import ShortProfileCard from '../ui/ShortProfileCard';
@@ -1497,11 +1497,21 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
         {/* Filter Section */}
         <div className="mb-4">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
             <h5>
               {config?.title || "Leads"}
             </h5>
             <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search..."
+                  value={displaySearchTerm}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
               <CustomButton
                 variant="outline"
                 size="sm"
