@@ -208,6 +208,8 @@ interface TicketTableProps {
     }>;
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
+    /** Comma-separated field names to search in (e.g. "name,email,subject"). Sent as search_fields with search param. */
+    searchFields?: string;
   };
 }
 
@@ -249,6 +251,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
+  /** Base data for client-side search (initial load or filter result). Search runs across all fields on this. */
+  const baseDataRef = useRef<any[]>([]);
   const [pagination, setPagination] = useState<{
     totalCount: number;
     numberOfPages: number;
@@ -289,6 +293,24 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     })) || defaultColumns,
     [config?.columns]
   );
+
+  /** Client-side search: match term against ALL ticket fields (table columns + any other field in the row) */
+  const matchRowBySearchTerm = useCallback((row: any, term: string, _columns: Column[]): boolean => {
+    if (!term || !term.trim()) return true;
+    const lower = term.trim().toLowerCase();
+    // Search every field in the row so "all" fields are included
+    for (const key of Object.keys(row)) {
+      const val = row[key];
+      if (val == null) continue;
+      if (typeof val === 'object' && val !== null && !Array.isArray(val)) continue; // skip nested objects
+      if (Array.isArray(val)) {
+        if (val.some((v: any) => v != null && String(v).toLowerCase().includes(lower))) return true;
+        continue;
+      }
+      if (String(val).toLowerCase().includes(lower)) return true;
+    }
+    return false;
+  }, []);
 
   // Get unique values for filters
   const getUniqueResolutionStatuses = () => {
@@ -485,16 +507,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         params.append('created_at__lte', endDateTime.toISOString());
       }
       
-      // Add search filter - use the latest search value from ref
-      const currentSearchTerm = latestSearchValueRef.current;
-      if (currentSearchTerm.trim() !== '') {
-        params.append('search_fields', currentSearchTerm.trim());
-        console.log(`Adding search filter: "${currentSearchTerm}"`);
-      }
+      // Do NOT send search to API - search is done client-side across all fields
+      const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
+      const isSearching = currentSearchTerm !== '';
       
-      // Add pagination
+      // Pagination: request enough results so client-side search has data to filter
       params.append('page', '1');
-      params.append('page_size', '10'); // Get more results
+      params.append('page_size', isSearching ? '100' : '50');
       
       const fullUrl = `${apiUrl}?${params.toString()}`;
       console.log('Filtered API URL:', fullUrl);
@@ -528,17 +547,19 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         return;
       }
       
-      console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length || responseData.results?.length || 0}`);
+      console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length ?? responseData.results?.length ?? (Array.isArray(responseData) ? responseData.length : '?')}`);
       
-      // Handle different response formats
-      let tickets = [];
+      // Handle different response formats (array or single object)
+      let tickets: any[] = [];
       let pageMeta = null;
       
-      if (responseData.results && Array.isArray(responseData.results)) {
-        tickets = responseData.results;
+      const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+      
+      if (responseData.results !== undefined) {
+        tickets = ensureArray(responseData.results);
         pageMeta = responseData.page_meta;
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        tickets = responseData.data;
+      } else if (responseData.data !== undefined) {
+        tickets = ensureArray(responseData.data);
         pageMeta = responseData.page_meta;
       } else if (Array.isArray(responseData)) {
         tickets = responseData;
@@ -571,9 +592,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         display_pic_url: ticket.display_pic_url || null
       }));
 
-      // Set filtered data with the current search context
-      console.log(`Setting filtered data for sequence ${currentSequence} with ${transformedData.length} tickets, search: "${searchTerm}"`);
-      setFilteredData(transformedData);
+      baseDataRef.current = transformedData;
+      const toShow = isSearching
+        ? transformedData.filter((row: any) => matchRowBySearchTerm(row, currentSearchTerm, tableColumns))
+        : transformedData;
+      console.log(`Setting filtered data for sequence ${currentSequence}: ${transformedData.length} from API, ${toShow.length} after search "${currentSearchTerm}"`);
+      setFilteredData(toShow);
       setFiltersApplied(true);
       
       // Update pagination data if available
@@ -626,94 +650,30 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = null;
     }
+    baseDataRef.current = data;
     setFilteredData(data); // Show all tickets again
     setFiltersApplied(false);
   };
 
-  // Store the latest search value in a ref to avoid closure issues
   const latestSearchValueRef = useRef<string>('');
-  const lastApiCallTimeRef = useRef<number>(0);
-  const MIN_TIME_BETWEEN_CALLS = 2000; // Minimum 2 seconds between API calls
 
-  // Simplified debounced search function - always use latest value with rate limiting
+  // Simple search: filter only the tickets already loaded. No API call.
   const debouncedSearch = useCallback((value: string) => {
-    // Update the latest search value immediately
     latestSearchValueRef.current = value;
-    
-    console.log(`User typed: "${value}"`);
-    
-    // Update display immediately - no delay for better UX
     setDisplaySearchTerm(value);
-    // DON'T update searchTerm here - only update it when we actually make the API call
-    
-    // Clear existing timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
-    // Cancel any previous request immediately
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    // Set new timeout for API call with rate limiting
+
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
     searchTimeoutRef.current = setTimeout(() => {
-      // ALWAYS use the latest value from ref, ignore closure value
-      const finalSearchValue = latestSearchValueRef.current;
-      
-      // Check rate limiting
-      const now = Date.now();
-      const timeSinceLastCall = now - lastApiCallTimeRef.current;
-      
-      if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
-        const remainingWait = MIN_TIME_BETWEEN_CALLS - timeSinceLastCall;
-        console.log(`Rate limiting: waiting ${remainingWait}ms before API call for "${finalSearchValue}"`);
-        
-        // Show rate limiting indicator
-        setRateLimited(true);
-        
-        // Wait additional time before making API call
-        setTimeout(() => {
-          console.log(`Executing delayed API call for: "${finalSearchValue}"`);
-          setRateLimited(false);
-          makeApiCall(finalSearchValue);
-        }, remainingWait);
-      } else {
-        console.log(`Executing API call for latest value: "${finalSearchValue}" (original closure value was: "${value}")`);
-        makeApiCall(finalSearchValue);
-      }
-      
-      function makeApiCall(searchValue: string) {
-        // Update last API call time
-        lastApiCallTimeRef.current = Date.now();
-        
-        // NOW update search term to match what we're actually searching for
-        setSearchTerm(searchValue);
-        
-        // Increment sequence for this actual API call
-        const apiSequence = ++requestSequenceRef.current;
-        
-        // If search is empty, show all data (reset to initial state)
-        if (searchValue.trim() === '') {
-          // If no other filters are applied, show original data
-          if (resolutionStatusFilter.length === 0 && 
-              assignedToFilter === 'all' && 
-              posterStatusFilter.length === 0 && 
-              !dateRangeFilter.startDate && 
-              !dateRangeFilter.endDate) {
-            setFilteredData(data);
-            setFiltersApplied(false);
-          } else {
-            // Apply other filters without search
-            applyFilters(apiSequence);
-          }
-        } else {
-          // Apply filters with search
-          applyFilters(apiSequence);
-        }
-      }
-    }, 1000); // Increased from 500ms to 1000ms
-  }, [applyFilters, data, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter]);
+      const term = latestSearchValueRef.current.trim();
+      setSearchTerm(term);
+      const base = baseDataRef.current.length > 0 ? baseDataRef.current : data;
+      const next = term === ''
+        ? base
+        : base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
+      setFilteredData(next);
+    }, 300);
+  }, [data, matchRowBySearchTerm, tableColumns]);
 
   // Handle search input change from PrajaTable
   const handleSearchChange = useCallback((value: string) => {
@@ -924,15 +884,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         params.append('created_at__lte', endDateTime.toISOString());
       }
       
-      // Add search filter
-      const currentSearchTerm = latestSearchValueRef.current;
-      if (currentSearchTerm.trim() !== '') {
-        params.append('search_fields', currentSearchTerm.trim());
-      }
+      // Search is client-side only - do not send search to API
+      const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
+      const isSearching = currentSearchTerm !== '';
       
-      // Add pagination with selected page
       params.append('page', page.toString());
-      params.append('page_size', '10');
+      params.append('page_size', isSearching ? '100' : '50');
       
       const fullUrl = `${apiUrl}?${params.toString()}`;
 
@@ -951,14 +908,15 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
       const responseData = await response.json();
       
-      let tickets = [];
+      const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+      let tickets: any[] = [];
       let pageMeta = null;
       
-      if (responseData.data && Array.isArray(responseData.data)) {
-        tickets = responseData.data;
+      if (responseData.data !== undefined) {
+        tickets = ensureArray(responseData.data);
         pageMeta = responseData.page_meta;
-      } else if (responseData.results && Array.isArray(responseData.results)) {
-        tickets = responseData.results;
+      } else if (responseData.results !== undefined) {
+        tickets = ensureArray(responseData.results);
         pageMeta = responseData.page_meta;
       } else {
         throw new Error('Invalid data format received');
@@ -982,7 +940,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }));
 
       setData(transformedData);
-      setFilteredData(transformedData);
+      const toShow = isSearching
+        ? transformedData.filter((row: any) => matchRowBySearchTerm(row, currentSearchTerm, tableColumns))
+        : transformedData;
+      setFilteredData(toShow);
       
       if (pageMeta) {
         setPagination({
@@ -1034,7 +995,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const baseUrl = apiPrefix === 'renderer' 
           ? import.meta.env.VITE_RENDER_API_URL 
           : import.meta.env.VITE_API_URI;
-        const apiUrl = `${baseUrl}${endpoint}`;
+        const apiUrl = `${baseUrl}${endpoint}?page=1&page_size=50`;
         console.log('API URL:', apiUrl);
         
         const headers: Record<string, string> = {
@@ -1104,6 +1065,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Set the data (empty array if no tickets found)
         setData(transformedData);
         setFilteredData(transformedData);
+        baseDataRef.current = transformedData;
         console.log('Data loaded. FiltersApplied:', filtersApplied, 'Data count:', transformedData.length);
         
         // Set pagination data if available
@@ -1197,19 +1159,31 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
         {/* Filter Section */}
         <div className="mb-4">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
             <h5>
               {config?.title || "Support Tickets"}
             </h5>
-            <CustomButton
-              variant="outline"
-              size="sm"
-              icon={<Filter className="h-4 w-4" />}
-              onClick={() => setShowFilters(!showFilters)}
-              className="bg-gray-100 hover:bg-gray-200 rounded-md"
-            >
-              Filters
-            </CustomButton>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search..."
+                  value={displaySearchTerm}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+              <CustomButton
+                variant="outline"
+                size="sm"
+                icon={<Filter className="h-4 w-4" />}
+                onClick={() => setShowFilters(!showFilters)}
+                className="bg-gray-100 hover:bg-gray-200 rounded-md"
+              >
+                Filters
+              </CustomButton>
+            </div>
           </div>
         </div>
 
