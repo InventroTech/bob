@@ -349,7 +349,7 @@ const AddUserComponent: React.FC = () => {
           {/* Action Buttons */}
           <div className="flex gap-2">
             <Button 
-              className="flex-1" 
+              className="flex-1 bg-black text-white hover:bg-black border-none" 
               onClick={handleAddUser}
               disabled={!selectedRoleId}
             >
@@ -358,7 +358,7 @@ const AddUserComponent: React.FC = () => {
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1 text-black border-gray-300 hover:bg-white hover:text-black"
               onClick={() => setShowRoleFields(!showRoleFields)}
               disabled={!!selectedRoleId}
             >
@@ -393,7 +393,7 @@ const AddUserComponent: React.FC = () => {
               </div>
               
               <div className="flex gap-2">
-                <Button type="button" onClick={handleAddRole} className="flex-1">
+                <Button type="button" onClick={handleAddRole} className="flex-1 bg-black text-white border-none hover:bg-black">
                   Create Role
                 </Button>
                 <Button 
@@ -404,7 +404,7 @@ const AddUserComponent: React.FC = () => {
                     setNewRoleName('');
                     setNewRoleKey('');
                   }}
-                  className="flex-1"
+                  className="flex-1 text-black border-gray-300 hover:bg-white hover:text-black"
                 >
                   Cancel
                 </Button>

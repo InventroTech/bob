@@ -543,7 +543,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                             <PopoverTrigger asChild>
                               <Button
                                 variant="outline"
-                                className="w-full justify-between text-left font-normal"
+                                className="w-full justify-between text-left font-normal hover:bg-gray-50"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <span className="truncate">
@@ -571,7 +571,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                                       return (
                                         <div 
                                           key={leadType} 
-                                          className="flex items-center space-x-2 rounded-sm px-2 py-1.5 hover:bg-accent cursor-pointer"
+                                          className="flex items-center space-x-2 rounded-sm px-2 py-1.5 hover:bg-gray-50 cursor-pointer"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleLeadTypeToggle(assignment.user_id, leadType, e);
@@ -584,6 +584,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                                               handleLeadTypeToggle(assignment.user_id, leadType);
                                             }}
                                             onClick={(e) => e.stopPropagation()}
+                                            className="data-[state=checked]:bg-black data-[state=checked]:border-black border-gray-300"
                                           />
                                           <Label 
                                             htmlFor={`${assignment.user_id}-${leadType}`}
@@ -614,7 +615,8 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                         <div className="flex flex-wrap gap-1">
                           {assignment.lead_types.length > 0 ? (
                             assignment.lead_types.map((leadType) => (
-                              <Badge key={leadType} variant="secondary" className="text-xs">
+                              <Badge key={leadType} /* Removed variant="secondary" and added black background styling */
+                              className="text-xs bg-black text-white border-none hover:bg-black">
                                 {leadType.replace(/_/g, ' ')}
                               </Badge>
                             ))
@@ -673,7 +675,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                             }}
                             disabled={!hasChanges(assignment.user_id) || saving === assignment.user_id}
                             size="sm"
-                            className="w-full"
+                            className="w-full bg-black text-white hover:bg-gray-800 disabled:bg-gray-300 disabled:text-gray-500 transition-colors"
                           >
                             {saving === assignment.user_id ? (
                               <>
