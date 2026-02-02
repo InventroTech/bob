@@ -827,10 +827,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   };
 
   return (
-    <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l p-4 shadow-lg z-50 overflow-y-auto">
+    <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l border-border p-4 shadow-lg z-50 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
-        <h5>Component Configuration</h5>
-        <CustomButton variant="ghost" size="sm" onClick={onClose}>
+        <h5 className="text-sm font-semibold text-foreground">Component Configuration</h5>
+        <CustomButton variant="outline" size="sm" onClick={onClose} className="border-border text-foreground hover:bg-muted">
           Close
         </CustomButton>
       </div>
@@ -1099,8 +1099,7 @@ const PageBuilder = () => {
     if (!activeComponent) return null;
     
     return (
-      // Render a very simple div for the overlay
-      <div className="p-2 bg-primary text-primary-foreground rounded shadow-lg">
+      <div className="p-2 bg-foreground text-background rounded-md shadow-lg text-sm font-medium">
         Dragging: {activeComponent}
       </div>
     );
@@ -1218,38 +1217,38 @@ const PageBuilder = () => {
     >
       <div className="min-h-screen flex flex-col">
         {/* Builder Header (includes page name input) */}
-        <header className="border-b px-6 py-3 bg-background z-10">
+        <header className="border-b border-border px-6 py-3 bg-background z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Input
                 value={pageName}
                 onChange={(e) => setPageName(e.target.value)}
                 placeholder="Page Name"
-                className="w-1/3"
+                className="w-1/3 text-sm font-medium border-border"
               />
               <Input
                 value={headerTitle}
                 onChange={(e) => setHeaderTitle(e.target.value)}
                 placeholder="Header Title"
-                className="w-1/3"
+                className="w-1/3 text-sm font-medium border-border"
               />
-              <CustomButton variant="outline" size="sm" icon={<Eye className="h-4 w-4" />}>
+              <CustomButton variant="outline" size="sm" icon={<Eye className="h-4 w-4" />} className="border-border text-foreground hover:bg-muted">
                 Preview
               </CustomButton>
               <select
                 id="role"
-                className="w-full border px-3 py-2 rounded text-sm"
+                className="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground"
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value)}
               >
                 <option value="">-- Select Role --</option>
-          {roles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
-          ))}
-        </select>
-              <CustomButton size="sm" onClick={handleSavePage} disabled={isSaving} loading={isSaving} icon={!isSaving ? <Save className="h-4 w-4" /> : undefined}>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+              <CustomButton variant="default" size="sm" onClick={handleSavePage} disabled={isSaving} loading={isSaving} icon={!isSaving ? <Save className="h-4 w-4" /> : undefined}>
                 Save
               </CustomButton>
             </div>
@@ -1259,11 +1258,19 @@ const PageBuilder = () => {
         {/* Builder Content (Sidebar + Canvas) - Now wrapped */}
         <div className="flex-1 flex">
           {/* Left Sidebar - Components & Settings */}
-          <div className="w-[300px] border-r flex flex-col">
+          <div className="w-[300px] border-r border-border flex flex-col bg-background">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="border-b">
-                <TabsList className="w-full rounded-none h-12 bg-transparent">
-                   {/* ... existing TabsTrigger ... */}
+              <div className="border-b border-border">
+                <TabsList className="w-full rounded-none h-12 bg-muted/50 p-0 gap-0">
+                  <TabsTrigger value="components" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-background data-[state=active]:text-foreground text-muted-foreground font-medium text-sm">
+                    Components
+                  </TabsTrigger>
+                  <TabsTrigger value="layers" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-background data-[state=active]:text-foreground text-muted-foreground font-medium text-sm">
+                    Layers
+                  </TabsTrigger>
+                  <TabsTrigger value="settings" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-background data-[state=active]:text-foreground text-muted-foreground font-medium text-sm">
+                    Settings
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -1272,62 +1279,62 @@ const PageBuilder = () => {
                   <div className="p-4 space-y-4">
                     {/* Layout Components */}
                     <div className="space-y-2">
-                      <h5>Layout Components</h5>
+                      <h5 className="text-sm font-semibold text-foreground">Layout Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="container"
                           label="Container"
-                          icon={<Layout className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Layout className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="split"
                           label="Split View"
-                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="collapseCard"
                           label="Collapse Card"
-                          icon={<ChevronDown className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<ChevronDown className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="leadCarousel"
                           label="Lead Carousel"
-                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="ticketCarousel"
                           label="Ticket Carousel"
-                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="ticketBarGraph"
                           label="Ticket Bar Graph"
-                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="progressBar"
                           label="Progress Bar"
-                          icon={<AlignCenter className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<AlignCenter className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="leadProgressBar"
                           label="Lead Progress Bar"
-                          icon={<Target className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Target className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="leadAssignment"
                           label="Lead Assignment"
-                          icon={<Target className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Target className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="callAttemptMatrix"
                           label="Call Attempt Matrix"
-                          icon={<Settings className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Settings className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="temporaryLogout"
                           label="Temporary Logout"
-                          icon={<LogOut className="h-8 w-8 mb-1 text-red-500" />}
+                          icon={<LogOut className="h-8 w-8 mb-1 text-foreground" />}
                         />
                       </div>
                     </div>
@@ -1336,104 +1343,104 @@ const PageBuilder = () => {
 
                     {/* Data Components */}
                     <div className="space-y-2">
-                      <h5>Data Components</h5>
+                      <h5 className="text-sm font-semibold text-foreground">Data Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="form"
                           label="Form"
-                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="table"
                           label="Table"
-                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="dataCard"
                           label="Data Card"
-                          icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="leadTable"
                           label="Lead Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="oeLeadsTable"
                           label="OE Leads Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="ticketTable"
                           label="Ticket Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="addUser"
                           label="Add User"
-                          icon={<User className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<User className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="routingRules"
                           label="Routing Rules"
-                          icon={<Users className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Users className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="openModalButton"
                           label="Modal Button"
-                          icon={<MousePointer className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<MousePointer className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="jobManager"
                           label="Job Manager"
-                          icon={<Briefcase className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Briefcase className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="jobsPage"
                           label="Jobs Board"
-                          icon={<Users className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Users className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="applicantTable"
                           label="Applicant Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="fileUpload"
                           label="File Upload"
-                          icon={<Upload className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Upload className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="dynamicScoring"
                           label="Dynamic Scoring"
-                          icon={<Calculator className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Calculator className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="whatsappTemplate"
                           label="WhatsApp Template"
-                          icon={<MessageSquare className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<MessageSquare className="h-8 w-8 mb-1 text-foreground" />}
                         />
                       </div>
                     </div>
                     <Separator />
                     {/* Analytical Components */}
                     <div className="space-y-2">
-                      <h5>Analytical Components</h5>
+                      <h5 className="text-sm font-semibold text-foreground">Analytical Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="stackedBarChart"
                           label="Stacked Bar Chart"
-                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="lineChart"
                           label="Line Chart"
-                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="barGraph"
                           label="Bar Graph"
-                          icon={<Grid3X3 className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Grid3X3 className="h-8 w-8 mb-1 text-foreground" />}
                         />
                       </div>
                     </div>
@@ -1442,22 +1449,22 @@ const PageBuilder = () => {
 
                     {/* Basic Components */}
                     <div className="space-y-2">
-                      <h5>Basic Components</h5>
+                      <h5 className="text-sm font-semibold text-foreground">Basic Components</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="text"
                           label="Text"
-                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="button"
                           label="Button"
-                          icon={<Layers className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="image"
                           label="Image"
-                          icon={<ImageIcon className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<ImageIcon className="h-8 w-8 mb-1 text-foreground" />}
                         />
                       </div>
                     </div>
@@ -1466,32 +1473,32 @@ const PageBuilder = () => {
 
                     {/* Analytics Components */}
                     <div className="space-y-2">
-                      <h5>Analytics</h5>
+                      <h5 className="text-sm font-semibold text-foreground">Analytics</h5>
                       <div className="grid grid-cols-2 gap-2">
                         <DraggableSidebarItem
                           id="barGraph"
                           label="Bar Graph"
-                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="lineChart"
                           label="Line Chart"
-                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="stackedBarChart"
                           label="Stacked Bar"
-                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="teamDashboard"
                           label="Team Dashboard"
-                          icon={<TrendingUp className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="operationsPrograms"
                           label="Operations & Programs"
-                          icon={<Database className="h-8 w-8 mb-1 text-primary" />}
+                          icon={<Database className="h-8 w-8 mb-1 text-foreground" />}
                         />
                       </div>
                     </div>
@@ -1516,10 +1523,10 @@ const PageBuilder = () => {
               setCanvasRef(node);
               canvasRef.current = node;
             }}
-            className={`flex-1 bg-muted/30 overflow-visible border-2 ${
-              isOver ? 'border-primary border-dashed' : 'border-dashed'
+            className={`flex-1 bg-muted/30 overflow-visible border-2 border-border ${
+              isOver ? 'border-foreground border-dashed' : 'border-dashed'
             } flex-1 flex flex-col bg-background shadow-sm ${
-              activeDragId ? 'ring-2 ring-primary/20' : ''
+              activeDragId ? 'ring-2 ring-foreground/20' : ''
             }`}
             data-droppable="true"
             id="canvas-drop-area"
@@ -1533,7 +1540,7 @@ const PageBuilder = () => {
             {/* Content area within the droppable div */}
             <div
               className={`flex-1 flex flex-col ${
-                isOver ? 'bg-primary/5 transition-colors duration-150' : ''
+                isOver ? 'bg-muted/50 transition-colors duration-150' : ''
               }`}
             >
               {/* Render dropped components OR placeholder */}
@@ -1547,7 +1554,7 @@ const PageBuilder = () => {
                     Drag from the sidebar onto this area
                   </p>
                   <div className="mt-6">
-                    <Button variant="outline">
+                    <Button variant="outline" className="border-border text-foreground hover:bg-muted">
                       Choose a Template
                     </Button>
                   </div>

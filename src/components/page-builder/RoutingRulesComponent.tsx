@@ -590,15 +590,15 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
           ) : rules.length === 0 ? (
             <p className="text-body-sm text-gray-500 py-4">No routing rules configured yet.</p>
           ) : (
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead className="font-semibold text-gray-900">User</TableHead>
-                    <TableHead className="font-semibold text-gray-900">Queue</TableHead>
-                    <TableHead className="font-semibold text-gray-900">Active</TableHead>
-                    <TableHead className="font-semibold text-gray-900">Conditions</TableHead>
-                    <TableHead className="font-semibold text-gray-900 w-[80px] text-right">Actions</TableHead>
+                  <TableRow className="bg-black border-b border-gray-200">
+                    <TableHead className="text-white font-medium">User</TableHead>
+                    <TableHead className="text-white font-medium">Queue</TableHead>
+                    <TableHead className="text-white font-medium">Active</TableHead>
+                    <TableHead className="text-white font-medium">Conditions</TableHead>
+                    <TableHead className="text-white font-medium w-[80px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

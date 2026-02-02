@@ -65,20 +65,20 @@ const UsersPage = () => {
           </CustomButton>
         </div>
 
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm text-gray-500 uppercase tracking-wider">
+            <thead>
+              <tr className="bg-black border-b border-gray-200">
+                <th className="px-6 py-3 text-left text-sm font-medium text-white">
                   Name
                 </th>
-                <th className="px-6 py-3 text-left text-sm text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-sm font-medium text-white">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-sm text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-sm font-medium text-white">
                   Role
                 </th>
-                <th className="px-6 py-3 text-left text-sm text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-sm font-medium text-white">
                   Created At
                 </th>
               </tr>

@@ -47,7 +47,7 @@ const Sidebar = () => {
         <div className="flex items-center gap-2 group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:justify-center">
           <Sparkles className="h-6 w-6 flex-shrink-0 text-crm-primary" />
           <span className="text-lg font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-            CRM Builder
+            BOB by Pyro
           </span>
         </div>
         <SidebarTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-sidebar-border bg-sidebar text-sidebar-foreground transition hover:bg-sidebar-accent hover:text-primary" />
