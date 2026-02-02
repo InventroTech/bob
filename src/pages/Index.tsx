@@ -28,7 +28,7 @@ const Index = () => {
       description: "Build a custom page using our drag-and-drop builder",
       icon: Plus,
       link: "/builder/new",
-      color: "bg-purple-50 text-purple-500 dark:bg-purple-900 dark:text-purple-300",
+      color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
     },
     {
       title: "Templates",
@@ -66,7 +66,7 @@ const Index = () => {
       <div className="space-y-8 animate-fade-in">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h3>Welcome to CRM Builder</h3>
+            <h3>Welcome to BOB by Pyro</h3>
             <p className="text-muted-foreground mt-1">
               Build, customize, and manage your CRM pages
             </p>
@@ -159,7 +159,7 @@ const Index = () => {
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <div className="bg-purple-50 text-purple-500 p-1 rounded-md mt-0.5">
+                  <div className="bg-gray-100 text-gray-700 p-1 rounded-md mt-0.5">
                     <Plus className="h-4 w-4" />
                   </div>
                   <div>

@@ -1615,14 +1615,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
       {/* Ticket Modal */}
       <Dialog open={isTicketModalOpen} onOpenChange={setIsTicketModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex justify-between items-center">
-              <DialogTitle>Ticket Details</DialogTitle>
-            </div>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto p-6">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-lg font-semibold text-foreground">Ticket Details</DialogTitle>
           </DialogHeader>
           {selectedTicket && (
-            <div className="mt-2">
+            <div className="mt-2 -mx-2">
               <TicketCarousel 
                 config={{
                   title: `Ticket #${selectedTicket.id}`

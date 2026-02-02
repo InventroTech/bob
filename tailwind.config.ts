@@ -63,11 +63,11 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				},
 				crm: {
-					primary: "#7E69AB",
-					secondary: "#6E59A5",
-					accent: "#9b87f5",
-					light: "#E5DEFF",
-					dark: "#1A1F2C",
+					primary: "#0a0a0a",
+					secondary: "#404040",
+					accent: "#737373",
+					light: "#f5f5f5",
+					dark: "#262626",
 				}
 			},
 			borderRadius: {
