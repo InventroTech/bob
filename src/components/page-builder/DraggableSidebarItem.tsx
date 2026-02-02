@@ -18,14 +18,14 @@ export const DraggableSidebarItem: React.FC<DraggableSidebarItemProps> = ({ id, 
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={`draggable-component cursor-grab border-dashed transition-colors ${
-        isDragging ? 'opacity-30' : 'hover:border-primary/50'
+      className={`draggable-component cursor-grab border-dashed border-border transition-colors ${
+        isDragging ? 'opacity-30' : 'hover:border-foreground/50'
       }`}
       data-component-type={id}
     >
       <CardContent className="p-3 flex flex-col items-center justify-center text-center">
-        <div className="h-8 w-8 mb-1 text-primary flex items-center justify-center">{icon}</div>
-        <p className="text-sm font-medium">{label}</p>
+        <div className="h-8 w-8 mb-1 text-foreground flex items-center justify-center">{icon}</div>
+        <p className="text-sm font-medium text-foreground">{label}</p>
       </CardContent>
     </Card>
   );

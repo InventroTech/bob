@@ -25,7 +25,7 @@ const demoMenuItems = [
   },
   {
     id: 4,
-    color: 'bg-purple-500',
+    color: 'bg-gray-500',
     value: 'Pending_feedback_collection'
   },
   {

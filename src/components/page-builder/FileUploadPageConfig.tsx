@@ -232,7 +232,7 @@ export const FileUploadPageConfig: React.FC<FileUploadPageConfigProps> = ({
               handleInputChange('maxFileSize', 10);
               handleInputChange('multiple', true);
             }}
-            className="px-3 py-2 text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 rounded border border-purple-200"
+            className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded border border-gray-200"
           >
             Documents
           </button>

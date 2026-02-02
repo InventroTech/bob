@@ -428,22 +428,22 @@ const AddUserPage = () => {
           <h5>Users</h5>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
             </div>
           ) : users.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               No users found
             </div>
           ) : (
-            <div className="border rounded-lg">
+            <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Created At</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                  <TableRow className="bg-black border-b border-gray-200">
+                    <TableHead className="text-white font-medium">Name</TableHead>
+                    <TableHead className="text-white font-medium">Email</TableHead>
+                    <TableHead className="text-white font-medium">Role</TableHead>
+                    <TableHead className="text-white font-medium">Created At</TableHead>
+                    <TableHead className="text-white font-medium text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
