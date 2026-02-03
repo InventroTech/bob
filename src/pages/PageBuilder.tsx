@@ -299,7 +299,13 @@ export const componentMap: Record<string, React.FC<any>> = {
 interface ColumnConfig {
   key: string;
   label: string;
-  type: 'text' | 'chip' | 'date' | 'number';
+  type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+  linkField?: string;
+  openCard?: boolean | string;
+  actionApiEndpoint?: string;
+  actionApiMethod?: string;
+  actionApiHeaders?: string;
+  actionApiPayload?: string;
 }
 
 // Move ConfigurationPanel outside the main component
@@ -472,7 +478,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   }, [localColumns, debouncedUpdateWithDelay]);
 
   // Handle individual column field changes
-  const handleColumnFieldChange = useCallback((index: number, field: keyof ColumnConfig, value: string) => {
+  const handleColumnFieldChange = useCallback((index: number, field: keyof ColumnConfig, value: string | boolean) => {
     const newColumns = [...localColumns];
     newColumns[index] = { ...newColumns[index], [field]: value };
     setLocalColumns(newColumns);

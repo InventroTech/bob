@@ -21,13 +21,19 @@ import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
-import { CustomTable } from '@/components/ui/CustomTable';
+import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
+import { buildActionApiRequest } from '@/lib/actionApiUtils';
 
 interface Column {
   header: string;
   accessor: string;
-  type: 'text' | 'chip' | 'link';
-  linkField?: string; // Field to use as link for this column
+  type: 'text' | 'chip' | 'link' | 'action';
+  linkField?: string;
+  openCard?: boolean | string;
+  actionApiEndpoint?: string;
+  actionApiMethod?: string;
+  actionApiHeaders?: string;
+  actionApiPayload?: string;
 }
 
 // Status color mapping - matching design colors
@@ -256,9 +262,14 @@ interface LeadTableProps {
     columns?: Array<{
       key: string;
       label: string;
-      type: 'text' | 'chip' | 'date' | 'number' | 'link';
+      type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
       transform?: (value: any, row: any) => any;
       width?: string;
+      openCard?: boolean | string;
+      actionApiEndpoint?: string;
+      actionApiMethod?: string;
+      actionApiHeaders?: string;
+      actionApiPayload?: string;
     }>;
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
@@ -572,8 +583,43 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     sources: []
   });
 
+  // Action button click: open card and/or call API (defined before renderCell which uses it)
+  const handleActionClick = useCallback(async (row: any, col: Column) => {
+    const openCard = col.openCard === true || col.openCard === 'true';
+    if (openCard) {
+      setSelectedLead(row);
+      setIsLeadModalOpen(true);
+    }
+    if (col.actionApiEndpoint?.trim()) {
+      try {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        const { url, method, headers, body } = buildActionApiRequest(
+          {
+            endpoint: col.actionApiEndpoint,
+            method: col.actionApiMethod,
+            headers: col.actionApiHeaders,
+            payload: col.actionApiPayload,
+          },
+          row,
+          baseUrl,
+          {
+            'Content-Type': 'application/json',
+            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          },
+          'lead_id'
+        );
+        const res = await fetch(url, { method, headers, body });
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        toast({ title: 'Success', description: 'Action completed' });
+      } catch (err: any) {
+        toast({ title: 'Error', description: err?.message || 'Action failed', variant: 'destructive' });
+      }
+    }
+  }, [session?.access_token, toast]);
+
   // Custom cell renderer - completely generic
-  const renderCell = useCallback((row: any, column: Column, columnIndex: number, rowIndex: number = 0) => {
+  const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
     let value = row[column.accessor];
     
     // Handle case where value is an object - extract the actual value
@@ -693,6 +739,22 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         </Badge>
       );
     }
+
+    // Action button column
+    if (column.type === 'action') {
+      return (
+        <CustomButton
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleActionClick(row, column as Column);
+          }}
+        >
+          {column.header || 'Action'}
+        </CustomButton>
+      );
+    }
     
     // Special handling: Make phone_number/phone_no clickable if whatsapp_link exists
     const isPhoneColumn = column.accessor === 'phone_number' || 
@@ -774,14 +836,19 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     
     // Default text rendering
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors]);
+  }, [config?.statusColors, handleActionClick]);
 
   // Memoize table columns
   const tableColumns: Column[] = useMemo(() => 
     config?.columns?.map(col => ({
-    header: col.label,
-    accessor: col.key,
-      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
+      header: col.label,
+      accessor: col.key,
+      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text',
+      openCard: col.openCard,
+      actionApiEndpoint: col.actionApiEndpoint,
+      actionApiMethod: col.actionApiMethod,
+      actionApiHeaders: col.actionApiHeaders,
+      actionApiPayload: col.actionApiPayload,
     })) || defaultColumns,
     [config?.columns]
   );
@@ -1595,7 +1662,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
               accessor: col.accessor,
               type: col.type,
               linkField: col.linkField,
-            }))}
+              openCard: col.openCard,
+              actionApiEndpoint: col.actionApiEndpoint,
+              actionApiMethod: col.actionApiMethod,
+              actionApiHeaders: col.actionApiHeaders,
+              actionApiPayload: col.actionApiPayload,
+            })) as CustomTableColumn[]}
             data={filteredData}
             loading={tableLoading}
             emptyMessage={config?.emptyMessage || 'No data found'}
