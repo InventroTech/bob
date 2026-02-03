@@ -8,11 +8,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DynamicFilterConfig, FilterConfig } from './DynamicFilterConfig';
 
-interface ColumnConfig {
+export interface ColumnConfig {
   key: string;
   label: string;
-  type: 'text' | 'chip' | 'date' | 'number' | 'link';
+  type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
   linkField?: string; // Field to use as link for this column
+  /** For action type: open detail card (lead/ticket) on click */
+  openCard?: boolean | string;
+  /** For action type: API endpoint to call when action button is clicked */
+  actionApiEndpoint?: string;
+  /** Request method: GET, POST, PUT, PATCH, DELETE */
+  actionApiMethod?: string;
+  /** Custom headers as JSON object, e.g. {"X-Custom": "value"} */
+  actionApiHeaders?: string;
+  /** Request body as JSON. Use {id}, {propertyName} for row values, __ROW__ for full row */
+  actionApiPayload?: string;
 }
 
 interface TableConfigProps {
@@ -133,7 +143,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                     <Label>Column Type</Label>
                     <Select
                       value={column.type}
-                      onValueChange={(value: 'text' | 'chip' | 'date' | 'number' | 'link') =>
+                      onValueChange={(value: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action') =>
                         handleColumnFieldChange(index, 'type', value)
                       }
                     >
@@ -146,6 +156,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                         <SelectItem value="date">Date</SelectItem>
                         <SelectItem value="number">Number</SelectItem>
                         <SelectItem value="link">Link</SelectItem>
+                        <SelectItem value="action">Action Button</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -163,6 +174,73 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                         Field to use as link for this column (e.g., user_profile_link for User ID)
                       </p>
                     </div>
+                  )}
+                  {column.type === 'action' && (
+                    <>
+                      <div className="col-span-2 flex items-center gap-2">
+                        <Switch
+                          id={`openCard-${index}`}
+                          checked={column.openCard === true || column.openCard === 'true'}
+                          onCheckedChange={(checked) =>
+                            handleColumnFieldChange(index, 'openCard', checked ? 'true' : 'false')
+                          }
+                        />
+                        <Label htmlFor={`openCard-${index}`} className="text-sm font-normal cursor-pointer">
+                          Open detail card on click (lead/ticket modal)
+                        </Label>
+                      </div>
+                      <div className="col-span-2">
+                        <Label>API Endpoint (optional)</Label>
+                        <Input
+                          value={column.actionApiEndpoint || ''}
+                          onChange={(e) => handleColumnFieldChange(index, 'actionApiEndpoint', e.target.value)}
+                          placeholder="e.g., /api/tickets/123/action"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Use {`{id}`} for row id (e.g. /api/tickets/{`{id}`}/resolve)
+                        </p>
+                      </div>
+                      <div>
+                        <Label>Request Method</Label>
+                        <Select
+                          value={column.actionApiMethod || 'POST'}
+                          onValueChange={(v) => handleColumnFieldChange(index, 'actionApiMethod', v)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="GET">GET</SelectItem>
+                            <SelectItem value="POST">POST</SelectItem>
+                            <SelectItem value="PUT">PUT</SelectItem>
+                            <SelectItem value="PATCH">PATCH</SelectItem>
+                            <SelectItem value="DELETE">DELETE</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2">
+                        <Label>Headers (optional, JSON)</Label>
+                        <Input
+                          value={column.actionApiHeaders || ''}
+                          onChange={(e) => handleColumnFieldChange(index, 'actionApiHeaders', e.target.value)}
+                          placeholder='e.g. {"X-Custom-Header": "value"}'
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Custom headers merged with defaults (Authorization, Content-Type, X-Tenant-Slug)
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <Label>Payload (optional, JSON)</Label>
+                        <Input
+                          value={column.actionApiPayload || ''}
+                          onChange={(e) => handleColumnFieldChange(index, 'actionApiPayload', e.target.value)}
+                          placeholder='e.g. {"lead_id": "{id}"} or __ROW__ for full row'
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Use {`{id}`}, {`{propertyName}`} for row values. Leave empty or __ROW__ for full row.
+                        </p>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

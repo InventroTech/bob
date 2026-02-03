@@ -15,12 +15,25 @@ export interface CustomTableColumn {
   /**
    * Column type for rendering
    */
-  type?: 'text' | 'chip' | 'link';
+  type?: 'text' | 'chip' | 'link' | 'action';
   
   /**
    * Field to use as link (for link type)
    */
   linkField?: string;
+  
+  /**
+   * For action type: open detail card (lead/ticket) on click
+   */
+  openCard?: boolean | string;
+  
+  /**
+   * For action type: API endpoint to call when action button is clicked
+   */
+  actionApiEndpoint?: string;
+  actionApiMethod?: string;
+  actionApiHeaders?: string;
+  actionApiPayload?: string;
   
   /**
    * Custom width

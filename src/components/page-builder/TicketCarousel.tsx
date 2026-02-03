@@ -815,7 +815,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   //showing the ticket card
   return (
-    <div className={`mainCard w-full flex flex-col justify-center items-center gap-2 ${isCompact ? '' : 'border'}`}>
+    <div className={`font-body mainCard w-full flex flex-col justify-center items-center gap-2 ${isCompact ? '' : 'border'}`}>
       <div className={`mt-4 flex justify-end ${isCompact ? 'w-full' : 'w-[70%]'}`}>
         <CustomButton
           onClick={handleTakeBreak}
