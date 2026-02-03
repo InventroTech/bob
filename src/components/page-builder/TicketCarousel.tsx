@@ -164,6 +164,8 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
       return { label: 'Premium Extended', color: 'text-indigo-600', bgColor: 'bg-indigo-50' };
     case 'trial_expired':
       return { label: 'Trial Expired', color: 'text-red-600', bgColor: 'bg-red-50' };
+    case 'premium_expired':
+      return { label: 'Premium Expired', color: 'text-red-600', bgColor: 'bg-red-50' };
     case 'in_grace_period':
       return { label: 'Grace Period', color: 'text-orange-600', bgColor: 'bg-orange-50' };
     case 'auto_pay_not_set_up':
@@ -809,10 +811,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       })
     : "N/A";
 
+  const isCompact = !!initialTicket;
+
   //showing the ticket card
   return (
-    <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-      <div className="mt-4 flex  w-[70%] justify-end">
+    <div className={`font-body mainCard w-full flex flex-col justify-center items-center gap-2 ${isCompact ? '' : 'border'}`}>
+      <div className={`mt-4 flex justify-end ${isCompact ? 'w-full' : 'w-[70%]'}`}>
         <CustomButton
           onClick={handleTakeBreak}
           variant="outline"
@@ -823,7 +827,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           Take a Break
         </CustomButton>
       </div>
-      <div className="relative w-[70%] h-full">
+      <div className={`relative h-full ${isCompact ? 'w-full' : 'w-[70%]'}`}>
       <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
         {fetchingNext && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
@@ -1094,8 +1098,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             </div>
           </div>
         </div>
-  <div className="buttons flex flex-row items-center justify-center gap-[200px]  w-full">
-        <div className="flex justify-center items-center gap-3 mt-4 pt-3  ">
+  <div className={`buttons flex flex-row items-center justify-center w-full ${isCompact ? 'gap-3 mt-6 pt-4 border-t border-gray-200 flex-wrap' : 'gap-[200px] mt-4 pt-3'}`}>
+        <div className="flex justify-center items-center gap-3">
           <CustomButton
             onClick={() => handleActionButton("Not Connected")}
             size="sm"
@@ -1105,7 +1109,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           >
             Not Connected
           </CustomButton>
-          
           <CustomButton
             onClick={() => handleActionButton("Call Later")}
             size="sm"
@@ -1115,10 +1118,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           >
             Call Later
           </CustomButton>
-          
         </div>
-        <div className="flex justify-center items-center gap-3 mt-4 pt-3  ">
-          
+        <div className="flex justify-center items-center gap-3">
           <CustomButton
             onClick={() => handleActionButton("Can't Resolve")}
             size="sm"
@@ -1128,7 +1129,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           >
             Can't Resolve
           </CustomButton>
-         
           <CustomButton
             onClick={() => handleActionButton("Resolve")}
             size="sm"
@@ -1140,7 +1140,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             {updating ? 'Updating...' : fetchingNext ? 'Loading Next Ticket...' : 'Resolve'}
           </CustomButton>
         </div>
-        </div>
+      </div>
       </div>
       
       {/* Take a Break button outside the main card at bottom */}

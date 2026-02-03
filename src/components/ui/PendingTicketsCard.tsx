@@ -243,7 +243,7 @@ export const PendingTicketsCard: React.FC<PendingTicketsCardProps> = ({
           <Button 
             onClick={onGetFirstTicket} 
             disabled={loading}
-            className="w-full"
+            className="w-full bg-black text-white hover:bg-gray-800 disabled:bg-gray-300 disabled:text-gray-500 transition-colors"
           >
             {loading ? (
               <>

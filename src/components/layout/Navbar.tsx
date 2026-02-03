@@ -53,7 +53,7 @@ const Navbar = ({ user }: NavbarProps) => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div>
-            <h5>CRM Builder</h5>
+            <h5>BOB by Pyro</h5>
           </div>
         </div>
         <div className="flex items-center gap-4">

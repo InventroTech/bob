@@ -20,11 +20,17 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { convertGMTtoIST } from '@/lib/timeUtils';
+import { buildActionApiRequest } from '@/lib/actionApiUtils';
 
 interface Column {
   header: string;
   accessor: string;
-  type: 'text' | 'chip' | 'link';
+  type: 'text' | 'chip' | 'link' | 'action';
+  openCard?: boolean | string;
+  actionApiEndpoint?: string;
+  actionApiMethod?: string;
+  actionApiHeaders?: string;
+  actionApiPayload?: string;
 }
 
 // Status color mapping - matching design colors
@@ -204,7 +210,12 @@ interface TicketTableProps {
     columns?: Array<{
       key: string;
       label: string;
-      type: 'text' | 'chip' | 'date' | 'number' | 'link';
+      type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+      openCard?: boolean | string;
+      actionApiEndpoint?: string;
+      actionApiMethod?: string;
+      actionApiHeaders?: string;
+      actionApiPayload?: string;
     }>;
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
@@ -289,7 +300,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     config?.columns?.map(col => ({
       header: col.label,
       accessor: col.key,
-      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : 'text'
+      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text',
+      openCard: col.openCard,
+      actionApiEndpoint: col.actionApiEndpoint,
+      actionApiMethod: col.actionApiMethod,
+      actionApiHeaders: col.actionApiHeaders,
+      actionApiPayload: col.actionApiPayload,
     })) || defaultColumns,
     [config?.columns]
   );
@@ -686,6 +702,41 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     setSelectedTicket(row);
     setIsTicketModalOpen(true);
   }, []);
+
+  // Action button click: open card and/or call API
+  const handleActionClick = useCallback(async (row: any, col: Column) => {
+    const openCard = col.openCard === true || col.openCard === 'true';
+    if (openCard) {
+      setSelectedTicket(row);
+      setIsTicketModalOpen(true);
+    }
+    if (col.actionApiEndpoint?.trim()) {
+      try {
+        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        const { url, method, headers, body } = buildActionApiRequest(
+          {
+            endpoint: col.actionApiEndpoint,
+            method: col.actionApiMethod,
+            headers: col.actionApiHeaders,
+            payload: col.actionApiPayload,
+          },
+          row,
+          baseUrl,
+          {
+            'Content-Type': 'application/json',
+            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+            'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          },
+          'ticket_id'
+        );
+        const res = await fetch(url, { method, headers, body });
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        toast.success('Action completed');
+      } catch (err: any) {
+        toast.error(err?.message || 'Action failed');
+      }
+    }
+  }, [session?.access_token]);
 
   // Handle pagination navigation
   const handleNextPage = async () => {
@@ -1156,7 +1207,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   return (
     <>
-      <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
+      <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
         {/* Filter Section */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
@@ -1550,6 +1601,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                               ) : (
                                 <span className="text-sm text-gray-400">N/A</span>
                               )
+                            ) : col.type === 'action' ? (
+                              <CustomButton
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleActionClick(row, col);
+                                }}
+                              >
+                                {col.header || 'Action'}
+                              </CustomButton>
                             ) : (
                               <span className="text-sm text-gray-600">{row[col.accessor] || 'N/A'}</span>
                             )}
@@ -1615,14 +1678,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
       {/* Ticket Modal */}
       <Dialog open={isTicketModalOpen} onOpenChange={setIsTicketModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex justify-between items-center">
-              <DialogTitle>Ticket Details</DialogTitle>
-            </div>
+        <DialogContent className="font-body max-w-3xl max-h-[85vh] overflow-y-auto p-6">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-lg font-semibold text-foreground">Ticket Details</DialogTitle>
           </DialogHeader>
           {selectedTicket && (
-            <div className="mt-2">
+            <div className="mt-2 -mx-2">
               <TicketCarousel 
                 config={{
                   title: `Ticket #${selectedTicket.id}`

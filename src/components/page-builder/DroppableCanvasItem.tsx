@@ -33,7 +33,7 @@ export const DroppableCanvasItem: React.FC<DroppableCanvasItemProps> = ({ id, ch
       ref={setNodeRef}
       className={cn(
         "droppable-canvas-item relative group", // Removed p-1 padding to eliminate borders
-        isOver && "outline-dashed outline-2 outline-offset-2 outline-primary rounded" // Highlight when dragged over
+        isOver && "outline-dashed outline-2 outline-offset-2 outline-foreground rounded" // Highlight when dragged over
       )}
       onClick={() => onSelect?.(id)}
       data-droppable-id={id}
@@ -55,7 +55,7 @@ export const DroppableCanvasItem: React.FC<DroppableCanvasItemProps> = ({ id, ch
       {/* Insertion indicator line (visual cue) */}
       {isOver && (
         <div
-          className="absolute top-0 left-0 right-0 h-[3px] bg-primary -translate-y-1/2 pointer-events-none rounded"
+          className="absolute top-0 left-0 right-0 h-[3px] bg-foreground -translate-y-1/2 pointer-events-none rounded"
           aria-hidden="true"
         />
       )}

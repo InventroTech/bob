@@ -23,8 +23,8 @@ const ShortProfileCard = ({ image, name = '', address = '' }: ShortProfileCardPr
         <AvatarImage src={image || ''} alt={name || 'User'} />
         <AvatarFallback className="bg-gray-200 text-gray-600">{initials || 'U'}</AvatarFallback>
       </Avatar>
-      <div className='flex flex-col'>
-        <h1 className='text-sm font-bold text-gray-900'>{name || 'Unnamed'}</h1>
+      <div className='flex flex-col font-body'>
+        <span className='text-sm font-bold text-gray-900'>{name || 'Unnamed'}</span>
         <p className='text-xs text-gray-500'>{address || 'No address'}</p>
       </div>
     </div>

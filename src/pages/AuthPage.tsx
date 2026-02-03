@@ -60,15 +60,15 @@ const AuthPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
       <Tabs defaultValue="signin" className="w-full max-w-sm">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="signin">Sign In</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+          <TabsTrigger value="signin" className="data-[state=active]:bg-foreground data-[state=active]:text-background">Sign In</TabsTrigger>
           <TabsTrigger value="signup" disabled>Sign Up</TabsTrigger>
         </TabsList>
 
         <TabsContent value="signin">
           <Card className="shadow-lg animate-fade-in">
             <CardHeader className="text-center">
-              <KeyRound className="mx-auto h-10 w-10 text-primary mb-2" />
+              <KeyRound className="mx-auto h-10 w-10 text-foreground mb-2" />
               <CardTitle className="text-2xl">Sign In</CardTitle>
               <CardDescription className="text-gray-700">Enter your email and password to access your account.</CardDescription>
             </CardHeader>
