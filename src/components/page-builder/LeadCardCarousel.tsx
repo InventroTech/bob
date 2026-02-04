@@ -972,6 +972,10 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     if (extra?.reason) {
       payload.reason = extra.reason;
     }
+    // Set lead_stage to SNOOZED when Call Back Later is triggered (always, regardless of nextCallAt)
+    if (action === "Call Back Later") {
+      payload.lead_stage = "SNOOZED";
+    }
     if (extra?.nextCallAt) {
       payload.next_call_at = extra.nextCallAt;
     }
