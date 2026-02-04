@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import type { LeadCardCarouselHandle } from './LeadCardCarousel';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/hooks/useTenant';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -335,11 +336,15 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const requestSequenceRef = useRef<number>(0);
   const lastFetchedConfigRef = useRef<string>(''); // Track last fetched config/filter combination
   const { session, user } = useAuth();
+  const { customRole } = useTenant();
   const sessionUser = session?.user ?? null;
   const activeUser = user ?? sessionUser ?? null;
   const activeUserId = activeUser?.id ?? null;
   const activeUserMetadata = activeUser?.user_metadata ?? null;
   const activeAppMetadata = activeUser?.app_metadata ?? null;
+  
+  // Check if user is GM (General Manager) - GM should see all leads
+  const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
 
   const runtimeContext = useMemo(() => ({
     session,
@@ -396,10 +401,54 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   // Resolve the template once per config/user combo, but keep raw endpoint as a fallback
   const resolvedApiEndpoint = useMemo(() => {
     if (!config?.apiEndpoint) return undefined;
-    return applyPlaceholderTemplate(config.apiEndpoint, resolvePlaceholderValue);
-  }, [config?.apiEndpoint, resolvePlaceholderValue]);
+    let endpoint = applyPlaceholderTemplate(config.apiEndpoint, resolvePlaceholderValue);
+    
+    // GM users should see all leads - remove assigned_to from URL if present
+    if (isGM && endpoint) {
+      try {
+        const url = new URL(endpoint, window.location.origin);
+        if (url.searchParams.has('assigned_to')) {
+          url.searchParams.delete('assigned_to');
+          endpoint = url.pathname + url.search + url.hash;
+          // Remove leading origin if it was added
+          if (endpoint.startsWith(window.location.origin)) {
+            endpoint = endpoint.substring(window.location.origin.length);
+          }
+          console.log('[LeadTableComponent] GM user detected, removed assigned_to from endpoint URL');
+        }
+      } catch (e) {
+        // If URL parsing fails (relative URL), try regex replacement
+        endpoint = endpoint.replace(/[?&]assigned_to=[^&]*/g, '');
+        // Clean up double ? or trailing &
+        endpoint = endpoint.replace(/\?&/g, '?').replace(/[?&]$/, '');
+        console.log('[LeadTableComponent] GM user detected, removed assigned_to from endpoint URL (regex fallback)');
+      }
+    }
+    
+    return endpoint;
+  }, [config?.apiEndpoint, resolvePlaceholderValue, isGM]);
 
   const effectiveApiEndpoint = resolvedApiEndpoint ?? config?.apiEndpoint;
+
+  // Helper function to remove assigned_to from params for GM users
+  const removeAssignedToForGM = useCallback((params: URLSearchParams) => {
+    if (isGM && params.has('assigned_to')) {
+      params.delete('assigned_to');
+      console.log('[LeadTableComponent] GM user detected, removed assigned_to from query params');
+    }
+    return params;
+  }, [isGM]);
+
+  // Helper function to build URL with query string (handles endpoints that already have query params)
+  const buildUrlWithParams = useCallback((endpoint: string, params: URLSearchParams) => {
+    const queryString = params.toString();
+    if (!queryString) return endpoint;
+    
+    // Check if endpoint already has query parameters
+    const hasQueryParams = endpoint.includes('?');
+    const separator = hasQueryParams ? '&' : '?';
+    return `${endpoint}${separator}${queryString}`;
+  }, []);
 
   // Normalize filters to ensure non-empty, unique keys
   const normalizedFilters = useMemo(() => {
@@ -889,8 +938,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page_size', '10');
       }
 
-      const queryString = params.toString();
-      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
+      // Remove assigned_to for GM users
+      removeAssignedToForGM(params);
+
+      const url = buildUrlWithParams(endpoint, params);
 
       const response = await apiClient.get(url, {
         signal: abortController.signal
@@ -1012,8 +1063,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       params.append('page', '1');
       params.append('page_size', '10');
 
-      const queryString = params.toString();
-      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
+      // Remove assigned_to for GM users
+      removeAssignedToForGM(params);
+
+      const url = buildUrlWithParams(endpoint, params);
 
       const response = await apiClient.get(url);
       const responseData = response.data;
@@ -1282,8 +1335,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page_size', '10');
       }
 
-      const queryString = params.toString();
-      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
+      // Remove assigned_to for GM users
+      removeAssignedToForGM(params);
+
+      const url = buildUrlWithParams(endpoint, params);
 
       const response = await apiClient.get(url);
       const responseData = response.data;
@@ -1407,11 +1462,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page', '1');
         params.append('page_size', '10');
 
+        // Remove assigned_to for GM users
+        removeAssignedToForGM(params);
+
         // Update URL with current parameters (including URL-restored filters)
         updateURL(params);
 
-        const queryString = params.toString();
-        const url = queryString ? `${endpoint}?${queryString}` : endpoint;
+        const url = buildUrlWithParams(endpoint, params);
 
         const response = await apiClient.get(url);
         const responseData = response.data;
