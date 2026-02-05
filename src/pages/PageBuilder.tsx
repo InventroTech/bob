@@ -112,6 +112,7 @@ import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
 import { TeamDashboardComponent, TeamDashboardConfig } from "@/components/page-builder";
 import { OperationsProgramsComponent, OperationsProgramsConfig } from "@/components/page-builder";
+import { UserHierarchyComponent, UserHierarchyConfig } from "@/components/page-builder";
 // Import configuration components
 import {
   DataCardConfig,
@@ -246,6 +247,9 @@ interface ComponentConfig {
   // LeadProgressBar specific fields
   targetCount?: number;
   segmentCount?: number;
+  // UserHierarchy specific fields
+  showTable?: boolean;
+  showDiagram?: boolean;
 }
 
 // Update CanvasComponentData to include config
@@ -293,6 +297,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   whatsappTemplate: WhatsAppTemplateComponent,
   teamDashboard: TeamDashboardComponent,
   operationsPrograms: OperationsProgramsComponent,
+  userHierarchy: UserHierarchyComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -361,6 +366,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     deleteEndpoint?: string; // Separate endpoint for deletes (DELETE)
     apiMode?: 'localhost' | 'renderer'; // API mode for JobManager
     useDemoData?: boolean; // Use demo data instead of API calls
+    // UserHierarchy specific fields
+    // title already in base; showTable, showDiagram below
+    showTable?: boolean;
+    showDiagram?: boolean;
   };
 
   // Local state for all input fields
@@ -408,6 +417,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     deleteEndpoint: initialConfig.deleteEndpoint || '',
     apiMode: (initialConfig.apiMode === 'direct' ? 'localhost' : initialConfig.apiMode) || 'localhost',
     useDemoData: initialConfig.useDemoData ?? false,
+    // UserHierarchy
+    showTable: initialConfig.showTable !== false,
+    showDiagram: initialConfig.showDiagram !== false,
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
@@ -827,6 +839,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'userHierarchy':
+        return (
+          <UserHierarchyConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -876,7 +896,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1505,6 +1525,11 @@ const PageBuilder = () => {
                           id="operationsPrograms"
                           label="Operations & Programs"
                           icon={<Database className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="userHierarchy"
+                          label="User Hierarchy"
+                          icon={<Users className="h-8 w-8 mb-1 text-primary" />}
                         />
                       </div>
                     </div>
