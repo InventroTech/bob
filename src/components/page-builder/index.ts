@@ -21,4 +21,6 @@ export { LeadProgressBar } from './LeadProgressBar';
 export { default as TeamDashboardComponent } from './TeamDashboardComponent';
 export { TeamDashboardConfig } from './component-config/TeamDashboardConfig';
 export { default as OperationsProgramsComponent } from './OperationsProgramsComponent';
-export { OperationsProgramsConfig } from './component-config/OperationsProgramsConfig'; 
+export { OperationsProgramsConfig } from './component-config/OperationsProgramsConfig';
+export { default as UserHierarchyComponent } from './UserHierarchyComponent';
+export { UserHierarchyConfig } from './component-config/UserHierarchyConfig';

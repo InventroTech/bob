@@ -17,9 +17,10 @@ export interface GetRolesResponse {
 }
 
 export interface MembershipUser {
-  id?: string;
+  id?: string | number; // TenantMembership pk when from API (number)
   uid?: string;
   user_id?: string; // Primary user identifier from API
+  user_parent_id?: number | null; // TenantMembership id of manager (for hierarchy)
   name?: string;
   full_name?: string;
   email?: string;
@@ -33,6 +34,20 @@ export interface MembershipUser {
     name?: string;
   };
   role_name?: string;
+}
+
+/** User with hierarchy fields for the User Hierarchy page */
+export interface HierarchyUser {
+  membershipId: number;
+  user_parent_id: number | null;
+  name: string;
+  email: string;
+  role: { name: string } | null;
+}
+
+export interface HierarchyAssignment {
+  membership_id: number;
+  parent_membership_id: number | null;
 }
 
 export interface GetUsersResponse {
@@ -186,6 +201,52 @@ export const membershipService = {
       console.error('Error creating role:', error);
       throw error;
     }
+  },
+
+  /**
+   * Get all users with hierarchy fields (membershipId, user_parent_id) for the User Hierarchy page.
+   * Uses the same GET /membership/users endpoint (backend includes id and user_parent_id).
+   */
+  async getUsersForHierarchy(): Promise<HierarchyUser[]> {
+    const response = await apiClient.get<GetUsersResponse>('/membership/users');
+    const responseData = response.data;
+    let usersData: MembershipUser[] = [];
+    if (responseData && typeof responseData === 'object') {
+      if ('results' in responseData && Array.isArray(responseData.results)) {
+        usersData = responseData.results;
+      } else if ('data' in responseData && Array.isArray(responseData.data)) {
+        usersData = responseData.data;
+      }
+    }
+    return usersData
+      .filter((u) => u.id != null && typeof u.id === 'number')
+      .map((u) => ({
+        membershipId: u.id as number,
+        user_parent_id: u.user_parent_id ?? null,
+        name: u.name || u.full_name || 'Unnamed User',
+        email: u.email || 'No Email',
+        role: u.role?.name
+          ? { name: u.role.name }
+          : u.role?.key
+            ? { name: u.role.key }
+            : u.role_name
+              ? { name: u.role_name }
+              : null,
+      }));
+  },
+
+  /**
+   * Update user reporting hierarchy (who reports to whom).
+   * Restricted to GM/ASM on the backend.
+   */
+  async updateUserHierarchy(
+    assignments: HierarchyAssignment[]
+  ): Promise<{ count: number }> {
+    const response = await apiClient.patch<{ count: number }>(
+      '/membership/users/hierarchy',
+      { assignments }
+    );
+    return response.data;
   },
 };
 
