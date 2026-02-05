@@ -30,6 +30,7 @@ import { JobsPage } from "./pages/JobsPage";
 import PublicTenantPage from "./pages/PublicTenantPage";
 import TeamDashboardPage from "./pages/TeamDashboardPage";
 import OperationsProgramsPage from "./pages/OperationsProgramsPage";
+import UserHierarchyPage from "./pages/UserHierarchyPage";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -58,6 +59,7 @@ const App = () => (
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/team-dashboard" element={<TeamDashboardPage />} />
             <Route path="/operations-programs" element={<OperationsProgramsPage />} />
+            <Route path="/user-hierarchy" element={<UserHierarchyPage />} />
           </Route>
 
           {/* Custom App Routes */}
