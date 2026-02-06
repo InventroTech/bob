@@ -697,14 +697,16 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                         )}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        {/* Currently Assigned count / badges */}
+                        {/* Currently Assigned Badges */}
                         <div className="flex flex-wrap gap-1">
-                          {assignment.assigned_leads_count !== undefined && assignment.assigned_leads_count > 0 ? (
-                            <Badge className="text-xs bg-black text-white border-none hover:bg-black">
-                              {assignment.assigned_leads_count}
-                            </Badge>
+                          {assignment.lead_types.length > 0 ? (
+                            assignment.lead_types.map((leadType) => (
+                              <Badge key={leadType} className="text-xs bg-black text-white border-none hover:bg-black">
+                                {leadType.replace(/_/g, ' ')}
+                              </Badge>
+                            ))
                           ) : (
-                            <span className="text-xs text-muted-foreground">0</span>
+                            <span className="text-xs text-muted-foreground">None</span>
                           )}
                         </div>
                       </TableCell>
