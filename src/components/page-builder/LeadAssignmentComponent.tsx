@@ -4,6 +4,7 @@ import LeadTypeAssignmentPage from '../../pages/LeadTypeAssignmentPage';
 interface LeadAssignmentComponentProps {
   config?: {
     leadTypesEndpoint?: string;
+    leadSourcesEndpoint?: string;
     rmsEndpoint?: string;
     title?: string;
     assignmentsEndpoint?: string;

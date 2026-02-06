@@ -33,6 +33,7 @@ const CustomAppLayout: React.FC = () => {
     'User';
   const navigationIconMap: Record<string, JSX.Element> = {
     "lead assignment": <Users className="h-4 w-4" />,
+    "user hierarchy": <Users className="h-4 w-4" />,
     "analytics": <BarChart3 className="h-4 w-4" />,
     "pending tickets": <Ticket className="h-4 w-4" />,
     "wip tickets": <WIPTicketIcon className="h-4 w-4" />,
