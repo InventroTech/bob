@@ -237,6 +237,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false); // Separate loading state for table only
+  const [searchLoading, setSearchLoading] = useState(false); // Loading state specifically for search
   const [rateLimited, setRateLimited] = useState(false); // Rate limiting indicator
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
@@ -527,9 +528,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
       const isSearching = currentSearchTerm !== '';
       
-      // Pagination: request enough results so client-side search has data to filter
+      // Pagination: always use 50 tickets per page
       params.append('page', '1');
-      params.append('page_size', isSearching ? '100' : '50');
+      params.append('page_size', '50');
       
       const fullUrl = `${apiUrl}?${params.toString()}`;
       console.log('Filtered API URL:', fullUrl);
@@ -622,7 +623,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           totalCount: pageMeta.total_count || 0,
           numberOfPages: pageMeta.number_of_pages || 0,
           currentPage: pageMeta.current_page || 1,
-          pageSize: pageMeta.page_size || 10,
+          pageSize: pageMeta.page_size || 50,
           nextPageLink: pageMeta.next_page_link || null,
           previousPageLink: pageMeta.previous_page_link || null
         });
@@ -673,23 +674,299 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   const latestSearchValueRef = useRef<string>('');
 
-  // Simple search: filter only the tickets already loaded. No API call.
+  // Search: simplified and optimized
   const debouncedSearch = useCallback((value: string) => {
     latestSearchValueRef.current = value;
     setDisplaySearchTerm(value);
 
+    // Cancel previous search timeout
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    
+    // Cancel any ongoing API requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
 
-    searchTimeoutRef.current = setTimeout(() => {
+    searchTimeoutRef.current = setTimeout(async () => {
       const term = latestSearchValueRef.current.trim();
       setSearchTerm(term);
-      const base = baseDataRef.current.length > 0 ? baseDataRef.current : data;
-      const next = term === ''
-        ? base
-        : base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
-      setFilteredData(next);
-    }, 300);
-  }, [data, matchRowBySearchTerm, tableColumns]);
+      
+      // Create new abort controller for this search
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      
+      // Check if filters are applied
+      const hasFilters = filtersApplied || 
+        resolutionStatusFilter.length > 0 || 
+        assignedToFilter !== 'all' || 
+        posterStatusFilter.length > 0 ||
+        dateRangeFilter.startDate ||
+        dateRangeFilter.endDate;
+      
+      // If search was cleared, reset to original data
+      if (!term) {
+        setSearchLoading(false); // Clear search loading when search is cleared
+        if (hasFilters) {
+          // If filters are applied, re-apply filters without search
+          applyFilters();
+        } else {
+          // Reset to original first page (50 tickets)
+          try {
+            setTableLoading(true);
+            const authToken = session?.access_token;
+            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+            const apiUrl = `${baseUrl}/analytics/support-ticket/`;
+            
+            const params = new URLSearchParams();
+            params.append('page', '1');
+            params.append('page_size', '50');
+            
+            const response = await fetch(`${apiUrl}?${params.toString()}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authToken ? `Bearer ${authToken}` : '',
+                'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              },
+              signal: abortController.signal
+            });
+
+            if (abortController.signal.aborted) return;
+
+            if (response.ok) {
+              const responseData = await response.json();
+              const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+              
+              let tickets: any[] = [];
+              let pageMeta = null;
+              
+              if (responseData.results !== undefined) {
+                tickets = ensureArray(responseData.results);
+                pageMeta = responseData.page_meta;
+              } else if (responseData.data !== undefined) {
+                tickets = ensureArray(responseData.data);
+                pageMeta = responseData.page_meta;
+              } else if (Array.isArray(responseData)) {
+                tickets = responseData;
+              }
+
+              const transformedData = tickets.map((ticket: any) => ({
+                ...ticket,
+                created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
+                cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
+                name: ticket.first_name && ticket.last_name 
+                  ? `${ticket.first_name} ${ticket.last_name}`
+                  : ticket.name || 'N/A',
+                reason: ticket.reason || ticket.Description || 'No reason provided',
+                resolution_status: ticket.resolution_status || ticket.status || 'Open',
+                poster: ticket.poster || 'No Poster',
+                praja_dashboard_user_link: ticket.praja_user_id 
+                  ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+                  : ticket.praja_dashboard_user_link || 'N/A',
+                display_pic_url: ticket.display_pic_url || null
+              }));
+
+              setData(transformedData);
+              baseDataRef.current = transformedData;
+              setFilteredData(transformedData);
+              
+              if (pageMeta) {
+                setPagination({
+                  totalCount: pageMeta.total_count || 0,
+                  numberOfPages: pageMeta.number_of_pages || 0,
+                  currentPage: pageMeta.current_page || 1,
+                  pageSize: 50,
+                  nextPageLink: pageMeta.next_page_link || null,
+                  previousPageLink: pageMeta.previous_page_link || null
+                });
+              }
+            }
+          } catch (error: any) {
+            if (error.name === 'AbortError') return;
+            console.error('Error resetting search:', error);
+            baseDataRef.current = data;
+            setFilteredData(data);
+          } finally {
+            if (!abortController.signal.aborted) {
+              setTableLoading(false);
+            }
+          }
+        }
+        return;
+      }
+      
+      // If searching and no filters applied, fetch more data to search across all tickets
+      if (term && !hasFilters) {
+        // Try backend search first, then fallback to limited pagination if needed
+        try {
+          setTableLoading(true);
+          setSearchLoading(true); // Show search-specific loading indicator
+          const authToken = session?.access_token;
+          const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+          const apiUrl = `${baseUrl}/analytics/support-ticket/`;
+          
+          const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+          const transformTicket = (ticket: any) => ({
+            ...ticket,
+            created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
+            cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
+            name: ticket.first_name && ticket.last_name 
+              ? `${ticket.first_name} ${ticket.last_name}`
+              : ticket.name || 'N/A',
+            reason: ticket.reason || ticket.Description || 'No reason provided',
+            resolution_status: ticket.resolution_status || ticket.status || 'Open',
+            poster: ticket.poster || 'No Poster',
+            praja_dashboard_user_link: ticket.praja_user_id 
+              ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
+              : ticket.praja_dashboard_user_link || 'N/A',
+            display_pic_url: ticket.display_pic_url || null
+          });
+
+          // Fetch ALL pages for search (previous working version)
+          let allTickets: any[] = [];
+          
+          // Use larger page_size for search to reduce API calls (but still display 50 per page)
+          const searchPageSize = 500; // Fetch 500 tickets per page for search (reduces API calls by 10x)
+          
+          // Fetch first page to get total count
+          const firstPageParams = new URLSearchParams();
+          firstPageParams.append('page', '1');
+          firstPageParams.append('page_size', searchPageSize.toString());
+          
+          try {
+            const firstResponse = await fetch(`${apiUrl}?${firstPageParams.toString()}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authToken ? `Bearer ${authToken}` : '',
+                'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              },
+              signal: abortController.signal
+            });
+
+            if (abortController.signal.aborted) return;
+
+            if (firstResponse.ok) {
+              const firstResponseData = await firstResponse.json();
+              let firstPageTickets: any[] = [];
+              
+              if (firstResponseData.results !== undefined) {
+                firstPageTickets = ensureArray(firstResponseData.results);
+              } else if (firstResponseData.data !== undefined) {
+                firstPageTickets = ensureArray(firstResponseData.data);
+              } else if (Array.isArray(firstResponseData)) {
+                firstPageTickets = firstResponseData;
+              }
+
+              allTickets = allTickets.concat(firstPageTickets);
+              
+              // Get total pages from metadata (based on searchPageSize=500)
+              const pageMeta = firstResponseData.page_meta;
+              const totalPages = pageMeta?.number_of_pages || 1;
+              const totalTickets = pageMeta?.total_count || allTickets.length;
+              
+              console.log(`Total tickets: ${totalTickets}, Total pages (with page_size=${searchPageSize}): ${totalPages}, fetching all for search...`);
+              
+              // Fetch ALL remaining pages in parallel batches to minimize API calls
+              if (totalPages > 1 && !abortController.signal.aborted) {
+                // Calculate how many pages we need to fetch
+                const remainingPages = totalPages - 1; // Page 1 already fetched
+                
+                // Fetch remaining pages in parallel (up to 5 at a time to avoid overwhelming the server)
+                const concurrentFetches = 5;
+                const totalBatches = Math.ceil(remainingPages / concurrentFetches);
+                
+                for (let batch = 0; batch < totalBatches && !abortController.signal.aborted; batch++) {
+                  const startPage = batch * concurrentFetches + 2; // Start from page 2
+                  const endPage = Math.min(startPage + concurrentFetches - 1, totalPages);
+                  
+                  const fetchPromises = [];
+                  for (let page = startPage; page <= endPage; page++) {
+                    const pageParams = new URLSearchParams();
+                    pageParams.append('page', page.toString());
+                    pageParams.append('page_size', searchPageSize.toString()); // Use larger page size
+                    
+                    fetchPromises.push(
+                      fetch(`${apiUrl}?${pageParams.toString()}`, {
+                        method: 'GET',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': authToken ? `Bearer ${authToken}` : '',
+                          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+                        },
+                        signal: abortController.signal
+                      }).then(res => res.ok ? res.json() : null).catch(() => null)
+                    );
+                  }
+                  
+                  try {
+                    const batchResults = await Promise.all(fetchPromises);
+                    if (abortController.signal.aborted) return;
+                    
+                    batchResults.forEach((responseData) => {
+                      if (!responseData) return;
+                      let tickets: any[] = [];
+                      
+                      if (responseData.results !== undefined) {
+                        tickets = ensureArray(responseData.results);
+                      } else if (responseData.data !== undefined) {
+                        tickets = ensureArray(responseData.data);
+                      } else if (Array.isArray(responseData)) {
+                        tickets = responseData;
+                      }
+                      
+                      allTickets = allTickets.concat(tickets);
+                    });
+                    
+                    // Log progress
+                    console.log(`Search progress: Fetched ${allTickets.length} tickets (pages 1-${endPage} of ${totalPages})`);
+                  } catch (batchError: any) {
+                    if (batchError.name !== 'AbortError') {
+                      console.warn(`Error fetching batch ${batch + 1}:`, batchError);
+                    }
+                  }
+                }
+              }
+              
+              console.log(`Search complete: Fetched ${allTickets.length} tickets from ${totalPages} pages (using page_size=${searchPageSize})`);
+            }
+          } catch (paginationError: any) {
+            if (paginationError.name === 'AbortError') return;
+            console.error('Error fetching tickets for search:', paginationError);
+          }
+
+          if (abortController.signal.aborted) return;
+
+          const transformedData = allTickets.map(transformTicket);
+          baseDataRef.current = transformedData;
+          
+          // Filter client-side through all fetched tickets
+          const next = transformedData.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
+          
+          setFilteredData(next);
+          console.log(`Search "${term}": Fetched ${transformedData.length} tickets, found ${next.length} matches`);
+        } catch (error: any) {
+          if (error.name === 'AbortError') return;
+          console.error('Error fetching tickets for search:', error);
+          // Fallback to client-side search on existing data
+          const base = baseDataRef.current.length > 0 ? baseDataRef.current : data;
+          const next = base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
+          setFilteredData(next);
+        } finally {
+          if (!abortController.signal.aborted) {
+            setTableLoading(false);
+            setSearchLoading(false); // Hide search loading indicator
+          }
+        }
+      } else {
+        // Search with filters applied - filter the already loaded filtered data
+        setSearchLoading(false); // No API calls needed, just client-side filtering
+        const base = baseDataRef.current.length > 0 ? baseDataRef.current : filteredData;
+        const next = base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
+        setFilteredData(next);
+      }
+    }, 500); // Increased debounce to 500ms to reduce API calls
+  }, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
 
   // Handle search input change from PrajaTable
   const handleSearchChange = useCallback((value: string) => {
@@ -795,7 +1072,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             totalCount: pageMeta.total_count || 0,
             numberOfPages: pageMeta.number_of_pages || 0,
             currentPage: pageMeta.current_page || 1,
-            pageSize: pageMeta.page_size || 10,
+            pageSize: pageMeta.page_size || 50,
             nextPageLink: pageMeta.next_page_link || null,
             previousPageLink: pageMeta.previous_page_link || null
           });
@@ -865,7 +1142,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             totalCount: pageMeta.total_count || 0,
             numberOfPages: pageMeta.number_of_pages || 0,
             currentPage: pageMeta.current_page || 1,
-            pageSize: pageMeta.page_size || 10,
+            pageSize: pageMeta.page_size || 50,
             nextPageLink: pageMeta.next_page_link || null,
             previousPageLink: pageMeta.previous_page_link || null
           });
@@ -940,7 +1217,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const isSearching = currentSearchTerm !== '';
       
       params.append('page', page.toString());
-      params.append('page_size', isSearching ? '100' : '50');
+      params.append('page_size', '50'); // Always use 50 tickets per page
       
       const fullUrl = `${apiUrl}?${params.toString()}`;
 
@@ -1001,7 +1278,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           totalCount: pageMeta.total_count || 0,
           numberOfPages: pageMeta.number_of_pages || 0,
           currentPage: pageMeta.current_page || 1,
-          pageSize: pageMeta.page_size || 10,
+          pageSize: pageMeta.page_size || 50,
           nextPageLink: pageMeta.next_page_link || null,
           previousPageLink: pageMeta.previous_page_link || null
         });
@@ -1125,7 +1402,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             totalCount: pageMeta.total_count || 0,
             numberOfPages: pageMeta.number_of_pages || 0,
             currentPage: pageMeta.current_page || 1,
-            pageSize: pageMeta.page_size || 10,
+            pageSize: pageMeta.page_size || 50,
             nextPageLink: pageMeta.next_page_link || null,
             previousPageLink: pageMeta.previous_page_link || null
           });
@@ -1209,12 +1486,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     <>
       <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
         {/* Filter Section */}
-        <div className="mb-4">
+        <div className="mb-4 relative">
           <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
             <h5>
               {config?.title || "Support Tickets"}
             </h5>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 relative">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
@@ -1535,11 +1812,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         {/* Table Section */}
         <div className="w-full relative">
           {/* Loading Overlay */}
-          {tableLoading && (
+          {(tableLoading || searchLoading) && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <span className="text-gray-600">Loading...</span>
+              <div className="flex flex-col items-center space-y-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="text-gray-600 font-medium">
+                  {searchLoading ? 'Searching through all tickets...' : 'Loading...'}
+                </span>
               </div>
             </div>
           )}
