@@ -133,22 +133,30 @@ export const membershipService = {
         }
       }
       
-      // Transform the data to match the User interface
-      // user_id is the primary identifier (Supabase UUID), fallback to id or uid
-      const transformedUsers: User[] = usersData.map((user: MembershipUser, index: number) => ({
-        id: user.user_id || user.id || user.uid || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
-        name: user.name || user.full_name || 'Unnamed User',
-        email: user.email || 'No Email',
-        role_id: user.role_id || user.role?.id || '',
-        created_at: user.created_at || user.date_joined || new Date().toISOString(),
-        role: user.role?.name 
-          ? { name: user.role.name }
-          : user.role?.key
-            ? { name: user.role.key }
-            : user.role_name 
-              ? { name: user.role_name }
-              : null
-      }));
+      // Transform the data to match the User interface.
+      // For routing rules we key by TenantMembership id, so prefer id (membership pk) when present.
+      const transformedUsers: User[] = usersData.map((user: MembershipUser, index: number) => {
+        const rawId =
+          user.id ??
+          user.user_id ??
+          user.uid ??
+          `temp-${index}-${Math.random().toString(36).substring(2, 15)}`;
+
+        return {
+          id: String(rawId),
+          name: user.name || user.full_name || 'Unnamed User',
+          email: user.email || 'No Email',
+          role_id: user.role_id || user.role?.id || '',
+          created_at: user.created_at || user.date_joined || new Date().toISOString(),
+          role: user.role?.name
+            ? { name: user.role.name }
+            : user.role?.key
+              ? { name: user.role.key }
+              : user.role_name
+                ? { name: user.role_name }
+                : null,
+        };
+      });
       
       // Sort by created_at descending (newest first)
       return transformedUsers.sort((a, b) => 
