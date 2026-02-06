@@ -78,7 +78,10 @@ export type QueueType = 'ticket' | 'lead';
 export interface RoutingRule {
   id: number;
   tenant: string;
-  user_id: string;
+  /** TenantMembership id (primary); use this to match the user in the list. */
+  tenant_membership_id?: number | null;
+  /** Denormalized user UUID from membership; may be null. */
+  user_id: string | null;
   queue_type: QueueType;
   is_active: boolean;
   conditions: any;

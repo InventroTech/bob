@@ -211,7 +211,10 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
     try {
       const usersData = await membershipService.getUsers();
       // Filter out users with temp IDs (inactive users without real user_id)
-      const activeUsers = usersData.filter(user => !user.id.startsWith('temp-'));
+      // membershipService now guarantees id is a string
+      const activeUsers = usersData.filter(
+        (u) => typeof u.id === 'string' && !u.id.startsWith('temp-')
+      );
       setUsers(activeUsers);
       if (activeUsers.length === 0) {
         toast.info('No users found. The list is empty.');
@@ -273,7 +276,8 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
   };
 
   const handleSave = async () => {
-    if (!formUserId.trim()) {
+    const userIdStr = String(formUserId).trim();
+    if (!userIdStr) {
       toast.error('Please select a user');
       return;
     }
@@ -281,7 +285,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
     try {
       setSaving(true);
       const payload = {
-        user_id: formUserId.trim(),
+        user_id: userIdStr,
         queue_type: formQueueType,
         is_active: formActive,
         conditions: buildConditions(),
@@ -290,7 +294,11 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       const saved = await routingRulesService.upsert(payload);
       setRules((prev) => {
         const idx = prev.findIndex(
-          (r) => r.id === saved.id || (r.user_id === saved.user_id && r.queue_type === saved.queue_type),
+          (r) =>
+            r.id === saved.id ||
+            (String(r.tenant_membership_id ?? r.user_id) ===
+              String(saved.tenant_membership_id ?? saved.user_id) &&
+              r.queue_type === saved.queue_type),
         );
         if (idx === -1) {
           return [...prev, saved];
@@ -333,8 +341,8 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
     return null;
   }
 
-  // Find selected user for display
-  const selectedUser = users.find(u => u.id === formUserId);
+  // Find selected user for display (ids are strings)
+  const selectedUser = users.find(u => u.id === String(formUserId));
 
   return (
     <div className="w-full space-y-6">
@@ -603,7 +611,9 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
                 </TableHeader>
                 <TableBody>
                   {rules.map((rule) => {
-                    const ruleUser = users.find(u => u.id === rule.user_id);
+                    const ruleUser = users.find(
+                      (u) => u.id === String(rule.tenant_membership_id ?? rule.user_id ?? '')
+                    );
                     return (
                       <TableRow key={rule.id} className="hover:bg-gray-50">
                         <TableCell>
@@ -613,7 +623,9 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
                               <div className="text-sm text-gray-500">{ruleUser.email}</div>
                             </div>
                           ) : (
-                            <span className="font-mono text-sm text-gray-700">{rule.user_id}</span>
+                            <span className="font-mono text-sm text-gray-700">
+                              {rule.tenant_membership_id ?? rule.user_id ?? '—'}
+                            </span>
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-gray-700">
