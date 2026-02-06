@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 interface LeadAssignmentConfigProps {
   localConfig: {
     leadTypesEndpoint?: string;
+    leadSourcesEndpoint?: string;
     rmsEndpoint?: string;
     assignmentsEndpoint?: string;
     title?: string;
@@ -34,7 +35,7 @@ export const LeadAssignmentConfig: React.FC<LeadAssignmentConfigProps> = ({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="leadTypesEndpoint">Lead Types API Endpoint</Label>
+          <Label htmlFor="leadTypesEndpoint">Lead Types (Party) API Endpoint</Label>
           <Input
             id="leadTypesEndpoint"
             value={localConfig.leadTypesEndpoint || ""}
@@ -42,7 +43,20 @@ export const LeadAssignmentConfig: React.FC<LeadAssignmentConfigProps> = ({
             placeholder="/user-settings/lead-types/"
           />
           <p className="text-xs text-muted-foreground">
-            API endpoint to fetch lead types. Leave empty to use default: /user-settings/lead-types/
+            API endpoint to fetch lead types (party). Leave empty to use default: /user-settings/lead-types/
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="leadSourcesEndpoint">Lead Sources API Endpoint</Label>
+          <Input
+            id="leadSourcesEndpoint"
+            value={localConfig.leadSourcesEndpoint || ""}
+            onChange={(e) => handleInputChange("leadSourcesEndpoint", e.target.value)}
+            placeholder="/user-settings/lead-sources/"
+          />
+          <p className="text-xs text-muted-foreground">
+            API endpoint to fetch lead sources. Leave empty to use default: /user-settings/lead-sources/
           </p>
         </div>
 

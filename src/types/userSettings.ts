@@ -30,6 +30,7 @@ export interface LeadTypeAssignment {
   user_email: string;
   tenant_membership_id?: number; // Explicit TenantMembership ID
   lead_types: string[];
+  lead_sources?: string[]; // Only leads with these lead_source values are directed to this RM
   daily_target?: number;
   daily_limit?: number;
   assigned_leads_count?: number;
@@ -38,6 +39,7 @@ export interface LeadTypeAssignment {
 export interface LeadTypeAssignmentRequest {
   user_id: string; // TenantMembership ID
   lead_types: string[];
+  lead_sources?: string[]; // Optional; only these lead sources are directed to the RM
   daily_target?: number; // Optional daily target to store in daily_target column
   daily_limit?: number; // Optional daily limit to store in daily_limit column
 }
@@ -64,6 +66,7 @@ export interface LeadTypeAssignmentResponse {
   user_name: string;
   user_email?: string;
   lead_types: string[];
+  lead_sources?: string[];
   daily_target?: number;
   daily_limit?: number;
   created: boolean;
