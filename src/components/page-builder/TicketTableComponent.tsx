@@ -22,6 +22,9 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { convertGMTtoIST } from '@/lib/timeUtils';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 
+// Use renderer API for ticket search
+const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
+
 interface Column {
   header: string;
   accessor: string;
@@ -345,7 +348,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const fetchFilterOptions = async () => {
     try {
       const authToken = session?.access_token;
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/analytics/support-tickets/filter-options/`;
       
       console.log('Fetching filter options from:', apiUrl);
@@ -400,7 +403,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const fetchAssignees = async () => {
     try {
       const authToken = session?.access_token;
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/accounts/users/assignees-by-role/?role=CSE`;
       
       console.log('Fetching assignees from:', apiUrl);
@@ -478,7 +481,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const authToken = session?.access_token;
 
       // Always use renderer URL for analytics endpoint
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/analytics/support-ticket/`;
       
       // Build query parameters
@@ -719,7 +722,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           try {
             setTableLoading(true);
             const authToken = session?.access_token;
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+            const baseUrl = TICKET_API_BASE;
             const apiUrl = `${baseUrl}/analytics/support-ticket/`;
             
             const params = new URLSearchParams();
@@ -806,7 +809,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           setTableLoading(true);
           setSearchLoading(true);
           const authToken = session?.access_token;
-          const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+          const baseUrl = TICKET_API_BASE;
           const apiUrl = `${baseUrl}/analytics/support-ticket/`;
 
           const params = new URLSearchParams();
@@ -914,7 +917,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
     if (col.actionApiEndpoint?.trim()) {
       try {
-        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        const baseUrl = TICKET_API_BASE;
         const { url, method, headers, body } = buildActionApiRequest(
           {
             endpoint: col.actionApiEndpoint,
@@ -1093,7 +1096,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const authToken = session?.access_token;
 
       // Always use renderer URL for analytics endpoint
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/analytics/support-ticket/`;
       
       // Build query parameters with all current filters
@@ -1245,7 +1248,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
         const endpoint = config?.apiEndpoint || '/api/tickets';
         const baseUrl = apiPrefix === 'renderer' 
-          ? import.meta.env.VITE_RENDER_API_URL 
+          ? TICKET_API_BASE 
           : import.meta.env.VITE_API_URI;
         const apiUrl = `${baseUrl}${endpoint}?page=1&page_size=50`;
         console.log('API URL:', apiUrl);
