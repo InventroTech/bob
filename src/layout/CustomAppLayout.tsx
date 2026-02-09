@@ -3,11 +3,11 @@ import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
-import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, BarChart3, Ticket, Settings, Layers } from 'lucide-react';
+import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers } from 'lucide-react';
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
-import { FollowUpIcon, WIPTicketIcon } from '@/components/icons/CustomIcons';
+import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon} from '@/components/icons/CustomIcons';
 
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -34,7 +34,7 @@ const CustomAppLayout: React.FC = () => {
   const navigationIconMap: Record<string, JSX.Element> = {
     "lead assignment": <Users className="h-4 w-4" />,
     "user hierarchy": <Users className="h-4 w-4" />,
-    "analytics": <BarChart3 className="h-4 w-4" />,
+    "analytics": <AnalyticsIcon />,
     "pending tickets": <Ticket className="h-4 w-4" />,
     "wip tickets": <WIPTicketIcon className="h-4 w-4" />,
     "all support tickets": <Layers className="h-4 w-4" />,
@@ -44,6 +44,8 @@ const CustomAppLayout: React.FC = () => {
     "pending leads": <Sparkles className="h-4 w-4" />,
     "all leads": <Users className="h-4 w-4" />,
     "follow up leads": <FollowUpIcon />,
+    "routing settings": <RoutingSettingsIcon />,
+    "lead score": <LeadScoreIcon />,
   };
   const dataExtractedRef = useRef(false); // Track if we've already extracted data from JWT
   

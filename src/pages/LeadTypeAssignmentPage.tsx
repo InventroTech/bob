@@ -39,8 +39,10 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   const [saving, setSaving] = useState<string | null>(null);
   const [selectedLeadTypes, setSelectedLeadTypes] = useState<Record<string, LeadType[]>>({});
   const [selectedLeadSources, setSelectedLeadSources] = useState<Record<string, string[]>>({});
+  const [selectedLeadStatuses, setSelectedLeadStatuses] = useState<Record<string, string[]>>({});
   const [availableLeadTypes, setAvailableLeadTypes] = useState<string[]>([]);
   const [availableLeadSources, setAvailableLeadSources] = useState<string[]>([]);
+  const [availableLeadStatuses, setAvailableLeadStatuses] = useState<string[]>([]);
   const [roleChecked, setRoleChecked] = useState(false);
   const [leadsCounts, setLeadsCounts] = useState<Record<string, number | ''>>({});
   const [originalLeadsCounts, setOriginalLeadsCounts] = useState<Record<string, number>>({});
@@ -82,27 +84,32 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         // If no endpoint is configured, getAvailableLeadTypes will use the default: /user-settings/lead-types/
         const leadTypesEndpoint = config?.leadTypesEndpoint;
         const leadSourcesEndpoint = config?.leadSourcesEndpoint;
-        const [leadTypes, leadSources] = await Promise.all([
+        const [leadTypes, leadSources, leadStatuses] = await Promise.all([
           leadTypeAssignmentApi.getAvailableLeadTypes(leadTypesEndpoint),
           leadTypeAssignmentApi.getAvailableLeadSources(leadSourcesEndpoint),
+          leadTypeAssignmentApi.getAvailableLeadStatuses(),
         ]);
         setAvailableLeadTypes(leadTypes);
         setAvailableLeadSources(leadSources);
+        setAvailableLeadStatuses(leadStatuses);
 
         // Fetch lead type assignments (now returns TenantMembership-based data)
         const rmsEndpoint = config?.rmsEndpoint;
         const data = await leadTypeAssignmentApi.getAll(rmsEndpoint);
         setAssignments(data);
         
-        // Initialize selected lead types and lead sources
+        // Initialize selected lead types, lead sources, and lead statuses
         const initialSelections: Record<string, LeadType[]> = {};
         const initialLeadSources: Record<string, string[]> = {};
+        const initialLeadStatuses: Record<string, string[]> = {};
         data.forEach(assignment => {
           initialSelections[assignment.user_id] = assignment.lead_types as LeadType[];
           initialLeadSources[assignment.user_id] = assignment.lead_sources ?? [];
+          initialLeadStatuses[assignment.user_id] = assignment.lead_statuses ?? [];
         });
         setSelectedLeadTypes(initialSelections);
         setSelectedLeadSources(initialLeadSources);
+        setSelectedLeadStatuses(initialLeadStatuses);
 
         // Initialize daily target + daily limit from assignments payload (new endpoint fields)
         const initialTargets: Record<string, number> = {};
@@ -194,6 +201,21 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     });
   };
 
+  // Handle lead status selection for a user
+  const handleLeadStatusToggle = (userId: string, leadStatus: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setSelectedLeadStatuses(prev => {
+      const current = prev[userId] || [];
+      const newStatuses = current.includes(leadStatus)
+        ? current.filter(s => s !== leadStatus)
+        : [...current, leadStatus];
+      return { ...prev, [userId]: newStatuses };
+    });
+  };
+
   // Handle lead type selection for a user
   const handleLeadTypeToggle = async (userId: string, leadType: LeadType, e?: React.MouseEvent) => {
     // Stop event propagation to prevent opening config sidebar
@@ -265,6 +287,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       setSaving(userId);
       const leadTypes = selectedLeadTypes[userId] || [];
       const leadSources = selectedLeadSources[userId] || [];
+      const leadStatuses = selectedLeadStatuses[userId] || [];
       // Convert empty string to 0 for backend (backend expects number)
       const assignedLeadsCount = (leadsCounts[userId] === '' || leadsCounts[userId] === undefined) ? 0 : (leadsCounts[userId] as number);
       const assignedDailyLimit = (dailyLimits[userId] === '' || dailyLimits[userId] === undefined) ? 0 : (dailyLimits[userId] as number);
@@ -273,6 +296,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         user_id: userId,
         lead_types: leadTypes,
         lead_sources: leadSources,
+        lead_statuses: leadStatuses.length > 0 ? leadStatuses : undefined, // Only include if selected
         daily_target: assignedLeadsCount, // Include daily target in the request
         daily_limit: assignedDailyLimit // Include daily limit in the request
       };
@@ -303,6 +327,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                 user_email: response.user_email || assignment.user_email || '',
                 lead_types: leadTypes,
                 lead_sources: leadSources,
+                lead_statuses: leadStatuses,
                 daily_target: savedDailyTarget,
                 daily_limit: savedDailyLimit
               }
@@ -310,6 +335,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         )
       );
       setSelectedLeadSources(prev => ({ ...prev, [userId]: leadSources }));
+      setSelectedLeadStatuses(prev => ({ ...prev, [userId]: leadStatuses }));
       
       // Also update leadsCounts state to reflect the saved daily_target
       setLeadsCounts(prev => ({
@@ -358,6 +384,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         user_id: userId,
         lead_types: [],
         lead_sources: [],
+        lead_statuses: [],
         daily_target: 0,
         daily_limit: 0
       };
@@ -375,6 +402,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                 user_email: response.user_email || assignment.user_email || '',
                 lead_types: [],
                 lead_sources: [],
+                lead_statuses: [],
                 daily_target: response.daily_target ?? 0,
                 daily_limit: response.daily_limit ?? 0
               }
@@ -384,6 +412,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
 
       setSelectedLeadTypes(prev => ({ ...prev, [userId]: [] }));
       setSelectedLeadSources(prev => ({ ...prev, [userId]: [] }));
+      setSelectedLeadStatuses(prev => ({ ...prev, [userId]: [] }));
 
       // Reset daily_target and daily_limit to 0 in state
       setLeadsCounts(prev => ({
@@ -430,6 +459,10 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
 
     const leadTypesChanged = JSON.stringify([...selectedTypes].sort()) !== JSON.stringify([...originalTypes].sort());
     const leadSourcesChanged = JSON.stringify([...selectedSources].sort()) !== JSON.stringify([...originalSources].sort());
+    
+    const selectedStatuses = selectedLeadStatuses[userId] || [];
+    const originalStatuses = currentAssignment?.lead_statuses || [];
+    const leadStatusesChanged = JSON.stringify([...selectedStatuses].sort()) !== JSON.stringify([...originalStatuses].sort());
 
     // Convert empty string to 0 for comparison
     const currentLeadsCount = (leadsCounts[userId] === '' || leadsCounts[userId] === undefined) ? 0 : (leadsCounts[userId] as number);
@@ -440,7 +473,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     const originalDailyLimit = originalDailyLimits[userId] ?? 0;
     const dailyLimitChanged = currentDailyLimit !== originalDailyLimit;
 
-    return leadTypesChanged || leadSourcesChanged || leadsCountChanged || dailyLimitChanged;
+    return leadTypesChanged || leadSourcesChanged || leadStatusesChanged || leadsCountChanged || dailyLimitChanged;
   };
 
   // Early access check - block non-GM users immediately
@@ -541,8 +574,9 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[220px]">RM Name & Email</TableHead>
-                    <TableHead className="w-[260px]">Party (Lead Types)</TableHead>
+                    <TableHead className="w-[260px]">PARTY</TableHead>
                     <TableHead className="w-[260px]">Lead Source</TableHead>
+                    <TableHead className="w-[260px]">Lead Status</TableHead>
                     <TableHead className="w-[120px]">Currently Assigned</TableHead>
                     <TableHead className="w-[120px]">Daily Target</TableHead>
                     <TableHead className="w-[120px]">Daily Limit</TableHead>
@@ -697,6 +731,70 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                         )}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
+                        {/* Lead Status Dropdown */}
+                        {availableLeadStatuses.length > 0 ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-between text-left font-normal hover:bg-gray-50"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="truncate">
+                                  {(selectedLeadStatuses[assignment.user_id] || []).length > 0
+                                    ? `${(selectedLeadStatuses[assignment.user_id] || []).length} selected`
+                                    : 'Select lead status...'}
+                                </span>
+                                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-[280px] p-0"
+                              align="start"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="max-h-[300px] overflow-y-auto p-2">
+                                <div className="space-y-2">
+                                  {availableLeadStatuses.map((leadStatus) => {
+                                    const isSelected = (selectedLeadStatuses[assignment.user_id] || []).includes(leadStatus);
+                                    return (
+                                      <div
+                                        key={leadStatus}
+                                        className="flex items-center space-x-2 rounded-sm px-2 py-1.5 hover:bg-gray-50 cursor-pointer"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleLeadStatusToggle(assignment.user_id, leadStatus, e);
+                                        }}
+                                      >
+                                        <Checkbox
+                                          id={`lstatus-${assignment.user_id}-${leadStatus}`}
+                                          checked={isSelected}
+                                          onCheckedChange={() => handleLeadStatusToggle(assignment.user_id, leadStatus)}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="data-[state=checked]:bg-black data-[state=checked]:border-black border-gray-300"
+                                        />
+                                        <Label
+                                          htmlFor={`lstatus-${assignment.user_id}-${leadStatus}`}
+                                          className="text-sm font-normal cursor-pointer flex-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleLeadStatusToggle(assignment.user_id, leadStatus, e);
+                                          }}
+                                        >
+                                          {leadStatus}
+                                        </Label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <div className="text-xs text-muted-foreground p-2">No lead statuses</div>
+                        )}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {/* Currently Assigned Badges */}
                         <div className="flex flex-wrap gap-1">
                           {assignment.lead_types.length > 0 ? (
@@ -778,7 +876,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
                               e.stopPropagation();
                               handleRemoveAllAssignments(assignment.user_id);
                             }}
-                            disabled={(assignment.lead_types?.length ?? 0) === 0 && (assignment.lead_sources?.length ?? 0) === 0 || saving === assignment.user_id}
+                            disabled={(assignment.lead_types?.length ?? 0) === 0 && (assignment.lead_sources?.length ?? 0) === 0 && (assignment.lead_statuses?.length ?? 0) === 0 || saving === assignment.user_id}
                             variant="outline"
                             size="sm"
                             className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"

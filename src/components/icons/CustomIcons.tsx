@@ -44,6 +44,44 @@ export const WIPTicketIcon = ({ className = "h-4 w-4" }: { className?: string })
   </svg>
 );
 
+export const RoutingSettingsIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg
+  className={className}
+  viewBox="0 0 26 26" 
+  fill="none" 
+  xmlns="http://www.w3.org/2000/svg">
+<path d="M9.78 11.16L8.36 12.58C7.68 11.89 7.02 11 6.57 9.64L8.51 9.15C8.83 10.04 9.28 10.65 9.78 11.16ZM11 6L7 2L3 6H6.02C6.04 6.81 6.1 7.54 6.21 8.17L8.15 7.68C8.08 7.2 8.03 6.63 8.02 6H11ZM21 6L17 2L13 6H15.99C15.89 9.68 14.71 10.75 13.45 11.88C12.95 12.32 12.44 12.8 12 13.43C11.66 12.94 11.27 12.55 10.87 12.19L9.46 13.6C10.39 14.45 11 15.14 11 17V22H13V17C13 14.98 13.71 14.34 14.79 13.37C16.17 12.13 17.87 10.59 17.99 6H21Z" fill="currentColor"/>
+</svg>
+
+);
+
+export const LeadScoreIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+<svg 
+className={className}
+viewBox="0 0 19 16" 
+fill="none" 
+xmlns="http://www.w3.org/2000/svg">
+<path d="M16 13H18V13.5H17V14.5H18V15H16V16H19V12H16V13ZM17 4H18V0H16V1H17V4ZM16 7H17.8L16 9.1V10H19V9H17.2L19 6.9V6H16V7ZM0 1H14V3H0V1ZM0 13H14V15H0V13ZM0 7H14V9H0V7Z" fill="currentColor"/>
+</svg>
+
+);
+
+export const AnalyticsIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+<svg
+className={className}
+viewBox="0 0 24 24" 
+fill="none" 
+xmlns="http://www.w3.org/2000/svg">
+<path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM19 19H5V5H19V19Z" fill="currentColor"/>
+<path d="M9 12H7V17H9V12Z" fill="currentColor"/>
+<path d="M17 7H15V17H17V7Z" fill="currentColor"/>
+<path d="M13 14H11V17H13V14Z" fill="currentColor"/>
+<path d="M13 10H11V12H13V10Z" fill="currentColor"/>
+</svg>
+
+
+);
+
 export const TrophyIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg className={className} width="11" height="12" viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M10.794 1.19999V2.33333C10.794 4.17399 9.30217 5.66666 7.46252 5.66666H6.99609L7.51381 5.13266C9.03366 5.10532 10.261 3.86 10.261 2.33333V1.46668H8.26209L8.32873 0.93335H10.5275C10.6748 0.933303 10.794 1.05265 10.794 1.19999Z" fill="#E8A615"/>
