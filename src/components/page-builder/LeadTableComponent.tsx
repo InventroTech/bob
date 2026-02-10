@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Filter, User, MessageCircle, ExternalLink, CheckCircle2, XCircle, Clock, AlertCircle, Search } from 'lucide-react';
 import LeadCardCarousel from './LeadCardCarousel';
+import { RecordDetailModal } from './RecordDetailModal';
 import { Button } from '@/components/ui/button';
 import ShortProfileCard from '../ui/ShortProfileCard';
 
@@ -279,6 +280,8 @@ interface LeadTableProps {
       lead_stage?: string[];
     };
     entityType?: string;
+    /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'none' | 'auto';
     statusOptions?: string[];
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
@@ -305,9 +308,71 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   const [tableLoading, setTableLoading] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [isRecordDetailModalOpen, setIsRecordDetailModalOpen] = useState(false);
+  const [cartOptions, setCartOptions] = useState<Array<{ id: number; label: string }>>([]);
+  const [cartOptionsLoading, setCartOptionsLoading] = useState(false);
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [isCallBackModalOpen, setIsCallBackModalOpen] = useState(false);
   const leadCardRef = useRef<LeadCardCarouselHandle>(null);
+
+  // Effective detail mode: explicit config or infer from entityType (inventory_* → record detail, else lead card)
+  const effectiveDetailMode = useMemo(() => {
+    const mode = config?.detailMode;
+    if (mode && mode !== 'auto') return mode;
+    const et = config?.entityType;
+    if (et === 'inventory_request') return 'inventory_request' as const;
+    if (et === 'inventory_cart') return 'inventory_cart' as const;
+    return 'lead_card';
+  }, [config?.detailMode, config?.entityType]);
+
+  // Load cart options when opening record detail for inventory_request
+  useEffect(() => {
+    const shouldLoadCarts =
+      isRecordDetailModalOpen &&
+      config?.entityType === 'inventory_request';
+    if (!shouldLoadCarts) return;
+
+    let cancelled = false;
+    const loadCarts = async () => {
+      try {
+        setCartOptionsLoading(true);
+        const res = await apiClient.get<any>('/crm-records/records/?entity_type=inventory_cart&page_size=100');
+        const list: any[] = res.data?.results ?? (res.data as any)?.data ?? [];
+        const options = list
+          .map((r: any) => {
+            const id = r.id;
+            const d = r.data || {};
+            const status = d.status || 'DRAFT';
+            const invoice = d.invoice_number;
+            const labelParts = [`Cart #${id}`, `(${status})`];
+            if (invoice) labelParts.push(`Invoice: ${invoice}`);
+            return {
+              id,
+              label: labelParts.join(' '),
+            };
+          })
+          .filter((o) => o && o.id != null);
+        if (!cancelled) {
+          setCartOptions(options);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setCartOptions([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setCartOptionsLoading(false);
+        }
+      }
+    };
+
+    loadCarts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRecordDetailModalOpen, config?.entityType]);
 
   // Memoize onLeadUpdate callback for modal to prevent infinite re-render loop
   const handleModalLeadUpdate = useCallback((updatedLead: any) => {
@@ -1256,11 +1321,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   }, [debouncedSearch]);
 
 
-  // Memoized row click handler
+  // Row click: behavior depends on detailMode (lead card vs record detail vs none)
   const handleRowClick = useCallback((row: any) => {
-    setSelectedLead(row);
-    setIsLeadModalOpen(true);
-  }, []);
+    if (effectiveDetailMode === 'none') return;
+    if (effectiveDetailMode === 'lead_card') {
+      setSelectedLead(row);
+      setIsLeadModalOpen(true);
+      return;
+    }
+    // inventory_request | inventory_cart (or any other record type)
+    setSelectedRecord(row);
+    setIsRecordDetailModalOpen(true);
+  }, [effectiveDetailMode]);
 
   // Handle pagination navigation
   const handleNextPage = async () => {
@@ -1728,11 +1800,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             data={filteredData}
             loading={tableLoading}
             emptyMessage={config?.emptyMessage || 'No data found'}
-            onRowClick={handleRowClick}
+            onRowClick={effectiveDetailMode !== 'none' ? handleRowClick : undefined}
             renderCell={renderCell}
             headerBgColor="bg-black"
             headerTextColor="text-white"
-            hoverable={!!handleRowClick}
+            hoverable={effectiveDetailMode !== 'none'}
           />
         </div>
         
@@ -1973,6 +2045,91 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Generic record detail modal (inventory_request, inventory_cart, inventory_item, etc.) */}
+      <RecordDetailModal
+        open={isRecordDetailModalOpen}
+        onOpenChange={(open) => {
+          setIsRecordDetailModalOpen(open);
+          if (!open) setSelectedRecord(null);
+        }}
+        record={selectedRecord}
+        entityType={config?.entityType}
+        cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
+        onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
+          ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
+              const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+              const url = `${base}/${recordId}/`;
+
+              // Ensure we never accidentally overwrite the whole JSONB with a partial object.
+              // Merge incoming patch.data with the current record.data before sending to the API.
+              const currentFromSelected = selectedRecord && selectedRecord.id === recordId ? selectedRecord : null;
+              const currentFromList =
+                currentFromSelected == null
+                  ? data.find((r: any) => r.id === recordId)
+                  : null;
+              const existingData =
+                (currentFromSelected?.data as Record<string, unknown> | undefined) ||
+                (currentFromList?.data as Record<string, unknown> | undefined) ||
+                {};
+
+              const fullData =
+                patch.data != null ? { ...existingData, ...patch.data } : existingData;
+
+              const body =
+                patch.data != null
+                  ? { ...patch, data: fullData }
+                  : patch;
+
+              const response = await apiClient.patch(url, body);
+              const updated = response.data;
+
+              setSelectedRecord((prev: any) =>
+                prev?.id === recordId
+                  ? {
+                      ...prev,
+                      ...updated,
+                      data: updated?.data ?? fullData,
+                    }
+                  : prev,
+              );
+              setData((prev) =>
+                prev.map((r: any) =>
+                  r.id === recordId
+                    ? {
+                        ...r,
+                        ...updated,
+                        data: updated?.data ?? fullData,
+                      }
+                    : r,
+                ),
+              );
+              setFilteredData((prev) =>
+                prev.map((r: any) =>
+                  r.id === recordId
+                    ? {
+                        ...r,
+                        ...updated,
+                        data: updated?.data ?? fullData,
+                      }
+                    : r,
+                ),
+              );
+            }
+          : undefined}
+        onDeleted={async (recordId: number) => {
+          // Optimistically remove from current client-side data
+          setData((prev) => prev.filter((r: any) => r.id !== recordId));
+          setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
+          setSelectedRecord(null);
+          setIsRecordDetailModalOpen(false);
+          // Re-fetch from server so pagination / counts stay correct
+          try {
+            await fetchFilteredData();
+          } catch (e) {
+            console.error('Error refreshing table after delete:', e);
+          }
+        }}
+      />
     </>
   );
 };
