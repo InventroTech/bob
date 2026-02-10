@@ -340,6 +340,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     refreshInterval?: number;
     showFilters: boolean;
     searchFields: string;
+    /** Records table: entity type for API (e.g. inventory_request, inventory_cart). */
+    entityType?: string;
+    /** Records table: row click behavior — lead card, record detail modal, none, or auto (infer from entityType). */
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'none' | 'auto';
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -390,6 +394,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     refreshInterval: initialConfig.refreshInterval || 0,
     showFilters: initialConfig.showFilters || false,
     searchFields: initialConfig.searchFields || '',
+    entityType: (initialConfig as any).entityType || '',
+    detailMode: (initialConfig as any).detailMode || 'auto',
     // OpenModalButton fields
     buttonTitle: initialConfig.buttonTitle || 'Apply Now',
     buttonColor: initialConfig.buttonColor || 'default',
