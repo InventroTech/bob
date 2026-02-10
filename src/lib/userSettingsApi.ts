@@ -82,6 +82,7 @@ export const leadTypeAssignmentApi = {
           tenant_membership_id: assignment.tenant_membership_id || assignment.user_id,
           lead_types: assignment.lead_types || [],
           lead_sources: assignment.lead_sources || [],
+          lead_statuses: assignment.lead_statuses || [],
           daily_target: assignment.daily_target,
           daily_limit: assignment.daily_limit,
           assigned_leads_count: assignment.assigned_leads_count || 0
@@ -114,6 +115,7 @@ export const leadTypeAssignmentApi = {
         user_id: data.user_id,
         lead_types: data.lead_types,
         lead_sources: data.lead_sources ?? [],
+        lead_statuses: data.lead_statuses ?? [],
         daily_target: data.daily_target,
         daily_limit: data.daily_limit
       });
@@ -127,6 +129,7 @@ export const leadTypeAssignmentApi = {
         user_email: result.user_email || '',
         lead_types: result.lead_types || data.lead_types,
         lead_sources: result.lead_sources ?? data.lead_sources ?? [],
+        lead_statuses: result.lead_statuses ?? data.lead_statuses ?? [],
         daily_target: result.daily_target,
         daily_limit: result.daily_limit,
         created: result.created || false
@@ -195,6 +198,22 @@ export const leadTypeAssignmentApi = {
       return [];
     } catch (error: any) {
       console.error('Error fetching available lead sources:', error);
+      return [];
+    }
+  },
+
+  // Get available lead statuses from records' lead_stage field
+  async getAvailableLeadStatuses(endpoint?: string): Promise<string[]> {
+    try {
+      const leadStatusesEndpoint = endpoint || '/user-settings/lead-statuses/';
+      const response = await apiClient.get(leadStatusesEndpoint);
+      const responseData = response.data;
+      if (responseData.lead_statuses && Array.isArray(responseData.lead_statuses)) {
+        return responseData.lead_statuses;
+      }
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching available lead statuses:', error);
       return [];
     }
   },

@@ -22,6 +22,9 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { convertGMTtoIST } from '@/lib/timeUtils';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 
+// Use renderer API for ticket search
+const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
+
 interface Column {
   header: string;
   accessor: string;
@@ -345,7 +348,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const fetchFilterOptions = async () => {
     try {
       const authToken = session?.access_token;
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/analytics/support-tickets/filter-options/`;
       
       console.log('Fetching filter options from:', apiUrl);
@@ -400,7 +403,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const fetchAssignees = async () => {
     try {
       const authToken = session?.access_token;
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/accounts/users/assignees-by-role/?role=CSE`;
       
       console.log('Fetching assignees from:', apiUrl);
@@ -478,7 +481,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const authToken = session?.access_token;
 
       // Always use renderer URL for analytics endpoint
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/analytics/support-ticket/`;
       
       // Build query parameters
@@ -523,10 +526,16 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
         params.append('created_at__lte', endDateTime.toISOString());
       }
-      
-      // Do NOT send search to API - search is done client-side across all fields
+
+      // Include search param for backend search (improves time and accuracy)
       const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
       const isSearching = currentSearchTerm !== '';
+      if (currentSearchTerm) {
+        params.append('search', currentSearchTerm);
+        if (config?.searchFields) {
+          params.append('search_fields', config.searchFields);
+        }
+      }
       
       // Pagination: always use 50 tickets per page
       params.append('page', '1');
@@ -610,10 +619,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }));
 
       baseDataRef.current = transformedData;
-      const toShow = isSearching
-        ? transformedData.filter((row: any) => matchRowBySearchTerm(row, currentSearchTerm, tableColumns))
-        : transformedData;
-      console.log(`Setting filtered data for sequence ${currentSequence}: ${transformedData.length} from API, ${toShow.length} after search "${currentSearchTerm}"`);
+      // Backend already applies search when search param is sent - no client-side filter needed
+      const toShow = transformedData;
+      console.log(`Setting filtered data for sequence ${currentSequence}: ${transformedData.length} from API (search: "${currentSearchTerm}")`);
       setFilteredData(toShow);
       setFiltersApplied(true);
       
@@ -714,7 +722,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           try {
             setTableLoading(true);
             const authToken = session?.access_token;
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+            const baseUrl = TICKET_API_BASE;
             const apiUrl = `${baseUrl}/analytics/support-ticket/`;
             
             const params = new URLSearchParams();
@@ -795,175 +803,95 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         return;
       }
       
-      // If searching and no filters applied, fetch more data to search across all tickets
+      // If searching and no filters applied: use backend search (single API call)
       if (term && !hasFilters) {
-        // Try backend search first, then fallback to limited pagination if needed
         try {
           setTableLoading(true);
-          setSearchLoading(true); // Show search-specific loading indicator
+          setSearchLoading(true);
           const authToken = session?.access_token;
-          const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+          const baseUrl = TICKET_API_BASE;
           const apiUrl = `${baseUrl}/analytics/support-ticket/`;
-          
+
+          const params = new URLSearchParams();
+          params.append('search', term);
+          if (config?.searchFields) params.append('search_fields', config.searchFields);
+          params.append('page', '1');
+          params.append('page_size', '50');
+
+          const response = await fetch(`${apiUrl}?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authToken ? `Bearer ${authToken}` : '',
+              'X-Tenant-Slug': 'bibhab-thepyro-ai'
+            },
+            signal: abortController.signal
+          });
+
+          if (abortController.signal.aborted) return;
+
           const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
           const transformTicket = (ticket: any) => ({
             ...ticket,
             created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
             cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-            name: ticket.first_name && ticket.last_name 
+            name: ticket.first_name && ticket.last_name
               ? `${ticket.first_name} ${ticket.last_name}`
               : ticket.name || 'N/A',
             reason: ticket.reason || ticket.Description || 'No reason provided',
             resolution_status: ticket.resolution_status || ticket.status || 'Open',
             poster: ticket.poster || 'No Poster',
-            praja_dashboard_user_link: ticket.praja_user_id 
+            praja_dashboard_user_link: ticket.praja_user_id
               ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
               : ticket.praja_dashboard_user_link || 'N/A',
             display_pic_url: ticket.display_pic_url || null
           });
 
-          // Fetch ALL pages for search (previous working version)
-          let allTickets: any[] = [];
-          
-          // Use larger page_size for search to reduce API calls (but still display 50 per page)
-          const searchPageSize = 500; // Fetch 500 tickets per page for search (reduces API calls by 10x)
-          
-          // Fetch first page to get total count
-          const firstPageParams = new URLSearchParams();
-          firstPageParams.append('page', '1');
-          firstPageParams.append('page_size', searchPageSize.toString());
-          
-          try {
-            const firstResponse = await fetch(`${apiUrl}?${firstPageParams.toString()}`, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': authToken ? `Bearer ${authToken}` : '',
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
-              },
-              signal: abortController.signal
-            });
+          if (response.ok) {
+            const responseData = await response.json();
+            let tickets: any[] = [];
+            if (responseData.results !== undefined) tickets = ensureArray(responseData.results);
+            else if (responseData.data !== undefined) tickets = ensureArray(responseData.data);
+            else if (Array.isArray(responseData)) tickets = responseData;
 
-            if (abortController.signal.aborted) return;
+            const transformedData = tickets.map(transformTicket);
+            baseDataRef.current = transformedData;
+            setFilteredData(transformedData);
 
-            if (firstResponse.ok) {
-              const firstResponseData = await firstResponse.json();
-              let firstPageTickets: any[] = [];
-              
-              if (firstResponseData.results !== undefined) {
-                firstPageTickets = ensureArray(firstResponseData.results);
-              } else if (firstResponseData.data !== undefined) {
-                firstPageTickets = ensureArray(firstResponseData.data);
-              } else if (Array.isArray(firstResponseData)) {
-                firstPageTickets = firstResponseData;
-              }
-
-              allTickets = allTickets.concat(firstPageTickets);
-              
-              // Get total pages from metadata (based on searchPageSize=500)
-              const pageMeta = firstResponseData.page_meta;
-              const totalPages = pageMeta?.number_of_pages || 1;
-              const totalTickets = pageMeta?.total_count || allTickets.length;
-              
-              console.log(`Total tickets: ${totalTickets}, Total pages (with page_size=${searchPageSize}): ${totalPages}, fetching all for search...`);
-              
-              // Fetch ALL remaining pages in parallel batches to minimize API calls
-              if (totalPages > 1 && !abortController.signal.aborted) {
-                // Calculate how many pages we need to fetch
-                const remainingPages = totalPages - 1; // Page 1 already fetched
-                
-                // Fetch remaining pages in parallel (up to 5 at a time to avoid overwhelming the server)
-                const concurrentFetches = 5;
-                const totalBatches = Math.ceil(remainingPages / concurrentFetches);
-                
-                for (let batch = 0; batch < totalBatches && !abortController.signal.aborted; batch++) {
-                  const startPage = batch * concurrentFetches + 2; // Start from page 2
-                  const endPage = Math.min(startPage + concurrentFetches - 1, totalPages);
-                  
-                  const fetchPromises = [];
-                  for (let page = startPage; page <= endPage; page++) {
-                    const pageParams = new URLSearchParams();
-                    pageParams.append('page', page.toString());
-                    pageParams.append('page_size', searchPageSize.toString()); // Use larger page size
-                    
-                    fetchPromises.push(
-                      fetch(`${apiUrl}?${pageParams.toString()}`, {
-                        method: 'GET',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': authToken ? `Bearer ${authToken}` : '',
-                          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-                        },
-                        signal: abortController.signal
-                      }).then(res => res.ok ? res.json() : null).catch(() => null)
-                    );
-                  }
-                  
-                  try {
-                    const batchResults = await Promise.all(fetchPromises);
-                    if (abortController.signal.aborted) return;
-                    
-                    batchResults.forEach((responseData) => {
-                      if (!responseData) return;
-                      let tickets: any[] = [];
-                      
-                      if (responseData.results !== undefined) {
-                        tickets = ensureArray(responseData.results);
-                      } else if (responseData.data !== undefined) {
-                        tickets = ensureArray(responseData.data);
-                      } else if (Array.isArray(responseData)) {
-                        tickets = responseData;
-                      }
-                      
-                      allTickets = allTickets.concat(tickets);
-                    });
-                    
-                    // Log progress
-                    console.log(`Search progress: Fetched ${allTickets.length} tickets (pages 1-${endPage} of ${totalPages})`);
-                  } catch (batchError: any) {
-                    if (batchError.name !== 'AbortError') {
-                      console.warn(`Error fetching batch ${batch + 1}:`, batchError);
-                    }
-                  }
-                }
-              }
-              
-              console.log(`Search complete: Fetched ${allTickets.length} tickets from ${totalPages} pages (using page_size=${searchPageSize})`);
+            const pageMeta = responseData.page_meta;
+            if (pageMeta) {
+              setPagination({
+                totalCount: pageMeta.total_count || 0,
+                numberOfPages: pageMeta.number_of_pages || 0,
+                currentPage: pageMeta.current_page || 1,
+                pageSize: 50,
+                nextPageLink: pageMeta.next_page_link || null,
+                previousPageLink: pageMeta.previous_page_link || null
+              });
             }
-          } catch (paginationError: any) {
-            if (paginationError.name === 'AbortError') return;
-            console.error('Error fetching tickets for search:', paginationError);
+          } else {
+            throw new Error(`Search failed: ${response.status}`);
           }
-
-          if (abortController.signal.aborted) return;
-
-          const transformedData = allTickets.map(transformTicket);
-          baseDataRef.current = transformedData;
-          
-          // Filter client-side through all fetched tickets
-          const next = transformedData.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
-          
-          setFilteredData(next);
-          console.log(`Search "${term}": Fetched ${transformedData.length} tickets, found ${next.length} matches`);
         } catch (error: any) {
           if (error.name === 'AbortError') return;
           console.error('Error fetching tickets for search:', error);
-          // Fallback to client-side search on existing data
           const base = baseDataRef.current.length > 0 ? baseDataRef.current : data;
           const next = base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
           setFilteredData(next);
         } finally {
           if (!abortController.signal.aborted) {
             setTableLoading(false);
-            setSearchLoading(false); // Hide search loading indicator
+            setSearchLoading(false);
           }
         }
       } else {
-        // Search with filters applied - filter the already loaded filtered data
-        setSearchLoading(false); // No API calls needed, just client-side filtering
-        const base = baseDataRef.current.length > 0 ? baseDataRef.current : filteredData;
-        const next = base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
-        setFilteredData(next);
+        // Search with filters applied - use backend (applyFilters includes search param)
+        setSearchLoading(true);
+        try {
+          await applyFilters();
+        } finally {
+          setSearchLoading(false);
+        }
       }
     }, 500); // Increased debounce to 500ms to reduce API calls
   }, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
@@ -989,7 +917,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
     if (col.actionApiEndpoint?.trim()) {
       try {
-        const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        const baseUrl = TICKET_API_BASE;
         const { url, method, headers, body } = buildActionApiRequest(
           {
             endpoint: col.actionApiEndpoint,
@@ -1168,7 +1096,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const authToken = session?.access_token;
 
       // Always use renderer URL for analytics endpoint
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const baseUrl = TICKET_API_BASE;
       const apiUrl = `${baseUrl}/analytics/support-ticket/`;
       
       // Build query parameters with all current filters
@@ -1211,11 +1139,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
         params.append('created_at__lte', endDateTime.toISOString());
       }
-      
-      // Search is client-side only - do not send search to API
+
       const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
-      const isSearching = currentSearchTerm !== '';
-      
+      if (currentSearchTerm) {
+        params.append('search', currentSearchTerm);
+        if (config?.searchFields) params.append('search_fields', config.searchFields);
+      }
+
       params.append('page', page.toString());
       params.append('page_size', '50'); // Always use 50 tickets per page
       
@@ -1268,10 +1198,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }));
 
       setData(transformedData);
-      const toShow = isSearching
-        ? transformedData.filter((row: any) => matchRowBySearchTerm(row, currentSearchTerm, tableColumns))
-        : transformedData;
-      setFilteredData(toShow);
+      setFilteredData(transformedData);
       
       if (pageMeta) {
         setPagination({
@@ -1321,7 +1248,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
         const endpoint = config?.apiEndpoint || '/api/tickets';
         const baseUrl = apiPrefix === 'renderer' 
-          ? import.meta.env.VITE_RENDER_API_URL 
+          ? TICKET_API_BASE 
           : import.meta.env.VITE_API_URI;
         const apiUrl = `${baseUrl}${endpoint}?page=1&page_size=50`;
         console.log('API URL:', apiUrl);

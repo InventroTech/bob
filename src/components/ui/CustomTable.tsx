@@ -159,7 +159,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
               <th
                 key={idx}
                 className={cn(
-                  'text-sm font-medium px-4 py-3',
+                  'text-sm font-medium px-4 py-3 text-left',
                   col.align === 'center' && 'text-center',
                   col.align === 'right' && 'text-right',
                   col.width && `w-[${col.width}]`
@@ -199,7 +199,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   <td
                     key={colIdx}
                     className={cn(
-                      'text-sm px-4 py-3',
+                      'text-sm px-4 py-3 text-left',
                       col.align === 'center' && 'text-center',
                       col.align === 'right' && 'text-right'
                     )}
