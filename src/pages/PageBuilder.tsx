@@ -68,6 +68,8 @@ import {
   AddUserComponent,
   LeadAssignmentComponent,
   CallAttemptMatrixComponent,
+  InventoryTableComponent,
+  InventoryRequestFormComponent,
 } from "@/components/page-builder";
 import RoutingRulesComponent from "@/components/page-builder/RoutingRulesComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
@@ -250,6 +252,8 @@ interface ComponentConfig {
   // UserHierarchy specific fields
   showTable?: boolean;
   showDiagram?: boolean;
+  // InventoryRequestForm specific fields
+  defaultStatus?: string;
 }
 
 // Update CanvasComponentData to include config
@@ -272,6 +276,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   image: ImageComponent,
   dataCard:DataCardComponent,
   leadTable: LeadTableComponent,
+  inventoryTable: InventoryTableComponent,
   collapseCard: CollapseCard,
   leadCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,
@@ -298,6 +303,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   teamDashboard: TeamDashboardComponent,
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
+  inventoryRequestForm: InventoryRequestFormComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -334,6 +340,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     refreshInterval?: number;
     showFilters: boolean;
     searchFields: string;
+    /** Records table: entity type for API (e.g. inventory_request, inventory_cart). */
+    entityType?: string;
+    /** Records table: row click behavior — lead card, record detail modal, none, or auto (infer from entityType). */
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'none' | 'auto';
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -370,6 +380,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // title already in base; showTable, showDiagram below
     showTable?: boolean;
     showDiagram?: boolean;
+    // InventoryRequestForm specific fields
+    defaultStatus?: string;
   };
 
   // Local state for all input fields
@@ -382,6 +394,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     refreshInterval: initialConfig.refreshInterval || 0,
     showFilters: initialConfig.showFilters || false,
     searchFields: initialConfig.searchFields || '',
+    entityType: (initialConfig as any).entityType || '',
+    detailMode: (initialConfig as any).detailMode || 'auto',
     // OpenModalButton fields
     buttonTitle: initialConfig.buttonTitle || 'Apply Now',
     buttonColor: initialConfig.buttonColor || 'default',
@@ -420,6 +434,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // UserHierarchy
     showTable: initialConfig.showTable !== false,
     showDiagram: initialConfig.showDiagram !== false,
+    // InventoryRequestForm
+    defaultStatus: initialConfig.defaultStatus || 'DRAFT',
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
@@ -662,6 +678,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
       case 'leadTable':
       case 'oeLeadsTable':
+      case 'inventoryTable':
         return (
           <TableConfig
             localConfig={localConfig as any}
@@ -847,6 +864,30 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'inventoryRequestForm':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>Default Status</Label>
+              <Select
+                value={localConfig.defaultStatus || 'DRAFT'}
+                onValueChange={(value) => handleInputChange('defaultStatus', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select default status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DRAFT">DRAFT</SelectItem>
+                  <SelectItem value="PENDING_PM">PENDING_PM</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Status to set on new inventory requests created from this form.
+              </p>
+            </div>
+          </div>
+        );
+
       default:
         return <div>No configuration available for this component type.</div>;
     }
@@ -896,7 +937,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1390,6 +1431,16 @@ const PageBuilder = () => {
                           id="leadTable"
                           label="Lead Table"
                           icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="inventoryTable"
+                          label="Records Table (API)"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="inventoryRequestForm"
+                          label="Inventory Request Form"
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="oeLeadsTable"
