@@ -373,7 +373,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   // Default columns if none configured
   const defaultColumns = [
     { key: 'applicantName', label: 'Applicant', type: 'text' as const, visible: true, sortable: true, accessor: 'applicantName', align: 'left' as const, width: '200px' },
-    { key: 'stage', label: 'Stage', type: 'stage' as const, visible: true, sortable: true, accessor: 'stage', align: 'center' as const, width: '150px' },
+    { key: 'stage', label: 'Stage', type: 'stage' as const, visible: true, sortable: true, accessor: 'stage', align: 'left' as const, width: '150px' },
     { key: 'skills', label: 'Skills', type: 'skills' as const, visible: true, sortable: false, accessor: 'skills', align: 'left' as const, width: '300px' },
     { key: 'experience', label: 'Experience', type: 'text' as const, visible: true, sortable: false, accessor: 'experience', align: 'left' as const, width: '200px' },
     { key: 'college', label: 'College', type: 'text' as const, visible: true, sortable: false, accessor: 'college', align: 'left' as const, width: '200px' }
