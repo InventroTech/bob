@@ -80,6 +80,7 @@ import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
+import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
@@ -877,8 +878,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
                   <SelectValue placeholder="Select default status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="DRAFT">DRAFT</SelectItem>
-                  <SelectItem value="PENDING_PM">PENDING_PM</SelectItem>
+                  {INVENTORY_REQUEST_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">

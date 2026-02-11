@@ -22,7 +22,7 @@ interface RecordsTableProps {
  */
 export const InventoryTableComponent: React.FC<RecordsTableProps> = ({ config }) => {
   const mergedConfig = {
-    title: config?.title || 'Records Table',
+    title: config?.title || '',
     ...(config || {}),
   };
 

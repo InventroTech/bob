@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -28,7 +29,7 @@ const RECORD_TOP_LEVEL_KEYS = ['id', 'entity_type', 'created_at', 'updated_at', 
 /** Allowed status options per entity type (for status dropdown). */
 const ALLOWED_STATUSES: Record<string, string[]> = {
   inventory_item: ['IN_STOCK', 'OUT_OF_STOCK', 'RESERVED', 'DISCONTINUED', 'ON_ORDER'],
-  inventory_request: ['DRAFT', 'SUBMITTED', 'PENDING_PM', 'VENDOR_IDENTIFIED', 'PAYMENT_PENDING', 'IN_SHIPPING', 'RECEIVER_RECEIVED', 'TO_INVENTORY', 'FULFILLED', 'REJECTED'],
+  inventory_request: [...INVENTORY_REQUEST_STATUSES],
   inventory_cart: ['DRAFT', 'SUBMITTED', 'PENDING_APPROVAL', 'APPROVED', 'ORDERED', 'CLOSED'],
 };
 
@@ -44,13 +45,11 @@ const DEFAULT_EDITABLE_BY_ENTITY: Record<string, string[]> = {
     'active',
   ],
   inventory_request: [
-    // Keep legacy keys for backward-compat (if any existing data uses them)
     'status',
     'quantity',
     'vendor',
     'tracking_number',
     'notes',
-    // New canonical keys for inventory_request flow
     'department',
     'sub_department',
     'project_purpose',
@@ -63,11 +62,29 @@ const DEFAULT_EDITABLE_BY_ENTITY: Record<string, string[]> = {
     'urgency_level',
     'expected_delivery_date',
     'procurement_type',
-    // Allow linking/moving requests to carts directly from the modal
     'cart_id',
   ],
   inventory_cart: ['status', 'invoice_number', 'payment_terms', 'comments'],
 };
+
+/** inventory_request: data keys hidden from requestor (PM-only). Requestor never sees these in the modal. */
+const FIELDS_HIDDEN_FROM_REQUESTER: string[] = ['cart_id', 'assigned_to_id'];
+
+/** inventory_request: data keys the requestor is allowed to edit (subset; status and cart/assignee are PM-only). */
+const EDITABLE_FIELDS_FOR_REQUESTER: string[] = [
+  'department',
+  'sub_department',
+  'project_purpose',
+  'item_name_freeform',
+  'part_number_or_sku',
+  'quantity_required',
+  'comments',
+  'urgency_level',
+  'expected_delivery_date',
+  'procurement_type',
+  'quantity',
+  'notes',
+];
 
 interface RecordDetailModalProps {
   open: boolean;
@@ -180,24 +197,89 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   const displayRows = record ? buildDisplayRows(record, entityType) : [];
   const statusOptions = entityType ? ALLOWED_STATUSES[entityType] ?? [] : [];
-  const editableSet = useCallback(() => {
-    const list = editableFieldsProp ?? (entityType ? DEFAULT_EDITABLE_BY_ENTITY[entityType] ?? [] : []);
-    return new Set(list);
-  }, [editableFieldsProp, entityType])();
   const canEdit = Boolean(onUpdate && record?.id != null);
   const isInventoryRequest = entityType === 'inventory_request';
   const isInventoryCart = entityType === 'inventory_cart';
+  const cartOwnerId = record?.data?.created_by_id;
+  const isCartOwner =
+    isInventoryCart && !!user && cartOwnerId != null && String(cartOwnerId) === String(user.id);
   const requesterId = record?.data?.requester_id;
   const isRequester =
     isInventoryRequest &&
     !!user &&
     requesterId != null &&
     String(requesterId) === String(user.id);
+  const assignedToId = record?.data?.assigned_to_id;
+  const isAssignee =
+    isInventoryRequest &&
+    !!user &&
+    assignedToId != null &&
+    String(assignedToId) === String(user.id);
+
+  /** Rows to show: for requestor, hide PM-only fields (cart_id, assigned_to_id). */
+  const visibleRows =
+    isInventoryRequest && isRequester
+      ? displayRows.filter((r) => !FIELDS_HIDDEN_FROM_REQUESTER.includes(r.key))
+      : displayRows;
+
+  /** Editable keys: requestor gets only EDITABLE_FIELDS_FOR_REQUESTER; PM gets full list for entity. */
+  const editableSet = new Set(
+    isInventoryRequest && isRequester
+      ? (editableFieldsProp ?? EDITABLE_FIELDS_FOR_REQUESTER)
+      : (editableFieldsProp ?? (entityType ? DEFAULT_EDITABLE_BY_ENTITY[entityType] ?? [] : []))
+  );
+
   const canEditInventoryRequest = canEdit && (!isInventoryRequest || isRequester);
+  /** Only the assigned PM can update status on an inventory request; requester can edit other fields when draft. */
+  const canEditStatusForRequest = isInventoryRequest && canEdit && !!user && isAssignee;
 
   const [cartRequests, setCartRequests] = useState<any[]>([]);
   const [cartRequestsLoading, setCartRequestsLoading] = useState(false);
   const [cartRequestsError, setCartRequestsError] = useState<string | null>(null);
+  const [cartRequestsVersion, setCartRequestsVersion] = useState(0);
+  const [applyTargetStatus, setApplyTargetStatus] = useState<string>('PAYMENT_PENDING');
+  const [copyInvoiceAndTerms, setCopyInvoiceAndTerms] = useState(true);
+  const [applyingToCart, setApplyingToCart] = useState(false);
+  const [removingFromRequestId, setRemovingFromRequestId] = useState<number | null>(null);
+  const [deletingCart, setDeletingCart] = useState(false);
+  /** Selected cart id for "Add to existing cart" (string to match Select value). */
+  const [selectedCartIdForAdd, setSelectedCartIdForAdd] = useState<string>('');
+  /** Carts loaded by modal when parent does not pass cartOptions (PM add-to-cart dropdown). */
+  const [modalCartOptions, setModalCartOptions] = useState<Array<{ id: number; label: string }>>([]);
+  const [modalCartOptionsLoading, setModalCartOptionsLoading] = useState(false);
+
+  // When PM view and parent did not pass cartOptions, load carts for "Add to existing cart" dropdown
+  useEffect(() => {
+    if (!open || !isInventoryRequest || isRequester || cartOptions != null) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setModalCartOptionsLoading(true);
+        const res = await apiClient.get<any>('/crm-records/records/?entity_type=inventory_cart&page_size=100');
+        const list: any[] = res.data?.results ?? (res.data as any)?.data ?? [];
+        const options = list
+          .map((r: any) => {
+            const id = r.id;
+            const d = r.data || {};
+            const status = d.status || 'DRAFT';
+            const invoice = d.invoice_number;
+            const labelParts = [`Cart #${id}`, `(${status})`];
+            if (invoice) labelParts.push(`Invoice: ${invoice}`);
+            return { id, label: labelParts.join(' ') };
+          })
+          .filter((o: any) => o && o.id != null);
+        if (!cancelled) setModalCartOptions(options);
+      } catch {
+        if (!cancelled) setModalCartOptions([]);
+      } finally {
+        if (!cancelled) setModalCartOptionsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isInventoryRequest, isRequester, cartOptions]);
 
   // When viewing an inventory_cart, load all inventory_request records linked via cart_id
   useEffect(() => {
@@ -234,7 +316,90 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [open, isInventoryCart, record?.id]);
+  }, [open, isInventoryCart, record?.id, cartRequestsVersion]);
+
+  const handleApplyToAllRequestsInCart = useCallback(async () => {
+    if (!isInventoryCart || !record?.id || !applyTargetStatus) return;
+    try {
+      setApplyingToCart(true);
+      await apiClient.post('/crm-records/records/events/', {
+        record_id: Number(record.id),
+        event: 'inventory_cart.apply_to_requests',
+        payload: {
+          target_status: applyTargetStatus,
+          copy_invoice_and_terms: copyInvoiceAndTerms,
+        },
+      });
+      toast({
+        title: 'Cart applied',
+        description: `All requests in this cart updated to ${applyTargetStatus}.`,
+      });
+      setCartRequestsVersion((v) => v + 1);
+    } catch (e: any) {
+      toast({
+        title: 'Apply failed',
+        description: e?.message || 'Could not apply to requests in cart.',
+        variant: 'destructive',
+      });
+    } finally {
+      setApplyingToCart(false);
+    }
+  }, [isInventoryCart, record?.id, applyTargetStatus, copyInvoiceAndTerms, toast]);
+
+  const handleRemoveRequestFromCart = useCallback(
+    async (req: { id: number; data?: Record<string, unknown> }) => {
+      try {
+        setRemovingFromRequestId(req.id);
+        const nextData = { ...(req.data || {}), cart_id: '' };
+        await apiClient.patch(`/crm-records/records/${req.id}/`, { data: nextData });
+        toast({ title: 'Removed from cart', description: `Request #${req.id} is no longer in this cart.` });
+        setCartRequestsVersion((v) => v + 1);
+      } catch (e: any) {
+        toast({
+          title: 'Remove failed',
+          description: e?.message || 'Could not remove request from cart.',
+          variant: 'destructive',
+        });
+      } finally {
+        setRemovingFromRequestId(null);
+      }
+    },
+    [toast]
+  );
+
+  const handleDeleteCart = useCallback(async () => {
+    if (!isInventoryCart || !record?.id) return;
+    if (
+      !window.confirm(
+        'Delete this cart? Requests in it will be unlinked (removed from the cart) but not deleted. This cannot be undone.'
+      )
+    ) {
+      return;
+    }
+    try {
+      setDeletingCart(true);
+      // Clear cart_id on all requests in this cart so they don't point to a deleted cart
+      for (const req of cartRequests) {
+        const nextData = { ...(req.data || {}), cart_id: '' };
+        await apiClient.patch(`/crm-records/records/${req.id}/`, { data: nextData });
+      }
+      await apiClient.delete(`/crm-records/records/${record.id}/`);
+      toast({ title: 'Cart deleted', description: 'The cart has been deleted and requests were unlinked.' });
+      if (onDeleted) {
+        onDeleted(record.id);
+      } else {
+        onOpenChange(false);
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Delete failed',
+        description: e?.message || 'Could not delete cart.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingCart(false);
+    }
+  }, [isInventoryCart, record?.id, cartRequests, onDeleted, onOpenChange, toast]);
 
   const handleSave = useCallback(async (key: string, value: unknown) => {
     if (!onUpdate || record?.id == null) return;
@@ -345,61 +510,78 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     }
   }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, toast, onOpenChange]);
 
-  const handleAddToCartForPm = useCallback(async () => {
+  /** Create a new cart and add this request to it. */
+  const handleAddToNewCart = useCallback(async () => {
     if (!isInventoryRequest || !record?.id || !user) return;
     if (addingToCart) return;
 
     try {
       setAddingToCart(true);
-
-      // Step 1: try to find an existing DRAFT cart for this PM
-      let cartId: number | null = null;
-      try {
-        const url = `/crm-records/records/?entity_type=inventory_cart&created_by_id=${encodeURIComponent(
-          String(user.id),
-        )}&status=DRAFT&page_size=1`;
-        const res = await apiClient.get<any>(url);
-        const list: any[] = res.data?.results ?? (res.data as any)?.data ?? [];
-        if (list.length > 0 && list[0]?.id != null) {
-          cartId = Number(list[0].id);
-        }
-      } catch {
-        // ignore and fall through to cart creation
+      const createRes = await apiClient.post<any>('/crm-records/records/', {
+        entity_type: 'inventory_cart',
+        data: {
+          status: 'DRAFT',
+          created_by_id: user.id,
+        },
+      });
+      if (!createRes.data?.id) {
+        throw new Error('Could not create cart.');
       }
-
-      // Step 2: if no existing cart, create a new one for this PM
-      if (!cartId) {
-        const createRes = await apiClient.post<any>('/crm-records/records/', {
-          entity_type: 'inventory_cart',
-          data: {
-            status: 'DRAFT',
-            created_by_id: user.id,
-          },
-        });
-        if (!createRes.data?.id) {
-          throw new Error('Could not create cart for this PM.');
-        }
-        cartId = Number(createRes.data.id);
-      }
-
-      // Step 3: link this request to the cart (store cart_id as string for consistency)
+      const cartId = Number(createRes.data.id);
       const cartIdAsString = String(cartId);
+      const requestData = {
+        ...(record.data || {}),
+        cart_id: cartIdAsString,
+        assigned_to_id: String(user.id),
+      };
       if (onUpdate) {
-        await onUpdate(Number(record.id), {
-          data: {
-            ...(record.data || {}),
-            cart_id: cartIdAsString,
-          },
-        });
+        await onUpdate(Number(record.id), { data: requestData });
       } else {
-        await apiClient.patch(`/crm-records/records/${record.id}/`, {
-          data: {
-            ...(record.data || {}),
-            cart_id: cartIdAsString,
-          },
-        });
+        await apiClient.patch(`/crm-records/records/${record.id}/`, { data: requestData });
       }
+      toast({
+        title: 'Added to new cart',
+        description: `Request linked to new cart #${cartId}.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Add to cart failed',
+        description: e?.message || 'Could not create cart or add request.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAddingToCart(false);
+    }
+  }, [isInventoryRequest, record?.id, record?.data, user, onUpdate, toast, addingToCart]);
 
+  /** Add this request to the currently selected existing cart. */
+  const handleAddToSelectedCart = useCallback(async () => {
+    if (!isInventoryRequest || !record?.id || !user) return;
+    const cartId = selectedCartIdForAdd ? Number(selectedCartIdForAdd) : null;
+    if (cartId == null || isNaN(cartId)) {
+      toast({
+        title: 'Select a cart',
+        description: 'Choose a cart from the dropdown first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (addingToCart) return;
+
+    try {
+      setAddingToCart(true);
+      const cartIdAsString = String(cartId);
+      const requestData = {
+        ...(record.data || {}),
+        cart_id: cartIdAsString,
+        assigned_to_id: String(user.id),
+      };
+      if (onUpdate) {
+        await onUpdate(Number(record.id), { data: requestData });
+      } else {
+        await apiClient.patch(`/crm-records/records/${record.id}/`, { data: requestData });
+      }
+      setSelectedCartIdForAdd('');
       toast({
         title: 'Added to cart',
         description: `Request linked to cart #${cartId}.`,
@@ -407,13 +589,13 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } catch (e: any) {
       toast({
         title: 'Add to cart failed',
-        description: e?.message || 'Could not move request to cart.',
+        description: e?.message || 'Could not add request to cart.',
         variant: 'destructive',
       });
     } finally {
       setAddingToCart(false);
     }
-  }, [isInventoryRequest, record?.id, user, onUpdate, toast, addingToCart]);
+  }, [isInventoryRequest, record?.id, record?.data, user, selectedCartIdForAdd, onUpdate, toast, addingToCart]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -431,12 +613,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
-          {displayRows.length === 0 ? (
+          {visibleRows.length === 0 ? (
             <p className="text-sm text-gray-500">No data to display.</p>
           ) : (
             <dl className="grid gap-3 sm:grid-cols-1">
-              {displayRows.map(({ key, value, inData }) => {
-                const isEditable = canEditInventoryRequest && inData && editableSet.has(key);
+              {visibleRows.map(({ key, value, inData }) => {
+                const isEditable =
+                  key === 'status' && isInventoryRequest
+                    ? canEditStatusForRequest && editableSet.has(key)
+                    : canEditInventoryRequest && inData && editableSet.has(key);
                 const displayValue = pending[key] !== undefined ? pending[key] : value;
                 const isSaving = saving === key;
 
@@ -558,24 +743,81 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   No inventory requests are linked to this cart yet.
                 </p>
               ) : (
-                <ul className="space-y-1">
-                  {cartRequests.map((req) => (
-                    <li
-                      key={req.id}
-                      className="text-xs text-gray-800 flex items-center justify-between border-b border-gray-100 pb-1 last:border-0"
-                    >
-                      <span className="truncate">
-                        <span className="font-medium">#{req.id}</span>{' '}
-                        {req.data?.item_name_freeform ||
-                          req.data?.part_number_or_sku ||
-                          'Request'}
-                      </span>
-                      <span className="text-[11px] uppercase tracking-wide text-gray-500 ml-2 shrink-0">
-                        {req.data?.status || '—'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="space-y-1">
+                    {cartRequests.map((req) => (
+                      <li
+                        key={req.id}
+                        className="text-xs text-gray-800 flex items-center justify-between gap-2 border-b border-gray-100 pb-1 last:border-0"
+                      >
+                        <span className="truncate min-w-0">
+                          <span className="font-medium">#{req.id}</span>{' '}
+                          {req.data?.item_name_freeform ||
+                            req.data?.part_number_or_sku ||
+                            'Request'}
+                        </span>
+                        <span className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] uppercase tracking-wide text-gray-500">
+                            {req.data?.status || '—'}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                            disabled={removingFromRequestId === req.id}
+                            onClick={() => handleRemoveRequestFromCart(req)}
+                          >
+                            {removingFromRequestId === req.id ? 'Removing…' : 'Remove from cart'}
+                          </Button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                    <h6 className="text-sm font-medium text-gray-700">Apply to all requests in cart</h6>
+                    <p className="text-xs text-gray-500">
+                      Set the same status for all requests above and optionally copy this cart&apos;s invoice number and payment terms.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={applyTargetStatus}
+                        onValueChange={setApplyTargetStatus}
+                        disabled={applyingToCart}
+                      >
+                        <SelectTrigger className="w-[200px] h-8 text-sm">
+                          <SelectValue placeholder="Target status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(ALLOWED_STATUSES.inventory_request || []).map((opt) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt.replace(/_/g, ' ')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={copyInvoiceAndTerms}
+                          onChange={(e) => setCopyInvoiceAndTerms(e.target.checked)}
+                          disabled={applyingToCart}
+                          className="rounded border-gray-300"
+                        />
+                        Update invoice &amp; payment terms
+                      </label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-primary text-white hover:bg-primary/90"
+                        disabled={applyingToCart || cartRequests.length === 0}
+                        onClick={handleApplyToAllRequestsInCart}
+                      >
+                        {applyingToCart ? 'Applying…' : 'Apply to all requests'}
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -601,15 +843,67 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             </Button>
           </div>
         )}
-        {isInventoryRequest && !isRequester && (
+        {isInventoryRequest && !isRequester && (() => {
+          const cartList = cartOptions ?? modalCartOptions;
+          const hasCarts = Array.isArray(cartList) && cartList.length > 0;
+          const showSelect = hasCarts && !modalCartOptionsLoading;
+          return (
+            <div className="px-6 pb-4 pt-2 border-t border-gray-200 space-y-3">
+              <p className="text-sm font-medium text-gray-700">Add request to a cart</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  className="bg-primary text-white hover:bg-primary/90"
+                  disabled={addingToCart || deleting || proceeding}
+                  onClick={handleAddToNewCart}
+                >
+                  {addingToCart ? 'Adding…' : showSelect ? 'Create new cart and add request' : 'Move to cart'}
+                </Button>
+                {showSelect && (
+                  <>
+                    <span className="text-xs text-gray-500 shrink-0">or</span>
+                    <Select
+                      value={selectedCartIdForAdd || '_none_'}
+                      onValueChange={(v) => setSelectedCartIdForAdd(v === '_none_' ? '' : v)}
+                      disabled={addingToCart}
+                    >
+                      <SelectTrigger className="w-[220px] h-9">
+                        <SelectValue placeholder="Select a cart" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none_">Select a cart…</SelectItem>
+                        {cartList.map((opt) => (
+                          <SelectItem key={opt.id} value={String(opt.id)}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-primary text-primary hover:bg-primary/10"
+                      disabled={addingToCart || !selectedCartIdForAdd || deleting || proceeding}
+                      onClick={handleAddToSelectedCart}
+                    >
+                      {addingToCart ? 'Adding…' : 'Add to selected cart'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+        {isInventoryCart && isCartOwner && (
           <div className="flex items-center justify-end gap-3 px-6 pb-4 pt-2 border-t border-gray-200">
             <Button
               type="button"
-              className="bg-primary text-white hover:bg-primary/90"
-              disabled={addingToCart || deleting || proceeding}
-              onClick={handleAddToCartForPm}
+              variant="outline"
+              className="border-red-200 text-red-600 hover:bg-red-50"
+              disabled={deletingCart || applyingToCart}
+              onClick={handleDeleteCart}
             >
-              {addingToCart ? 'Adding to cart…' : 'Move to My Cart'}
+              {deletingCart ? 'Deleting…' : 'Delete cart'}
             </Button>
           </div>
         )}
