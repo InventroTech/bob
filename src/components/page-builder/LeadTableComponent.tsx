@@ -1683,7 +1683,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-gray-600">Loading leads data...</div>
+        <div className="text-gray-600">Loading data...</div>
       </div>
     );
   }
@@ -1695,7 +1695,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
             <h5>
-              {config?.title || "Leads"}
+              {config?.title || ""}
             </h5>
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-[200px] max-w-sm">

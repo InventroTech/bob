@@ -141,7 +141,7 @@ export const OeLeadsTable: React.FC<OeLeadsTableProps> = ({ config }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-gray-600">Loading leads data...</div>
+        <div className="text-gray-600">Loading data...</div>
       </div>
     );
   }
