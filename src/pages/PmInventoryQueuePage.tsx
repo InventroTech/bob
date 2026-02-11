@@ -1,6 +1,12 @@
 import React from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { LeadTableComponent } from '@/components/page-builder';
+import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
+
+/** Active (non-terminal) statuses shown in PM queue. */
+const PM_QUEUE_STATUSES = INVENTORY_REQUEST_STATUSES.filter(
+  (s) => !['DRAFT', 'FULFILLED', 'REJECTED'].includes(s)
+).join(',');
 
 const PmInventoryQueuePage: React.FC = () => {
   return (
@@ -18,7 +24,7 @@ const PmInventoryQueuePage: React.FC = () => {
             title: 'Active Inventory Requests',
             entityType: 'inventory_request',
             apiEndpoint:
-              '/crm-records/records/?entity_type=inventory_request&status=PENDING_PM,VENDOR_IDENTIFIED,PAYMENT_PENDING,IN_SHIPPING,RECEIVER_RECEIVED,TO_INVENTORY',
+              `/crm-records/records/?entity_type=inventory_request&status=${PM_QUEUE_STATUSES}`,
             columns: [
               { key: 'status', label: 'Status', type: 'chip' },
               { key: 'item_name_freeform', label: 'Item', type: 'text' },
