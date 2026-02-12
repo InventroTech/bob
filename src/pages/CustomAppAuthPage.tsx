@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { authService } from '@/lib/api/services/auth';
+import { getRoleIdFromJWT } from '@/lib/jwt';
 
 const CustomAppAuthPage: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -38,21 +39,32 @@ const CustomAppAuthPage: React.FC = () => {
       localStorage.setItem('user_email', user.email);
 
       try {
-        // NEW: Use centralized auth service to link user UID with email
-        console.log('Linking user UID via auth service');
-        console.log('Payload:', { uid: user.id, email: user.email });
+        // Only link for new users (check JWT for role_id - if missing, user needs linking)
+        const { data: { session } } = await supabase.auth.getSession();
+        const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
 
-        const result = await authService.linkUserUid(
-          { uid: user.id, email: user.email },
-          tenantSlug || 'bibhab-thepyro-ai'
-        );
+        if (!isAlreadyLinked) {
+          const result = await authService.linkUserUid(
+            { uid: user.id, email: user.email },
+            tenantSlug || 'bibhab-thepyro-ai'
+          );
 
-        if (result.success === false || result.error) {
-          console.error('Error linking user UID:', result.error);
-          // Don't block login for this error, just log it
-          toast.error('Warning: User linking failed, but login will continue');
-        } else {
-          console.log('User UID linked successfully:', result);
+          if (result.success === false && result.error) {
+            const errorCode = (result as any).code;
+            const errorMessage = result.error || '';
+            
+            // Expected errors don't block login and don't show toast
+            const isExpectedError = 
+              errorCode === 'NO_TENANT_MEMBERSHIP' || 
+              errorMessage.includes('No TenantMembership found') ||
+              errorMessage.includes('already has a linked UID') ||
+              errorMessage.includes('already linked');
+            
+            if (!isExpectedError) {
+              // Only show toast for unexpected errors
+              toast.error('Warning: User linking failed, but login will continue');
+            }
+          }
         }
 
         /* BACKWARD COMPATIBILITY: Legacy fetch-based implementation
