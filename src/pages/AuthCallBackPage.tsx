@@ -70,6 +70,59 @@ const AuthCallbackPage = () => {
             })
           });
 
+          if (result.success === false && result.error) {
+            const errorCode = (result as any).code;
+            const errorMessage = result.error || '';
+            
+            // Expected errors don't block login and don't show toast
+            const isExpectedError = 
+              errorCode === 'NO_TENANT_MEMBERSHIP' || 
+              errorMessage.includes('No TenantMembership found') ||
+              errorMessage.includes('already has a linked UID') ||
+              errorMessage.includes('already linked');
+            
+            if (!isExpectedError) {
+              // Only show toast for unexpected errors
+              toast.error('Warning: User linking failed, but login will continue');
+            }
+          }
+        }
+
+        /* BACKWARD COMPATIBILITY: Legacy fetch-based implementation
+         * Uncomment below and comment above if you need to revert to old implementation
+         * 
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        if (token) {
+          const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+          const apiUrl = `${baseUrl}/accounts/link-user-uid/`;
+          
+          console.log('Linking user UID via:', apiUrl);
+          console.log('Payload:', { uid: user.id, email: user.email });
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'X-Tenant-Slug': 'bibhab-thepyro-ai'
+            },
+            body: JSON.stringify({
+              uid: user.id,
+              email: user.email
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Error linking user UID:', errorData);
+            toast.error('Warning: User linking failed, but login will continue');
+          } else {
+            const responseData = await response.json();
+            console.log('User UID linked successfully:', responseData);
+          }
+        }
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             console.error('Error linking user UID:', errorData);
