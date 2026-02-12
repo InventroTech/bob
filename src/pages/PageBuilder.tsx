@@ -1224,6 +1224,14 @@ const PageBuilder = () => {
       }
 
       if (response.error) {
+        // Handle foreign key constraint violation for role
+        if (response.error.message?.includes('pages_role_fkey') || 
+            response.error.message?.includes('foreign key constraint')) {
+          toast.error(`Error saving page: Invalid role selected. Please select a valid role or leave it empty.`);
+          console.error('Role FK constraint violation:', response.error);
+          return; // Don't retry, just show error
+        }
+        
         // If error is about missing column, try saving without header_title
         if (response.error.message?.includes('header_title') || response.error.message?.includes('column')) {
           const pageDataWithoutHeader = { ...pageData };
