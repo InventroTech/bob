@@ -191,15 +191,14 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
-        // Link the user's UID from auth.users to our users table (non-blocking)
-        // Only do this once per session to avoid redundant updates
-        if (accessCheckedRef.current !== checkKey) {
+        // Link user UID only for new users (no role_id in JWT) and only once per session
+        if (accessCheckedRef.current !== checkKey && !jwtRoleId) {
           const result = await authService.linkUserUid(
             { uid: session.user.id, email: session.user.email },
             tenantSlug
           );
 
-          if (result.success === false || result.error) {
+          if (result.success === false && result.error) {
             console.error('Failed to link user UID:', result.error);
             // Don't block access if linking fails
           }
