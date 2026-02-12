@@ -36,11 +36,6 @@ const IGNORED_ERRORS = [
   // Chrome extension errors
   "chrome-extension://",
   "moz-extension://",
-  // User linking errors (expected - non-blocking)
-  "No TenantMembership found",
-  "already has a linked UID",
-  "already linked",
-  "Failed to link user UID",
 ] as const;
 
 /**
@@ -56,27 +51,6 @@ const DENIED_URLS = [
   // Browser internals
   /^about:/i,
 ] as const;
-
-/**
- * Check if error is an expected user linking error (should not be sent to Sentry)
- */
-const isExpectedUserLinkingError = (event: any): boolean => {
-  const errorMessage = event.message || event.exception?.values?.[0]?.value || '';
-  const errorType = event.exception?.values?.[0]?.type || '';
-  
-  // Check for expected user linking errors
-  const expectedPatterns = [
-    'No TenantMembership found',
-    'already has a linked UID',
-    'already linked',
-    'Failed to link user UID',
-    'NO_TENANT_MEMBERSHIP',
-  ];
-  
-  return expectedPatterns.some(pattern => 
-    errorMessage.includes(pattern) || errorType.includes(pattern)
-  );
-};
 
 /**
  * Sanitize error event before sending to Sentry
@@ -117,14 +91,6 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
   if (event.request?.url) {
     if (DENIED_URLS.some(pattern => pattern.test(event.request!.url!))) {
       return null; // Drop the event
-    }
-    
-    // Filter out expected errors from link-user-uid endpoint
-    if (event.request.url.includes('/accounts/link-user-uid/')) {
-      const errorMessage = event.message || event.exception?.values?.[0]?.value || '';
-      if (isExpectedUserLinkingError(event)) {
-        return null; // Drop the event
-      }
     }
   }
 
@@ -220,13 +186,7 @@ export function initSentry(config: SentryConfig): void {
     replaysOnErrorSampleRate: enableReplay ? errorSampleRate : 0,
     
     // Event processing
-    beforeSend: (event, hint) => {
-      // Filter out expected user linking errors
-      if (isExpectedUserLinkingError(event)) {
-        return null; // Don't send to Sentry
-      }
-      return sanitizeEvent(event, hint);
-    },
+    beforeSend: sanitizeEvent,
     
     // Error filtering
     ignoreErrors: [
