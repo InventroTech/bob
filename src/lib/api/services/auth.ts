@@ -35,13 +35,22 @@ export const authService = {
 
       return response.data;
     } catch (error: any) {
+      // Extract error details from response if available
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to link user UID';
+      const errorCode = error.response?.data?.code;
+      
       // Log error but don't throw - this is a non-blocking operation
-      console.error('Error linking user UID:', error);
+      // Don't log expected errors (they're handled gracefully)
+      if (!errorMessage.includes('No TenantMembership found') && 
+          !errorMessage.includes('already has a linked UID')) {
+        console.error('Error linking user UID:', errorMessage);
+      }
       
       // Return error info in a way that doesn't break the flow
       return {
         success: false,
-        error: error.message || 'Failed to link user UID',
+        error: errorMessage,
+        code: errorCode,
       } as any;
     }
   },
