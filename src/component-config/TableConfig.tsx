@@ -112,11 +112,12 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             <SelectItem value="lead_card">Lead card (lead modal)</SelectItem>
             <SelectItem value="inventory_request">Record detail (request)</SelectItem>
             <SelectItem value="inventory_cart">Record detail (cart)</SelectItem>
+            <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
             <SelectItem value="none">None (no row click)</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-gray-500 mt-1">
-          What happens when a row is clicked. Auto: inventory_request/cart open record detail; otherwise lead card.
+          What happens when a row is clicked. Auto: inventory_request/cart open record detail; receive_shipments: quick add-to-inventory / roll-back modal.
         </p>
       </div>
 
