@@ -1569,6 +1569,14 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                           {currentLead.affiliated_party}
                         </span>
                       )}
+                      {currentLead?.affiliated_party && currentLead?.package_to_pitch && (
+                        <span className="text-slate-400">•</span>
+                      )}
+                      {currentLead?.package_to_pitch && (
+                        <span className="rounded bg-black px-2 py-0.5 font-medium text-white">
+                          {currentLead.package_to_pitch}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
