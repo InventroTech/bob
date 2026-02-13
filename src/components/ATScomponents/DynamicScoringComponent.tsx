@@ -384,8 +384,11 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         url = `${url}/`;
       }
 
-      // Add ID to URL if updating
-      if (rule.id) {
+      // Check if this is a new rule (no ID or temporary ID starting with "rule_")
+      const isNewRule = !rule.id || (typeof rule.id === 'string' && rule.id.startsWith('rule_'));
+      
+      // Add ID to URL only if updating an existing rule (not a temporary ID)
+      if (rule.id && !isNewRule) {
         url = `${url}${rule.id}/`;
       }
 
@@ -419,7 +422,8 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         description: rule.description || '',
       };
 
-      const method = rule.id ? 'PUT' : 'POST';
+      // Use POST for new rules (including those with temporary IDs), PUT for existing rules
+      const method = isNewRule ? 'POST' : 'PUT';
       const response = await fetch(url, {
         method,
         headers,
@@ -589,30 +593,65 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
     }
   };
 
-  const handleRemoveRule = (id: string | number | undefined) => {
-    if (!id) {
+  const handleRemoveRule = (ruleToRemove: ScoringRule) => {
+    // This is for canceling new rules (rules without database ID)
+    // Check if it's a temporary ID (string starting with "rule_") or no ID
+    const isNewRule = !ruleToRemove.id || (typeof ruleToRemove.id === 'string' && ruleToRemove.id.startsWith('rule_'));
+    
+    if (isNewRule) {
       // Remove from local state only (new rule not saved yet)
       if (rules.length === 1) {
         toast.error('At least one rule is required');
         return;
       }
-      setRules(rules.filter(rule => rule.id !== id));
+      
+      // Filter out the rule by comparing IDs
+      // Since new rules have unique temporary IDs, we can filter by ID
+      const ruleIdToRemove = ruleToRemove.id;
+      const filteredRules = rules.filter(rule => {
+        // Compare IDs - handle both undefined and defined cases
+        if (ruleIdToRemove === undefined && rule.id === undefined) {
+          // If both are undefined, compare by object reference as fallback
+          return rule !== ruleToRemove;
+        }
+        return rule.id !== ruleIdToRemove;
+      });
+      
+      if (filteredRules.length === rules.length) {
+        // Rule wasn't removed - try object reference comparison as fallback
+        console.warn('Rule not found by ID, trying object reference comparison');
+        setRules(rules.filter(rule => rule !== ruleToRemove));
+      } else {
+        setRules(filteredRules);
+      }
+      
+      toast.success('Rule removed');
     } else {
-      // Delete from backend
-      handleDeleteRule(id);
+      // This shouldn't happen - existing rules use handleDeleteRule
+      console.warn('handleRemoveRule called with existing rule ID, using handleDeleteRule instead');
+      if (ruleToRemove.id) {
+        handleDeleteRule(ruleToRemove.id);
+      }
     }
   };
 
-  const handleRuleChange = (id: string | number | undefined, field: keyof ScoringRule, value: string | number) => {
-    if (!id) return;
+  const handleRuleChange = (ruleToUpdate: ScoringRule, field: keyof ScoringRule, value: string | number) => {
+    // Update rule by matching the rule object itself (works for both new and existing rules)
     setRules(rules.map(rule => 
-      rule.id === id ? { ...rule, [field]: value } : rule
+      rule === ruleToUpdate || rule.id === ruleToUpdate.id ? { ...rule, [field]: value } : rule
     ));
   };
 
   const handleCalculate = async () => {
     if (!scoringEndpoint) {
       toast.error('Scoring endpoint not configured');
+      return;
+    }
+
+    // Check if there are unsaved rules (rules with temporary IDs starting with "rule_")
+    const unsavedRules = rules.filter(rule => !rule.id || (typeof rule.id === 'string' && rule.id.startsWith('rule_')));
+    if (unsavedRules.length > 0) {
+      toast.error('Please save all rules before running the scoring job');
       return;
     }
 
@@ -626,20 +665,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
       return;
     }
 
-    // First, save all rules to database (if rulesEndpoint is configured)
-    if (rulesEndpoint) {
-      try {
-        // Save each rule that doesn't have an ID (new rules)
-        const unsavedRules = rules.filter(rule => !rule.id);
-        for (const rule of unsavedRules) {
-          await handleSaveRule(rule);
-        }
-      } catch (error) {
-        console.error('Error saving rules before calculation:', error);
-        // Continue with calculation even if save fails
-      }
-    }
-
+    // Only trigger the background job - rules should already be saved individually
     setCalculating(true);
     try {
       let url = scoringEndpoint;
@@ -684,29 +710,10 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         headers['X-Tenant-Slug'] = effectiveTenantSlug;
       }
 
-      // Prepare payload with all rule fields
+      // Prepare payload - send empty rules array since rules are already saved in ScoringRule table
+      // The backend will read rules from ScoringRule table instead
       const payload = {
-        rules: rules.map(rule => {
-          // Get full attribute name from display name using the mapping
-          const fullAttributeName = attributeMap.get(rule.attribute) || rule.attribute;
-          
-          // Convert value to number if it's a numeric string, otherwise keep as string
-          let processedValue: string | number = rule.value;
-          if (rule.operator !== 'contains' && rule.operator !== 'startsWith' && rule.operator !== 'endsWith') {
-            // For comparison operators, try to parse as number
-            const numValue = parseFloat(rule.value);
-            if (!isNaN(numValue) && rule.value.trim() !== '') {
-              processedValue = numValue;
-            }
-          }
-          
-          return {
-            attr: fullAttributeName,      // Full attribute name (e.g., "data.affiliated_party")
-            operator: rule.operator,      // Comparison operator
-            value: processedValue,        // Value to compare (string or number)
-            weight: rule.weight,          // Score/weight for this rule
-          };
-        })
+        rules: []  // Rules are already saved individually, backend will read from ScoringRule table
       };
 
       console.log('Calculating score with payload:', JSON.stringify(payload, null, 2));
@@ -824,13 +831,19 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rules.map((rule, index) => (
-                  <TableRow key={rule.id} className="hover:bg-gray-50">
+                {rules.map((rule, index) => {
+                  // Check if this is a new rule (no ID or temporary ID starting with "rule_")
+                  const isNewRule = !rule.id || (typeof rule.id === 'string' && rule.id.startsWith('rule_'));
+                  // Fields should be enabled for new rules, or for existing rules when editing
+                  const fieldsDisabled = !isNewRule && editingRuleId !== rule.id;
+                  
+                  return (
+                  <TableRow key={rule.id || `temp-${index}`} className="hover:bg-gray-50">
                     <TableCell>
                       <Select
                         value={rule.attribute}
-                        onValueChange={(value) => handleRuleChange(rule.id!, 'attribute', value)}
-                        disabled={loadingAttributes || (editingRuleId !== null && editingRuleId !== rule.id)}
+                        onValueChange={(value) => handleRuleChange(rule, 'attribute', value)}
+                        disabled={loadingAttributes || fieldsDisabled}
                       >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select attribute" />
@@ -847,8 +860,8 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                     <TableCell>
                       <Select
                         value={rule.operator}
-                        onValueChange={(value) => handleRuleChange(rule.id!, 'operator', value)}
-                        disabled={editingRuleId !== null && editingRuleId !== rule.id}
+                        onValueChange={(value) => handleRuleChange(rule, 'operator', value)}
+                        disabled={fieldsDisabled}
                       >
                         <SelectTrigger className="w-full">
                           <SelectValue />
@@ -866,25 +879,26 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                       <Input
                         type="text"
                         value={rule.value}
-                        onChange={(e) => handleRuleChange(rule.id!, 'value', e.target.value)}
+                        onChange={(e) => handleRuleChange(rule, 'value', e.target.value)}
                         placeholder="Enter value"
                         className="w-full"
-                        disabled={editingRuleId !== null && editingRuleId !== rule.id}
+                        disabled={fieldsDisabled}
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         type="number"
                         value={rule.weight}
-                        onChange={(e) => handleRuleChange(rule.id!, 'weight', parseFloat(e.target.value) || 0)}
+                        onChange={(e) => handleRuleChange(rule, 'weight', parseFloat(e.target.value) || 0)}
                         placeholder="0"
                         className="w-full"
-                        disabled={editingRuleId !== null && editingRuleId !== rule.id}
+                        disabled={fieldsDisabled}
                       />
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {editingRuleId === rule.id ? (
+                        {isNewRule ? (
+                          // New rule (no ID or temporary ID): Always show Save and Cancel, fields enabled
                           <>
                             <CustomButton
                               variant="outline"
@@ -892,20 +906,51 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                               icon={<Save className="h-4 w-4" />}
                               onClick={() => handleSaveRule(rule)}
                               className="hover:bg-green-50 hover:text-green-700"
-                              title="Save rule"
+                              title="Save new rule"
                             />
                             <CustomButton
                               variant="outline"
                               size="sm"
                               icon={<X className="h-4 w-4" />}
-                              onClick={() => setEditingRuleId(null)}
+                              onClick={() => {
+                                // Use index to reliably remove the rule
+                                if (rules.length === 1) {
+                                  toast.error('At least one rule is required');
+                                  return;
+                                }
+                                setRules(rules.filter((_, i) => i !== index));
+                                toast.success('Rule removed');
+                              }}
+                              disabled={rules.length === 1}
                               className="hover:bg-gray-50"
-                              title="Cancel editing"
+                              title="Cancel (remove rule)"
                             />
                           </>
                         ) : (
-                          <>
-                            {rule.id && (
+                          // Existing rule (has real database ID)
+                          editingRuleId === rule.id ? (
+                            // Editing mode: Show Save and Cancel
+                            <>
+                              <CustomButton
+                                variant="outline"
+                                size="sm"
+                                icon={<Save className="h-4 w-4" />}
+                                onClick={() => handleSaveRule(rule)}
+                                className="hover:bg-green-50 hover:text-green-700"
+                                title="Save rule"
+                              />
+                              <CustomButton
+                                variant="outline"
+                                size="sm"
+                                icon={<X className="h-4 w-4" />}
+                                onClick={() => setEditingRuleId(null)}
+                                className="hover:bg-gray-50"
+                                title="Cancel editing"
+                              />
+                            </>
+                          ) : (
+                            // Not editing: Show Edit and Delete, fields disabled
+                            <>
                               <CustomButton
                                 variant="outline"
                                 size="sm"
@@ -914,8 +959,6 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                                 className="hover:bg-blue-50 hover:text-blue-700"
                                 title="Edit rule"
                               />
-                            )}
-                            {rule.id ? (
                               <CustomButton
                                 variant="outline"
                                 size="sm"
@@ -924,33 +967,14 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                                 className="hover:bg-red-50 hover:text-red-700"
                                 title="Delete rule"
                               />
-                            ) : (
-                              <>
-                                <CustomButton
-                                  variant="outline"
-                                  size="sm"
-                                  icon={<Save className="h-4 w-4" />}
-                                  onClick={() => handleSaveRule(rule)}
-                                  className="hover:bg-green-50 hover:text-green-700"
-                                  title="Save new rule"
-                                />
-                                <CustomButton
-                                  variant="outline"
-                                  size="sm"
-                                  icon={<Trash2 className="h-4 w-4" />}
-                                  onClick={() => handleRemoveRule(rule.id)}
-                                  disabled={rules.length === 1}
-                                  className="hover:bg-muted hover:text-foreground"
-                                  title="Remove rule"
-                                />
-                              </>
-                            )}
-                          </>
+                            </>
+                          )
                         )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
