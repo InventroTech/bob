@@ -24,7 +24,7 @@ export type RecordDetailEntityType =
   | string;
 
 /** Top-level keys that are part of the API record (tenant_id excluded from view). */
-const RECORD_TOP_LEVEL_KEYS = ['id', 'entity_type', 'created_at', 'updated_at', 'pyro_data'];
+const RECORD_TOP_LEVEL_KEYS = ['id', 'created_at', 'updated_at'];
 
 /** Allowed status options per entity type (for status dropdown). */
 const ALLOWED_STATUSES: Record<string, string[]> = {
@@ -67,23 +67,26 @@ const DEFAULT_EDITABLE_BY_ENTITY: Record<string, string[]> = {
   inventory_cart: ['status', 'invoice_number', 'payment_terms', 'comments'],
 };
 
+/** Fields hidden from all users (internal/system fields). */
+const FIELDS_HIDDEN_FOR_ALL: string[] = ['requester_id', 'pyro_data', 'entity_type', 'submitted_at', 'request_date'];
+
 /** inventory_request: data keys hidden from requestor (PM-only). Requestor never sees these in the modal. */
-const FIELDS_HIDDEN_FROM_REQUESTER: string[] = ['cart_id', 'assigned_to_id'];
+const FIELDS_HIDDEN_FROM_REQUESTER: string[] = ['cart_id', 'assigned_to_id', 'comments', 'requester_name'];
 
 /** inventory_request: data keys the requestor is allowed to edit (subset; status and cart/assignee are PM-only). */
 const EDITABLE_FIELDS_FOR_REQUESTER: string[] = [
-  'department',
-  'sub_department',
+  // 'department',
+  // 'sub_department',
   'project_purpose',
-  'item_name_freeform',
-  'part_number_or_sku',
+  // 'item_name_freeform',
+  // 'part_number_or_sku',
   'quantity_required',
   'comments',
   'urgency_level',
-  'expected_delivery_date',
-  'procurement_type',
+  // 'expected_delivery_date',
+  // 'procurement_type',
   'quantity',
-  'notes',
+  // 'notes',
 ];
 
 interface RecordDetailModalProps {
@@ -216,11 +219,14 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     assignedToId != null &&
     String(assignedToId) === String(user.id);
 
-  /** Rows to show: for requestor, hide PM-only fields (cart_id, assigned_to_id). */
-  const visibleRows =
-    isInventoryRequest && isRequester
-      ? displayRows.filter((r) => !FIELDS_HIDDEN_FROM_REQUESTER.includes(r.key))
-      : displayRows;
+  /** Rows to show: hide system fields for all users, and PM-only fields for requestors. */
+  const visibleRows = displayRows.filter((r) => {
+    // Hide system fields for all users
+    if (FIELDS_HIDDEN_FOR_ALL.includes(r.key)) return false;
+    // Hide PM-only fields for requestors
+    if (isInventoryRequest && isRequester && FIELDS_HIDDEN_FROM_REQUESTER.includes(r.key)) return false;
+    return true;
+  });
 
   /** Editable keys: requestor gets only EDITABLE_FIELDS_FOR_REQUESTER; PM gets full list for entity. */
   const editableSet = new Set(
@@ -453,6 +459,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   const handleDelete = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
+    const currentStatus = record?.data?.status;
+    if (currentStatus && currentStatus !== 'DRAFT') {
+      toast({
+        title: 'Cannot delete',
+        description: 'Only draft requests can be deleted.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this request? This cannot be undone.')) {
       return;
     }
@@ -474,7 +489,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } finally {
       setDeleting(false);
     }
-  }, [isInventoryRequest, isRequester, record?.id, onOpenChange, onDeleted, toast]);
+  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, onOpenChange, onDeleted, toast]);
 
   const handleProceedToRm = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
@@ -609,7 +624,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             #{record?.id ?? '—'}
           </DialogTitle>
           <DialogDescription>
-            {canEdit ? 'Fields from API. Some can be edited.' : 'Fields from API.'}
+            {canEdit ? 'Fields for this record. Some can be edited.' : 'Fields for this record.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
@@ -828,7 +843,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
               type="button"
               variant="outline"
               className="border-red-200 text-red-600 hover:bg-red-50"
-              disabled={deleting || proceeding}
+              disabled={deleting || proceeding || record?.data?.status !== 'DRAFT'}
               onClick={handleDelete}
             >
               {deleting ? 'Deleting…' : 'Delete Request'}
@@ -836,7 +851,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             <Button
               type="button"
               className="bg-primary text-white hover:bg-primary/90"
-              disabled={deleting || proceeding}
+              disabled={deleting || proceeding || record?.data?.status !== 'DRAFT'}
               onClick={handleProceedToRm}
             >
               {proceeding ? 'Submitting…' : 'Proceed to PM'}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface InventoryRequestFormConfig {
@@ -20,14 +24,15 @@ interface InventoryRequestFormProps {
 }
 
 // Options for dropdowns (can be moved to config or API later)
-const DEPARTMENTS = ['Engineering', 'Design', 'Operations', 'Product', 'Marketing', 'HR', 'Finance', 'Other'];
+const DEPARTMENTS = ['Engineering', 'Design', 'Manufacturing', 'Operations', 'Product', 'Sales & Marketing', 'HR', 'Finance', 'Other'];
 const SUB_DEPARTMENTS: Record<string, string[]> = {
-  Engineering: ['Backend', 'Frontend', 'Infra', 'Data', 'Mobile', 'Other'],
-  Design: ['UI/UX', 'Research', 'Brand', 'Other'],
-  Operations: ['Logistics', 'Support', 'Facilities', 'Other'],
-  Product: ['PM', 'Growth', 'Other'],
-  Marketing: ['Content', 'Demand', 'Other'],
-  HR: ['Recruitment', 'L&D', 'Other'],
+  Engineering: ['Hardware', 'Software/Firmware', 'Embedded Systems', 'Flight Control', 'Propulsion', 'Electronics', 'Testing/QA', 'Other'],
+  Design: ['Industrial Design', 'Aerodynamics', 'CAD/Mechanical Design', 'Other'],
+  Manufacturing: ['Assembly', 'Quality Control', 'Production Planning', 'Other'],
+  Operations: ['Supply Chain', 'Logistics', 'Facilities', 'Support', 'Other'],
+  Product: ['Product Management', 'Product Development', 'Other'],
+  'Sales & Marketing': ['Sales', 'Marketing', 'Business Development', 'Other'],
+  HR: ['Recruitment', 'L&D', 'Operations', 'Other'],
   Finance: ['FP&A', 'Accounting', 'Other'],
   Other: ['Other'],
 };
@@ -52,6 +57,10 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [itemDescription, setItemDescription] = useState('');
   const [partNumberSku, setPartNumberSku] = useState('');
   const [partNumberOptions, setPartNumberOptions] = useState<{ value: string; label: string }[]>([]);
+  const [partNumberSearchOpen, setPartNumberSearchOpen] = useState(false);
+  const [partNumberSearchQuery, setPartNumberSearchQuery] = useState('');
+  const partNumberTriggerRef = useRef<HTMLButtonElement>(null);
+  const [popoverWidth, setPopoverWidth] = useState<number | undefined>(undefined);
   const [quantity, setQuantity] = useState<number | ''>('');
   const [urgency, setUrgency] = useState('');
   const [justificationNotes, setJustificationNotes] = useState('');
@@ -84,6 +93,26 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const subDepartmentOptions = department ? (SUB_DEPARTMENTS[department] ?? ['Other']) : [];
 
+  // Filter part number options based on search query
+  const filteredPartNumberOptions = partNumberOptions.filter((option) =>
+    option.label.toLowerCase().includes(partNumberSearchQuery.toLowerCase()) ||
+    option.value.toLowerCase().includes(partNumberSearchQuery.toLowerCase())
+  );
+
+  // Get the selected part number label for display
+  const selectedPartNumberLabel = partNumberSku
+    ? partNumberOptions.find((o) => o.value === partNumberSku)?.label || partNumberSku
+    : 'Select or leave blank';
+
+  // Update popover width when trigger is mounted or opened
+  useEffect(() => {
+    if (partNumberSearchOpen && partNumberTriggerRef.current) {
+      setPopoverWidth(partNumberTriggerRef.current.offsetWidth);
+    }
+  }, [partNumberSearchOpen]);
+
+  const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -109,6 +138,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           status,
           request_date: requestDate,
           requester_id: requesterId,
+          requester_name: requesterDisplay,
           department: department || undefined,
           sub_department: subDepartment || undefined,
           project_purpose: projectPurpose || undefined,
@@ -137,16 +167,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     }
   };
 
-  const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
-
   return (
     <div className="border rounded-lg bg-white p-4 shadow-sm space-y-4">
-      <div>
-        <h5 className="text-base font-semibold">New Inventory Request</h5>
-        <p className="text-xs text-muted-foreground">
-          All fields are stored in the records table as inventory_request.
-        </p>
-      </div>
+      
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -158,12 +181,12 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
               disabled
               className="bg-muted"
             />
-            <p className="text-xs text-muted-foreground">Auto: current date</p>
+            
           </div>
           <div className="space-y-1">
             <Label>Requester Name</Label>
             <Input value={requesterDisplay} readOnly disabled className="bg-muted" />
-            <p className="text-xs text-muted-foreground">Auto: Supabase UID from JWT (stored as requester_id)</p>
+            
           </div>
         </div>
 
@@ -200,7 +223,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           <Label htmlFor="project-purpose">Project / Purpose</Label>
           <Input
             id="project-purpose"
-            placeholder="e.g. Q1 campaign, New hire setup"
+            placeholder="e.g. Titan 30 Sensor, Fury Wing Part"
             value={projectPurpose}
             onChange={(e) => setProjectPurpose(e.target.value)}
           />
@@ -220,17 +243,74 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <Label htmlFor="part-sku">Part Number / SKU (if known)</Label>
-            <Select value={partNumberSku || '_none_'} onValueChange={(v) => setPartNumberSku(v === '_none_' ? '' : v)}>
-              <SelectTrigger id="part-sku">
-                <SelectValue placeholder="Select or leave blank" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none_">— None / New item</SelectItem>
-                {partNumberOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={partNumberSearchOpen} onOpenChange={setPartNumberSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  ref={partNumberTriggerRef}
+                  id="part-sku"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={partNumberSearchOpen}
+                  className="w-full justify-between"
+                >
+                  {partNumberSku ? selectedPartNumberLabel : 'Select or leave blank'}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent 
+                className="p-0" 
+                align="start"
+                style={popoverWidth ? { width: `${popoverWidth}px` } : undefined}
+              >
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Search items..."
+                    value={partNumberSearchQuery}
+                    onValueChange={setPartNumberSearchQuery}
+                  />
+                  <CommandList>
+                    <CommandEmpty>No items found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="_none_"
+                        onSelect={() => {
+                          setPartNumberSku('');
+                          setPartNumberSearchOpen(false);
+                          setPartNumberSearchQuery('');
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            'mr-2 h-4 w-4',
+                            partNumberSku === '' ? 'opacity-100' : 'opacity-0'
+                          )}
+                        />
+                        — None / New item
+                      </CommandItem>
+                      {filteredPartNumberOptions.map((option) => (
+                        <CommandItem
+                          key={option.value}
+                          value={option.value}
+                          onSelect={() => {
+                            setPartNumberSku(option.value);
+                            setPartNumberSearchOpen(false);
+                            setPartNumberSearchQuery('');
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              partNumberSku === option.value ? 'opacity-100' : 'opacity-0'
+                            )}
+                          />
+                          {option.label}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="space-y-1">
             <Label htmlFor="quantity">Quantity Required</Label>
