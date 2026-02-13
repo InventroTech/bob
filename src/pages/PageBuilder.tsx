@@ -343,8 +343,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     searchFields: string;
     /** Records table: entity type for API (e.g. inventory_request, inventory_cart). */
     entityType?: string;
-    /** Records table: row click behavior — lead card, record detail modal, none, or auto (infer from entityType). */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'none' | 'auto';
+    /** Records table: row click behavior — lead card, record detail modal, receive shipment modal, none, or auto (infer from entityType). */
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'receive_shipments' | 'none' | 'auto';
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';

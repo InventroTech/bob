@@ -30,6 +30,7 @@ import { JobsPage } from "./pages/JobsPage";
 import InventoryRequestsPage from "./pages/InventoryRequestsPage";
 import NewInventoryRequestPage from "./pages/NewInventoryRequestPage";
 import PmInventoryQueuePage from "./pages/PmInventoryQueuePage";
+import ReceiveShipmentsPage from "./pages/ReceiveShipmentsPage";
 import PublicTenantPage from "./pages/PublicTenantPage";
 import TeamDashboardPage from "./pages/TeamDashboardPage";
 import OperationsProgramsPage from "./pages/OperationsProgramsPage";
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="/inventory/requests" element={<InventoryRequestsPage />} />
             <Route path="/inventory/requests/new" element={<NewInventoryRequestPage />} />
             <Route path="/inventory/requests/pm-queue" element={<PmInventoryQueuePage />} />
+            <Route path="/inventory/receive-shipments" element={<ReceiveShipmentsPage />} />
             <Route path="/team-dashboard" element={<TeamDashboardPage />} />
             <Route path="/operations-programs" element={<OperationsProgramsPage />} />
             <Route path="/user-hierarchy" element={<UserHierarchyPage />} />

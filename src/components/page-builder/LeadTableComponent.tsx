@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Filter, User, MessageCircle, ExternalLink, CheckCircle2, XCircle, Clock, AlertCircle, Search } from 'lucide-react';
 import LeadCardCarousel from './LeadCardCarousel';
 import { RecordDetailModal } from './RecordDetailModal';
+import { ReceiveShipmentDetailModal } from './ReceiveShipmentDetailModal';
 import { Button } from '@/components/ui/button';
 import ShortProfileCard from '../ui/ShortProfileCard';
 
@@ -281,7 +282,7 @@ interface LeadTableProps {
     };
     entityType?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'receive_shipments' | 'none' | 'auto';
     statusOptions?: string[];
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
@@ -326,11 +327,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     return 'lead_card';
   }, [config?.detailMode, config?.entityType]);
 
-  // Load cart options when opening record detail for inventory_request
+  // Load cart options when opening record detail for inventory_request (not for receive_shipments modal)
   useEffect(() => {
     const shouldLoadCarts =
       isRecordDetailModalOpen &&
-      config?.entityType === 'inventory_request';
+      config?.entityType === 'inventory_request' &&
+      effectiveDetailMode !== 'receive_shipments';
     if (!shouldLoadCarts) return;
 
     let cancelled = false;
@@ -372,7 +374,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     return () => {
       cancelled = true;
     };
-  }, [isRecordDetailModalOpen, config?.entityType]);
+  }, [isRecordDetailModalOpen, config?.entityType, effectiveDetailMode]);
 
   // Memoize onLeadUpdate callback for modal to prevent infinite re-render loop
   const handleModalLeadUpdate = useCallback((updatedLead: any) => {
@@ -2045,7 +2047,29 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Receive Shipments: inventory manager quick-actions modal */}
+      {effectiveDetailMode === 'receive_shipments' && (
+        <ReceiveShipmentDetailModal
+          open={isRecordDetailModalOpen}
+          onOpenChange={(open) => {
+            setIsRecordDetailModalOpen(open);
+            if (!open) setSelectedRecord(null);
+          }}
+          record={selectedRecord}
+          onSuccess={async () => {
+            setSelectedRecord(null);
+            setIsRecordDetailModalOpen(false);
+            try {
+              await fetchFilteredData();
+            } catch (e) {
+              console.error('Error refreshing table after receive action:', e);
+            }
+          }}
+        />
+      )}
+
       {/* Generic record detail modal (inventory_request, inventory_cart, inventory_item, etc.) */}
+      {effectiveDetailMode !== 'receive_shipments' && (
       <RecordDetailModal
         open={isRecordDetailModalOpen}
         onOpenChange={(open) => {
@@ -2130,6 +2154,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           }
         }}
       />
+      )}
     </>
   );
 };
