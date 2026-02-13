@@ -33,7 +33,7 @@ interface LeadTypeAssignmentPageProps {
 
 const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: LeadTypeAssignmentPageProps) => {
   const { user } = useAuth();
-  const { role, customRole } = useTenant();
+  const { role, customRole, refetchCustomRole } = useTenant();
   const [assignments, setAssignments] = useState<LeadTypeAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -53,17 +53,29 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   // Strictly check: must be exactly 'GM', not null, undefined, or any other value
   const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
   
-  // Track when role has been checked (after a short delay to allow useTenant to fetch)
+  // Refetch role when visiting this page; retry once after delay so newly added GMs see the page without re-login
   useEffect(() => {
-    if (user) {
-      // Give useTenant hook time to fetch role data
-      const timer = setTimeout(() => {
-        setRoleChecked(true);
-      }, 500); // 500ms delay to allow role to be fetched
-      
-      return () => clearTimeout(timer);
-    }
-  }, [user, customRole]);
+    if (!user) return;
+    let cancelled = false;
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    setRoleChecked(false);
+    // First refetch immediately
+    refetchCustomRole().then(() => {
+      if (cancelled) return;
+      // Show access decision after first refetch (existing GMs see page quickly)
+      timeouts.push(setTimeout(() => setRoleChecked(true), 200));
+      // Retry once after 1.5s so newly added GMs get role without re-login (updates customRole if backend now returns GM)
+      const retryId = setTimeout(() => {
+        if (cancelled) return;
+        refetchCustomRole();
+      }, 1500);
+      timeouts.push(retryId);
+    });
+    return () => {
+      cancelled = true;
+      timeouts.forEach((id) => clearTimeout(id));
+    };
+  }, [user, refetchCustomRole]);
   
   // Debug logging
   console.log('LeadTypeAssignmentPage: User role info:', {
