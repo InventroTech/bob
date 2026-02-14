@@ -92,7 +92,7 @@ export const leadTypeAssignmentApi = {
       return [];
     } catch (error: any) {
       if (error.response?.status === 403) {
-        throw new Error('Access denied: GM role required to access lead type assignments');
+        throw new Error('Access denied: insufficient permissions to access lead type assignments');
       }
       // For 404, return empty array instead of throwing (no users found is not an error)
       if (error.response?.status === 404) {
