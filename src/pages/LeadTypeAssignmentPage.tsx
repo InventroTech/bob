@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Loader2, Users, Settings, AlertCircle, Trash2, ChevronDown } from 'lucide-react';
+import { Loader2, Users, Settings, Trash2, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { 
   LeadTypeAssignment, 
@@ -33,7 +32,6 @@ interface LeadTypeAssignmentPageProps {
 
 const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: LeadTypeAssignmentPageProps) => {
   const { user } = useAuth();
-  const { role, customRole, refetchCustomRole } = useTenant();
   const [assignments, setAssignments] = useState<LeadTypeAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -43,48 +41,10 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
   const [availableLeadTypes, setAvailableLeadTypes] = useState<string[]>([]);
   const [availableLeadSources, setAvailableLeadSources] = useState<string[]>([]);
   const [availableLeadStatuses, setAvailableLeadStatuses] = useState<string[]>([]);
-  const [roleChecked, setRoleChecked] = useState(false);
   const [leadsCounts, setLeadsCounts] = useState<Record<string, number | ''>>({});
   const [originalLeadsCounts, setOriginalLeadsCounts] = useState<Record<string, number>>({});
   const [dailyLimits, setDailyLimits] = useState<Record<string, number | ''>>({});
   const [originalDailyLimits, setOriginalDailyLimits] = useState<Record<string, number>>({});
-
-  // Check if user has GM permissions (GM custom role only)
-  // Strictly check: must be exactly 'GM', not null, undefined, or any other value
-  const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
-  
-  // Refetch role when visiting this page; retry once after delay so newly added GMs see the page without re-login
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    const timeouts: ReturnType<typeof setTimeout>[] = [];
-    setRoleChecked(false);
-    // First refetch immediately
-    refetchCustomRole().then(() => {
-      if (cancelled) return;
-      // Show access decision after first refetch (existing GMs see page quickly)
-      timeouts.push(setTimeout(() => setRoleChecked(true), 200));
-      // Retry once after 1.5s so newly added GMs get role without re-login (updates customRole if backend now returns GM)
-      const retryId = setTimeout(() => {
-        if (cancelled) return;
-        refetchCustomRole();
-      }, 1500);
-      timeouts.push(retryId);
-    });
-    return () => {
-      cancelled = true;
-      timeouts.forEach((id) => clearTimeout(id));
-    };
-  }, [user, refetchCustomRole]);
-  
-  // Debug logging
-  console.log('LeadTypeAssignmentPage: User role info:', {
-    user: user?.id,
-    role,
-    customRole,
-    isGM,
-    userEmail: user?.email
-  });
 
   // Fetch available lead types and assignments
   useEffect(() => {
@@ -177,26 +137,16 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           response: error.response
         });
         
-        // If it's a 403 error, show a more helpful message
-        if (error.message?.includes('Access denied') || error.message?.includes('GM role required')) {
-          toast.error('Access denied: You need GM role to access lead type assignments');
-        } else {
-          toast.error(`Failed to fetch lead type data: ${error.message}`);
-        }
+        toast.error(`Failed to fetch lead type data: ${error.message}`);
       } finally {
         setLoading(false);
       }
     };
 
-    // Only fetch if user is authenticated AND has GM role
-    if (user && isGM) {
+    if (user) {
       fetchData();
-    } else if (user && !isGM) {
-      // User is authenticated but not a GM, stop loading immediately
-      setLoading(false);
     }
-    // If no user, keep loading state until user is available
-  }, [user, isGM]);
+  }, [user]);
 
   // Handle lead source selection for a user
   const handleLeadSourceToggle = (userId: string, leadSource: string, e?: React.MouseEvent) => {
@@ -376,12 +326,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       toast.success('Lead type assignment saved successfully');
     } catch (error: any) {
       console.error('Error saving lead type assignment:', error);
-      // If it's a 403 error, show a more helpful message
-      if (error.message?.includes('Access denied') || error.message?.includes('GM role required')) {
-        toast.error('Access denied: You need GM role to assign lead types');
-      } else {
-        toast.error(`Failed to save lead type assignment: ${error.message || 'Unknown error'}`);
-      }
+      toast.error(`Failed to save lead type assignment: ${error.message || 'Unknown error'}`);
     } finally {
       setSaving(null);
     }
@@ -449,12 +394,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       toast.success('All lead type assignments removed successfully');
     } catch (error: any) {
       console.error('Error removing lead type assignments:', error);
-      // If it's a 403 error, show a more helpful message
-      if (error.message?.includes('Access denied') || error.message?.includes('GM role required')) {
-        toast.error('Access denied: You need GM role to remove lead type assignments');
-      } else {
-        toast.error(`Failed to remove lead type assignments: ${error.message || 'Unknown error'}`);
-      }
+      toast.error(`Failed to remove lead type assignments: ${error.message || 'Unknown error'}`);
     } finally {
       setSaving(null);
     }
@@ -488,55 +428,8 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     return leadTypesChanged || leadSourcesChanged || leadStatusesChanged || leadsCountChanged || dailyLimitChanged;
   };
 
-  // Early access check - block non-GM users immediately
-  // Once role is checked and user is not GM, show access denied
-  // Also block if we have a non-GM role explicitly set
-  if (user && roleChecked && !isGM) {
-    return (
-      <div className={`flex items-center justify-center h-64 ${className}`}>
-        <Card className="max-w-md">
-          <CardContent className="flex flex-col items-center justify-center py-8">
-            <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                    <h5>Access Denied</h5>
-                    <p className="text-muted-foreground text-center">
-                      You need GM (General Manager) role to access this page.
-                    </p>
-                    <div className="mt-4 p-3 bg-muted rounded text-sm">
-                      <p><strong>Current Role:</strong> {role || 'None'}</p>
-                      <p><strong>Custom Role:</strong> {customRole || 'None'}</p>
-                      <p><strong>User ID:</strong> {user?.id}</p>
-                      <p><strong>Is GM Check:</strong> {String(isGM)}</p>
-                    </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-  
-  // Also block if customRole is set to something other than GM (even before roleChecked)
-  if (user && customRole !== null && customRole !== 'GM' && customRole?.toUpperCase() !== 'GM') {
-    return (
-      <div className={`flex items-center justify-center h-64 ${className}`}>
-        <Card className="max-w-md">
-          <CardContent className="flex flex-col items-center justify-center py-8">
-            <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-                    <h5>Access Denied</h5>
-                    <p className="text-muted-foreground text-center">
-                      You need GM (General Manager) role to access this page.
-                    </p>
-                    <div className="mt-4 p-3 bg-muted rounded text-sm">
-                      <p><strong>Current Role:</strong> {role || 'None'}</p>
-                      <p><strong>Custom Role:</strong> {customRole || 'None'}</p>
-                      <p><strong>User ID:</strong> {user?.id}</p>
-                    </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Show loading if user is not authenticated, or if we're still checking the role
-  if (loading || !user || (!roleChecked && !customRole)) {
+  // Show loading if user is not authenticated or data is still loading
+  if (loading || !user) {
     return (
       <div className={`flex items-center justify-center h-64 ${className}`}>
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -558,7 +451,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           </div>
           <div className="flex items-center space-x-2">
             <Settings className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">GM Settings</span>
+            <span className="text-sm text-muted-foreground">Lead assignment</span>
           </div>
         </div>
       )}
