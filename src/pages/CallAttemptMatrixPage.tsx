@@ -32,7 +32,7 @@ interface CallAttemptMatrixPageProps {
 
 const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: CallAttemptMatrixPageProps) => {
   const { user } = useAuth();
-  const { role, customRole } = useTenant();
+  const { role, customRole, refetchCustomRole } = useTenant();
   const [matrices, setMatrices] = useState<CallAttemptMatrix[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
@@ -42,6 +42,11 @@ const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: Ca
 
   // Check if user has GM permissions
   const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
+
+  // Refetch role when visiting this page so newly promoted GMs see the page without re-login
+  useEffect(() => {
+    if (user) refetchCustomRole();
+  }, [user, refetchCustomRole]);
 
   // Fetch call attempt matrices and available lead types
   useEffect(() => {

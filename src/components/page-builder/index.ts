@@ -24,3 +24,5 @@ export { default as OperationsProgramsComponent } from './OperationsProgramsComp
 export { OperationsProgramsConfig } from './component-config/OperationsProgramsConfig';
 export { default as UserHierarchyComponent } from './UserHierarchyComponent';
 export { UserHierarchyConfig } from './component-config/UserHierarchyConfig';
+export { InventoryTableComponent } from './InventoryTableComponent';
+export { InventoryRequestFormComponent } from './InventoryRequestFormComponent';
