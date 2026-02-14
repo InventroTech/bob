@@ -66,7 +66,7 @@ export const userSettingsApi = {
 
 // Lead Type Assignment API functions
 export const leadTypeAssignmentApi = {
-  // Get all lead type assignments for the tenant (GM only)
+  // Get all lead type assignments for the tenant
   async getAll(rmsEndpoint?: string): Promise<LeadTypeAssignment[]> {
     try {
       // Use the lead-type-assignments endpoint directly (returns TenantMembership-based data)
@@ -92,7 +92,9 @@ export const leadTypeAssignmentApi = {
       return [];
     } catch (error: any) {
       if (error.response?.status === 403) {
+
         throw new Error('Access denied: insufficient permissions to access lead type assignments');
+
       }
       // For 404, return empty array instead of throwing (no users found is not an error)
       if (error.response?.status === 404) {
@@ -104,7 +106,7 @@ export const leadTypeAssignmentApi = {
     }
   },
 
-  // Assign lead types to a user (GM only)
+  // Assign lead types to a user
   async assign(data: LeadTypeAssignmentRequest, endpoint?: string): Promise<LeadTypeAssignmentResponse> {
     console.log('Saving lead type assignment via API...');
     

@@ -465,7 +465,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           </div>
           <div className="flex items-center space-x-2">
             <Settings className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">GM Settings</span>
+            <span className="text-sm text-muted-foreground">Lead assignment</span>
           </div>
         </div>
       )}

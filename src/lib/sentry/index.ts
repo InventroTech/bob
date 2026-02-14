@@ -4,6 +4,8 @@
  */
 
 import * as Sentry from "@sentry/react";
+import { SentrySpanProcessor, SentrySampler } from "@sentry/opentelemetry";
+import { browserTracingIntegration, replayIntegration } from "@sentry/react";
 import type { SentryConfig } from "./config";
 
 /**
@@ -204,6 +206,9 @@ export function initSentry(config: SentryConfig): void {
     // Debug mode (only in development)
     debug: environment === 'development' && import.meta.env.VITE_SENTRY_DEBUG === 'true',
   });
+
+  // Inside the initSentry function, after Sentry.init({...})
+(window as any).Sentry = Sentry;
 
   // Log initialization (only in development)
   if (environment === 'development') {

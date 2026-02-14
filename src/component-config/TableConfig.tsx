@@ -30,6 +30,8 @@ interface TableConfigProps {
     apiEndpoint: string;
     showFilters: boolean;
     searchFields?: string;
+    entityType?: string;
+    detailMode?: string;
   };
   localColumns: ColumnConfig[];
   numColumns: number;
@@ -81,6 +83,41 @@ export const TableConfig: React.FC<TableConfigProps> = ({
         />
         <p className="text-xs text-gray-500 mt-1">
           Comma-separated fields to search in. Leave empty to search all fields.
+        </p>
+      </div>
+
+      <div>
+        <Label>Entity Type</Label>
+        <Input
+          value={localConfig.entityType || ''}
+          onChange={(e) => handleInputChange('entityType', e.target.value)}
+          placeholder="e.g., inventory_request, inventory_cart, inventory_item"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          For records API: entity_type sent to the API. Used to infer row-click behavior if Detail Mode is not set.
+        </p>
+      </div>
+
+      <div>
+        <Label>Detail Mode (row click)</Label>
+        <Select
+          value={localConfig.detailMode && localConfig.detailMode !== 'auto' ? localConfig.detailMode : 'auto'}
+          onValueChange={(value) => handleInputChange('detailMode', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Auto (from Entity Type)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Auto (from Entity Type)</SelectItem>
+            <SelectItem value="lead_card">Lead card (lead modal)</SelectItem>
+            <SelectItem value="inventory_request">Record detail (request)</SelectItem>
+            <SelectItem value="inventory_cart">Record detail (cart)</SelectItem>
+            <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
+            <SelectItem value="none">None (no row click)</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-gray-500 mt-1">
+          What happens when a row is clicked. Auto: inventory_request/cart open record detail; receive_shipments: quick add-to-inventory / roll-back modal.
         </p>
       </div>
 
