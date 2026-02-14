@@ -1434,7 +1434,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
             variant="outline"
             size="sm"
             icon={<Coffee className="h-3 w-3" />}
-            disabled={updating}
+            disabled={updating || isInModal}
           >
             Take a Break
           </CustomButton>
@@ -1608,7 +1608,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                   icon={<Coffee className="h-4 w-4 text-gray-500" />}
                   className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
                   onClick={handleTakeBreak}
-                  disabled={updating}
+                  disabled={updating || isInModal}
                 />
                 <CustomButton
                   type="button"

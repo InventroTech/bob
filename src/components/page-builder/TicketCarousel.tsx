@@ -822,7 +822,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           variant="outline"
           size="sm"
           icon={<Coffee className="h-3 w-3" />}
-          disabled={updating}
+          disabled={updating || isCompact}
         >
           Take a Break
         </CustomButton>
