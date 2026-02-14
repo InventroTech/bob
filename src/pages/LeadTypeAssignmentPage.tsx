@@ -137,7 +137,11 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
           response: error.response
         });
         
-        toast.error(`Failed to fetch lead type data: ${error.message}`);
+        if (error.response?.status === 403) {
+          toast.error('Access denied: You do not have permission to access lead type assignments');
+        } else {
+          toast.error(`Failed to fetch lead type data: ${error.message}`);
+        }
       } finally {
         setLoading(false);
       }
@@ -326,7 +330,12 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       toast.success('Lead type assignment saved successfully');
     } catch (error: any) {
       console.error('Error saving lead type assignment:', error);
-      toast.error(`Failed to save lead type assignment: ${error.message || 'Unknown error'}`);
+      // If it's a 403 error, show a more helpful message
+      if (error.response?.status === 403) {
+        toast.error('Access denied: You do not have permission to assign lead types');
+      } else {
+        toast.error(`Failed to save lead type assignment: ${error.message || 'Unknown error'}`);
+      }
     } finally {
       setSaving(null);
     }
@@ -394,7 +403,12 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       toast.success('All lead type assignments removed successfully');
     } catch (error: any) {
       console.error('Error removing lead type assignments:', error);
-      toast.error(`Failed to remove lead type assignments: ${error.message || 'Unknown error'}`);
+      // If it's a 403 error, show a more helpful message
+      if (error.response?.status === 403) {
+        toast.error('Access denied: You do not have permission to remove lead type assignments');
+      } else {
+        toast.error(`Failed to remove lead type assignments: ${error.message || 'Unknown error'}`);
+      }
     } finally {
       setSaving(null);
     }
@@ -428,7 +442,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
     return leadTypesChanged || leadSourcesChanged || leadStatusesChanged || leadsCountChanged || dailyLimitChanged;
   };
 
-  // Show loading if user is not authenticated or data is still loading
+  // Show loading until user is authenticated and data has been fetched
   if (loading || !user) {
     return (
       <div className={`flex items-center justify-center h-64 ${className}`}>
