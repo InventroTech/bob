@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
 import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
@@ -85,7 +85,6 @@ interface LeadData {
   source?: string;
   lead_source?: string;
   status: string;
-  priority: string;
   notes: string;
   budget: number;
   location: string;
@@ -124,7 +123,6 @@ interface LeadStats {
 
 interface LeadState {
   leadStatus: string;
-  priority: string;
   notes: string;
   selectedTags: string[];
   nextFollowUp: string;
@@ -169,7 +167,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
   const [lead, setLead] = useState<LeadState>({
     leadStatus: "New",
-    priority: "Medium",
     notes: "",
     selectedTags: [],
     nextFollowUp: "",
@@ -196,36 +193,116 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     handleOpenCallBackDialog: () => void;
   } | null>(null);
 
-  // Handle initialLead prop - set currentLead when initialLead is provided
-  useEffect(() => {
-    if (initialLead) {
-      setCurrentLead(initialLead);
-      setShowPendingCard(false);
-      // When opened from table modal (follow-up leads page), show buttons immediately
-      // When fetching new lead (pending leads page), buttons hidden until call is made
-      if (isInModal) {
-        // For follow-up leads: show buttons immediately since it's an existing lead
-        setActionButtonsVisible(true);
-      } else {
-        // For pending leads: only show after user makes a call
-        setActionButtonsVisible(false);
-      }
-      // Close any open modals when switching leads
-      setShowNotInterestedDialog(false);
-      setShowCallBackDialog(false);
-      setShowProfileModal(false);
-      // Initialize lead state from initialLead
-      setLead({
-        leadStatus: initialLead.status || initialLead.lead_stage || "New",
-        priority: initialLead.priority || "Medium",
-        notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
-        selectedTags: parseTags(initialLead.tags || []),
-        nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
+  const parseTags = (tags: string[] | string) => {
+    if (Array.isArray(tags)) return tags;
+    if (typeof tags === "string") return tags.split(",").map(tag => tag.trim());
+    return [];
+  };
+
+  // Normalize API lead response to LeadData shape (for fresh fetch when card opened from table)
+  const normalizeApiLeadToLeadData = (apiLead: any): LeadData => {
+    const d = apiLead?.data || {};
+    return {
+      id: apiLead.id,
+      created_at: apiLead.created_at ?? '',
+      name: apiLead.name ?? d.name ?? 'N/A',
+      email: apiLead.email ?? d.email ?? '',
+      phone: apiLead.phone ?? apiLead.phone_number ?? d.phone_number ?? d.phone_no ?? d.phone ?? '',
+      phone_no: apiLead.phone_no ?? apiLead.phone_number ?? d.phone_number ?? d.phone_no ?? d.phone ?? '',
+      phone_number: apiLead.phone_number ?? d.phone_number ?? d.phone_no ?? d.phone ?? '',
+      company: apiLead.company ?? d.company ?? '',
+      position: apiLead.position ?? d.position ?? '',
+      source: apiLead.source ?? d.lead_source ?? d.source ?? '',
+      lead_source: apiLead.lead_source ?? d.lead_source ?? '',
+      status: apiLead.status ?? apiLead.lead_stage ?? d.lead_stage ?? d.lead_status ?? 'New',
+      notes: apiLead.notes ?? d.notes ?? d.latest_remarks ?? '',
+      budget: apiLead.budget ?? d.budget ?? 0,
+      location: apiLead.location ?? d.location ?? d.state ?? '',
+      tags: Array.isArray(apiLead.tags) ? apiLead.tags : (d.tags ? (Array.isArray(d.tags) ? d.tags : []) : []),
+      display_pic_url: apiLead.display_pic_url ?? d.display_pic_url ?? null,
+      linkedin_profile: apiLead.linkedin_profile ?? d.linkedin_profile ?? '',
+      website: apiLead.website ?? d.website ?? '',
+      next_follow_up: apiLead.next_follow_up ?? d.next_follow_up ?? d.next_call_at ?? '',
+      lead_stage: apiLead.lead_stage ?? d.lead_stage ?? d.lead_status ?? 'New',
+      praja_id: apiLead.praja_id ?? d.praja_id ?? d.user_id ?? '',
+      affiliated_party: apiLead.affiliated_party ?? d.affiliated_party ?? '',
+      rm_dashboard: apiLead.rm_dashboard ?? d.rm_dashboard ?? '',
+      user_profile_link: apiLead.user_profile_link ?? d.user_profile_link ?? '',
+      whatsapp_link: apiLead.whatsapp_link ?? d.whatsapp_link ?? '',
+      package_to_pitch: apiLead.package_to_pitch ?? d.package_to_pitch ?? '',
+      premium_poster_count: apiLead.premium_poster_count ?? d.premium_poster_count ?? 0,
+      last_active_date: apiLead.last_active_date ?? d.last_active_date ?? '',
+      last_active_date_time: apiLead.last_active_date_time ?? d.last_active_date_time ?? '',
+      latest_remarks: apiLead.latest_remarks ?? d.latest_remarks ?? '',
+      tasks: apiLead.tasks ?? d.tasks ?? [],
+      data: {
+        ...d,
+        name: d.name ?? apiLead.name ?? 'N/A',
+        phone_number: d.phone_number ?? apiLead.phone_number ?? '',
+        lead_stage: d.lead_stage ?? apiLead.lead_stage ?? 'New',
+        praja_id: d.praja_id ?? apiLead.praja_id ?? '',
+      },
+    };
+  };
+
+  // Fetch fresh lead by ID and update card (uses existing backend GET /crm-records/records/:id/)
+  const fetchFreshLeadForCard = useCallback(async (leadId: number) => {
+    try {
+      const fresh = await crmLeadsApi.getLeadById(leadId);
+      if (!fresh) return;
+      const normalized = normalizeApiLeadToLeadData(fresh);
+      setCurrentLead(normalized);
+      setLead(prev => ({
+        ...prev,
+        leadStatus: normalized.status || normalized.lead_stage || "New",
+        notes: normalized.notes || normalized.data?.notes || normalized.latest_remarks || "",
+        selectedTags: parseTags(normalized.tags || []),
+        nextFollowUp: normalized.next_follow_up || normalized.data?.next_follow_up || normalized.data?.next_call_at || "",
         leadStartTime: new Date(),
-      });
-      isInitialized.current = true;
+      }));
+      if (onLeadUpdate) onLeadUpdate(normalized);
+    } catch (err) {
+      console.warn("[LeadCardCarousel] Failed to fetch fresh lead by ID:", err);
     }
-  }, [initialLead, isInModal]);
+  }, [onLeadUpdate]);
+
+  // Track last lead id we fetched for (avoid re-fetching when parent re-renders with new initialLead object ref)
+  const lastFetchedLeadIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!initialLead) lastFetchedLeadIdRef.current = null;
+  }, [initialLead]);
+
+  // Handle initialLead prop - set currentLead when initialLead is provided, then fetch fresh data once per lead
+  useEffect(() => {
+    if (!initialLead) return;
+    const leadId = initialLead.id != null ? Number(initialLead.id) : NaN;
+    const isNewLead = !Number.isNaN(leadId) && lastFetchedLeadIdRef.current !== leadId;
+
+    setCurrentLead(initialLead);
+    setShowPendingCard(false);
+    if (isInModal) {
+      setActionButtonsVisible(true);
+    } else {
+      setActionButtonsVisible(false);
+    }
+    setShowNotInterestedDialog(false);
+    setShowCallBackDialog(false);
+    setShowProfileModal(false);
+    setLead({
+      leadStatus: initialLead.status || initialLead.lead_stage || "New",
+      notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
+      selectedTags: parseTags(initialLead.tags || []),
+      nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
+      leadStartTime: new Date(),
+    });
+    isInitialized.current = true;
+
+    // Fetch latest from backend only once per lead open (not on every parent re-render)
+    if (isNewLead) {
+      lastFetchedLeadIdRef.current = leadId;
+      fetchFreshLeadForCard(leadId);
+    }
+  }, [initialLead, isInModal, fetchFreshLeadForCard]);
 
   // Call onLeadUpdate when currentLead changes (if callback provided)
   // Only call when currentLead.id actually changes to prevent infinite loops
@@ -386,27 +463,21 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
 
 
   // Utility functions
-  const parseTags = (tags: string[] | string) => {
-    if (Array.isArray(tags)) return tags;
-    if (typeof tags === "string") return tags.split(",").map(tag => tag.trim());
-    return [];
-  };
-
   const getLeadName = (lead: LeadData | null): string => {
     if (!lead) return "N/A";
     return lead.data?.name || lead.name || "N/A";
   };
 
+  // Display and copy: digits only, no spaces. Indian 91+10 digits shown as 10 digits.
   const formatPhoneForDisplay = (phone?: string) => {
     if (!phone) return "N/A";
     const digits = phone.replace(/\D/g, "");
-    if (digits.length === 12) {
-      return `+${digits.slice(0, 2)} ${digits.slice(2, 7)} ${digits.slice(7)}`;
+    if (!digits) return "N/A";
+    // 12 digits starting with 91 (India): show only 10-digit number for cleaner copy/display
+    if (digits.length === 12 && digits.startsWith("91")) {
+      return digits.slice(2);
     }
-    if (digits.length === 10) {
-      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
-    }
-    return phone;
+    return digits;
   };
 
   const normalizePhoneForLinks = (phone?: string) => {
@@ -414,12 +485,22 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     return phone.replace(/\D/g, "");
   };
 
+  // For tel: link strip leading 91 so dialer gets 10-digit number (no 91 to remove)
+  const getPhoneForDial = (phone?: string) => {
+    const digits = normalizePhoneForLinks(phone);
+    if (!digits) return "";
+    if (digits.length === 12 && digits.startsWith("91")) {
+      return digits.slice(2);
+    }
+    return digits;
+  };
+
   const handleCallLead = (phone?: string) => {
-    const clean = normalizePhoneForLinks(phone);
-    if (!clean) return;
+    const forDial = getPhoneForDial(phone);
+    if (!forDial) return;
     setActionButtonsVisible(true);
     persistActionButtonsState(currentLead?.id, true);
-    window.open(`tel:${clean}`);
+    window.open(`tel:${forDial}`);
   };
 
   const handleWhatsAppLead = (phone?: string, link?: string) => {
@@ -827,7 +908,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       setLead(prev => ({
         ...prev,
         leadStatus: leadData.status || "New",
-        priority: leadData.priority || "Medium",
         notes: (leadData?.data?.notes as string) || leadData?.notes || "",
         selectedTags: parseTags(leadData?.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
@@ -881,7 +961,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const resetLeadState = () => {
     setLead({
       leadStatus: "New",
-      priority: "Medium",
       notes: "",
       selectedTags: [],
       nextFollowUp: "",
@@ -1104,7 +1183,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         setLead(prev => ({
           ...prev,
           leadStatus: refreshedLead.status || prev.leadStatus,
-          priority: refreshedLead.priority || prev.priority,
           notes: (refreshedLead?.data?.notes as string) || refreshedLead?.notes || prev.notes,
           selectedTags: parseTags(refreshedLead?.tags || []),
           nextFollowUp: refreshedLead.next_follow_up || prev.nextFollowUp,
@@ -1203,6 +1281,8 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   }, []);
 
   // Initialize component - fetch current lead on refresh (skip if initialLead is provided)
+  // Use initialLead?.id so we don't re-run when parent re-renders with new object ref (same lead)
+  const initialLeadId = initialLead?.id != null ? Number(initialLead.id) : null;
   useEffect(() => {
     const initializeComponent = async () => {
       // If initialLead is provided, skip auto-initialization and stats fetching
@@ -1237,7 +1317,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         setLead(prev => ({
           ...prev,
           leadStatus: currentLead.status || "New",
-          priority: currentLead.priority || "Medium",
           notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
           selectedTags: parseTags(currentLead?.tags || []),
           nextFollowUp: currentLead.next_follow_up || "",
@@ -1253,7 +1332,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     };
     
     initializeComponent();
-  }, [initialLead]);
+  }, [initialLeadId]);
 
   // Handle "Get Leads" button click - fetch current lead first, then next if none
   const handleGetLeads = async () => {
@@ -1274,7 +1353,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         setLead(prev => ({
           ...prev,
           leadStatus: currentLead.status || "New",
-          priority: currentLead.priority || "Medium",
           notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
           selectedTags: parseTags(currentLead?.tags || []),
           nextFollowUp: currentLead.next_follow_up || "",
@@ -1583,11 +1661,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                     {currentLead?.status && (
                       <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
                         {currentLead.status}
-                      </span>
-                    )}
-                    {currentLead?.priority && (
-                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Priority: {currentLead.priority}
                       </span>
                     )}
                   </div>
