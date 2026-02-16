@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
-import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
+import { ALLOWED_STATUSES } from '@/constants/inventory';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -25,13 +25,6 @@ export type RecordDetailEntityType =
 
 /** Top-level keys that are part of the API record (tenant_id excluded from view). */
 const RECORD_TOP_LEVEL_KEYS = ['id', 'created_at', 'updated_at'];
-
-/** Allowed status options per entity type (for status dropdown). */
-const ALLOWED_STATUSES: Record<string, string[]> = {
-  inventory_item: ['IN_STOCK', 'OUT_OF_STOCK', 'RESERVED', 'DISCONTINUED', 'ON_ORDER'],
-  inventory_request: [...INVENTORY_REQUEST_STATUSES],
-  inventory_cart: ['DRAFT', 'SUBMITTED', 'PENDING_APPROVAL', 'APPROVED', 'ORDERED', 'CLOSED'],
-};
 
 /** Default editable data fields per entity type. total_quantity is computed (allocated + available) for inventory_item. */
 const DEFAULT_EDITABLE_BY_ENTITY: Record<string, string[]> = {
@@ -68,7 +61,7 @@ const DEFAULT_EDITABLE_BY_ENTITY: Record<string, string[]> = {
 };
 
 /** Fields hidden from all users (internal/system fields). */
-const FIELDS_HIDDEN_FOR_ALL: string[] = ['requester_id', 'pyro_data', 'entity_type', 'submitted_at', 'request_date', "assigned_to_id"];
+const FIELDS_HIDDEN_FOR_ALL: string[] = ['requester_id', 'pyro_data', 'entity_type', 'submitted_at', 'request_date', "assigned_to_id", "created_by_id","updated_at"];
 
 /** inventory_request: data keys hidden from requestor (PM-only). Requestor never sees these in the modal. */
 const FIELDS_HIDDEN_FROM_REQUESTER: string[] = ['cart_id', 'assigned_to_id', 'comments', 'requester_name'];
