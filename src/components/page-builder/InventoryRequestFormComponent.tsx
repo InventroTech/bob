@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Check, ChevronsUpDown, Calendar, User, Package, Send, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -167,198 +168,294 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     }
   };
 
+  const handleClear = () => {
+    setDepartment('');
+    setSubDepartment('');
+    setProjectPurpose('');
+    setItemDescription('');
+    setPartNumberSku('');
+    setPartNumberSearchQuery('');
+    setQuantity('');
+    setUrgency('');
+    setJustificationNotes('');
+    toast.success('Form cleared.');
+  };
+
+  const isFormEmpty =
+    !department &&
+    !subDepartment &&
+    !projectPurpose &&
+    !itemDescription &&
+    !partNumberSku &&
+    quantity === '' &&
+    !urgency &&
+    !justificationNotes;
+
   return (
-    <div className="border rounded-lg bg-white p-4 shadow-sm space-y-4">
+    <Card className="overflow-hidden border border-border/60 shadow-md">
       
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <Label>Date</Label>
-            <Input
-              value={new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })}
-              readOnly
-              disabled
-              className="bg-muted"
-            />
-            
-          </div>
-          <div className="space-y-1">
-            <Label>Requester Name</Label>
-            <Input value={requesterDisplay} readOnly disabled className="bg-muted" />
-            
-          </div>
-        </div>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-6 pt-6">
+          {/* Request info */}
+          <section className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Date
+                </Label>
+                <Input
+                  value={new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                  readOnly
+                  disabled
+                  className="h-10 bg-muted/50 font-medium"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
+                  <User className="h-3.5 w-3.5" />
+                  Requester
+                </Label>
+                <Input
+                  value={requesterDisplay}
+                  readOnly
+                  disabled
+                  className="h-10 bg-muted/50 font-medium"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="department" className="text-sm font-medium">
+                  Department
+                </Label>
+                <Select value={department} onValueChange={(v) => { setDepartment(v); setSubDepartment(''); }}>
+                  <SelectTrigger id="department" className="h-10">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPARTMENTS.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sub-department" className="text-sm font-medium">
+                  Sub-department
+                </Label>
+                <Select value={subDepartment} onValueChange={setSubDepartment} disabled={!department}>
+                  <SelectTrigger id="sub-department" className="h-10">
+                    <SelectValue placeholder={department ? 'Select sub-department' : 'Select department first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subDepartmentOptions.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-purpose" className="text-sm font-medium">
+                Project / Purpose
+              </Label>
+              <Input
+                id="project-purpose"
+                placeholder="e.g. Titan 30 Sensor, Fury Wing Part"
+                value={projectPurpose}
+                onChange={(e) => setProjectPurpose(e.target.value)}
+                className="h-10"
+              />
+            </div>
+          </section>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <Label htmlFor="department">Department</Label>
-            <Select value={department} onValueChange={(v) => { setDepartment(v); setSubDepartment(''); }}>
-              <SelectTrigger id="department">
-                <SelectValue placeholder="Select department" />
-              </SelectTrigger>
-              <SelectContent>
-                {DEPARTMENTS.map((d) => (
-                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="sub-department">Sub-department</Label>
-            <Select value={subDepartment} onValueChange={setSubDepartment} disabled={!department}>
-              <SelectTrigger id="sub-department">
-                <SelectValue placeholder="Select sub-department" />
-              </SelectTrigger>
-              <SelectContent>
-                {subDepartmentOptions.map((d) => (
-                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+          {/* Item details */}
+          <section className="space-y-4 border-t pt-6">
+            <h3 className="text-sm font-medium text-foreground/90">Item details</h3>
+            <div className="space-y-2">
+              <Label htmlFor="item-description" className="text-sm font-medium">
+                Item description <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="item-description"
+                placeholder="Describe the item(s) you need"
+                value={itemDescription}
+                onChange={(e) => setItemDescription(e.target.value)}
+                required
+                className="h-10"
+              />
+              <p className="text-muted-foreground text-xs">Brief description of the requested item(s).</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="part-sku" className="text-sm font-medium">
+                  Part number / SKU
+                </Label>
+                <Popover open={partNumberSearchOpen} onOpenChange={setPartNumberSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      ref={partNumberTriggerRef}
+                      id="part-sku"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={partNumberSearchOpen}
+                      className={cn(
+                        'h-10 w-full justify-between font-normal',
+                        !partNumberSku && 'text-muted-foreground'
+                      )}
+                    >
+                      <span className="truncate">
+                        {partNumberSku ? selectedPartNumberLabel : 'Select or leave blank'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="p-0"
+                    align="start"
+                    style={popoverWidth ? { width: `${popoverWidth}px` } : undefined}
+                  >
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Search items..."
+                        value={partNumberSearchQuery}
+                        onValueChange={setPartNumberSearchQuery}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No items found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="_none_"
+                            onSelect={() => {
+                              setPartNumberSku('');
+                              setPartNumberSearchOpen(false);
+                              setPartNumberSearchQuery('');
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                partNumberSku === '' ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            — None / New item
+                          </CommandItem>
+                          {filteredPartNumberOptions.map((option) => (
+                            <CommandItem
+                              key={option.value}
+                              value={option.value}
+                              onSelect={() => {
+                                setPartNumberSku(option.value);
+                                setPartNumberSearchOpen(false);
+                                setPartNumberSearchQuery('');
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  partNumberSku === option.value ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              {option.label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-muted-foreground text-xs">Optional — search existing inventory items.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quantity" className="text-sm font-medium">
+                  Quantity required <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={quantity}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setQuantity(v === '' ? '' : Number(v));
+                  }}
+                  required
+                  placeholder="0"
+                  className="h-10"
+                />
+              </div>
+            </div>
+          </section>
 
-        <div className="space-y-1">
-          <Label htmlFor="project-purpose">Project / Purpose</Label>
-          <Input
-            id="project-purpose"
-            placeholder="e.g. Titan 30 Sensor, Fury Wing Part"
-            value={projectPurpose}
-            onChange={(e) => setProjectPurpose(e.target.value)}
-          />
-        </div>
+          {/* Priority & notes */}
+          <section className="space-y-4 border-t pt-6">
+            <h3 className="text-sm font-medium text-foreground/90">Priority & notes</h3>
+            <div className="space-y-2">
+              <Label htmlFor="urgency" className="text-sm font-medium">
+                Priority / Urgency
+              </Label>
+              <Select value={urgency} onValueChange={setUrgency}>
+                <SelectTrigger id="urgency" className="h-10">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  {URGENCY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="justification" className="text-sm font-medium">
+                Justification / Notes
+              </Label>
+              <Textarea
+                id="justification"
+                placeholder="Business justification or additional notes"
+                value={justificationNotes}
+                onChange={(e) => setJustificationNotes(e.target.value)}
+                rows={3}
+                className="resize-y min-h-[80px]"
+              />
+            </div>
+          </section>
+        </CardContent>
 
-        <div className="space-y-1">
-          <Label htmlFor="item-description">Item Description</Label>
-          <Input
-            id="item-description"
-            placeholder="Describe the item(s) you need"
-            value={itemDescription}
-            onChange={(e) => setItemDescription(e.target.value)}
-            required
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <Label htmlFor="part-sku">Part Number / SKU (if known)</Label>
-            <Popover open={partNumberSearchOpen} onOpenChange={setPartNumberSearchOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  ref={partNumberTriggerRef}
-                  id="part-sku"
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={partNumberSearchOpen}
-                  className="w-full justify-between"
-                >
-                  {partNumberSku ? selectedPartNumberLabel : 'Select or leave blank'}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent 
-                className="p-0" 
-                align="start"
-                style={popoverWidth ? { width: `${popoverWidth}px` } : undefined}
-              >
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder="Search items..."
-                    value={partNumberSearchQuery}
-                    onValueChange={setPartNumberSearchQuery}
-                  />
-                  <CommandList>
-                    <CommandEmpty>No items found.</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value="_none_"
-                        onSelect={() => {
-                          setPartNumberSku('');
-                          setPartNumberSearchOpen(false);
-                          setPartNumberSearchQuery('');
-                        }}
-                      >
-                        <Check
-                          className={cn(
-                            'mr-2 h-4 w-4',
-                            partNumberSku === '' ? 'opacity-100' : 'opacity-0'
-                          )}
-                        />
-                        — None / New item
-                      </CommandItem>
-                      {filteredPartNumberOptions.map((option) => (
-                        <CommandItem
-                          key={option.value}
-                          value={option.value}
-                          onSelect={() => {
-                            setPartNumberSku(option.value);
-                            setPartNumberSearchOpen(false);
-                            setPartNumberSearchQuery('');
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              'mr-2 h-4 w-4',
-                              partNumberSku === option.value ? 'opacity-100' : 'opacity-0'
-                            )}
-                          />
-                          {option.label}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="quantity">Quantity Required</Label>
-            <Input
-              id="quantity"
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) => {
-                const v = e.target.value;
-                setQuantity(v === '' ? '' : Number(v));
-              }}
-              required
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="urgency">Priority / Urgency</Label>
-          <Select value={urgency} onValueChange={setUrgency}>
-            <SelectTrigger id="urgency">
-              <SelectValue placeholder="Select priority" />
-            </SelectTrigger>
-            <SelectContent>
-              {URGENCY_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="justification">Justification / Notes</Label>
-          <Textarea
-            id="justification"
-            placeholder="Business justification or additional notes"
-            value={justificationNotes}
-            onChange={(e) => setJustificationNotes(e.target.value)}
-            rows={3}
-          />
-        </div>
-
-        <div className="flex items-center gap-2 pt-1">
-          <Button type="submit" disabled={submitting || !user}>
-            {submitting ? 'Creating...' : 'Create Request'}
+        <CardFooter className="flex flex-wrap items-center gap-3 border-t bg-muted/20 px-6 py-4">
+          <Button
+            type="submit"
+            disabled={submitting || !user}
+            className="min-w-[140px] gap-2 shadow-sm"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Create Request
+              </>
+            )}
           </Button>
-        </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClear}
+            disabled={submitting || isFormEmpty}
+            className="min-w-[100px]"
+          >
+            Clear form
+          </Button>
+          {!user && (
+            <span className="text-muted-foreground text-sm">You must be signed in to submit.</span>
+          )}
+        </CardFooter>
       </form>
-    </div>
+    </Card>
   );
 };

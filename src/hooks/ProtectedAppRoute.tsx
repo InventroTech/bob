@@ -31,34 +31,8 @@ const UnauthorizedPage: React.FC<{
           .single();
 
         if (tenant) {
-          // NEW: Get the public role ID via API instead of direct Supabase query
-          // This uses authz_role table (Django model) instead of public.roles
-          let publicRole = null;
-          try {
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-            const apiUrl = `${baseUrl}/api/authz/roles/?key=public`;
-            
-            const response = await fetch(apiUrl, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Tenant-Slug': tenantSlug || ''
-              }
-            });
-            
-            if (response.ok) {
-              const roleData = await response.json();
-              // API returns { count: 1, results: [{ id, name, key, description }] }
-              publicRole = roleData.results?.[0] || roleData.data?.[0] || null;
-            } else {
-              console.warn('Failed to fetch public role via API:', response.status, response.statusText);
-              // Continue without publicRole - will check for pages with role=null
-            }
-          } catch (apiError) {
-            console.error('Error fetching public role via API:', apiError);
-            // Continue without publicRole - will check for pages with role=null
-            // Note: No fallback to Supabase since roles table is being deleted
-          }
+          // Get the public role via membership API (Django authz at /membership/roles)
+          const publicRole = await membershipService.getPublicRole(tenantSlug || undefined);
 
           // Fetch public and unassigned pages
           const query = supabase
