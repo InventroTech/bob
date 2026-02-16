@@ -68,7 +68,7 @@ const DEFAULT_EDITABLE_BY_ENTITY: Record<string, string[]> = {
 };
 
 /** Fields hidden from all users (internal/system fields). */
-const FIELDS_HIDDEN_FOR_ALL: string[] = ['requester_id', 'pyro_data', 'entity_type', 'submitted_at', 'request_date'];
+const FIELDS_HIDDEN_FOR_ALL: string[] = ['requester_id', 'pyro_data', 'entity_type', 'submitted_at', 'request_date', "assigned_to_id"];
 
 /** inventory_request: data keys hidden from requestor (PM-only). Requestor never sees these in the modal. */
 const FIELDS_HIDDEN_FROM_REQUESTER: string[] = ['cart_id', 'assigned_to_id', 'comments', 'requester_name'];
@@ -103,6 +103,8 @@ interface RecordDetailModalProps {
   cartOptions?: Array<{ id: number; label: string }>;
   /** Called after a record is deleted so the parent can refresh/remove it. */
   onDeleted?: (recordId: number) => void;
+  /** Called after a record is updated by an action (e.g. Proceed to PM) so the parent can refresh the table. */
+  onRecordUpdated?: (recordId: number) => void;
 }
 
 /**
@@ -189,6 +191,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   onUpdate,
   cartOptions,
   onDeleted,
+  onRecordUpdated,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
@@ -513,6 +516,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         title: 'Request sent to RM',
         description: 'The request has been submitted to the RM for review.',
       });
+      onRecordUpdated?.(record.id);
       onOpenChange(false);
     } catch (e: any) {
       toast({
@@ -523,7 +527,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } finally {
       setProceeding(false);
     }
-  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, toast, onOpenChange]);
+  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, toast, onOpenChange, onRecordUpdated]);
 
   /** Create a new cart and add this request to it. */
   const handleAddToNewCart = useCallback(async () => {

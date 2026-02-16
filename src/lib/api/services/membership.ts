@@ -107,9 +107,44 @@ export const membershipService = {
   },
 
   /**
+   * Get the public role for a tenant (key=public).
+   * Uses the membership/roles endpoint. Returns null on any error or if not found.
+   * Use this instead of the non-existent api/authz/roles endpoint.
+   *
+   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header (e.g. from URL params)
+   * @returns Promise with the public role or null
+   */
+  async getPublicRole(tenantSlug?: string): Promise<Role | null> {
+    try {
+      const config: { params?: { key: string }; headers?: { 'X-Tenant-Slug': string } } = {
+        params: { key: 'public' },
+      };
+      if (tenantSlug) {
+        config.headers = { 'X-Tenant-Slug': tenantSlug };
+      }
+      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles', config);
+      const responseData = response.data;
+      let roles: Role[] = [];
+      if (Array.isArray(responseData)) {
+        roles = responseData;
+      } else if (responseData && typeof responseData === 'object') {
+        if ('results' in responseData && Array.isArray(responseData.results)) {
+          roles = responseData.results;
+        } else if ('data' in responseData && Array.isArray(responseData.data)) {
+          roles = responseData.data;
+        }
+      }
+      return roles.length > 0 ? roles[0] : null;
+    } catch (error: any) {
+      console.warn('Failed to fetch public role via membership API:', error?.message || error);
+      return null;
+    }
+  },
+
+  /**
    * Get all users for the current tenant
    * Uses the membership/users endpoint
-   * 
+   *
    * @returns Promise with array of users
    */
   async getUsers(): Promise<User[]> {
