@@ -1870,7 +1870,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
           leadCardRef.current = null;
         }
       }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0" hideCloseButton>
           <DialogHeader className="sr-only">
             <DialogTitle>
               {selectedLead?.name || (selectedLead as any)?.data?.name || 'Lead Details'}
@@ -1900,7 +1900,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
                 source: lead.source || leadData.lead_source || leadData.source || '',
                 lead_source: leadData.lead_source || lead.source || '',
                 status: lead.status || lead.lead_stage || leadData.lead_stage || leadData.lead_status || 'New',
-                priority: lead.priority || leadData.priority || 'Medium',
                 notes: lead.notes || leadData.notes || leadData.latest_remarks || '',
                 budget: lead.budget || leadData.budget || 0,
                 location: lead.location || leadData.location || leadData.state || '',
