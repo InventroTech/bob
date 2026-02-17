@@ -917,6 +917,7 @@ const PageBuilder = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [pageName, setPageName] = useState("Untitled Page");
   const [headerTitle, setHeaderTitle] = useState("");
+  const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [activeTab, setActiveTab] = useState("components");
   const [canvasComponents, setCanvasComponents] = useState<CanvasComponentData[]>([]);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -960,7 +961,7 @@ const PageBuilder = () => {
         try {
           const { data, error } = await supabase
             .from('pages')
-            .select('name, config, role')
+            .select('name, config, role, header_title, display_order')
             .eq('id', pageId)
             .single();
 
@@ -972,6 +973,7 @@ const PageBuilder = () => {
             setPageName(data.name || 'Untitled Page');
             // Try to get header_title if column exists, otherwise use empty string
             setHeaderTitle((data as any).header_title || '');
+            setDisplayOrder((data as any).display_order || 0);
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
             if (data.role) setSelectedRole(data.role);
           } else {
@@ -1200,6 +1202,7 @@ const PageBuilder = () => {
         config: canvasComponents as unknown as Json,
         updated_at: new Date().toISOString(),
         role: selectedRole || null,
+        display_order: displayOrder,
       };
       
       // Only include header_title if it has a value (optional field)
@@ -1301,6 +1304,21 @@ const PageBuilder = () => {
                 placeholder="Header Title"
                 className="w-1/3 text-sm font-medium border-border"
               />
+              <div className="flex items-center gap-2 px-2 border-l border-border">
+              <Label htmlFor="order" className="text-[10px] uppercase font-bold text-muted-foreground">Order</Label>
+              <Input
+              id="order"
+              type="number"
+              value={displayOrder === 0 ? "" : displayOrder}
+              onChange={(e) => {
+                const val = e.target.value;
+                setDisplayOrder(val === "" ? 0 : parseInt(val, 10));
+                }}
+                // Added Tailwind classes to hide the arrows (spinners)
+                className="w-16 h-9 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                placeholder="0"
+              />
+              </div>
               <CustomButton variant="outline" size="sm" icon={<Eye className="h-4 w-4" />} className="border-border text-foreground hover:bg-muted">
                 Preview
               </CustomButton>
