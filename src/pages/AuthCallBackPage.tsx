@@ -85,6 +85,22 @@ const AuthCallbackPage = () => {
               // Only show toast for unexpected errors
               toast.error('Warning: User linking failed, but login will continue');
             }
+          } else if (result.success === true) {
+            // User was successfully linked (or already linked) - refresh session to get new JWT with user_data
+            // This ensures the JWT contains tenant_id and role_id before redirecting to protected route
+            try {
+              const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+              if (refreshError) {
+                console.warn('Session refresh failed after linking:', refreshError);
+                // Don't block login - the existing session might still work
+              } else {
+                console.log('Session refreshed successfully after linking user UID');
+                // Session is now updated with new JWT that should contain user_data
+              }
+            } catch (refreshErr) {
+              console.error('Error refreshing session after linking:', refreshErr);
+              // Don't block login - continue with existing session
+            }
           }
         }
 
