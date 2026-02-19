@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { authService } from '@/lib/api/services/auth';
+import { getRoleIdFromJWT, getTenantIdFromJWT } from '@/lib/jwt';
 
 const AuthCallbackPage = () => {
   const navigate = useNavigate();
@@ -95,7 +96,31 @@ const AuthCallbackPage = () => {
                 // Don't block login - the existing session might still work
               } else {
                 console.log('Session refreshed successfully after linking user UID');
-                // Session is now updated with new JWT that should contain user_data
+                
+                // Wait for session to have user_data before redirecting
+                // Poll for up to 3 seconds to ensure session has user_data
+                let attempts = 0;
+                const maxAttempts = 15; // 15 attempts * 200ms = 3 seconds max
+                let sessionHasUserData = false;
+                
+                while (attempts < maxAttempts && !sessionHasUserData) {
+                  const { data: { session: currentSession } } = await supabase.auth.getSession();
+                  if (currentSession?.access_token) {
+                    const hasRoleId = getRoleIdFromJWT(currentSession.access_token);
+                    const hasTenantId = getTenantIdFromJWT(currentSession.access_token);
+                    if (hasRoleId && hasTenantId) {
+                      sessionHasUserData = true;
+                      console.log('Session now has user_data, ready to redirect');
+                      break;
+                    }
+                  }
+                  attempts++;
+                  await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms between checks
+                }
+                
+                if (!sessionHasUserData) {
+                  console.warn('Session refresh completed but user_data not found in JWT after waiting');
+                }
               }
             } catch (refreshErr) {
               console.error('Error refreshing session after linking:', refreshErr);
