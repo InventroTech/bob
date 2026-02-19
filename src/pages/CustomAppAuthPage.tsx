@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { authService } from '@/lib/api/services/auth';
-import { getRoleIdFromJWT, getTenantIdFromJWT } from '@/lib/jwt';
+import { getRoleIdFromJWT } from '@/lib/jwt';
 
 const CustomAppAuthPage: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -15,18 +15,13 @@ const CustomAppAuthPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isLinking, setIsLinking] = useState(false);
 
-  // If already authenticated, redirect to dashboard (but not if we're in the process of linking)
+  // If already authenticated, redirect to dashboard
   useEffect(() => {
-    if (!authLoading && session && !isLinking) {
-      // Only auto-redirect if session already has user_data (user was already linked)
-      const token = session?.access_token;
-      if (token && getRoleIdFromJWT(token) && getTenantIdFromJWT(token)) {
-        navigate(`/app/${tenantSlug}`, { replace: true });
-      }
+    if (!authLoading && session) {
+      navigate(`/app/${tenantSlug}`, { replace: true });
     }
-  }, [session, authLoading, navigate, tenantSlug, isLinking]);
+  }, [session, authLoading, navigate, tenantSlug]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +44,6 @@ const CustomAppAuthPage: React.FC = () => {
         const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
 
         if (!isAlreadyLinked) {
-          setIsLinking(true);
           const result = await authService.linkUserUid(
             { uid: user.id, email: user.email },
             tenantSlug || 'bibhab-thepyro-ai'
@@ -71,7 +65,7 @@ const CustomAppAuthPage: React.FC = () => {
               toast.error('Warning: User linking failed, but login will continue');
             }
           } else if (result.success === true) {
-            // User was successfully linked (or already linked) - refresh session to get new JWT with user_data
+            // User was successfully linked - refresh session to get new JWT with user_data
             // This ensures the JWT contains tenant_id and role_id before redirecting to protected route
             try {
               const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
@@ -80,37 +74,6 @@ const CustomAppAuthPage: React.FC = () => {
                 // Don't block login - the existing session might still work
               } else {
                 console.log('Session refreshed successfully after linking user UID');
-                
-                // Wait for session to have user_data before redirecting
-                // Poll for up to 3 seconds to ensure session has user_data
-                let attempts = 0;
-                const maxAttempts = 15; // 15 attempts * 200ms = 3 seconds max
-                let sessionHasUserData = false;
-                
-                while (attempts < maxAttempts && !sessionHasUserData) {
-                  const { data: { session: currentSession } } = await supabase.auth.getSession();
-                  if (currentSession?.access_token) {
-                    const hasRoleId = getRoleIdFromJWT(currentSession.access_token);
-                    const hasTenantId = getTenantIdFromJWT(currentSession.access_token);
-                    if (hasRoleId && hasTenantId) {
-                      sessionHasUserData = true;
-                      console.log('Session now has user_data, ready to redirect');
-                      break;
-                    }
-                  }
-                  attempts++;
-                  await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms between checks
-                }
-                
-                if (!sessionHasUserData) {
-                  console.warn('Session refresh completed but user_data not found in JWT after waiting');
-                } else {
-                  // Session has user_data, manually navigate to dashboard
-                  toast.success('Login successful! Redirecting…');
-                  navigate(`/app/${tenantSlug}`, { replace: true });
-                  setIsLinking(false);
-                  return; // Exit early since we're navigating
-                }
               }
             } catch (refreshErr) {
               console.error('Error refreshing session after linking:', refreshErr);
@@ -118,8 +81,6 @@ const CustomAppAuthPage: React.FC = () => {
             }
           }
         }
-        
-        setIsLinking(false);
 
         /* BACKWARD COMPATIBILITY: Legacy fetch-based implementation
          * Uncomment below and comment above if you need to revert to old implementation
@@ -161,13 +122,9 @@ const CustomAppAuthPage: React.FC = () => {
         console.error('Error during user linking:', error);
         // Don't block login for this error, just log it
         toast.error('Warning: User linking failed, but login will continue');
-        setIsLinking(false);
-        // Don't show success toast if linking failed
-        return;
       }
     }
   
-    // If user was already linked, show success toast and let useEffect handle redirect
     toast.success('Login successful! Redirecting…');
   };
   

@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { authService } from '@/lib/api/services/auth';
-import { getRoleIdFromJWT, getTenantIdFromJWT } from '@/lib/jwt';
+import { getRoleIdFromJWT } from '@/lib/jwt';
 
 const AuthCallbackPage = () => {
   const navigate = useNavigate();
@@ -54,7 +54,7 @@ const AuthCallbackPage = () => {
               toast.error('Warning: User linking failed, but login will continue');
             }
           } else if (result.success === true) {
-            // User was successfully linked (or already linked) - refresh session to get new JWT with user_data
+            // User was successfully linked - refresh session to get new JWT with user_data
             // This ensures the JWT contains tenant_id and role_id before redirecting to protected route
             try {
               const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
@@ -63,56 +63,6 @@ const AuthCallbackPage = () => {
                 // Don't block login - the existing session might still work
               } else {
                 console.log('Session refreshed successfully after linking user UID');
-                
-                // Give Supabase hook time to process (staging may be slower)
-                // Wait 500ms before starting to poll
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // Wait for session to have user_data before redirecting
-                // Poll for up to 10 seconds (staging may have slower hook processing)
-                let attempts = 0;
-                const maxAttempts = 50; // 50 attempts * 200ms = 10 seconds max
-                let sessionHasUserData = false;
-                
-                console.log('Waiting for session to have user_data...');
-                
-                while (attempts < maxAttempts && !sessionHasUserData) {
-                  const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-                  
-                  if (sessionError) {
-                    console.error('Error getting session during polling:', sessionError);
-                    break;
-                  }
-                  
-                  if (currentSession?.access_token) {
-                    const hasRoleId = getRoleIdFromJWT(currentSession.access_token);
-                    const hasTenantId = getTenantIdFromJWT(currentSession.access_token);
-                    
-                    // Log progress every 5 attempts
-                    if (attempts % 5 === 0) {
-                      console.log(`Polling attempt ${attempts}/${maxAttempts}: role_id=${!!hasRoleId}, tenant_id=${!!hasTenantId}`);
-                    }
-                    
-                    if (hasRoleId && hasTenantId) {
-                      sessionHasUserData = true;
-                      console.log(`Session now has user_data after ${attempts} attempts, ready to redirect`);
-                      break;
-                    }
-                  }
-                  
-                  attempts++;
-                  await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms between checks
-                }
-                
-                if (!sessionHasUserData) {
-                  console.warn(`Session refresh completed but user_data not found in JWT after ${attempts} attempts (${attempts * 200}ms)`);
-                  console.warn('This might indicate:');
-                  console.warn('1. Supabase Customize Session hook is not configured');
-                  console.warn('2. Hook is taking longer than expected to process');
-                  console.warn('3. User might need to logout/login again');
-                } else {
-                  console.log('Session has user_data, proceeding with redirect');
-                }
               }
             } catch (refreshErr) {
               console.error('Error refreshing session after linking:', refreshErr);
