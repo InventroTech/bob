@@ -129,13 +129,62 @@ const ProtectedAppRoute: React.FC = () => {
 
       try {
         // Extract tenant_id and role_id from JWT token (no API call needed)
-        const token = session.access_token;
-        const jwtTenantId = getTenantIdFromJWT(token);
-        const jwtRoleId = getRoleIdFromJWT(token);
+        let token = session.access_token;
+        let jwtTenantId = getTenantIdFromJWT(token);
+        let jwtRoleId = getRoleIdFromJWT(token);
+
+        // If JWT missing user_data, try refresh and link first
+        if (!jwtTenantId || !jwtRoleId) {
+          console.log('JWT missing user_data, attempting to link and refresh...');
+          
+          // First, ensure user is linked
+          if (accessCheckedRef.current !== checkKey) {
+            const linkResult = await authService.linkUserUid(
+              { uid: session.user.id, email: session.user.email },
+              tenantSlug
+            );
+            
+            if (linkResult.success) {
+              console.log('User linked successfully, refreshing session...');
+              // Wait a moment for backend to process
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // Refresh session to get new JWT with user_data
+              const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+              if (!refreshError && refreshData?.session?.access_token) {
+                token = refreshData.session.access_token;
+                jwtTenantId = getTenantIdFromJWT(token);
+                jwtRoleId = getRoleIdFromJWT(token);
+                console.log(`After link+refresh: role_id=${!!jwtRoleId}, tenant_id=${!!jwtTenantId}`);
+                
+                // Poll for user_data if still missing
+                if (!jwtTenantId || !jwtRoleId) {
+                  let attempts = 0;
+                  const maxAttempts = 20;
+                  while (attempts < maxAttempts && (!jwtTenantId || !jwtRoleId)) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    const { data: { session: currentSession } } = await supabase.auth.getSession();
+                    if (currentSession?.access_token) {
+                      token = currentSession.access_token;
+                      jwtTenantId = getTenantIdFromJWT(token);
+                      jwtRoleId = getRoleIdFromJWT(token);
+                      if (jwtTenantId && jwtRoleId) {
+                        console.log(`Found user_data after ${attempts} polling attempts`);
+                        break;
+                      }
+                    }
+                    attempts++;
+                  }
+                }
+              }
+            }
+          }
+        }
 
         if (!jwtTenantId || !jwtRoleId) {
+          console.error('Unable to get user_data in JWT after all attempts');
           if (isMounted) {
-            setErrorMessage('Unable to verify user credentials');
+            setErrorMessage('Unable to verify user credentials. Please logout and login again.');
             setAllowed(false);
           }
           return;
@@ -165,7 +214,7 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
-        // Link the user's UID from auth.users to our users table (non-blocking)
+        // Ensure user is linked BEFORE calling getRoles() (backend requires TenantMembership)
         // Only do this once per session to avoid redundant updates
         if (accessCheckedRef.current !== checkKey) {
           const result = await authService.linkUserUid(
@@ -175,21 +224,61 @@ const ProtectedAppRoute: React.FC = () => {
 
           if (result.success === false || result.error) {
             console.error('Failed to link user UID:', result.error);
-            // Don't block access if linking fails
+            // If linking fails, backend won't authorize getRoles() - show error
+            if (isMounted) {
+              setErrorMessage('Unable to verify user membership. Please logout and login again.');
+              setAllowed(false);
+            }
+            return;
           }
+          
+          // Wait a moment after linking to ensure backend has processed
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
 
         // 2. Get the roles for the tenant to validate role_id exists using API
         let roles;
         try {
           roles = await membershipService.getRoles(tenantSlug);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error fetching roles:', error);
-          if (isMounted) {
-            setErrorMessage('Unable to verify user role');
-            setAllowed(false);
+          
+          // If 403 error, user might not be linked yet - try linking again
+          if (error?.response?.status === 403 || error?.status === 403) {
+            console.log('403 error fetching roles, attempting to link user again...');
+            const linkResult = await authService.linkUserUid(
+              { uid: session.user.id, email: session.user.email },
+              tenantSlug
+            );
+            
+            if (linkResult.success) {
+              // Wait and retry
+              await new Promise(resolve => setTimeout(resolve, 500));
+              try {
+                roles = await membershipService.getRoles(tenantSlug);
+                console.log('Successfully fetched roles after re-linking');
+              } catch (retryError) {
+                console.error('Still failed after re-linking:', retryError);
+                if (isMounted) {
+                  setErrorMessage('Unable to verify user role. Please logout and login again.');
+                  setAllowed(false);
+                }
+                return;
+              }
+            } else {
+              if (isMounted) {
+                setErrorMessage('Unable to verify user membership. Please logout and login again.');
+                setAllowed(false);
+              }
+              return;
+            }
+          } else {
+            if (isMounted) {
+              setErrorMessage('Unable to verify user role');
+              setAllowed(false);
+            }
+            return;
           }
-          return;
         }
 
         // 3. Check if the user's role_id (from JWT) exists in the roles array
