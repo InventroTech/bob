@@ -67,6 +67,15 @@ export interface User {
   } | null;
 }
 
+export interface MyMembershipResponse {
+  role_key: string | null;
+  role_name: string | null;
+  role_id: string | null;
+  tenant_id: string | null;
+  is_active?: boolean;
+  error?: string;
+}
+
 /**
  * Membership API Service
  */
@@ -290,6 +299,70 @@ export const membershipService = {
       { assignments }
     );
     return response.data;
+  },
+
+  /**
+   * Get current user's membership information (tenant_id, role_id) from backend.
+   * Used as fallback when JWT doesn't contain user_data claims.
+   * This is the source of truth for user's tenant and role.
+   * 
+   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header
+   * @returns Promise with membership info (tenant_id, role_id, role_key, etc.) or null if not found
+   */
+  async getMyMembership(tenantSlug?: string): Promise<MyMembershipResponse | null> {
+    try {
+      console.log('[membershipService] getMyMembership: Fetching membership from backend API', {
+        tenantSlug: tenantSlug || 'not provided',
+        endpoint: '/membership/me/role',
+      });
+
+      const config: { headers?: { 'X-Tenant-Slug': string } } = {};
+      if (tenantSlug) {
+        config.headers = { 'X-Tenant-Slug': tenantSlug };
+      }
+
+      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role', config);
+      
+      console.log('[membershipService] getMyMembership: Response received', {
+        hasData: !!response.data,
+        role_id: response.data?.role_id || 'MISSING',
+        tenant_id: response.data?.tenant_id || 'MISSING',
+        role_key: response.data?.role_key || 'MISSING',
+        hasError: !!response.data?.error,
+        error: response.data?.error,
+      });
+
+      if (response.data?.error) {
+        console.warn('[membershipService] getMyMembership: Backend returned error', {
+          error: response.data.error,
+        });
+        return null;
+      }
+
+      if (!response.data?.role_id || !response.data?.tenant_id) {
+        console.warn('[membershipService] getMyMembership: Missing required fields', {
+          hasRoleId: !!response.data?.role_id,
+          hasTenantId: !!response.data?.tenant_id,
+        });
+        return null;
+      }
+
+      console.log('[membershipService] getMyMembership: ✅ Successfully retrieved membership', {
+        tenant_id: response.data.tenant_id,
+        role_id: response.data.role_id,
+        role_key: response.data.role_key,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      console.error('[membershipService] getMyMembership: ❌ Error fetching membership', {
+        error: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+      });
+      return null;
+    }
   },
 };
 

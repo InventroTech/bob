@@ -28,21 +28,63 @@ const AuthCallbackPage = () => {
       }
 
       try {
-        // NEW: Use centralized auth service to link user UID with email
-        console.log('Linking user UID via auth service');
-        console.log('Payload:', { uid: user.id, email: user.email });
+        // Check if user already linked (has role_id in JWT)
+        const { data: { session } } = await supabase.auth.getSession();
+        const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
+        
+        if (!isAlreadyLinked) {
+          console.log('[AuthCallBackPage] User needs linking, calling link-user-uid...');
+          const result = await authService.linkUserUid(
+            { uid: user.id, email: user.email },
+            tenantSlug || 'bibhab-thepyro-ai'
+          );
 
-        const result = await authService.linkUserUid(
-          { uid: user.id, email: user.email },
-          tenantSlug || 'bibhab-thepyro-ai'
-        );
-
-        if (result.success === false || result.error) {
-          console.error('Error linking user UID:', result.error);
-          // Don't block login for this error, just log it
-          toast.error('Warning: User linking failed, but login will continue');
+          if (result.success === false || result.error) {
+            const errorCode = (result as any).code;
+            const errorMessage = result.error || '';
+            
+            // Expected errors don't block login
+            const isExpectedError = 
+              errorCode === 'NO_TENANT_MEMBERSHIP' || 
+              errorMessage.includes('No TenantMembership found') ||
+              errorMessage.includes('already has a linked UID') ||
+              errorMessage.includes('already linked');
+            
+            if (!isExpectedError) {
+              console.error('[AuthCallBackPage] Error linking user UID:', result.error);
+              toast.error('Warning: User linking failed, but login will continue');
+            }
+          } else if (result.success === true) {
+            console.log('[AuthCallBackPage] ✅ User UID linked successfully, refreshing session to regenerate JWT...');
+            
+            // CRITICAL: Refresh session to regenerate JWT with user_data after linking
+            try {
+              const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+              
+              if (refreshError) {
+                console.warn('[AuthCallBackPage] ⚠️ Session refresh failed after linking:', refreshError);
+                console.warn('[AuthCallBackPage] ProtectedAppRoute will use API fallback if needed');
+              } else {
+                console.log('[AuthCallBackPage] ✅ Session refreshed - JWT regenerated');
+                
+                // Verify JWT has user_data (for debugging)
+                const { data: { session: refreshedSession } } = await supabase.auth.getSession();
+                if (refreshedSession?.access_token) {
+                  const hasRoleId = getRoleIdFromJWT(refreshedSession.access_token);
+                  if (hasRoleId) {
+                    console.log('[AuthCallBackPage] ✅ JWT now contains user_data (fast path)');
+                  } else {
+                    console.log('[AuthCallBackPage] ⚠️ JWT still missing user_data - ProtectedAppRoute will use API fallback');
+                  }
+                }
+              }
+            } catch (refreshErr) {
+              console.error('[AuthCallBackPage] Error refreshing session:', refreshErr);
+              console.log('[AuthCallBackPage] ProtectedAppRoute will use API fallback if needed');
+            }
+          }
         } else {
-          console.log('User UID linked successfully:', result);
+          console.log('[AuthCallBackPage] User already linked, skipping link-user-uid');
         }
 
         /* BACKWARD COMPATIBILITY: Legacy fetch-based implementation
