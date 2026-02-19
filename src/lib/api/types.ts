@@ -28,5 +28,10 @@ export interface LinkUserUidResponse {
   uid?: string;
   email?: string;
   error?: string;
+  code?: string;
+  activated_memberships?: number;
+  membership_ids?: string[];
+  already_linked?: boolean;
+  no_tenant_membership?: boolean;
 }
 

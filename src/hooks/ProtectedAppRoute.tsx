@@ -214,14 +214,18 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
-        // Ensure user is linked BEFORE calling getRoles() (backend requires TenantMembership)
+        // Ensure user is linked AND JWT has user_data BEFORE calling getRoles()
+        // Backend requires both: TenantMembership exists AND JWT has user_data.tenant_id
         // Only do this once per session to avoid redundant updates
         if (accessCheckedRef.current !== checkKey) {
+          console.log(`Linking user UID: ${session.user.id}, email: ${session.user.email}, tenant: ${tenantSlug}`);
           const result = await authService.linkUserUid(
             { uid: session.user.id, email: session.user.email },
             tenantSlug
           );
 
+          console.log('Link user result:', result);
+          
           if (result.success === false || result.error) {
             console.error('Failed to link user UID:', result.error);
             // If linking fails, backend won't authorize getRoles() - show error
@@ -232,42 +236,144 @@ const ProtectedAppRoute: React.FC = () => {
             return;
           }
           
-          // Wait a moment after linking to ensure backend has processed
-          await new Promise(resolve => setTimeout(resolve, 300));
+          // Log link success details
+          if (result.activated_memberships) {
+            console.log(`Successfully linked user: ${result.activated_memberships} membership(s) activated`);
+          }
+          
+          // After linking, refresh session to get JWT with user_data
+          console.log('User linked, refreshing session to get JWT with user_data...');
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (!refreshError && refreshData?.session?.access_token) {
+            // Update token and check for user_data
+            token = refreshData.session.access_token;
+            jwtTenantId = getTenantIdFromJWT(token);
+            jwtRoleId = getRoleIdFromJWT(token);
+            
+            // If still missing user_data, poll for it (hook might be slow in staging)
+            if (!jwtTenantId || !jwtRoleId) {
+              console.log('JWT still missing user_data after refresh, polling...');
+              let attempts = 0;
+              const maxAttempts = 25; // 5 seconds
+              while (attempts < maxAttempts && (!jwtTenantId || !jwtRoleId)) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                if (currentSession?.access_token) {
+                  token = currentSession.access_token;
+                  jwtTenantId = getTenantIdFromJWT(token);
+                  jwtRoleId = getRoleIdFromJWT(token);
+                  if (jwtTenantId && jwtRoleId) {
+                    console.log(`Found user_data after ${attempts} polling attempts`);
+                    break;
+                  }
+                }
+                attempts++;
+              }
+            }
+            
+            // Verify tenant_id still matches after refresh
+            if (jwtTenantId && tenant.id !== jwtTenantId) {
+              console.error('Tenant ID mismatch after refresh:', { jwtTenantId, tenantId: tenant.id });
+              if (isMounted) {
+                setErrorMessage('User does not have access to this organization');
+                setAllowed(false);
+              }
+              return;
+            }
+          } else {
+            console.warn('Session refresh failed after linking:', refreshError);
+          }
+          
+          // Wait longer after linking and refresh to ensure backend has processed
+          // Staging may have slower database writes and cache invalidation
+          console.log('Waiting for backend to process link and refresh...');
+          await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5 seconds
         }
 
         // 2. Get the roles for the tenant to validate role_id exists using API
+        // IMPORTANT: Only call this if JWT has user_data (backend needs it for tenant resolution)
         let roles;
         try {
+          // Ensure we're using the latest session token (might have been refreshed)
+          // Get fresh session to ensure interceptor uses latest token
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession?.access_token) {
+            token = currentSession.access_token;
+            // Re-check user_data with latest token
+            jwtTenantId = getTenantIdFromJWT(token);
+            jwtRoleId = getRoleIdFromJWT(token);
+            
+            // If still missing user_data, wait and poll (staging hook might be slow)
+            if (!jwtTenantId || !jwtRoleId) {
+              console.log('JWT still missing user_data, polling before API call...');
+              let pollAttempts = 0;
+              const maxPollAttempts = 15; // 3 seconds
+              while (pollAttempts < maxPollAttempts && (!jwtTenantId || !jwtRoleId)) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+                const { data: { session: pollSession } } = await supabase.auth.getSession();
+                if (pollSession?.access_token) {
+                  token = pollSession.access_token;
+                  jwtTenantId = getTenantIdFromJWT(token);
+                  jwtRoleId = getRoleIdFromJWT(token);
+                  if (jwtTenantId && jwtRoleId) {
+                    console.log(`Found user_data after ${pollAttempts} polling attempts before API call`);
+                    break;
+                  }
+                }
+                pollAttempts++;
+              }
+            }
+          }
+          
+          // Final check: don't call API if JWT still doesn't have user_data
+          if (!jwtTenantId || !jwtRoleId) {
+            console.error('Cannot call getRoles() - JWT missing user_data');
+            if (isMounted) {
+              setErrorMessage('Session credentials incomplete. Please logout and login again.');
+              setAllowed(false);
+            }
+            return;
+          }
+          
           roles = await membershipService.getRoles(tenantSlug);
         } catch (error: any) {
           console.error('Error fetching roles:', error);
           
-          // If 403 error, user might not be linked yet - try linking again
-          if (error?.response?.status === 403 || error?.status === 403) {
-            console.log('403 error fetching roles, attempting to link user again...');
-            const linkResult = await authService.linkUserUid(
-              { uid: session.user.id, email: session.user.email },
-              tenantSlug
-            );
+          // If 403 error and JWT doesn't have user_data, try refresh again
+          if ((error?.response?.status === 403 || error?.status === 403) && (!jwtTenantId || !jwtRoleId)) {
+            console.log('403 error with missing user_data, refreshing session again...');
+            const { data: refreshData2, error: refreshError2 } = await supabase.auth.refreshSession();
             
-            if (linkResult.success) {
-              // Wait and retry
-              await new Promise(resolve => setTimeout(resolve, 500));
-              try {
-                roles = await membershipService.getRoles(tenantSlug);
-                console.log('Successfully fetched roles after re-linking');
-              } catch (retryError) {
-                console.error('Still failed after re-linking:', retryError);
+            if (!refreshError2 && refreshData2?.session?.access_token) {
+              token = refreshData2.session.access_token;
+              jwtTenantId = getTenantIdFromJWT(token);
+              jwtRoleId = getRoleIdFromJWT(token);
+              
+              if (jwtTenantId && jwtRoleId) {
+                // Wait and retry with new token
+                await new Promise(resolve => setTimeout(resolve, 500));
+                try {
+                  roles = await membershipService.getRoles(tenantSlug);
+                  console.log('Successfully fetched roles after session refresh');
+                } catch (retryError) {
+                  console.error('Still failed after session refresh:', retryError);
+                  if (isMounted) {
+                    setErrorMessage('Unable to verify user role. Please logout and login again.');
+                    setAllowed(false);
+                  }
+                  return;
+                }
+              } else {
                 if (isMounted) {
-                  setErrorMessage('Unable to verify user role. Please logout and login again.');
+                  setErrorMessage('Session does not have required credentials. Please logout and login again.');
                   setAllowed(false);
                 }
                 return;
               }
             } else {
               if (isMounted) {
-                setErrorMessage('Unable to verify user membership. Please logout and login again.');
+                setErrorMessage('Unable to refresh session. Please logout and login again.');
                 setAllowed(false);
               }
               return;
