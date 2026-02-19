@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { authService } from '@/lib/api/services/auth';
-import { getRoleIdFromJWT } from '@/lib/jwt';
+import { getRoleIdFromJWT, getTenantIdFromJWT, getUserDataFromJWT, decodeJWT } from '@/lib/jwt';
 
 const CustomAppAuthPage: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -26,28 +26,75 @@ const CustomAppAuthPage: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    
+    // [STEP 1] User logs in on Custom App
+    console.log('[CustomAppAuthPage] STEP 1: User attempting login', { email, tenantSlug });
+    
+    // [STEP 2] Supabase signInWithPassword succeeds and returns a session (with a JWT)
+    console.log('[CustomAppAuthPage] STEP 2: Calling supabase.auth.signInWithPassword...');
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
   
     if (error) {
+      console.error('[CustomAppAuthPage] STEP 2: Login failed', { error: error.message });
       setError(error.message);
       return;
+    }
+    
+    console.log('[CustomAppAuthPage] STEP 2: Login successful, getting session...');
+    const { data: { session: initialSession } } = await supabase.auth.getSession();
+    console.log('[CustomAppAuthPage] STEP 2: Initial session obtained', {
+      hasSession: !!initialSession,
+      hasAccessToken: !!initialSession?.access_token,
+      userId: initialSession?.user?.id,
+      userEmail: initialSession?.user?.email,
+    });
+    
+    if (initialSession?.access_token) {
+      const initialRoleId = getRoleIdFromJWT(initialSession.access_token);
+      const initialTenantId = getTenantIdFromJWT(initialSession.access_token);
+      console.log('[CustomAppAuthPage] STEP 2: JWT claims check', {
+        hasRoleId: !!initialRoleId,
+        hasTenantId: !!initialTenantId,
+        roleId: initialRoleId || 'MISSING',
+        tenantId: initialTenantId || 'MISSING',
+      });
     }
   
     // Get user and save email to localStorage
     const { data: { user } } = await supabase.auth.getUser();
     if (user?.email && user?.id) {
       localStorage.setItem('user_email', user.email);
+      console.log('[CustomAppAuthPage] User email saved to localStorage', { email: user.email });
 
       try {
-        // Only link for new users (check JWT for role_id - if missing, user needs linking)
+        // [STEP 3] Only link for new users (check JWT for role_id - if missing, user needs linking)
         const { data: { session } } = await supabase.auth.getSession();
         const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
+        
+        console.log('[CustomAppAuthPage] STEP 3: Checking if user needs linking', {
+          isAlreadyLinked,
+          hasAccessToken: !!session?.access_token,
+        });
 
         if (!isAlreadyLinked) {
+          // [STEP 3] Frontend calls /accounts/link-user-uid/ to link the Supabase UID to TenantMembership
+          console.log('[CustomAppAuthPage] STEP 3: User needs linking, calling /accounts/link-user-uid/', {
+            uid: user.id,
+            email: user.email,
+            tenantSlug: tenantSlug || 'bibhab-thepyro-ai',
+          });
+          
           const result = await authService.linkUserUid(
             { uid: user.id, email: user.email },
             tenantSlug || 'bibhab-thepyro-ai'
           );
+
+          console.log('[CustomAppAuthPage] STEP 3: link-user-uid response', {
+            success: result.success,
+            error: result.error,
+            code: (result as any).code,
+            alreadyLinked: (result as any).already_linked,
+          });
 
           if (result.success === false && result.error) {
             const errorCode = (result as any).code;
@@ -60,26 +107,62 @@ const CustomAppAuthPage: React.FC = () => {
               errorMessage.includes('already has a linked UID') ||
               errorMessage.includes('already linked');
             
+            console.log('[CustomAppAuthPage] STEP 3: Linking result', {
+              isExpectedError,
+              errorCode,
+              errorMessage,
+            });
+            
             if (!isExpectedError) {
               // Only show toast for unexpected errors
               toast.error('Warning: User linking failed, but login will continue');
             }
           } else if (result.success === true) {
             // User was successfully linked - refresh session to get new JWT with user_data
-            // This ensures the JWT contains tenant_id and role_id before redirecting to protected route
+            // Note: ProtectedAppRoute will use API fallback if JWT still lacks user_data (Hybrid Approach)
+            console.log('[CustomAppAuthPage] STEP 3: Linking successful, refreshing session...');
             try {
               const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
               if (refreshError) {
-                console.warn('Session refresh failed after linking:', refreshError);
-                // Don't block login - the existing session might still work
+                console.warn('[CustomAppAuthPage] STEP 3: Session refresh failed after linking:', refreshError);
+                console.warn('[CustomAppAuthPage] STEP 3: ProtectedAppRoute will use API fallback if needed (Hybrid Approach)');
+                // Don't block login - ProtectedAppRoute will handle fallback
               } else {
-                console.log('Session refreshed successfully after linking user UID');
+                console.log('[CustomAppAuthPage] STEP 3: Session refreshed successfully after linking user UID');
+                
+                // Check if user_data is now in JWT (for logging/debugging)
+                const { data: { session: refreshedSession } } = await supabase.auth.getSession();
+                if (refreshedSession?.access_token) {
+                  const refreshedRoleId = getRoleIdFromJWT(refreshedSession.access_token);
+                  const refreshedTenantId = getTenantIdFromJWT(refreshedSession.access_token);
+                  const refreshedUserData = getUserDataFromJWT(refreshedSession.access_token);
+                  const refreshedJWTClaims = decodeJWT(refreshedSession.access_token);
+                  
+                  if (refreshedRoleId && refreshedTenantId) {
+                    console.log('[CustomAppAuthPage] STEP 3: ✅ user_data found in JWT after refresh (fast path)', {
+                      user_data: refreshedUserData,
+                      role_id: refreshedRoleId,
+                      tenant_id: refreshedTenantId,
+                    });
+                  } else {
+                    console.log('[CustomAppAuthPage] STEP 3: ⚠️ user_data not yet in JWT after refresh', {
+                      hasRoleId: !!refreshedRoleId,
+                      hasTenantId: !!refreshedTenantId,
+                      user_data: refreshedUserData,
+                      jwt_has_user_data_key: refreshedJWTClaims ? 'user_data' in refreshedJWTClaims : false,
+                    });
+                    console.log('[CustomAppAuthPage] STEP 3: ProtectedAppRoute will use API fallback (Hybrid Approach)');
+                  }
+                }
               }
             } catch (refreshErr) {
-              console.error('Error refreshing session after linking:', refreshErr);
-              // Don't block login - continue with existing session
+              console.error('[CustomAppAuthPage] STEP 3: Error refreshing session after linking:', refreshErr);
+              console.log('[CustomAppAuthPage] STEP 3: ProtectedAppRoute will use API fallback if needed');
+              // Don't block login - ProtectedAppRoute will handle fallback
             }
           }
+        } else {
+          console.log('[CustomAppAuthPage] STEP 3: User already linked, skipping link-user-uid call');
         }
 
         /* BACKWARD COMPATIBILITY: Legacy fetch-based implementation
@@ -119,12 +202,17 @@ const CustomAppAuthPage: React.FC = () => {
         }
         */
       } catch (error) {
-        console.error('Error during user linking:', error);
+        console.error('[CustomAppAuthPage] STEP 3: Error during user linking:', error);
         // Don't block login for this error, just log it
         toast.error('Warning: User linking failed, but login will continue');
       }
     }
   
+    // [STEP 4] The app then redirects to /app/:tenantSlug (dashboard)
+    console.log('[CustomAppAuthPage] STEP 4: Login flow complete, redirecting to dashboard', {
+      tenantSlug,
+      redirectPath: `/app/${tenantSlug}`,
+    });
     toast.success('Login successful! Redirecting…');
   };
   

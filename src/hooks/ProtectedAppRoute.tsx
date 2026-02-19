@@ -19,7 +19,7 @@ const UnauthorizedPage: React.FC<{
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  useEffect(() => { 
     // Fetch public pages for this tenant
     const fetchPublicPages = async () => {
       try {
@@ -117,31 +117,103 @@ const ProtectedAppRoute: React.FC = () => {
     let isMounted = true;
 
     const checkAccess = async () => {
-      if (!session?.user?.email || !tenantSlug || !session?.access_token) return;
+      // [STEP 4] The app redirects to /app/:tenantSlug (dashboard), which is wrapped by ProtectedAppRoute
+      console.log('[ProtectedAppRoute] STEP 4: Route accessed, starting access check', {
+        tenantSlug,
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userEmail: session?.user?.email,
+        userId: session?.user?.id,
+        hasAccessToken: !!session?.access_token,
+      });
+
+      if (!session?.user?.email || !tenantSlug || !session?.access_token) {
+        console.log('[ProtectedAppRoute] STEP 4: Missing required data, aborting check', {
+          hasEmail: !!session?.user?.email,
+          hasTenantSlug: !!tenantSlug,
+          hasAccessToken: !!session?.access_token,
+        });
+        return;
+      }
 
       // Create a unique key for this session/tenant combination
       const checkKey = `${session.user.id}-${tenantSlug}`;
       
       // Prevent redundant checks when session changes (e.g., on page focus)
       if (accessCheckedRef.current === checkKey && allowed !== null) {
+        console.log('[ProtectedAppRoute] STEP 4: Already checked this session/tenant combination, skipping');
         return;
       }
 
       try {
-        // Extract tenant_id and role_id from JWT token (no API call needed)
+        // [STEP 5] ProtectedAppRoute decides allow/deny by reading the JWT
+        console.log('[ProtectedAppRoute] STEP 5: Starting access check - Hybrid Approach (JWT-first with API fallback)');
         const token = session.access_token;
-        const jwtTenantId = getTenantIdFromJWT(token);
-        const jwtRoleId = getRoleIdFromJWT(token);
+        let jwtTenantId = getTenantIdFromJWT(token);
+        let jwtRoleId = getRoleIdFromJWT(token);
 
+        console.log('[ProtectedAppRoute] STEP 5: JWT claims extracted', {
+          jwtTenantId: jwtTenantId || 'MISSING',
+          jwtRoleId: jwtRoleId || 'MISSING',
+          hasTenantId: !!jwtTenantId,
+          hasRoleId: !!jwtRoleId,
+          usingJWT: !!(jwtTenantId && jwtRoleId),
+        });
+
+        // HYBRID APPROACH: If JWT lacks user_data, fallback to API call
         if (!jwtTenantId || !jwtRoleId) {
-          if (isMounted) {
-            setErrorMessage('Unable to verify user credentials');
-            setAllowed(false);
+          console.log('[ProtectedAppRoute] STEP 5: ⚠️ JWT missing user_data - Falling back to API call');
+          console.log('[ProtectedAppRoute] STEP 5: This is expected on first-time login');
+          
+          try {
+            const membership = await membershipService.getMyMembership(tenantSlug);
+            
+            if (membership?.tenant_id && membership?.role_id) {
+              // Use API response as fallback
+              jwtTenantId = membership.tenant_id;
+              jwtRoleId = membership.role_id;
+              
+              console.log('[ProtectedAppRoute] STEP 5: ✅ API fallback successful', {
+                tenant_id: jwtTenantId,
+                role_id: jwtRoleId,
+                role_key: membership.role_key,
+                source: 'API_FALLBACK',
+              });
+            } else {
+              console.error('[ProtectedAppRoute] STEP 5: ❌ API fallback failed - No membership found', {
+                membershipResponse: membership,
+                hasTenantId: !!membership?.tenant_id,
+                hasRoleId: !!membership?.role_id,
+                error: membership?.error,
+              });
+              if (isMounted) {
+                setErrorMessage('Unable to verify user credentials');
+                setAllowed(false);
+              }
+              return;
+            }
+          } catch (apiError: any) {
+            console.error('[ProtectedAppRoute] STEP 5: ❌ API fallback error', {
+              error: apiError.message,
+              status: apiError.response?.status,
+              statusText: apiError.response?.statusText,
+            });
+            if (isMounted) {
+              setErrorMessage('Unable to verify user credentials');
+              setAllowed(false);
+            }
+            return;
           }
-          return;
+        } else {
+          console.log('[ProtectedAppRoute] STEP 5: ✅ Using JWT claims (fast path)', {
+            tenant_id: jwtTenantId,
+            role_id: jwtRoleId,
+            source: 'JWT',
+          });
         }
 
         // 1. Get tenant by slug to validate the slug exists and matches JWT tenant_id
+        console.log('[ProtectedAppRoute] STEP 5.1: Validating tenant slug exists', { tenantSlug });
         const { data: tenant, error: tenantError } = await supabase
           .from('tenants')
           .select('id')
@@ -149,6 +221,10 @@ const ProtectedAppRoute: React.FC = () => {
           .single();
 
         if (tenantError || !tenant) {
+          console.error('[ProtectedAppRoute] STEP 5.1: Tenant not found - Access Denied', {
+            tenantSlug,
+            error: tenantError?.message,
+          });
           if (isMounted) {
             setErrorMessage('Tenant not found');
             setAllowed(false);
@@ -156,14 +232,30 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
-        // Verify that the JWT tenant_id matches the tenant from slug
+        console.log('[ProtectedAppRoute] STEP 5.1: Tenant found', {
+          tenantId: tenant.id,
+          jwtTenantId,
+          match: tenant.id === jwtTenantId,
+        });
+
+        // Verify that the tenant_id (from JWT or API) matches the tenant from slug
         if (tenant.id !== jwtTenantId) {
+          console.error('[ProtectedAppRoute] STEP 5.1: Tenant ID mismatch - Access Denied', {
+            tenantIdFromSlug: tenant.id,
+            tenantIdFromSource: jwtTenantId,
+            source: jwtTenantId ? (getTenantIdFromJWT(token) === jwtTenantId ? 'JWT' : 'API_FALLBACK') : 'UNKNOWN',
+          });
           if (isMounted) {
             setErrorMessage('User does not have access to this organization');
             setAllowed(false);
           }
           return;
         }
+        
+        console.log('[ProtectedAppRoute] STEP 5.1: ✅ Tenant ID matches', {
+          tenantId: tenant.id,
+          source: getTenantIdFromJWT(token) === jwtTenantId ? 'JWT' : 'API_FALLBACK',
+        });
 
         // Link the user's UID from auth.users to our users table (non-blocking)
         // Only do this once per session to avoid redundant updates
@@ -180,11 +272,16 @@ const ProtectedAppRoute: React.FC = () => {
         }
 
         // 2. Get the roles for the tenant to validate role_id exists using API
+        console.log('[ProtectedAppRoute] STEP 5.2: Fetching roles for tenant validation');
         let roles;
         try {
           roles = await membershipService.getRoles();
+          console.log('[ProtectedAppRoute] STEP 5.2: Roles fetched', {
+            rolesCount: roles?.length || 0,
+            roleIds: roles?.map(r => r.id) || [],
+          });
         } catch (error) {
-          console.error('Error fetching roles:', error);
+          console.error('[ProtectedAppRoute] STEP 5.2: Error fetching roles - Access Denied', error);
           if (isMounted) {
             setErrorMessage('Unable to verify user role');
             setAllowed(false);
@@ -192,17 +289,41 @@ const ProtectedAppRoute: React.FC = () => {
           return;
         }
 
-        // 3. Check if the user's role_id (from JWT) exists in the roles array
+        // 3. Check if the user's role_id (from JWT or API) exists in the roles array
+        console.log('[ProtectedAppRoute] STEP 5.3: Validating role_id exists in roles array', {
+          roleId: jwtRoleId,
+          source: getRoleIdFromJWT(token) === jwtRoleId ? 'JWT' : 'API_FALLBACK',
+          availableRoleIds: roles?.map(r => r.id) || [],
+          rolesCount: roles?.length || 0,
+        });
         const isValidRole = roles.some(role => role.id === jwtRoleId);
+
+        console.log('[ProtectedAppRoute] STEP 5.3: Role validation result', {
+          isValidRole,
+          roleId: jwtRoleId,
+          foundInRoles: isValidRole,
+          source: getRoleIdFromJWT(token) === jwtRoleId ? 'JWT' : 'API_FALLBACK',
+        });
 
         if (isMounted) {
           setAllowed(isValidRole);
           accessCheckedRef.current = checkKey;
           if (!isValidRole) {
+            console.error('[ProtectedAppRoute] STEP 5.3: ❌ Role ID not found in roles - Access Denied', {
+              roleId: jwtRoleId,
+              availableRoleIds: roles?.map(r => r.id) || [],
+              source: getRoleIdFromJWT(token) === jwtRoleId ? 'JWT' : 'API_FALLBACK',
+            });
             setErrorMessage('User does not have access to this organization');
+          } else {
+            console.log('[ProtectedAppRoute] STEP 5.3: ✅ Access granted - user has valid role', {
+              roleId: jwtRoleId,
+              source: getRoleIdFromJWT(token) === jwtRoleId ? 'JWT' : 'API_FALLBACK',
+            });
           }
         }
       } catch (error) {
+        console.error('[ProtectedAppRoute] STEP 5: Unexpected error during access check', error);
         if (isMounted) {
           setErrorMessage('An error occurred while checking access');
           setAllowed(false);
