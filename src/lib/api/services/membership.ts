@@ -75,16 +75,11 @@ export const membershipService = {
    * Get all roles for the current tenant
    * Uses the membership/roles endpoint
    * 
-   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header (e.g. from URL params)
    * @returns Promise with array of roles
    */
-  async getRoles(tenantSlug?: string): Promise<Role[]> {
+  async getRoles(): Promise<Role[]> {
     try {
-      const config: { headers?: { 'X-Tenant-Slug': string } } = {};
-      if (tenantSlug) {
-        config.headers = { 'X-Tenant-Slug': tenantSlug };
-      }
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles', config);
+      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles');
       
       const responseData = response.data;
       
