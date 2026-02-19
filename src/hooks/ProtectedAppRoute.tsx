@@ -182,7 +182,7 @@ const ProtectedAppRoute: React.FC = () => {
         // 2. Get the roles for the tenant to validate role_id exists using API
         let roles;
         try {
-          roles = await membershipService.getRoles();
+          roles = await membershipService.getRoles(tenantSlug);
         } catch (error) {
           console.error('Error fetching roles:', error);
           if (isMounted) {
