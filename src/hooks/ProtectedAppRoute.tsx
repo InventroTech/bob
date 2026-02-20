@@ -31,34 +31,8 @@ const UnauthorizedPage: React.FC<{
           .single();
 
         if (tenant) {
-          // NEW: Get the public role ID via API instead of direct Supabase query
-          // This uses authz_role table (Django model) instead of public.roles
-          let publicRole = null;
-          try {
-            const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-            const apiUrl = `${baseUrl}/api/authz/roles/?key=public`;
-            
-            const response = await fetch(apiUrl, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Tenant-Slug': tenantSlug || ''
-              }
-            });
-            
-            if (response.ok) {
-              const roleData = await response.json();
-              // API returns { count: 1, results: [{ id, name, key, description }] }
-              publicRole = roleData.results?.[0] || roleData.data?.[0] || null;
-            } else {
-              console.warn('Failed to fetch public role via API:', response.status, response.statusText);
-              // Continue without publicRole - will check for pages with role=null
-            }
-          } catch (apiError) {
-            console.error('Error fetching public role via API:', apiError);
-            // Continue without publicRole - will check for pages with role=null
-            // Note: No fallback to Supabase since roles table is being deleted
-          }
+          // Get the public role via membership API (Django authz at /membership/roles)
+          const publicRole = await membershipService.getPublicRole(tenantSlug || undefined);
 
           // Fetch public and unassigned pages
           const query = supabase
@@ -154,17 +128,94 @@ const ProtectedAppRoute: React.FC = () => {
       }
 
       try {
-        // Extract tenant_id and role_id from JWT token (no API call needed)
+        // HYBRID APPROACH: Try JWT first (fast), fallback to API (reliable)
+        console.log('[ProtectedAppRoute] Starting access check - Hybrid Approach (JWT-first with API fallback)');
         const token = session.access_token;
-        const jwtTenantId = getTenantIdFromJWT(token);
-        const jwtRoleId = getRoleIdFromJWT(token);
+        let jwtTenantId = getTenantIdFromJWT(token);
+        let jwtRoleId = getRoleIdFromJWT(token);
 
+        console.log('[ProtectedAppRoute] JWT claims check', {
+          jwtTenantId: jwtTenantId || 'MISSING',
+          jwtRoleId: jwtRoleId || 'MISSING',
+          hasTenantId: !!jwtTenantId,
+          hasRoleId: !!jwtRoleId,
+          usingJWT: !!(jwtTenantId && jwtRoleId),
+        });
+
+        // If JWT lacks user_data, try API fallback OR force JWT refresh
         if (!jwtTenantId || !jwtRoleId) {
-          if (isMounted) {
-            setErrorMessage('Unable to verify user credentials');
-            setAllowed(false);
+          console.log('[ProtectedAppRoute] ⚠️ JWT missing user_data - Attempting fallback strategies...');
+          
+          // Strategy 1: Try forcing another session refresh (in case hook was slow)
+          console.log('[ProtectedAppRoute] Strategy 1: Forcing session refresh to regenerate JWT...');
+          try {
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            
+            if (!refreshError && refreshData?.session?.access_token) {
+              const refreshedTenantId = getTenantIdFromJWT(refreshData.session.access_token);
+              const refreshedRoleId = getRoleIdFromJWT(refreshData.session.access_token);
+              
+              if (refreshedTenantId && refreshedRoleId) {
+                jwtTenantId = refreshedTenantId;
+                jwtRoleId = refreshedRoleId;
+                console.log('[ProtectedAppRoute] ✅ JWT refresh successful - user_data now available (fast path)');
+              } else {
+                console.log('[ProtectedAppRoute] ⚠️ JWT refresh completed but user_data still missing');
+              }
+            } else {
+              console.warn('[ProtectedAppRoute] Session refresh failed:', refreshError);
+            }
+          } catch (refreshErr) {
+            console.error('[ProtectedAppRoute] Error during session refresh:', refreshErr);
           }
-          return;
+
+          // Strategy 2: If JWT still lacks user_data, use API fallback
+          if (!jwtTenantId || !jwtRoleId) {
+            console.log('[ProtectedAppRoute] Strategy 2: Using API fallback to get membership from backend...');
+            try {
+              const membership = await membershipService.getMyMembership(tenantSlug);
+              
+              if (membership?.tenant_id && membership?.role_id) {
+                jwtTenantId = membership.tenant_id;
+                jwtRoleId = membership.role_id;
+                console.log('[ProtectedAppRoute] ✅ API fallback successful', {
+                  tenant_id: jwtTenantId,
+                  role_id: jwtRoleId,
+                  role_key: membership.role_key,
+                  source: 'API_FALLBACK',
+                });
+              } else {
+                console.error('[ProtectedAppRoute] ❌ API fallback failed - No membership found', {
+                  membershipResponse: membership,
+                  hasTenantId: !!membership?.tenant_id,
+                  hasRoleId: !!membership?.role_id,
+                  error: membership?.error,
+                });
+                if (isMounted) {
+                  setErrorMessage('Unable to verify user credentials');
+                  setAllowed(false);
+                }
+                return;
+              }
+            } catch (apiError: any) {
+              console.error('[ProtectedAppRoute] ❌ API fallback error', {
+                error: apiError.message,
+                status: apiError.response?.status,
+                statusText: apiError.response?.statusText,
+              });
+              if (isMounted) {
+                setErrorMessage('Unable to verify user credentials');
+                setAllowed(false);
+              }
+              return;
+            }
+          }
+        } else {
+          console.log('[ProtectedAppRoute] ✅ Using JWT claims (fast path)', {
+            tenant_id: jwtTenantId,
+            role_id: jwtRoleId,
+            source: 'JWT',
+          });
         }
 
         // 1. Get tenant by slug to validate the slug exists and matches JWT tenant_id

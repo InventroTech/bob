@@ -2152,6 +2152,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             console.error('Error refreshing table after delete:', e);
           }
         }}
+        onRecordUpdated={async (recordId: number) => {
+          // Refetch table so status/other fields updated by modal actions (e.g. Proceed to PM) are reflected
+          try {
+            await fetchFilteredData();
+          } catch (e) {
+            console.error('Error refreshing table after record update:', e);
+          }
+        }}
       />
       )}
     </>

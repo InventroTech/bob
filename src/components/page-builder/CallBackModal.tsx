@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
 import { format, addDays, addHours, startOfDay } from "date-fns";
@@ -27,7 +24,7 @@ const CALLBACK_SLOT_HOURS_AHEAD = 48;
 interface CallBackModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (nextCallAt: string, assignToSelf: boolean) => Promise<boolean>;
+  onSubmit: (nextCallAt: string) => Promise<boolean>;
   updating?: boolean;
 }
 
@@ -39,7 +36,6 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
 }) => {
   const [callbackSlotSections, setCallbackSlotSections] = useState<CallbackSlotSection[]>([]);
   const [selectedCallbackSlot, setSelectedCallbackSlot] = useState<string | null>(null);
-  const [assignCallbackToSelf, setAssignCallbackToSelf] = useState(false);
 
   // Debug: log when modal opens unexpectedly
   useEffect(() => {
@@ -86,13 +82,11 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
       setCallbackSlotSections(sections);
       const firstAvailable = sections.flatMap((section) => section.slots).find((slot) => !slot.disabled);
       setSelectedCallbackSlot(firstAvailable?.iso ?? null);
-      setAssignCallbackToSelf(false);
     }
   }, [open]);
 
   const handleClose = () => {
     setSelectedCallbackSlot(null);
-    setAssignCallbackToSelf(false);
     onOpenChange(false);
   };
 
@@ -100,7 +94,7 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
     if (!selectedCallbackSlot) {
       return;
     }
-    const ok = await onSubmit(selectedCallbackSlot, assignCallbackToSelf);
+    const ok = await onSubmit(selectedCallbackSlot);
     if (ok) {
       handleClose();
     }
@@ -171,17 +165,6 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
             ))}
           </div>
           <div className="border-t border-[#e7e1db] px-4 py-4 space-y-4 flex-shrink-0 bg-[#f4efe9]">
-            <div className="flex items-center gap-2 text-black">
-              <Checkbox
-                id="assign-callback"
-                checked={assignCallbackToSelf}
-                onCheckedChange={(checked) => setAssignCallbackToSelf(Boolean(checked))}
-                className="border-black data-[state=checked]:bg-black data-[state=checked]:text-white"
-              />
-              <Label htmlFor="assign-callback" className="text-sm">
-                Assign it to me.
-              </Label>
-            </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <CustomButton
                 variant="ghost"

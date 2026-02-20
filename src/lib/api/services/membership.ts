@@ -67,6 +67,15 @@ export interface User {
   } | null;
 }
 
+export interface MyMembershipResponse {
+  role_key: string | null;
+  role_name: string | null;
+  role_id: string | null;
+  tenant_id: string | null;
+  is_active?: boolean;
+  error?: string;
+}
+
 /**
  * Membership API Service
  */
@@ -107,9 +116,44 @@ export const membershipService = {
   },
 
   /**
+   * Get the public role for a tenant (key=public).
+   * Uses the membership/roles endpoint. Returns null on any error or if not found.
+   * Use this instead of the non-existent api/authz/roles endpoint.
+   *
+   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header (e.g. from URL params)
+   * @returns Promise with the public role or null
+   */
+  async getPublicRole(tenantSlug?: string): Promise<Role | null> {
+    try {
+      const config: { params?: { key: string }; headers?: { 'X-Tenant-Slug': string } } = {
+        params: { key: 'public' },
+      };
+      if (tenantSlug) {
+        config.headers = { 'X-Tenant-Slug': tenantSlug };
+      }
+      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles', config);
+      const responseData = response.data;
+      let roles: Role[] = [];
+      if (Array.isArray(responseData)) {
+        roles = responseData;
+      } else if (responseData && typeof responseData === 'object') {
+        if ('results' in responseData && Array.isArray(responseData.results)) {
+          roles = responseData.results;
+        } else if ('data' in responseData && Array.isArray(responseData.data)) {
+          roles = responseData.data;
+        }
+      }
+      return roles.length > 0 ? roles[0] : null;
+    } catch (error: any) {
+      console.warn('Failed to fetch public role via membership API:', error?.message || error);
+      return null;
+    }
+  },
+
+  /**
    * Get all users for the current tenant
    * Uses the membership/users endpoint
-   * 
+   *
    * @returns Promise with array of users
    */
   async getUsers(): Promise<User[]> {
@@ -255,6 +299,70 @@ export const membershipService = {
       { assignments }
     );
     return response.data;
+  },
+
+  /**
+   * Get current user's membership information (tenant_id, role_id) from backend.
+   * Used as fallback when JWT doesn't contain user_data claims.
+   * This is the source of truth for user's tenant and role.
+   * 
+   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header
+   * @returns Promise with membership info (tenant_id, role_id, role_key, etc.) or null if not found
+   */
+  async getMyMembership(tenantSlug?: string): Promise<MyMembershipResponse | null> {
+    try {
+      console.log('[membershipService] getMyMembership: Fetching membership from backend API', {
+        tenantSlug: tenantSlug || 'not provided',
+        endpoint: '/membership/me/role',
+      });
+
+      const config: { headers?: { 'X-Tenant-Slug': string } } = {};
+      if (tenantSlug) {
+        config.headers = { 'X-Tenant-Slug': tenantSlug };
+      }
+
+      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role', config);
+      
+      console.log('[membershipService] getMyMembership: Response received', {
+        hasData: !!response.data,
+        role_id: response.data?.role_id || 'MISSING',
+        tenant_id: response.data?.tenant_id || 'MISSING',
+        role_key: response.data?.role_key || 'MISSING',
+        hasError: !!response.data?.error,
+        error: response.data?.error,
+      });
+
+      if (response.data?.error) {
+        console.warn('[membershipService] getMyMembership: Backend returned error', {
+          error: response.data.error,
+        });
+        return null;
+      }
+
+      if (!response.data?.role_id || !response.data?.tenant_id) {
+        console.warn('[membershipService] getMyMembership: Missing required fields', {
+          hasRoleId: !!response.data?.role_id,
+          hasTenantId: !!response.data?.tenant_id,
+        });
+        return null;
+      }
+
+      console.log('[membershipService] getMyMembership: ✅ Successfully retrieved membership', {
+        tenant_id: response.data.tenant_id,
+        role_id: response.data.role_id,
+        role_key: response.data.role_key,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      console.error('[membershipService] getMyMembership: ❌ Error fetching membership', {
+        error: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+      });
+      return null;
+    }
   },
 };
 

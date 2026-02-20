@@ -45,12 +45,13 @@ export const authService = {
           !errorMessage.includes('already linked')) {
         console.error('Error linking user UID:', errorMessage);
       }
+      // Log error but don't throw - this is a non-blocking operation
+      console.error('Error linking user UID:', error);
       
       // Return error info in a way that doesn't break the flow
       return {
         success: false,
-        error: errorMessage,
-        code: errorCode,
+        error: error.message || 'Failed to link user UID',
       } as any;
     }
   },
