@@ -1020,7 +1020,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
 
   const handleActionButton = async (
     action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later",
-    extra?: { reason?: string; nextCallAt?: string; assignToSelf?: boolean }
+    extra?: { reason?: string; nextCallAt?: string }
   ) => {
     console.log('[handleActionButton] Called with action:', action, 'currentLead:', currentLead?.id, 'initialLead:', !!initialLead);
     if (!currentLead?.id) {
@@ -1058,14 +1058,9 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     if (extra?.nextCallAt) {
       payload.next_call_at = extra.nextCallAt;
     }
-    // Handle assignment: set assigned_to based on assignToSelf checkbox
-    if (extra?.assignToSelf === true) {
-      payload.assign_to_self = actingUserId;
+    // Call Back Later: always send current user for assignment; backend rules assign for sales lead only, not self trial
+    if (action === "Call Back Later") {
       payload.assigned_to = actingUserId;
-    } else {
-      // When not assigning to self, explicitly set assigned_to to null
-      // Backend should respect this and set assigned_to to null in the database
-      payload.assigned_to = null;
     }
 
     setProcessingAction(action);
@@ -1211,15 +1206,12 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     setShowCallBackDialog(true);
   };
 
-  const handleSubmitCallBackLater = async (nextCallAt: string, assignToSelf: boolean): Promise<boolean> => {
+  const handleSubmitCallBackLater = async (nextCallAt: string): Promise<boolean> => {
     if (!nextCallAt) {
       toast({ title: "Select time", description: "Please choose a valid date and time.", variant: "destructive" });
       return false;
     }
-    const result = await handleActionButton("Call Back Later", {
-      nextCallAt,
-      assignToSelf,
-    });
+    const result = await handleActionButton("Call Back Later", { nextCallAt });
     // Note: onActionComplete will be called from handleActionButton if successful
     return result;
   };
