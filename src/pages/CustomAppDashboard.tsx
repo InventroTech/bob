@@ -69,7 +69,7 @@ const CustomAppDashboard: React.FC = () => {
           .select('id, name')
           .eq('tenant_id', tenantId)
           .eq('role', roleId)
-          .order('updated_at', { ascending: false });
+          .order('display_order', { ascending: true });
 
         console.log('Pages query result:', { pages, pagesError });
 
