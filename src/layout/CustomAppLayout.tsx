@@ -110,10 +110,10 @@ const CustomAppLayout: React.FC = () => {
 
       const { data : pagesData, error } = await supabase 
         .from('pages')
-        .select('id, name')
+        .select('id, name, display_order')
         .eq('tenant_id', tenantId)
         .eq('role', userRoleId)
-        .order('updated_at', { ascending: false });
+        .order('display_order', { ascending: true });
       console.log("tenantId", tenantId)
       console.log("userRoleId", userRoleId)
       console.log("pages data", pagesData)
