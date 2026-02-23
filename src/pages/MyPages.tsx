@@ -47,8 +47,9 @@ const MyPages = () => {
       // Fetch pages
       const { data: pagesData, error: pagesError } = await supabase
         .from('pages')
-        .select('id, name, updated_at, role')
+        .select('id, name, updated_at, role, display_order')
         .eq('user_id', user.id)
+        .order('display_order', { ascending: true }) // Sort by order (1, 2, 3...)
         .order('updated_at', { ascending: false });
 
       if (pagesError) throw pagesError;
