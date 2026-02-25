@@ -34,7 +34,10 @@ import {
   Calculator,
   MessageSquare,
   Database,
+  Sparkles,
 } from "lucide-react";
+import { icons } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -909,6 +912,21 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   );
 };
 
+// Use the built-in 'icons' object from lucide-react
+const AVAILABLE_ICONS = Object.keys(icons);
+
+const DynamicIcon = ({ name, className }: { name: string; className?: string }) => {
+  // Look up the component in the full icons map
+  const IconComponent = (icons as any)[name];
+
+  if (IconComponent) {
+    return <IconComponent className={className} />;
+  }
+
+  // Fallback to Sparkles (imported individually)
+  return <Sparkles className={className} />;
+};
+
 const PageBuilder = () => {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
@@ -918,6 +936,14 @@ const PageBuilder = () => {
   const [pageName, setPageName] = useState("Untitled Page");
   const [headerTitle, setHeaderTitle] = useState("");
   const [displayOrder, setDisplayOrder] = useState<number>(0);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [pageIcon, setPageIcon] = useState<string>("Sparkles"); // Standard library default
+  const filteredIcons = useMemo(() => {
+  if (!searchTerm) return AVAILABLE_ICONS.slice(0, 100);
+  return AVAILABLE_ICONS.filter(icon => 
+    icon.toLowerCase().includes(searchTerm.toLowerCase())
+  ).slice(0, 100);
+}, [searchTerm]);
   const [activeTab, setActiveTab] = useState("components");
   const [canvasComponents, setCanvasComponents] = useState<CanvasComponentData[]>([]);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -961,7 +987,7 @@ const PageBuilder = () => {
         try {
           const { data, error } = await supabase
             .from('pages')
-            .select('name, config, role, header_title, display_order')
+            .select('name, config, role, header_title, display_order, icon_name')
             .eq('id', pageId)
             .single();
 
@@ -974,6 +1000,7 @@ const PageBuilder = () => {
             // Try to get header_title if column exists, otherwise use empty string
             setHeaderTitle((data as any).header_title || '');
             setDisplayOrder((data as any).display_order || 0);
+            setPageIcon((data as any).icon_name || 'Sparkles');
             setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
             if (data.role) setSelectedRole(data.role);
           } else {
@@ -1203,6 +1230,7 @@ const PageBuilder = () => {
         updated_at: new Date().toISOString(),
         role: selectedRole || null,
         display_order: displayOrder,
+        icon_name: pageIcon,
       };
       
       // Only include header_title if it has a value (optional field)
@@ -1318,6 +1346,70 @@ const PageBuilder = () => {
                 className="w-16 h-9 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 placeholder="0"
               />
+              </div>
+              {/* Visual Icon Picker */}
+              <div className="flex items-center gap-2 px-2 border-l border-border">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground">Icon</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                <Button variant="outline" className="h-9 w-10 p-0 flex items-center justify-center border-border">
+                <DynamicIcon name={pageIcon} className="h-4 w-4" />
+                </Button>
+                </PopoverTrigger>
+    
+                <PopoverContent className="w-72 p-0 shadow-xl border-border bg-background" align="start">
+                <div className="p-3 border-b space-y-2">
+                <p className="text-[10px] uppercase font-bold text-muted-foreground">Select Icon</p>
+                <Input 
+                  placeholder="Search icons..." 
+                  className="h-8 text-xs" 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                </div>
+      
+                <ScrollArea className="h-64 p-3">
+                {/* 1. Results Count Indicator */}
+                <p className="text-[9px] text-muted-foreground mb-2 uppercase font-medium">
+                  Showing {filteredIcons.length} of {AVAILABLE_ICONS.length} icons
+                </p>
+
+                {/* 2. Grid Container */}
+                <div className="grid grid-cols-5 gap-2">
+                  {filteredIcons.length > 0 ? (
+                  filteredIcons.map((iconKey) => (
+                  <button
+                    key={iconKey}
+                    type="button"
+                    onClick={() => {
+                    setPageIcon(iconKey);
+                    // Optional: Close popover here if you have a state for it
+                    }}
+                    className={`flex h-10 w-10 items-center justify-center rounded-md transition hover:bg-muted ${
+                    pageIcon === iconKey ? "bg-primary/10 border border-primary" : "border border-transparent"
+                    }`}
+                    title={iconKey}
+                  >
+                  <DynamicIcon name={iconKey} className="h-5 w-5 text-foreground" />
+                  </button>
+                  ))
+                  ) : (
+                /* 3. Empty State / Fallback */
+                <div className="col-span-5 py-8 text-center">
+                <p className="text-xs text-muted-foreground">No icons found for "{searchTerm}"</p>
+                <Button 
+                  variant="link" 
+                  className="text-[10px] h-auto p-0 mt-1" 
+                  onClick={() => setSearchTerm("")}
+                >
+                Clear Search
+                </Button>
+                </div>
+                  )}
+                </div>
+              </ScrollArea>
+                </PopoverContent>
+              </Popover>
               </div>
               <CustomButton variant="outline" size="sm" icon={<Eye className="h-4 w-4" />} className="border-border text-foreground hover:bg-muted">
                 Preview
