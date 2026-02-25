@@ -7,13 +7,44 @@ import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layer
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
+import { icons} from 'lucide-react';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon} from '@/components/icons/CustomIcons';
+
+  const navigationIconMap: Record<string, JSX.Element> = {
+    "lead assignment": <Users className="h-4 w-4" />,
+    "user hierarchy": <Users className="h-4 w-4" />,
+    "analytics": <AnalyticsIcon />,
+    "pending tickets": <Ticket className="h-4 w-4" />,
+    "wip tickets": <WIPTicketIcon className="h-4 w-4" />,
+    "all support tickets": <Layers className="h-4 w-4" />,
+    "settings": <Settings className="h-4 w-4" />,
+    "notifications": <Bell className="h-4 w-4" />,
+    // Legacy mappings for backwards compatibility
+    "pending leads": <Sparkles className="h-4 w-4" />,
+    "all leads": <Users className="h-4 w-4" />,
+    "follow up leads": <FollowUpIcon />,
+    "routing settings": <RoutingSettingsIcon />,
+    "lead score": <LeadScoreIcon />,
+  };
+
+const DynamicSidebarIcon = ({ iconName }: { iconName: string }) => {
+  // 1. Check if it's a custom icon from your manual map
+  const CustomIcon = navigationIconMap[iconName];
+  if (CustomIcon) return CustomIcon;
+
+  // 2. Check if it's a standard Lucide icon name from the library
+  const LucideIcon = (icons as any)[iconName];
+  if (LucideIcon) return <LucideIcon className="h-4 w-4" />;
+
+  // 3. Final Fallback
+  return <Sparkles className="h-4 w-4" />;
+};
 
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
   const { user, logout, session } = useAuth();
-  const [pages, setPages] = useState<{ id: string; name: string }[]>([]);
+  const [pages, setPages] = useState<{ id: string; name: string; icon_name: string }[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -31,22 +62,7 @@ const CustomAppLayout: React.FC = () => {
     user?.user_metadata?.name ||
     user?.email?.split('@')[0] ||
     'User';
-  const navigationIconMap: Record<string, JSX.Element> = {
-    "lead assignment": <Users className="h-4 w-4" />,
-    "user hierarchy": <Users className="h-4 w-4" />,
-    "analytics": <AnalyticsIcon />,
-    "pending tickets": <Ticket className="h-4 w-4" />,
-    "wip tickets": <WIPTicketIcon className="h-4 w-4" />,
-    "all support tickets": <Layers className="h-4 w-4" />,
-    "settings": <Settings className="h-4 w-4" />,
-    "notifications": <Bell className="h-4 w-4" />,
-    // Legacy mappings for backwards compatibility
-    "pending leads": <Sparkles className="h-4 w-4" />,
-    "all leads": <Users className="h-4 w-4" />,
-    "follow up leads": <FollowUpIcon />,
-    "routing settings": <RoutingSettingsIcon />,
-    "lead score": <LeadScoreIcon />,
-  };
+
   const dataExtractedRef = useRef(false); // Track if we've already extracted data from JWT
   
   // Debug user data
@@ -110,7 +126,7 @@ const CustomAppLayout: React.FC = () => {
 
       const { data : pagesData, error } = await supabase 
         .from('pages')
-        .select('id, name, display_order')
+        .select('id, name, display_order, icon_name')
         .eq('tenant_id', tenantId)
         .eq('role', userRoleId)
         .order('display_order', { ascending: true });
@@ -202,11 +218,8 @@ const CustomAppLayout: React.FC = () => {
                 {({ isActive }) => (
                   <>
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-white' : 'bg-transparent text-gray-600'}`}>
-                      {
-                        navigationIconMap[
-                          page.name?.toLowerCase().replace(/[\s_-]+/g, " ").trim()
-                        ] || <Sparkles className="h-4 w-4" />
-                      }
+                      {/* Call the helper with the icon_name from your database */}
+                      <DynamicSidebarIcon iconName={page.icon_name} />
                     </div>
                     {!sidebarCollapsed && <span>{page.name}</span>}
                   </>
