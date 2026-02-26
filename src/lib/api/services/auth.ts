@@ -6,7 +6,34 @@
 import { apiClient } from '../client';
 import { LinkUserUidRequest, LinkUserUidResponse } from '../types';
 
+export interface SetupNewTenantRequest {
+  tenant_slug: string;
+  tenant_name?: string;
+}
+
+export interface SetupNewTenantResponse {
+  success: boolean;
+  tenant_id?: string;
+  tenant_slug?: string;
+  role_id?: string;
+  role_key?: string;
+  message?: string;
+  error?: string;
+}
+
 export const authService = {
+  /**
+   * Create tenant, PYRO_ADMIN role, and TenantMembership (signup flow).
+   * Requires Supabase JWT. Path is excluded from tenant resolution.
+   */
+  async setupNewTenant(data: SetupNewTenantRequest): Promise<SetupNewTenantResponse> {
+    const response = await apiClient.post<SetupNewTenantResponse>(
+      '/accounts/setup-new-tenant/',
+      { tenant_slug: data.tenant_slug, tenant_name: data.tenant_name }
+    );
+    return response.data;
+  },
+
   /**
    * Link Supabase user UID with email in Django backend
    * This is called after successful Supabase authentication
