@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
@@ -24,159 +24,142 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  const locationRef = useRef(location.pathname);
 
-  // Helper function to extract tenant slug from current path
-  const getTenantSlugFromPath = (): string | null => {
-    const match = location.pathname.match(/^\/app\/([^\/]+)/);
-    return match ? match[1] : null;
-  };
+  // Keep ref in sync so the auth listener always has the current path
+  useEffect(() => {
+    locationRef.current = location.pathname;
+  }, [location.pathname]);
 
-  // Helper function to get appropriate login URL
-  const getLoginUrl = (): string => {
-    const tenantSlug = getTenantSlugFromPath();
+  const getLoginUrl = useCallback((): string => {
+    const match = locationRef.current.match(/^\/app\/([^\/]+)/);
+    const tenantSlug = match ? match[1] : null;
     if (tenantSlug && tenantSlug !== 'login' && tenantSlug !== 'auth') {
       return `/app/${tenantSlug}/login`;
     }
     return '/auth';
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       console.log('Starting logout process...');
 
-      // Clear any local storage items
       localStorage.removeItem('user_email');
       localStorage.removeItem('tenant_id');
 
-      // Clear Supabase auth tokens from localStorage
-      // Supabase stores tokens with pattern: sb-<project-ref>-auth-token
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       if (supabaseUrl) {
         try {
           const url = new URL(supabaseUrl);
           const projectRef = url.hostname.split('.')[0];
-          const authTokenKey = `sb-${projectRef}-auth-token`;
-          localStorage.removeItem(authTokenKey);
-          console.log(`Cleared Supabase auth token: ${authTokenKey}`);
-        } catch (urlError) {
-          // Fallback: clear all Supabase-related auth token keys
+          localStorage.removeItem(`sb-${projectRef}-auth-token`);
+        } catch {
           Object.keys(localStorage).forEach((key) => {
             if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
               localStorage.removeItem(key);
-              console.log(`Cleared Supabase auth token: ${key}`);
             }
           });
         }
       }
-      console.log('Local storage cleared');
 
-      // Clear session storage items
       sessionStorage.removeItem('ticketCarouselState');
-      console.log('Session storage cleared');
-
-      // Clear Sentry user context
+      sessionStorage.removeItem('pyro_access_check');
       clearSentryUser();
-
-      // Clear session and user state
       setSession(null);
       setUser(null);
-      console.log('Local state cleared');
 
       toast.success('Logged out successfully');
-      console.log('Logout process completed successfully');
     } catch (error) {
       console.error('Unexpected logout error:', error);
       toast.error('An unexpected error occurred during logout');
     }
-  };
+  }, []);
 
+  // Auth listener: set up ONCE (not on every pathname change)
   useEffect(() => {
-    // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      const user = session?.user ?? null;
-      setUser(user);
-      
-      // Set Sentry user context if user exists
-      if (user) {
-        setSentryUser({
-          id: user.id,
-          email: user.email,
-          username: user.user_metadata?.username || user.email?.split('@')[0],
-        });
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        setSentryUser({ id: u.id, email: u.email, username: u.user_metadata?.username || u.email?.split('@')[0] });
       } else {
         clearSentryUser();
       }
-      
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Supabase auth state changed:', event, session);
-        
-        // Handle sign out or token expiration
+        console.log('Supabase auth state changed:', event);
+
         if (event === 'SIGNED_OUT') {
-          console.log('User signed out - redirecting to login');
           setSession(null);
           setUser(null);
           clearSentryUser();
           setLoading(false);
-          
-          // Redirect to appropriate login page
           const loginUrl = getLoginUrl();
           toast.error('Your session has expired. Please login again.');
           navigate(loginUrl, { replace: true });
           return;
         }
 
-        // Handle token refresh failure
         if (event === 'TOKEN_REFRESHED' && !session) {
-          console.log('Token refresh failed - session lost');
           setSession(null);
           setUser(null);
           clearSentryUser();
           setLoading(false);
-          
           const loginUrl = getLoginUrl();
           toast.error('Your session has expired. Please login again.');
           navigate(loginUrl, { replace: true });
           return;
         }
 
-        // Handle user update/sign in
         setSession(session);
-        const user = session?.user ?? null;
-        setUser(user);
-        
-        // Set Sentry user context when auth state changes
-        if (user) {
-          setSentryUser({
-            id: user.id,
-            email: user.email,
-            username: user.user_metadata?.username || user.email?.split('@')[0],
-          });
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) {
+          setSentryUser({ id: u.id, email: u.email, username: u.user_metadata?.username || u.email?.split('@')[0] });
         } else {
           clearSentryUser();
         }
-        
-        setLoading(false); // Ensure loading is false after update
+        setLoading(false);
       }
     );
 
-    // Cleanup listener on component unmount
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, [navigate, location.pathname]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, getLoginUrl]);
+
+  // Proactive token refresh: keep JWT fresh every 10 minutes while user is active
+  useEffect(() => {
+    if (!session?.access_token) return;
+
+    const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+    const intervalId = setInterval(async () => {
+      try {
+        const { error } = await supabase.auth.refreshSession();
+        if (error) {
+          console.warn('[useAuth] Proactive token refresh failed:', error.message);
+        } else {
+          console.log('[useAuth] Proactive token refresh succeeded');
+        }
+      } catch (err) {
+        console.warn('[useAuth] Proactive token refresh error:', err);
+      }
+    }, REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [session?.user?.id]);
 
   const value = useMemo(() => ({
     session,
     user,
     loading,
     logout,
-  }), [session?.access_token, user?.id, loading]);
+  }), [session?.access_token, user?.id, loading, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
