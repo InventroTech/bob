@@ -105,13 +105,66 @@ const UnauthorizedPage: React.FC<{
   );
 };
 
+const ACCESS_CACHE_KEY = 'pyro_access_check';
+
+function getCachedAccess(userId: string, tenantSlug: string): boolean | null {
+  try {
+    const raw = sessionStorage.getItem(ACCESS_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (cached.userId === userId && cached.tenantSlug === tenantSlug && cached.allowed === true) {
+      return true;
+    }
+  } catch { /* ignore corrupt data */ }
+  return null;
+}
+
+function setCachedAccess(userId: string, tenantSlug: string, allowed: boolean) {
+  try {
+    sessionStorage.setItem(ACCESS_CACHE_KEY, JSON.stringify({ userId, tenantSlug, allowed, ts: Date.now() }));
+  } catch { /* ignore quota errors */ }
+}
+
+function clearCachedAccess() {
+  try { sessionStorage.removeItem(ACCESS_CACHE_KEY); } catch { /* noop */ }
+}
+
 const ProtectedAppRoute: React.FC = () => {
   const { session, loading: authLoading, logout } = useAuth();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const [allowed, setAllowed] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
-  const accessCheckedRef = useRef<string | null>(null); // Track checked session/tenant combination
+  const accessCheckedRef = useRef<string | null>(null);
+  const mountCountRef = useRef(0);
+
+  // Diagnostic: detect remounts (the suspected root cause)
+  useEffect(() => {
+    mountCountRef.current += 1;
+    const mountId = mountCountRef.current;
+    console.log(`[ProtectedAppRoute] MOUNTED (mount #${mountId})`, {
+      hasSession: !!session,
+      authLoading,
+      cachedAccess: sessionStorage.getItem(ACCESS_CACHE_KEY),
+      refValue: accessCheckedRef.current,
+    });
+    return () => {
+      console.log(`[ProtectedAppRoute] UNMOUNTED (mount #${mountId})`);
+    };
+  }, []);
+
+  // Restore access from sessionStorage so remounts don't flash "Access Denied"
+  const [allowed, setAllowed] = useState<boolean | null>(() => {
+    if (!tenantSlug) return null;
+    // We don't have session.user.id yet during initial state, so peek at storage loosely
+    const raw = sessionStorage.getItem(ACCESS_CACHE_KEY);
+    if (raw) {
+      try {
+        const cached = JSON.parse(raw);
+        if (cached.tenantSlug === tenantSlug && cached.allowed === true) return true;
+      } catch { /* ignore */ }
+    }
+    return null;
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -119,16 +172,40 @@ const ProtectedAppRoute: React.FC = () => {
     const checkAccess = async () => {
       if (!session?.user?.email || !tenantSlug || !session?.access_token) return;
 
-      // Create a unique key for this session/tenant combination
       const checkKey = `${session.user.id}-${tenantSlug}`;
-      
-      // Prevent redundant checks when session changes (e.g., on page focus)
+
+      // Skip if we already verified this user+tenant (in-memory ref survives re-renders)
       if (accessCheckedRef.current === checkKey && allowed !== null) {
         return;
       }
 
+      // Skip if sessionStorage says we already passed (survives remounts)
+      const cached = getCachedAccess(session.user.id, tenantSlug);
+      if (cached === true) {
+        if (isMounted) {
+          console.log('[ProtectedAppRoute] Restored access from session cache (fast path)');
+          setAllowed(true);
+          accessCheckedRef.current = checkKey;
+        }
+        return;
+      }
+
+      const denyAccess = (reason: string) => {
+        console.error(`[ProtectedAppRoute] ACCESS DENIED — reason: ${reason}`, {
+          mountCount: mountCountRef.current,
+          checkKey,
+          refValue: accessCheckedRef.current,
+          allowedState: allowed,
+          cachedAccess: sessionStorage.getItem(ACCESS_CACHE_KEY),
+          timestamp: new Date().toISOString(),
+        });
+        if (isMounted) {
+          setErrorMessage(reason);
+          setAllowed(false);
+        }
+      };
+
       try {
-        // HYBRID APPROACH: Try JWT first (fast), fallback to API (reliable)
         console.log('[ProtectedAppRoute] Starting access check - Hybrid Approach (JWT-first with API fallback)');
         const token = session.access_token;
         let jwtTenantId = getTenantIdFromJWT(token);
@@ -137,88 +214,49 @@ const ProtectedAppRoute: React.FC = () => {
         console.log('[ProtectedAppRoute] JWT claims check', {
           jwtTenantId: jwtTenantId || 'MISSING',
           jwtRoleId: jwtRoleId || 'MISSING',
-          hasTenantId: !!jwtTenantId,
-          hasRoleId: !!jwtRoleId,
           usingJWT: !!(jwtTenantId && jwtRoleId),
         });
 
-        // If JWT lacks user_data, try API fallback OR force JWT refresh
         if (!jwtTenantId || !jwtRoleId) {
-          console.log('[ProtectedAppRoute] ⚠️ JWT missing user_data - Attempting fallback strategies...');
-          
-          // Strategy 1: Try forcing another session refresh (in case hook was slow)
-          console.log('[ProtectedAppRoute] Strategy 1: Forcing session refresh to regenerate JWT...');
+          console.log('[ProtectedAppRoute] JWT missing user_data - Attempting fallback strategies...');
+
+          // Strategy 1: Force session refresh
           try {
             const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-            
             if (!refreshError && refreshData?.session?.access_token) {
               const refreshedTenantId = getTenantIdFromJWT(refreshData.session.access_token);
               const refreshedRoleId = getRoleIdFromJWT(refreshData.session.access_token);
-              
               if (refreshedTenantId && refreshedRoleId) {
                 jwtTenantId = refreshedTenantId;
                 jwtRoleId = refreshedRoleId;
-                console.log('[ProtectedAppRoute] ✅ JWT refresh successful - user_data now available (fast path)');
-              } else {
-                console.log('[ProtectedAppRoute] ⚠️ JWT refresh completed but user_data still missing');
+                console.log('[ProtectedAppRoute] JWT refresh successful - user_data now available');
               }
-            } else {
-              console.warn('[ProtectedAppRoute] Session refresh failed:', refreshError);
             }
           } catch (refreshErr) {
             console.error('[ProtectedAppRoute] Error during session refresh:', refreshErr);
           }
 
-          // Strategy 2: If JWT still lacks user_data, use API fallback
+          // Strategy 2: API fallback
           if (!jwtTenantId || !jwtRoleId) {
-            console.log('[ProtectedAppRoute] Strategy 2: Using API fallback to get membership from backend...');
+            console.log('[ProtectedAppRoute] Using API fallback to get membership from backend...');
             try {
               const membership = await membershipService.getMyMembership(tenantSlug);
-              
               if (membership?.tenant_id && membership?.role_id) {
                 jwtTenantId = membership.tenant_id;
                 jwtRoleId = membership.role_id;
-                console.log('[ProtectedAppRoute] ✅ API fallback successful', {
-                  tenant_id: jwtTenantId,
-                  role_id: jwtRoleId,
-                  role_key: membership.role_key,
-                  source: 'API_FALLBACK',
-                });
+                console.log('[ProtectedAppRoute] API fallback successful', { tenant_id: jwtTenantId, role_id: jwtRoleId });
               } else {
-                console.error('[ProtectedAppRoute] ❌ API fallback failed - No membership found', {
-                  membershipResponse: membership,
-                  hasTenantId: !!membership?.tenant_id,
-                  hasRoleId: !!membership?.role_id,
-                  error: membership?.error,
-                });
-                if (isMounted) {
-                  setErrorMessage('Unable to verify user credentials');
-                  setAllowed(false);
-                }
+                denyAccess('API fallback failed - No membership found');
                 return;
               }
             } catch (apiError: any) {
-              console.error('[ProtectedAppRoute] ❌ API fallback error', {
-                error: apiError.message,
-                status: apiError.response?.status,
-                statusText: apiError.response?.statusText,
-              });
-              if (isMounted) {
-                setErrorMessage('Unable to verify user credentials');
-                setAllowed(false);
-              }
+              denyAccess(`API fallback error: ${apiError.message} (status: ${apiError.response?.status})`);
               return;
             }
           }
-        } else {
-          console.log('[ProtectedAppRoute] ✅ Using JWT claims (fast path)', {
-            tenant_id: jwtTenantId,
-            role_id: jwtRoleId,
-            source: 'JWT',
-          });
         }
 
-        // 1. Get tenant by slug to validate the slug exists and matches JWT tenant_id
+        // Validate tenant slug matches JWT tenant_id
         const { data: tenant, error: tenantError } = await supabase
           .from('tenants')
           .select('id')
@@ -226,88 +264,67 @@ const ProtectedAppRoute: React.FC = () => {
           .single();
 
         if (tenantError || !tenant) {
-          if (isMounted) {
-            setErrorMessage('Tenant not found');
-            setAllowed(false);
-          }
+          denyAccess(`Tenant not found for slug "${tenantSlug}" (error: ${tenantError?.message})`);
           return;
         }
 
-        // Verify that the JWT tenant_id matches the tenant from slug
         if (tenant.id !== jwtTenantId) {
-          if (isMounted) {
-            setErrorMessage('User does not have access to this organization');
-            setAllowed(false);
-          }
+          denyAccess(`Tenant ID mismatch: JWT has ${jwtTenantId}, slug resolves to ${tenant.id}`);
           return;
         }
 
-        // Link the user's UID from auth.users to our users table (non-blocking)
-        // Only do this once per session to avoid redundant updates
+        // Link user UID (non-blocking, once per session)
         if (accessCheckedRef.current !== checkKey) {
-          const result = await authService.linkUserUid(
+          authService.linkUserUid(
             { uid: session.user.id, email: session.user.email },
             tenantSlug
-          );
-
-          if (result.success === false || result.error) {
-            console.error('Failed to link user UID:', result.error);
-            // Don't block access if linking fails
-          }
+          ).catch(err => console.error('Failed to link user UID:', err));
         }
 
-        // 2. Get the roles for the tenant to validate role_id exists using API
+        // Validate role exists for tenant
         let roles;
         try {
           roles = await membershipService.getRoles();
         } catch (error) {
-          console.error('Error fetching roles:', error);
-          if (isMounted) {
-            setErrorMessage('Unable to verify user role');
-            setAllowed(false);
-          }
+          denyAccess(`Unable to verify user role: ${error}`);
           return;
         }
 
-        // 3. Check if the user's role_id (from JWT) exists in the roles array
         const isValidRole = roles.some(role => role.id === jwtRoleId);
 
         if (isMounted) {
           setAllowed(isValidRole);
           accessCheckedRef.current = checkKey;
-          if (!isValidRole) {
-            setErrorMessage('User does not have access to this organization');
+          if (isValidRole) {
+            setCachedAccess(session.user.id, tenantSlug, true);
+            console.log('[ProtectedAppRoute] ACCESS GRANTED and cached');
+          } else {
+            clearCachedAccess();
+            denyAccess(`Role ${jwtRoleId} not found in tenant roles: [${roles.map(r => r.id).join(', ')}]`);
           }
         }
       } catch (error) {
-        if (isMounted) {
-          setErrorMessage('An error occurred while checking access');
-          setAllowed(false);
-        }
+        denyAccess(`Unexpected error during access check: ${error}`);
       }
     };
 
     if (!authLoading) {
       if (!session) {
+        clearCachedAccess();
         navigate(`/app/${tenantSlug}/login`, { replace: true });
         return;
       }
       checkAccess();
     }
 
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [session, tenantSlug, authLoading, navigate]);
 
   const handleLogout = async () => {
     try {
-      // Use the centralized logout function
+      clearCachedAccess();
       await logout();
-      
-      // Navigate to login page
       navigate(`/app/${tenantSlug}/login`);
-      
     } catch (error) {
       console.error('Logout navigation error:', error);
     }
