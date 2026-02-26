@@ -72,6 +72,7 @@ export interface MyMembershipResponse {
   role_name: string | null;
   role_id: string | null;
   tenant_id: string | null;
+  tenant_slug?: string | null;
   is_active?: boolean;
   error?: string;
 }
@@ -88,7 +89,7 @@ export const membershipService = {
    */
   async getRoles(): Promise<Role[]> {
     try {
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles');
+      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/');
       
       const responseData = response.data;
       
@@ -131,7 +132,7 @@ export const membershipService = {
       if (tenantSlug) {
         config.headers = { 'X-Tenant-Slug': tenantSlug };
       }
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles', config);
+      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', config);
       const responseData = response.data;
       let roles: Role[] = [];
       if (Array.isArray(responseData)) {
@@ -158,7 +159,7 @@ export const membershipService = {
    */
   async getUsers(): Promise<User[]> {
     try {
-      const response = await apiClient.get<GetUsersResponse | MembershipUser[]>('/membership/users');
+      const response = await apiClient.get<GetUsersResponse | MembershipUser[]>('/membership/users/');
       
       const responseData = response.data;
       
@@ -222,7 +223,7 @@ export const membershipService = {
    */
   async createRole(key: string, name: string): Promise<Role> {
     try {
-      const response = await apiClient.post<Role | { data: Role } | { id: string; name: string } | { results: Role[] }>('/membership/roles', {
+      const response = await apiClient.post<Role | { data: Role } | { id: string; name: string } | { results: Role[] }>('/membership/roles/', {
         key,
         name
       });
@@ -260,7 +261,7 @@ export const membershipService = {
    * Uses the same GET /membership/users endpoint (backend includes id and user_parent_id).
    */
   async getUsersForHierarchy(): Promise<HierarchyUser[]> {
-    const response = await apiClient.get<GetUsersResponse>('/membership/users');
+    const response = await apiClient.get<GetUsersResponse>('/membership/users/');
     const responseData = response.data;
     let usersData: MembershipUser[] = [];
     if (responseData && typeof responseData === 'object') {
@@ -295,7 +296,7 @@ export const membershipService = {
     assignments: HierarchyAssignment[]
   ): Promise<{ count: number }> {
     const response = await apiClient.patch<{ count: number }>(
-      '/membership/users/hierarchy',
+      '/membership/users/hierarchy/',
       { assignments }
     );
     return response.data;
@@ -321,7 +322,7 @@ export const membershipService = {
         config.headers = { 'X-Tenant-Slug': tenantSlug };
       }
 
-      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role', config);
+      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/', config);
       
       console.log('[membershipService] getMyMembership: Response received', {
         hasData: !!response.data,

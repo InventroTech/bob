@@ -24,11 +24,14 @@ export const getBaseUrl = (): string => {
   return API_CONFIG.RENDER_API || API_CONFIG.BASE_URL;
 };
 
+const TENANT_SLUG_KEY = 'tenant_slug';
+
 /**
- * Get tenant slug (can be extended to get from context/hook)
- * For now, returns the default tenant slug
+ * Get tenant slug for API requests (e.g. X-Tenant-Slug).
+ * Uses stored slug from signup/setup when available, else default.
  */
 export const getTenantSlug = (): string => {
-  return API_CONFIG.DEFAULT_TENANT_SLUG;
+  if (typeof window === 'undefined') return API_CONFIG.DEFAULT_TENANT_SLUG;
+  return localStorage.getItem(TENANT_SLUG_KEY) || API_CONFIG.DEFAULT_TENANT_SLUG;
 };
 

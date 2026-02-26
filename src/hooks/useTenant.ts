@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api/client';
+import { membershipService } from '@/lib/api';
 
 export interface TenantContext {
   tenantId: string | null;
@@ -20,46 +20,34 @@ export function useTenant(): TenantContext {
   const fetchCustomRole = useCallback(async () => {
     if (!session?.access_token) return;
     try {
-      // Cache-bust so newly added GMs always get fresh role (no cached 304/response)
-      const roleResponse = await apiClient.get(`/membership/me/role?_=${Date.now()}`);
+      const roleResponse = await apiClient.get(`/membership/me/role/?_=${Date.now()}`);
       const roleData = roleResponse.data;
-      if (roleData.role_key) {
-        console.log('useTenant: Setting custom role from backend:', roleData.role_key);
-        setCustomRole(roleData.role_key);
-      } else {
-        setCustomRole(null);
-      }
-    } catch (error: any) {
-      console.log('useTenant: Failed to fetch role from backend:', error.response?.status || error.message);
+      if (roleData?.role_key) setCustomRole(roleData.role_key);
+      else setCustomRole(null);
+    } catch {
       setCustomRole(null);
     }
   }, [session?.access_token]);
 
   useEffect(() => {
     async function fetchTenant() {
-      if (!user) return;
-      
-      console.log('useTenant: Fetching tenant data for user:', user.id);
-      
-      // Fetch tenant-level role
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenant_users')
-        .select('tenant_id, role')
-        .eq('user_id', user.id)
-        .single();
-      
-      console.log('useTenant: Tenant data:', tenantData, 'Error:', tenantError);
-      
-      if (!tenantError && tenantData) {
-        setTenantId(tenantData.tenant_id);
-        setRole(tenantData.role as 'owner' | 'editor' | 'viewer');
-        
-        // Fetch custom role from backend API (uses TenantMembership - source of truth)
-        if (session?.access_token) {
-          await fetchCustomRole();
+      if (!user || !session?.access_token) {
+        setTenantId(null);
+        setRole(null);
+        return;
+      }
+      const membership = await membershipService.getMyMembership();
+      if (membership?.tenant_id) {
+        setTenantId(membership.tenant_id);
+        setRole('owner');
+        if (membership.role_key) setCustomRole(membership.role_key);
+        else await fetchCustomRole();
+        if (membership.tenant_slug && typeof window !== 'undefined') {
+          localStorage.setItem('tenant_slug', membership.tenant_slug);
         }
       } else {
-        console.log('useTenant: No tenant data found or error occurred');
+        setTenantId(null);
+        setRole(null);
       }
     }
     fetchTenant();
