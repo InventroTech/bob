@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 export interface FilterOption {
   label: string;
@@ -13,10 +14,26 @@ export interface FilterOption {
 export interface FilterConfig {
   key: string;
   label: string;
-  type: 'select' | 'text' | 'date_gte' | 'date_lte' | 'date_range' | 'number_gte' | 'number_lte' | 'search' | 'exact' | 'icontains' | 'startswith' | 'endswith' | 'gt' | 'lt' | 'in';
+  type: 'select' | 'text' | 'date_gte' | 'date_lte' | 'date_range' | 'date_time_range' | 'number_gte' | 'number_lte' | 'search' | 'exact' | 'icontains' | 'startswith' | 'endswith' | 'gt' | 'lt' | 'in';
   accessor?: string; // Field to filter on (defaults to key if not provided)
   lookup?: string; // Custom Django ORM lookup (e.g., 'icontains', 'exact', 'gte', etc.)
-  options?: FilterOption[]; // For select type filters
+  options?: FilterOption[]; // For select type filters (manual options)
+  /** When set, dropdown options are fetched from this API. Use with optionsDisplayKey and optionsValueKey. */
+  optionsApiUrl?: string;
+  /** Key in each API response item for the display label in the dropdown (e.g. "name"). */
+  optionsDisplayKey?: string;
+  /** Key in each API response item for the value sent in filter/query (e.g. "id"). */
+  optionsValueKey?: string;
+  /** When true (and using API options), prepend a NULL/empty option with configurable label and value. */
+  optionsIncludeNull?: boolean;
+  /** Label for the NULL option (e.g. "Unassigned", "None"). Used when optionsIncludeNull is true. */
+  optionsNullLabel?: string;
+  /** Value for the NULL option sent in filter/query (e.g. "", "null"). Used when optionsIncludeNull is true. */
+  optionsNullValue?: string;
+  /** Label for the start date field in Date Range filter (e.g. "From", "Start date"). */
+  dateRangeStartLabel?: string;
+  /** Label for the end date field in Date Range filter (e.g. "To", "End date"). */
+  dateRangeEndLabel?: string;
   placeholder?: string; // For text and search filters
 }
 
@@ -29,7 +46,9 @@ interface DynamicFilterConfigProps {
   numFilters: number;
   handleInputChange: (field: string, value: string | number | boolean) => void;
   handleFilterCountChange: (count: number) => void;
-  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterOption[]) => void;
+  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterOption[] | boolean) => void;
+  /** When switching options source (manual vs API), update all related fields in one go. */
+  handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
   handleAddFilterOption: (filterIndex: number) => void;
   handleRemoveFilterOption: (filterIndex: number, optionIndex: number) => void;
   handleFilterOptionChange: (filterIndex: number, optionIndex: number, field: keyof FilterOption, value: string) => void;
@@ -42,6 +61,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
   handleInputChange,
   handleFilterCountChange,
   handleFilterFieldChange,
+  handleFilterOptionsSourceChange,
   handleAddFilterOption,
   handleRemoveFilterOption,
   handleFilterOptionChange
@@ -128,6 +148,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       <SelectItem value="date_gte">Date From (≥)</SelectItem>
                       <SelectItem value="date_lte">Date To (≤)</SelectItem>
                       <SelectItem value="date_range">Date Range</SelectItem>
+                      <SelectItem value="date_time_range">Date Time Range</SelectItem>
                       <SelectItem value="number_gte">Number From (≥)</SelectItem>
                       <SelectItem value="number_lte">Number To (≤)</SelectItem>
                       <SelectItem value="gt">Greater Than</SelectItem>
@@ -135,6 +156,11 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       <SelectItem value="in">In List</SelectItem>
                     </SelectContent>
                   </Select>
+                  {(filter.type === 'date_gte' || filter.type === 'date_lte' || filter.type === 'date_range' || filter.type === 'date_time_range') && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      <strong>Date filters:</strong> Date From (≥) → <code className="bg-muted px-1 rounded">accessor__gte</code> (start). Date To (≤) → <code className="bg-muted px-1 rounded">accessor__lte</code> (end). Date Range / Date Time Range → both.
+                    </p>
+                  )}
                 </div>
 
                 {/* Custom lookup field for advanced filtering */}
@@ -183,47 +209,163 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                   </div>
                 )}
 
-                {/* Select options */}
+                {/* Date Range: labels for start and end date fields */}
+                {(filter.type === 'date_range' || filter.type === 'date_time_range') && (
+                  <div className="col-span-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Start date label</Label>
+                      <Input
+                        value={filter.dateRangeStartLabel ?? ''}
+                        onChange={(e) => handleFilterFieldChange(index, 'dateRangeStartLabel', e.target.value)}
+                        placeholder="e.g. From, Start date"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">End date label</Label>
+                      <Input
+                        value={filter.dateRangeEndLabel ?? ''}
+                        onChange={(e) => handleFilterFieldChange(index, 'dateRangeEndLabel', e.target.value)}
+                        placeholder="e.g. To, End date"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Select options: Manual or fetch from API */}
                 {filter.type === 'select' && (
                   <div className="col-span-2 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Options</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddFilterOption(index)}
+                    <div>
+                      <Label className="block mb-2">Options source</Label>
+                      <Select
+                        value={filter.optionsApiUrl ? 'api' : 'manual'}
+                        onValueChange={(value: string) => {
+                          if (handleFilterOptionsSourceChange) {
+                            handleFilterOptionsSourceChange(index, value as 'manual' | 'api');
+                          } else {
+                            if (value === 'api') {
+                              handleFilterFieldChange(index, 'optionsApiUrl', '/membership/roles');
+                              handleFilterFieldChange(index, 'optionsDisplayKey', 'name');
+                              handleFilterFieldChange(index, 'optionsValueKey', 'id');
+                              handleFilterFieldChange(index, 'options', []);
+                            } else {
+                              handleFilterFieldChange(index, 'optionsApiUrl', '');
+                              handleFilterFieldChange(index, 'optionsDisplayKey', '');
+                              handleFilterFieldChange(index, 'optionsValueKey', '');
+                              if (!filter.options?.length) handleFilterFieldChange(index, 'options', [{ label: '', value: '' }]);
+                            }
+                          }
+                        }}
                       >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add Option
-                      </Button>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="manual">Manual (add options below)</SelectItem>
+                          <SelectItem value="api">Fetch from API</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
-                    {filter.options?.map((option, optionIndex) => (
-                      <div key={optionIndex} className="flex gap-2 items-center">
+                    {filter.optionsApiUrl ? (
+                      <div className="space-y-2 p-3 bg-muted/50 rounded-md">
+                        <Label className="text-xs text-muted-foreground">API configuration</Label>
                         <Input
-                          placeholder="Display Name"
-                          value={option.label}
-                          onChange={(e) => handleFilterOptionChange(index, optionIndex, 'label', e.target.value)}
-                          className="flex-1"
+                          placeholder="API URL (e.g. /membership/roles)"
+                          value={filter.optionsApiUrl || ''}
+                          onChange={(e) => handleFilterFieldChange(index, 'optionsApiUrl', e.target.value)}
                         />
-                        <Input
-                          placeholder="Value"
-                          value={option.value}
-                          onChange={(e) => handleFilterOptionChange(index, optionIndex, 'value', e.target.value)}
-                          className="flex-1"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRemoveFilterOption(index, optionIndex)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Display key (label in dropdown)</Label>
+                            <Input
+                              placeholder="e.g. name"
+                              value={filter.optionsDisplayKey || ''}
+                              onChange={(e) => handleFilterFieldChange(index, 'optionsDisplayKey', e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Value key (sent in filter/query)</Label>
+                            <Input
+                              placeholder="e.g. id"
+                              value={filter.optionsValueKey || ''}
+                              onChange={(e) => handleFilterFieldChange(index, 'optionsValueKey', e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="pt-2 border-t border-muted space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-normal">Include NULL / empty option</Label>
+                            <Switch
+                              checked={!!filter.optionsIncludeNull}
+                              onCheckedChange={(checked) => handleFilterFieldChange(index, 'optionsIncludeNull', checked)}
+                            />
+                          </div>
+                          {filter.optionsIncludeNull && (
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs">NULL option label</Label>
+                                <Input
+                                  placeholder="e.g. Unassigned, None"
+                                  value={filter.optionsNullLabel ?? ''}
+                                  onChange={(e) => handleFilterFieldChange(index, 'optionsNullLabel', e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">NULL option value</Label>
+                                <Input
+                                  placeholder="e.g. empty, null"
+                                  value={filter.optionsNullValue ?? ''}
+                                  onChange={(e) => handleFilterFieldChange(index, 'optionsNullValue', e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          API should return an array of objects. Display key = field shown in dropdown; value key = value sent as filter parameter.
+                        </p>
                       </div>
-                    ))}
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <Label>Options</Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddFilterOption(index)}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add Option
+                          </Button>
+                        </div>
+                        {filter.options?.map((option, optionIndex) => (
+                          <div key={optionIndex} className="flex gap-2 items-center">
+                            <Input
+                              placeholder="Display Name"
+                              value={option.label}
+                              onChange={(e) => handleFilterOptionChange(index, optionIndex, 'label', e.target.value)}
+                              className="flex-1"
+                            />
+                            <Input
+                              placeholder="Value"
+                              value={option.value}
+                              onChange={(e) => handleFilterOptionChange(index, optionIndex, 'value', e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRemoveFilterOption(index, optionIndex)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

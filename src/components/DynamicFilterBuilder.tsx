@@ -1,6 +1,7 @@
 import React from 'react';
 import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
+import type { FilterState } from '@/hooks/useFilters';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,21 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar as CalendarIcon, X, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+
+export interface FilterContextInjected {
+  filterState: FilterState;
+  setFilterValue: (key: string, value: any) => void;
+  setFilterValues: (values: Record<string, any>) => void;
+  clearFilters: () => void;
+  applyFilters: () => void;
+  resetFilters: () => void;
+  isFilterActive: (key: string) => boolean;
+  getActiveFiltersCount: () => number;
+  getQueryParams: (filters: FilterConfig[]) => URLSearchParams;
+  getFilterDisplayValue: (key: string, filters: FilterConfig[]) => string;
+}
 
 interface DynamicFilterBuilderProps {
   filters: FilterConfig[];
@@ -15,6 +31,8 @@ interface DynamicFilterBuilderProps {
   className?: string;
   showSummary?: boolean;
   compact?: boolean;
+  /** When provided, use this context so parent and builder share filter state (ensures Apply sends correct params e.g. assigned_to). */
+  filterContext?: FilterContextInjected;
 }
 
 // Renders a form UI for dynamic filters and exposes URLSearchParams via onFiltersChange
@@ -23,21 +41,22 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
   onFiltersChange,
   className = '',
   showSummary = true,
-  compact = false
+  compact = false,
+  filterContext
 }) => {
+  const internal = useFilters();
   const {
     filterState,
     setFilterValue,
     setFilterValues,
     clearFilters,
     applyFilters,
-    applyFiltersAndClear,
     resetFilters,
     isFilterActive,
     getActiveFiltersCount,
     getQueryParams,
     getFilterDisplayValue
-  } = useFilters();
+  } = filterContext ?? internal;
 
   const activeFiltersCount = getActiveFiltersCount();
 
@@ -199,41 +218,179 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
           </div>
         );
 
-      case 'date_range':
+      case 'date_range': {
+        const startDate = value?.start ? (value.start instanceof Date ? value.start : new Date(value.start)) : undefined;
+        const endDate = value?.end ? (value.end instanceof Date ? value.end : new Date(value.end)) : undefined;
         return (
-          <div className="space-y-2">
-            <div className="relative">
-              <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              <Input
-                type="date"
-                value={value?.start ? new Date(value.start).toISOString().split('T')[0] : ''}
-                onChange={(e) =>
-                  handleFilterChange(filter.key, {
-                    ...value,
-                    start: e.target.value ? new Date(e.target.value) : undefined
-                  })
-                }
-                className={`pl-10 ${isActive ? 'border-blue-500' : ''}`}
-                placeholder="Start date"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500 ring-1 ring-blue-500/20' : ''}`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {startDate ? (
+                      format(startDate, 'PPP')
+                    ) : (
+                      <span className="text-muted-foreground">Start date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={startDate}
+                    onSelect={(date) =>
+                      handleFilterChange(filter.key, {
+                        ...value,
+                        start: date ?? undefined
+                      })
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
-            <div className="relative">
-              <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              <Input
-                type="date"
-                value={value?.end ? new Date(value.end).toISOString().split('T')[0] : ''}
-                onChange={(e) =>
-                  handleFilterChange(filter.key, {
-                    ...value,
-                    end: e.target.value ? new Date(e.target.value) : undefined
-                  })
-                }
-                className={`pl-10 ${isActive ? 'border-blue-500' : ''}`}
-                placeholder="End date"
-              />
+            <div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500 ring-1 ring-blue-500/20' : ''}`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {endDate ? (
+                      format(endDate, 'PPP')
+                    ) : (
+                      <span className="text-muted-foreground">End date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={endDate}
+                    onSelect={(date) =>
+                      handleFilterChange(filter.key, {
+                        ...value,
+                        end: date ?? undefined
+                      })
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
         );
+      }
+
+      case 'date_time_range': {
+        const startDate = value?.start ? (value.start instanceof Date ? value.start : new Date(value.start)) : undefined;
+        const endDate = value?.end ? (value.end instanceof Date ? value.end : new Date(value.end)) : undefined;
+        const startTimeStr = startDate ? format(startDate, 'HH:mm') : '00:00';
+        const endTimeStr = endDate ? format(endDate, 'HH:mm') : '23:59';
+        const applyStartTime = (timeStr: string) => {
+          const [h, m] = timeStr.split(':').map(Number);
+          const base = startDate ? new Date(startDate) : new Date();
+          base.setHours(isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0);
+          handleFilterChange(filter.key, { ...value, start: base });
+        };
+        const applyEndTime = (timeStr: string) => {
+          const [h, m] = timeStr.split(':').map(Number);
+          const base = endDate ? new Date(endDate) : new Date();
+          base.setHours(isNaN(h) ? 23 : h, isNaN(m) ? 59 : m, 0, 0);
+          handleFilterChange(filter.key, { ...value, end: base });
+        };
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500 ring-1 ring-blue-500/20' : ''}`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {startDate ? (
+                      format(startDate, 'PPP')
+                    ) : (
+                      <span className="text-muted-foreground">Start date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={startDate}
+                    onSelect={(date) => {
+                      const d = date ? (() => {
+                        const d2 = new Date(date);
+                        if (startDate) d2.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+                        else d2.setHours(0, 0, 0, 0);
+                        return d2;
+                      })() : undefined;
+                      handleFilterChange(filter.key, { ...value, start: d });
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <div className="mt-2">
+                <Input
+                  type="time"
+                  value={startTimeStr}
+                  onChange={(e) => applyStartTime(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            </div>
+            <div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`w-full justify-start text-left font-normal ${isActive ? 'border-blue-500 ring-1 ring-blue-500/20' : ''}`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {endDate ? (
+                      format(endDate, 'PPP')
+                    ) : (
+                      <span className="text-muted-foreground">End date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={endDate}
+                    onSelect={(date) => {
+                      const d = date ? (() => {
+                        const d2 = new Date(date);
+                        if (endDate) d2.setHours(endDate.getHours(), endDate.getMinutes(), 0, 0);
+                        else d2.setHours(23, 59, 0, 0);
+                        return d2;
+                      })() : undefined;
+                      handleFilterChange(filter.key, { ...value, end: d });
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <div className="mt-2">
+                <Input
+                  type="time"
+                  value={endTimeStr}
+                  onChange={(e) => applyEndTime(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      }
 
       case 'number_gte':
         return (

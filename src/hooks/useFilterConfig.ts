@@ -165,8 +165,14 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
         errors.push(`Filter ${index + 1} (${filter.key}): Label is required`);
       }
 
-      if (filter.type === 'select' && (!filter.options || filter.options.length === 0)) {
-        errors.push(`Filter ${index + 1} (${filter.key}): Select filters must have options`);
+      if (filter.type === 'select') {
+        const hasApiOptions = !!(filter.optionsApiUrl && filter.optionsApiUrl.trim());
+        if (hasApiOptions) {
+          if (!filter.optionsDisplayKey?.trim()) errors.push(`Filter ${index + 1} (${filter.key}): optionsDisplayKey required when using API`);
+          if (!filter.optionsValueKey?.trim()) errors.push(`Filter ${index + 1} (${filter.key}): optionsValueKey required when using API`);
+        } else if (!filter.options || filter.options.length === 0) {
+          errors.push(`Filter ${index + 1} (${filter.key}): Select filters must have options or API config`);
+        }
       }
 
       // Check for duplicate keys
