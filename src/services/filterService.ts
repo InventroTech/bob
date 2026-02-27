@@ -90,8 +90,18 @@ export class FilterService {
         warnings.push(`Filter ${index + 1}: Missing label field`);
       }
 
-      if (filter.type === 'select' && (!filter.options || filter.options.length === 0)) {
-        errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Select filters must have options`);
+      if (filter.type === 'select') {
+        const hasApiOptions = !!(filter.optionsApiUrl && filter.optionsApiUrl.trim());
+        if (hasApiOptions) {
+          if (!filter.optionsDisplayKey?.trim()) {
+            errors.push(`Filter ${index + 1} (${filter.label || filter.key}): optionsDisplayKey is required when using API`);
+          }
+          if (!filter.optionsValueKey?.trim()) {
+            errors.push(`Filter ${index + 1} (${filter.label || filter.key}): optionsValueKey is required when using API`);
+          }
+        } else if (!filter.options || filter.options.length === 0) {
+          errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Select filters must have options or optionsApiUrl`);
+        }
       }
 
       // Check if accessor and key are the same (which is good for consistency)
@@ -181,6 +191,7 @@ export class FilterService {
       case 'date_gte':
       case 'date_lte':
       case 'date_range':
+      case 'date_time_range':
         this.addDateParam(params, accessor, filter, value);
         break;
       case 'number_gte':
@@ -225,6 +236,7 @@ export class FilterService {
       case 'date_lte':
         return 'lte';
       case 'date_range':
+      case 'date_time_range':
         return 'range';
       case 'number_gte':
         return 'gte';
@@ -296,8 +308,8 @@ export class FilterService {
   private addDateParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: any): void {
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
 
-    if (filter.type === 'date_range' && value && typeof value === 'object') {
-      // Handle date range
+    if ((filter.type === 'date_range' || filter.type === 'date_time_range') && value && typeof value === 'object') {
+      // Handle date range and date time range (start/end with optional time)
       if (value.start && this.isValidDate(value.start)) {
         const startDate = value.start instanceof Date ? value.start : new Date(value.start);
         params.append(`${accessor}__gte`, startDate.toISOString());
@@ -458,6 +470,14 @@ export class FilterService {
         if (value && typeof value === 'object') {
           const start = value.start instanceof Date ? value.start.toLocaleDateString() : String(value.start || '');
           const end = value.end instanceof Date ? value.end.toLocaleDateString() : String(value.end || '');
+          return `${filter.label}: ${start} - ${end}`;
+        }
+        return `${filter.label}: ${String(value)}`;
+
+      case 'date_time_range':
+        if (value && typeof value === 'object') {
+          const start = value.start instanceof Date ? value.start.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : String(value.start || '');
+          const end = value.end instanceof Date ? value.end.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : String(value.end || '');
           return `${filter.label}: ${start} - ${end}`;
         }
         return `${filter.label}: ${String(value)}`;

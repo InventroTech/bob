@@ -18,7 +18,7 @@ import ShortProfileCard from '../ui/ShortProfileCard';
 
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FilterConfig } from '@/component-config/DynamicFilterConfig';
+import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
@@ -407,6 +407,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
   const [apiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'renderer');
   const [filtersApplied, setFiltersApplied] = useState(false);
+  const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -508,14 +509,29 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
   const effectiveApiEndpoint = resolvedApiEndpoint ?? config?.apiEndpoint;
 
-  // Helper function to remove assigned_to from params for GM users
-  const removeAssignedToForGM = useCallback((params: URLSearchParams) => {
-    if (isGM && params.has('assigned_to')) {
+  // Helper: for GM users, remove assigned_to only when it came from endpoint/default, not when user explicitly set "Assigned to" filter
+  const removeAssignedToForGM = useCallback(
+    (
+      params: URLSearchParams,
+      opts?: { effectiveFilters: FilterConfig[]; filterStateValues: Record<string, any> }
+    ) => {
+      if (!isGM || !params.has('assigned_to')) return params;
+      if (opts?.effectiveFilters && opts?.filterStateValues) {
+        const hasExplicitAssignedToFilter = opts.effectiveFilters.some((f) => {
+          const accessor = f.accessor || f.key;
+          if (accessor !== 'assigned_to') return false;
+          const v = opts.filterStateValues[f.key];
+          if (Array.isArray(v)) return v.length > 0;
+          return v != null && v !== '';
+        });
+        if (hasExplicitAssignedToFilter) return params; // user chose "Assigned to" in filter UI – keep it
+      }
       params.delete('assigned_to');
       console.log('[LeadTableComponent] GM user detected, removed assigned_to from query params');
-    }
-    return params;
-  }, [isGM]);
+      return params;
+    },
+    [isGM]
+  );
 
   // Helper function to build URL with query string (handles endpoints that already have query params)
   const buildUrlWithParams = useCallback((endpoint: string, params: URLSearchParams) => {
@@ -557,14 +573,76 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     });
   }, [config?.filters]);
 
+  // Fetch dropdown options from API for select filters that have optionsApiUrl
+  useEffect(() => {
+    const apiSelectFilters = normalizedFilters.filter(
+      (f): f is FilterConfig & { optionsApiUrl: string; optionsDisplayKey: string; optionsValueKey: string } =>
+        f.type === 'select' &&
+        !!(f.optionsApiUrl && f.optionsApiUrl.trim()) &&
+        !!(f.optionsDisplayKey?.trim() && f.optionsValueKey?.trim())
+    );
+    if (apiSelectFilters.length === 0) {
+      setResolvedFilterOptions({});
+      return;
+    }
+    let cancelled = false;
+    const fetchOne = async (filter: (typeof apiSelectFilters)[0]) => {
+      try {
+        const url = filter.optionsApiUrl.startsWith('http')
+          ? filter.optionsApiUrl
+          : filter.optionsApiUrl.startsWith('/')
+            ? filter.optionsApiUrl
+            : `/${filter.optionsApiUrl}`;
+        const res = await apiClient.get<unknown>(url);
+        const raw = res.data;
+        const arr = Array.isArray(raw) ? raw : (raw as any)?.results ?? (raw as any)?.data ?? [];
+        const displayKey = filter.optionsDisplayKey.trim();
+        const valueKey = filter.optionsValueKey.trim();
+        let options: FilterOption[] = (arr as any[])
+          .map((item: any) => ({
+            label: String(item?.[displayKey] ?? ''),
+            value: String(item?.[valueKey] ?? ''),
+          }))
+          .filter((o) => o.value !== undefined && o.value !== '');
+        if (filter.optionsIncludeNull) {
+          const nullLabel = (filter.optionsNullLabel ?? 'Unassigned').trim() || 'Unassigned';
+          const nullValue = filter.optionsNullValue !== undefined && filter.optionsNullValue !== null ? String(filter.optionsNullValue) : '';
+          options = [{ label: nullLabel, value: nullValue }, ...options];
+        }
+        if (!cancelled) {
+          setResolvedFilterOptions((prev) => ({ ...prev, [filter.key]: options }));
+        }
+      } catch (err) {
+        console.warn(`[LeadTableComponent] Failed to fetch filter options for ${filter.key}:`, err);
+        if (!cancelled) {
+          setResolvedFilterOptions((prev) => ({ ...prev, [filter.key]: [] }));
+        }
+      }
+    };
+    apiSelectFilters.forEach(fetchOne);
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedFilters]);
+
+  // Merge API-fetched options into filters for DynamicFilterBuilder and FilterService (correct params sent to data API)
+  const effectiveFilters = useMemo(() => {
+    return normalizedFilters.map((f) => {
+      if (f.type === 'select' && f.optionsApiUrl && resolvedFilterOptions[f.key]) {
+        return { ...f, options: resolvedFilterOptions[f.key] };
+      }
+      return f;
+    });
+  }, [normalizedFilters, resolvedFilterOptions]);
+
   // URL management hooks (must be declared early for navigation and URL sync)
   const navigate = useNavigate();
   const location = useLocation();
 
   // New dynamic filter system: instantiate FilterService only when dynamic filters exist and not in fallback mode
   const filterService = useMemo(() => {
-    if (normalizedFilters.length > 0 && !config?.showFallbackOnly) {
-      const service = new FilterService(normalizedFilters, {
+    if (effectiveFilters.length > 0 && !config?.showFallbackOnly) {
+      const service = new FilterService(effectiveFilters, {
         apiEndpoint: effectiveApiEndpoint,
         entityType: config.entityType,
         pageSize: config.filterOptions?.pageSize || 10,
@@ -587,7 +665,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       return service;
     }
     return null;
-  }, [normalizedFilters, effectiveApiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, config?.searchFields]);
+  }, [effectiveFilters, effectiveApiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, config?.searchFields]);
 
   // Initialize filter hooks with proper reset when no filters are configured
   const {
@@ -636,7 +714,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             filterValues[filter.key] = paramValue;
             break;
           case 'date_range':
-            // Date range might have both start and end dates
+          case 'date_time_range':
+            // Date range / date time range: start and end from __gte and __lte
             const startValue = urlParams.get(`${accessor}__gte`);
             const endValue = urlParams.get(`${accessor}__lte`);
             if (startValue || endValue) {
@@ -1072,8 +1151,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page_size', '10');
       }
 
-      // Remove assigned_to for GM users
-      removeAssignedToForGM(params);
+      // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
+      removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
 
       const url = buildUrlWithParams(endpoint, params);
 
@@ -1197,8 +1276,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       params.append('page', '1');
       params.append('page_size', '10');
 
-      // Remove assigned_to for GM users
-      removeAssignedToForGM(params);
+      // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
+      removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
 
       const url = buildUrlWithParams(endpoint, params);
 
@@ -1476,8 +1555,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page_size', '10');
       }
 
-      // Remove assigned_to for GM users
-      removeAssignedToForGM(params);
+      // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
+      removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
 
       const url = buildUrlWithParams(endpoint, params);
 
@@ -1603,8 +1682,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         params.append('page', '1');
         params.append('page_size', '10');
 
-        // Remove assigned_to for GM users
-        removeAssignedToForGM(params);
+        // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
+        removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
 
         // Update URL with current parameters (including URL-restored filters)
         updateURL(params);
@@ -1734,7 +1813,19 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
               {hasActiveFilters ? (
                 <div className="space-y-4">
                   <DynamicFilterBuilder
-                    filters={normalizedFilters}
+                    filters={effectiveFilters}
+                    filterContext={{
+                      filterState,
+                      setFilterValue,
+                      setFilterValues,
+                      clearFilters,
+                      applyFilters: applyFilterState,
+                      resetFilters,
+                      isFilterActive,
+                      getActiveFiltersCount,
+                      getQueryParams,
+                      getFilterDisplayValue,
+                    }}
                     onFiltersChange={(params) => {
                       // Add pagination parameters to URL for complete bookmarkable state
                       params.set('page', '1');
@@ -1776,7 +1867,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         {/* Table Section */}
         {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full relative">
+        <div className="w-full relative overflow-x-auto">
           {/* Loading Overlay */}
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
