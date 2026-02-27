@@ -155,7 +155,8 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
           break;
 
         case 'date_range':
-          // Date range (both start and end)
+        case 'date_time_range':
+          // Date range / date time range (both start and end)
           if (value && typeof value === 'object') {
             if (value.start && (value.start instanceof Date || typeof value.start === 'string')) {
               const startDate = value.start instanceof Date ? value.start : new Date(value.start);
@@ -231,6 +232,14 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
         if (value && typeof value === 'object') {
           const start = value.start instanceof Date ? value.start.toLocaleDateString() : String(value.start || '');
           const end = value.end instanceof Date ? value.end.toLocaleDateString() : String(value.end || '');
+          return `${start} - ${end}`;
+        }
+        return String(value);
+
+      case 'date_time_range':
+        if (value && typeof value === 'object') {
+          const start = value.start instanceof Date ? value.start.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : String(value.start || '');
+          const end = value.end instanceof Date ? value.end.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : String(value.end || '');
           return `${start} - ${end}`;
         }
         return String(value);

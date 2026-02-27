@@ -565,7 +565,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     debouncedUpdateWithDelay({ filters: newFilters });
   }, [localFilters, debouncedUpdateWithDelay]);
 
-  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options']) => {
+  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options'] | boolean) => {
     const newFilters = [...localFilters];
 
     // If changing the accessor, also update the key to match for consistency
@@ -625,6 +625,30 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     }
   }, [localFilters, debouncedUpdateWithDelay]);
 
+  const handleFilterOptionsSourceChange = useCallback((index: number, source: 'manual' | 'api') => {
+    const newFilters = [...localFilters];
+    const current = newFilters[index] || {};
+    if (source === 'api') {
+      newFilters[index] = {
+        ...current,
+        optionsApiUrl: '/membership/roles',
+        optionsDisplayKey: 'name',
+        optionsValueKey: 'id',
+        options: [],
+      };
+    } else {
+      newFilters[index] = {
+        ...current,
+        optionsApiUrl: '',
+        optionsDisplayKey: '',
+        optionsValueKey: '',
+        options: (current.options?.length ? current.options : [{ label: '', value: '' }]) as FilterConfig['options'],
+      };
+    }
+    setLocalFilters(newFilters);
+    debouncedUpdateWithDelay({ filters: newFilters });
+  }, [localFilters, debouncedUpdateWithDelay]);
+
   // Handle dataset count change
   const handleDatasetCountChange = useCallback((count: number) => {
     setNumDatasets(count);
@@ -674,6 +698,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             handleColumnDelete={handleColumnDelete}
             handleFilterCountChange={handleFilterCountChange}
             handleFilterFieldChange={handleFilterFieldChange}
+            handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
@@ -696,6 +721,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             handleColumnDelete={handleColumnDelete}
             handleFilterCountChange={handleFilterCountChange}
             handleFilterFieldChange={handleFilterFieldChange}
+            handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
