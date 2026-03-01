@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { FileText, PlusCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { membershipService } from '@/lib/api';
+import { getTenantSlug } from '@/lib/api/config';
 
 interface PageRecord {
   id: string;
@@ -27,21 +28,19 @@ const MyPages = () => {
   const [rolesMap, setRolesMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tenantSlug, setTenantSlug] = useState<string | null>(null);
+  const [tenantSlug] = useState<string>(() => getTenantSlug());
 
   const fetchPagesAndRoles = async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
     try {
-      // Fetch all roles using API
       const rolesData = await membershipService.getRoles();
 
       const rolesLookup: Record<string, string> = {};
       (rolesData || []).forEach((role) => {
         rolesLookup[role.id] = role.name;
       });
-      console.log("rolesLookup", rolesLookup);
       setRolesMap(rolesLookup);
 
       // Fetch pages
@@ -76,25 +75,6 @@ const MyPages = () => {
       setLoading(false);
     }
   };
-
-  // Fetch tenant slug
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data: tu } = await supabase
-        .from('tenant_users')
-        .select('tenant_id')
-        .eq('user_id', user.id)
-        .single();
-      if (!tu) return;
-      const { data: t } = await supabase
-        .from('tenants')
-        .select('slug')
-        .eq('id', tu.tenant_id)
-        .single();
-      if (t?.slug) setTenantSlug(t.slug);
-    })();
-  }, [user]);
 
   useEffect(() => {
     fetchPagesAndRoles();

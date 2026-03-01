@@ -1867,7 +1867,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
 
         {/* Table Section */}
         {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full relative">
+        <div className="w-full relative overflow-x-auto">
           {/* Loading Overlay */}
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">

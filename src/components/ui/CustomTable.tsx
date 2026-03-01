@@ -151,7 +151,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   const cellRenderer = renderCell || defaultRenderCell;
 
   return (
-    <div className={cn('overflow-hidden w-full', className)}>
+    <div className={cn('w-full overflow-x-auto', className)}>
       <table className={cn('min-w-full bg-white', tableClassName)}>
         <thead>
           <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
