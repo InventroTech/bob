@@ -74,6 +74,7 @@ export interface MyMembershipResponse {
   tenant_id: string | null;
   tenant_slug?: string | null;
   is_active?: boolean;
+  department?: string | null;
   error?: string;
 }
 

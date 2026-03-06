@@ -1,18 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { apiClient } from '@/lib/api';
+import { apiClient, membershipService } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, ChevronsUpDown, Calendar, User, Package, Send, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Calendar, User, Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface InventoryRequestFormConfig {
@@ -25,25 +21,12 @@ interface InventoryRequestFormProps {
 }
 
 // Options for dropdowns (can be moved to config or API later)
-const DEPARTMENTS = ['Engineering', 'Design', 'Manufacturing', 'Operations', 'Product', 'Sales & Marketing', 'HR', 'Finance', 'Other'];
-const SUB_DEPARTMENTS: Record<string, string[]> = {
-  Engineering: ['Hardware', 'Software/Firmware', 'Embedded Systems', 'Flight Control', 'Propulsion', 'Electronics', 'Testing/QA', 'Other'],
-  Design: ['Industrial Design', 'Aerodynamics', 'CAD/Mechanical Design', 'Other'],
-  Manufacturing: ['Assembly', 'Quality Control', 'Production Planning', 'Other'],
-  Operations: ['Supply Chain', 'Logistics', 'Facilities', 'Support', 'Other'],
-  Product: ['Product Management', 'Product Development', 'Other'],
-  'Sales & Marketing': ['Sales', 'Marketing', 'Business Development', 'Other'],
-  HR: ['Recruitment', 'L&D', 'Operations', 'Other'],
-  Finance: ['FP&A', 'Accounting', 'Other'],
-  Other: ['Other'],
-};
 const URGENCY_OPTIONS = [
   { value: 'LOW', label: 'Low' },
   { value: 'MEDIUM', label: 'Medium' },
   { value: 'HIGH', label: 'High' },
   { value: 'CRITICAL', label: 'Critical' },
 ];
-
 /**
  * Inventory request creation form for PageBuilder.
  * Stores data in records table with entity_type=inventory_request.
@@ -52,65 +35,26 @@ const URGENCY_OPTIONS = [
 export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> = ({ config }) => {
   const { user } = useAuth();
 
+  const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
-  const [subDepartment, setSubDepartment] = useState('');
-  const [projectPurpose, setProjectPurpose] = useState('');
   const [itemDescription, setItemDescription] = useState('');
-  const [partNumberSku, setPartNumberSku] = useState('');
-  const [partNumberOptions, setPartNumberOptions] = useState<{ value: string; label: string }[]>([]);
-  const [partNumberSearchOpen, setPartNumberSearchOpen] = useState(false);
-  const [partNumberSearchQuery, setPartNumberSearchQuery] = useState('');
-  const partNumberTriggerRef = useRef<HTMLButtonElement>(null);
-  const [popoverWidth, setPopoverWidth] = useState<number | undefined>(undefined);
   const [quantity, setQuantity] = useState<number | ''>('');
   const [urgency, setUrgency] = useState('');
-  const [justificationNotes, setJustificationNotes] = useState('');
+  const [comments, setComments] = useState('');
+  const [vendor, setVendor] = useState('');
+  const [productLink, setProductLink] = useState('');
+  const [additionalLink, setAdditionalLink] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const status = config?.defaultStatus || 'DRAFT';
 
-  // Load part numbers from inventory_item records for dropdown
+  // Pre-fill department from current user's membership (backend TenantMembership.department)
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiClient.get<{ results?: { id: number; data?: { part_number_or_sku?: string; name?: string } }[] }>(
-          '/crm-records/records/?entity_type=inventory_item&page_size=100'
-        );
-        const list = res.data?.results ?? (res.data as any)?.data ?? [];
-        const options = list
-          .map((r: any) => {
-            const sku = r.data?.part_number_or_sku || r.data?.model;
-            const name = r.data?.name;
-            if (!sku && !name) return null;
-            return { value: sku || name || '', label: name ? `${name}${sku ? ` (${sku})` : ''}` : sku };
-          })
-          .filter(Boolean) as { value: string; label: string }[];
-        setPartNumberOptions(options);
-      } catch {
-        setPartNumberOptions([]);
-      }
-    })();
-  }, []);
-
-  const subDepartmentOptions = department ? (SUB_DEPARTMENTS[department] ?? ['Other']) : [];
-
-  // Filter part number options based on search query
-  const filteredPartNumberOptions = partNumberOptions.filter((option) =>
-    option.label.toLowerCase().includes(partNumberSearchQuery.toLowerCase()) ||
-    option.value.toLowerCase().includes(partNumberSearchQuery.toLowerCase())
-  );
-
-  // Get the selected part number label for display
-  const selectedPartNumberLabel = partNumberSku
-    ? partNumberOptions.find((o) => o.value === partNumberSku)?.label || partNumberSku
-    : 'Select or leave blank';
-
-  // Update popover width when trigger is mounted or opened
-  useEffect(() => {
-    if (partNumberSearchOpen && partNumberTriggerRef.current) {
-      setPopoverWidth(partNumberTriggerRef.current.offsetWidth);
-    }
-  }, [partNumberSearchOpen]);
+    if (!user) return;
+    membershipService.getMyMembership().then((membership) => {
+      setDepartment(membership?.department ?? '');
+    });
+  }, [user]);
 
   const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
 
@@ -128,38 +72,38 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     }
 
     const requesterId = user.id;
-    const requestDate = new Date().toISOString().split('T')[0];
 
     try {
       setSubmitting(true);
 
+      // Build payload with all fields always present so backend stores them (no undefined → no omitted keys in JSON)
+      const payloadData: Record<string, string | number> = {
+        status,
+        request_date: requestDate,
+        requester_id: requesterId,
+        requester_name: requesterDisplay ?? '',
+        department: department || '',
+        item_name_freeform: itemDescription,
+        quantity_required: typeof quantity === 'number' ? quantity : Number(quantity) || 0,
+        urgency_level: urgency || '',
+        comments: comments || '',
+        vendor: vendor || '',
+        product_link: productLink || '',
+        additional_link: additionalLink || '',
+      };
       await apiClient.post('/crm-records/records/', {
         entity_type: 'inventory_request',
-        data: {
-          status,
-          request_date: requestDate,
-          requester_id: requesterId,
-          requester_name: requesterDisplay,
-          department: department || undefined,
-          sub_department: subDepartment || undefined,
-          project_purpose: projectPurpose || undefined,
-          item_name_freeform: itemDescription,
-          part_number_or_sku: partNumberSku || undefined,
-          quantity_required: quantity,
-          urgency_level: urgency || undefined,
-          comments: justificationNotes || undefined,
-        },
+        data: payloadData,
       });
 
       toast.success('Inventory request created.');
-      setDepartment('');
-      setSubDepartment('');
-      setProjectPurpose('');
       setItemDescription('');
-      setPartNumberSku('');
       setQuantity('');
       setUrgency('');
-      setJustificationNotes('');
+      setComments('');
+      setVendor('');
+    setProductLink('');
+    setAdditionalLink('');
     } catch (err: any) {
       console.error('Failed to create inventory request', err);
       toast.error(err?.message || 'Failed to create inventory request.');
@@ -169,27 +113,24 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   };
 
   const handleClear = () => {
-    setDepartment('');
-    setSubDepartment('');
-    setProjectPurpose('');
     setItemDescription('');
-    setPartNumberSku('');
-    setPartNumberSearchQuery('');
     setQuantity('');
     setUrgency('');
-    setJustificationNotes('');
+    setComments('');
+    setVendor('');
+    setProductLink('');
+    setAdditionalLink('');
     toast.success('Form cleared.');
   };
 
   const isFormEmpty =
-    !department &&
-    !subDepartment &&
-    !projectPurpose &&
     !itemDescription &&
-    !partNumberSku &&
     quantity === '' &&
     !urgency &&
-    !justificationNotes;
+    !comments &&
+    !vendor &&
+    !productLink &&
+    !additionalLink;
 
   return (
     <Card className="overflow-hidden border border-border/60 shadow-md">
@@ -197,16 +138,16 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6 pt-6">
-          {/* Request info */}
+          {/* Request info — Date, Req name, Department pre-filled */}
           <section className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
                   <Calendar className="h-3.5 w-3.5" />
-                  Date
+                  Date <span className="text-destructive">*</span>
                 </Label>
                 <Input
-                  value={new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                  value={requestDate}
                   readOnly
                   disabled
                   className="h-10 bg-muted/50 font-medium"
@@ -215,7 +156,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
               <div className="space-y-2">
                 <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
                   <User className="h-3.5 w-3.5" />
-                  Requester
+                  Reqestor name <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   value={requesterDisplay}
@@ -225,152 +166,41 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="department" className="text-sm font-medium">
-                  Department
-                </Label>
-                <Select value={department} onValueChange={(v) => { setDepartment(v); setSubDepartment(''); }}>
-                  <SelectTrigger id="department" className="h-10">
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEPARTMENTS.map((d) => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sub-department" className="text-sm font-medium">
-                  Sub-department
-                </Label>
-                <Select value={subDepartment} onValueChange={setSubDepartment} disabled={!department}>
-                  <SelectTrigger id="sub-department" className="h-10">
-                    <SelectValue placeholder={department ? 'Select sub-department' : 'Select department first'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {subDepartmentOptions.map((d) => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
             <div className="space-y-2">
-              <Label htmlFor="project-purpose" className="text-sm font-medium">
-                Project / Purpose
+              <Label htmlFor="department" className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
+                Department <span className="text-destructive">*</span>
               </Label>
               <Input
-                id="project-purpose"
-                placeholder="e.g. Titan 30 Sensor, Fury Wing Part"
-                value={projectPurpose}
-                onChange={(e) => setProjectPurpose(e.target.value)}
-                className="h-10"
+                id="department"
+                value={department}
+                readOnly
+                disabled
+                placeholder="—"
+                className="h-10 bg-muted/50 font-medium"
               />
             </div>
           </section>
 
           {/* Item details */}
           <section className="space-y-4 border-t pt-6">
-            <h3 className="text-sm font-medium text-foreground/90">Item details</h3>
-            <div className="space-y-2">
-              <Label htmlFor="item-description" className="text-sm font-medium">
-                Item description <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="item-description"
-                placeholder="Describe the item(s) you need"
-                value={itemDescription}
-                onChange={(e) => setItemDescription(e.target.value)}
-                required
-                className="h-10"
-              />
-              <p className="text-muted-foreground text-xs">Brief description of the requested item(s).</p>
-            </div>
+            
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="part-sku" className="text-sm font-medium">
-                  Part number / SKU
+                <Label htmlFor="item-description" className="text-sm font-medium">
+                  Item Name <span className="text-destructive">*</span>
                 </Label>
-                <Popover open={partNumberSearchOpen} onOpenChange={setPartNumberSearchOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      ref={partNumberTriggerRef}
-                      id="part-sku"
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={partNumberSearchOpen}
-                      className={cn(
-                        'h-10 w-full justify-between font-normal',
-                        !partNumberSku && 'text-muted-foreground'
-                      )}
-                    >
-                      <span className="truncate">
-                        {partNumberSku ? selectedPartNumberLabel : 'Select or leave blank'}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="p-0"
-                    align="start"
-                    style={popoverWidth ? { width: `${popoverWidth}px` } : undefined}
-                  >
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        placeholder="Search items..."
-                        value={partNumberSearchQuery}
-                        onValueChange={setPartNumberSearchQuery}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No items found.</CommandEmpty>
-                        <CommandGroup>
-                          <CommandItem
-                            value="_none_"
-                            onSelect={() => {
-                              setPartNumberSku('');
-                              setPartNumberSearchOpen(false);
-                              setPartNumberSearchQuery('');
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                'mr-2 h-4 w-4',
-                                partNumberSku === '' ? 'opacity-100' : 'opacity-0'
-                              )}
-                            />
-                            — None / New item
-                          </CommandItem>
-                          {filteredPartNumberOptions.map((option) => (
-                            <CommandItem
-                              key={option.value}
-                              value={option.value}
-                              onSelect={() => {
-                                setPartNumberSku(option.value);
-                                setPartNumberSearchOpen(false);
-                                setPartNumberSearchQuery('');
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  'mr-2 h-4 w-4',
-                                  partNumberSku === option.value ? 'opacity-100' : 'opacity-0'
-                                )}
-                              />
-                              {option.label}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <p className="text-muted-foreground text-xs">Optional — search existing inventory items.</p>
+                <Input
+                  id="item-description"
+                  placeholder="Describe the item(s) you need"
+                  value={itemDescription}
+                  onChange={(e) => setItemDescription(e.target.value)}
+                  required
+                  className="h-10"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="quantity" className="text-sm font-medium">
-                  Quantity required <span className="text-destructive">*</span>
+                  Quantity <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="quantity"
@@ -388,35 +218,75 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 />
               </div>
             </div>
-          </section>
-
-          {/* Priority & notes */}
-          <section className="space-y-4 border-t pt-6">
-            <h3 className="text-sm font-medium text-foreground/90">Priority & notes</h3>
             <div className="space-y-2">
-              <Label htmlFor="urgency" className="text-sm font-medium">
-                Priority / Urgency
+              <Label htmlFor="vendor" className="text-sm font-medium">
+                Vendor <span className="text-destructive">*</span>
               </Label>
-              <Select value={urgency} onValueChange={setUrgency}>
-                <SelectTrigger id="urgency" className="h-10">
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  {URGENCY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                id="vendor"
+                type="text"
+                placeholder="Vendor name"
+                value={vendor}
+                onChange={(e) => setVendor(e.target.value)}
+                className="h-10"
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="justification" className="text-sm font-medium">
-                Justification / Notes
+              <Label htmlFor="product-link" className="text-sm font-medium">
+                Product link <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="product-link"
+                type="url"
+                placeholder="https://..."
+                value={productLink}
+                onChange={(e) => setProductLink(e.target.value)}
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="additional-link" className="text-sm font-medium">
+                Additional link <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Input
+                id="additional-link"
+                type="url"
+                placeholder="https://..."
+                value={additionalLink}
+                onChange={(e) => setAdditionalLink(e.target.value)}
+                className="h-10"
+              />
+            </div>
+          </section>
+
+          {/* Priority & comments */}
+          <section className="space-y-4 border-t pt-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Priority / Urgency <span className="text-destructive">*</span></Label>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Priority level">
+                {URGENCY_OPTIONS.map((o) => (
+                  <Button
+                    key={o.value}
+                    type="button"
+                    variant={urgency === o.value ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setUrgency(urgency === o.value ? '' : o.value)}
+                    className="rounded-full"
+                  >
+                    {o.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="comments" className="text-sm font-medium">
+                Comments <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
               <Textarea
-                id="justification"
-                placeholder="Business justification or additional notes"
-                value={justificationNotes}
-                onChange={(e) => setJustificationNotes(e.target.value)}
+                id="comments"
+                placeholder="Additional comments"
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
                 rows={3}
                 className="resize-y min-h-[80px]"
               />
@@ -459,3 +329,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     </Card>
   );
 };
+
+/**form field optimization:
+*/
