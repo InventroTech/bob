@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, PlusCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { membershipService } from '@/lib/api';
+// 2. IMPORT PAGESERVICE ALONGSIDE MEMBERSHIPSERVICE
+import { membershipService, pageService } from '@/lib/api'; 
 import { getTenantSlug } from '@/lib/api/config';
 
 interface PageRecord {
@@ -43,26 +43,39 @@ const MyPages = () => {
       });
       setRolesMap(rolesLookup);
 
-      // Fetch pages
-      const { data: pagesData, error: pagesError } = await supabase
-        .from('pages')
-        .select('id, name, updated_at, role, display_order')
-        .eq('user_id', user.id)
-        .order('display_order', { ascending: true }) // Sort by order (1, 2, 3...)
-        .order('updated_at', { ascending: false });
+      // 3. THE GET CALL: Changed from Supabase to pageService
+      const rawPagesData = await pageService.getPages(user.id);
 
-      if (pagesError) throw pagesError;
+      // --- NEW FRONTEND SORTING LOGIC ---
+      // First sort by display_order (ascending). If they match, sort by updated_at (newest first).
+      const sortedPagesData = [...(rawPagesData || [])].sort((a: any, b: any) => {
+        // Use 9999 as a fallback so items without an order drop to the bottom safely
+        const orderA = a.display_order ?? 9999; 
+        const orderB = b.display_order ?? 9999;
+        
+        if (orderA !== orderB) {
+          return orderA - orderB; // Sorts 1, 2, 3...
+        }
+        
+        // If display orders are exactly the same, sort by date as a tie-breaker
+        const dateA = new Date(a.updated_at || 0).getTime();
+        const dateB = new Date(b.updated_at || 0).getTime();
+        return dateB - dateA; 
+      });
 
-      // Group pages by role name
+      // Group pages by role name using our newly sorted array
       const grouped: Record<string, PageRecord[]> = {};
-      (pagesData || []).forEach((page) => {
-        const roleName = rolesLookup[page.role] || 'Unassigned';
+      sortedPagesData.forEach((page: any) => {
+        // Fallback to page.role if the API returns that instead of page.role_id
+        const roleValue = page.role_id || page.role; 
+        const roleName = rolesLookup[roleValue] || 'Unassigned';
+        
         if (!grouped[roleName]) grouped[roleName] = [];
         grouped[roleName].push({
           id: page.id,
           name: page.name,
           updated_at: page.updated_at,
-          role_id: page.role
+          role_id: roleValue
         });
       });
 
@@ -82,13 +95,15 @@ const MyPages = () => {
 
   const handleDeletePage = async (pageId: string) => {
     if (!confirm('Are you sure you want to delete this page?')) return;
-    const { error } = await supabase.from('pages').delete().eq('id', pageId);
-    if (error) {
-      console.error('Error deleting page:', error);
-      toast.error('Failed to delete page.');
-    } else {
+    
+    // 4. THE DELETE CALL: Changed from Supabase to pageService with a try/catch
+    try {
+      await pageService.deletePage(pageId);
       toast.success('Page deleted.');
-      fetchPagesAndRoles();
+      fetchPagesAndRoles(); // Refresh the page list
+    } catch (err: any) {
+      console.error('Error deleting page:', err);
+      toast.error('Failed to delete page.');
     }
   };
 

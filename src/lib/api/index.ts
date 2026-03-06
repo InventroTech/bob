@@ -33,6 +33,7 @@ export type {
 // Services
 export { authService, linkUserUidLegacy } from './services/auth';
 export { membershipService } from './services/membership';
+export { pageService } from './services/pageService';
 export type {
   Role,
   User,
