@@ -345,7 +345,7 @@ const CustomAppLayout: React.FC = () => {
         style={{ marginLeft: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
         {spoofBannerVisible && spoofLabel && (
-          <div className="w-full bg-amber-500 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">
+          <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">
             <span className="truncate">
               Spoofing as <span className="font-semibold">{spoofLabel}</span>
             </span>

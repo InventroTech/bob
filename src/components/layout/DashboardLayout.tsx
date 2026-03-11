@@ -81,7 +81,7 @@ const DashboardLayout = ({ children, className, user }: DashboardLayoutProps) =>
       <SidebarInset className="bg-background">
         <Navbar user={resolvedUser} />
         {spoofLabel && (
-          <div className="w-full bg-amber-500 text-black text-xs px-4 py-1 flex items-center justify-between">
+          <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between">
             <span className="truncate">
               Spoofing as <span className="font-semibold">{spoofLabel}</span>
             </span>
