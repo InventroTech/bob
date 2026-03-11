@@ -1,9 +1,11 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { SPOOF_CHANGED_EVENT } from "@/lib/spoof";
 
 interface UserInfo {
   name: string;
@@ -19,6 +21,41 @@ interface DashboardLayoutProps {
 
 const DashboardLayout = ({ children, className, user }: DashboardLayoutProps) => {
   const { user: authUser } = useAuth();
+  const navigate = useNavigate();
+  const [spoofLabel, setSpoofLabel] = React.useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem("pyro_spoof_user_label");
+  });
+
+  React.useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "pyro_spoof_user_label") {
+        setSpoofLabel(event.newValue);
+      }
+    };
+    const handleSpoofChanged = () => {
+      setSpoofLabel(window.localStorage.getItem("pyro_spoof_user_label"));
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(SPOOF_CHANGED_EVENT, handleSpoofChanged);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(SPOOF_CHANGED_EVENT, handleSpoofChanged);
+    };
+  }, []);
+
+  const handleStopSpoofing = React.useCallback(() => {
+    try {
+      window.localStorage.removeItem("pyro_spoof_jwt");
+      window.localStorage.removeItem("pyro_spoof_original_jwt");
+      window.localStorage.removeItem("pyro_spoof_user_label");
+      setSpoofLabel(null);
+      navigate("/");
+    } catch (err) {
+      console.error("Failed to stop spoofing:", err);
+    }
+  }, [navigate]);
 
   const resolvedUser = React.useMemo(() => {
     if (user) return user;
@@ -43,6 +80,20 @@ const DashboardLayout = ({ children, className, user }: DashboardLayoutProps) =>
       <Sidebar />
       <SidebarInset className="bg-background">
         <Navbar user={resolvedUser} />
+        {spoofLabel && (
+          <div className="w-full bg-amber-500 text-black text-xs px-4 py-1 flex items-center justify-between">
+            <span className="truncate">
+              Spoofing as <span className="font-semibold">{spoofLabel}</span>
+            </span>
+            <button
+              type="button"
+              onClick={handleStopSpoofing}
+              className="ml-4 rounded border border-black/40 px-2 py-0.5 text-xs font-medium hover:bg-black hover:text-amber-300"
+            >
+              Stop spoofing
+            </button>
+          </div>
+        )}
         <main className={cn("flex-1 overflow-auto p-6", className)}>
           {children}
         </main>
