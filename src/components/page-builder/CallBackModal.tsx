@@ -80,8 +80,8 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
     if (open) {
       const sections = buildCallbackSections();
       setCallbackSlotSections(sections);
-      const firstAvailable = sections.flatMap((section) => section.slots).find((slot) => !slot.disabled);
-      setSelectedCallbackSlot(firstAvailable?.iso ?? null);
+      // Do not auto-select a time; user can save with or without a time (optional)
+      setSelectedCallbackSlot(null);
     }
   }, [open]);
 
@@ -91,10 +91,8 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!selectedCallbackSlot) {
-      return;
-    }
-    const ok = await onSubmit(selectedCallbackSlot);
+    // Time is optional: pass selected slot or empty string (backend uses 48h vs 12h unassign accordingly)
+    const ok = await onSubmit(selectedCallbackSlot ?? "");
     if (ok) {
       handleClose();
     }
@@ -126,7 +124,7 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
               <div className="space-y-1">
                 <DialogPrimitive.Title className="text-[20px] font-semibold text-black">Select time</DialogPrimitive.Title>
                 <DialogPrimitive.Description id="callback-dialog-description" className="text-sm text-[#8c8176]">
-                  Pick a time within the next 48 hours.
+                  Optionally pick a time within the next 48 hours, or save without a time.
                 </DialogPrimitive.Description>
               </div>
               <DialogPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
@@ -176,7 +174,7 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
               <CustomButton
                 className="w-full sm:w-auto rounded-full bg-black text-white hover:bg-black/90"
                 onClick={handleSubmit}
-                disabled={!selectedCallbackSlot || updating}
+                disabled={updating}
                 loading={updating}
               >
                 Save
