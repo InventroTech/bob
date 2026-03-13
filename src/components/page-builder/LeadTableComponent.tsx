@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Filter, User, MessageCircle, ExternalLink, CheckCircle2, XCircle, Clock, AlertCircle, Search } from 'lucide-react';
 import LeadCardCarousel from './LeadCardCarousel';
 import { RecordDetailModal } from './RecordDetailModal';
+import { InventoryFormEditModal } from './InventoryFormEditModal';
 import { ReceiveShipmentDetailModal } from './ReceiveShipmentDetailModal';
 import { Button } from '@/components/ui/button';
 import ShortProfileCard from '../ui/ShortProfileCard';
@@ -30,13 +31,15 @@ import { buildActionApiRequest } from '@/lib/actionApiUtils';
 interface Column {
   header: string;
   accessor: string;
-  type: 'text' | 'chip' | 'link' | 'action';
+  type: 'text' | 'chip' | 'link' | 'action' | 'status_buttons';
   linkField?: string;
   openCard?: boolean | string;
   actionApiEndpoint?: string;
   actionApiMethod?: string;
   actionApiHeaders?: string;
   actionApiPayload?: string;
+  /** For type status_buttons: buttons that set record data.status to statusValue */
+  statusButtons?: Array<{ label: string; statusValue: string }>;
 }
 
 // Status color mapping - matching design colors
@@ -260,12 +263,15 @@ const defaultColumns: Column[] = [
 ];
 
 interface LeadTableProps {
+  /** When set (e.g. in Page Builder), row-click modal is disabled so clicks don't open modals while editing. */
+  pageId?: string;
   config?: {
     apiEndpoint?: string;
     columns?: Array<{
       key: string;
       label: string;
       type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+      editable?: boolean;
       transform?: (value: any, row: any) => any;
       width?: string;
       openCard?: boolean | string;
@@ -282,7 +288,7 @@ interface LeadTableProps {
     };
     entityType?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'receive_shipments' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'receive_shipments' | 'none' | 'auto';
     statusOptions?: string[];
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
@@ -297,12 +303,42 @@ interface LeadTableProps {
     };
     searchFields?: string;
 
-    showFallbackOnly?: boolean; // New prop to show only fallback 
+    showFallbackOnly?: boolean; // New prop to show only fallback
+
+    /** Table type: default (first column can be profile card) or itemsTable (first column normal text, supports status buttons). */
+    tableType?: 'default' | 'itemsTable';
+    /** When tableType is itemsTable: list of buttons that update record status on click. Each sets data.status to statusValue. */
+    statusButtons?: Array<{ label: string; statusValue: string }>;
+    /** Per-field config for record detail modal: which data keys are editable (key + editable toggle). */
+    modalFieldConfig?: Array<{ key: string; editable: boolean }>;
+    /** 'default' = record detail modal; 'form_edit' = form-style modal with action buttons. */
+    recordDetailModalType?: 'default' | 'form_edit';
+    /** For form_edit modal: fields (key, label, enabled). */
+    formModalFields?: Array<{ key: string; label: string; enabled: boolean }>;
+    formModalTitle?: string;
+    formModalDescription?: string;
   };
 }
 
-export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
+/** Default form modal fields for inventory_request when none configured; all enabled for edit. */
+const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: string; enabled: boolean }> = [
+  { key: 'status', label: 'Status', enabled: true },
+  { key: 'quantity_required', label: 'Quantity required', enabled: true },
+  { key: 'quantity', label: 'Quantity', enabled: true },
+  { key: 'item_name_freeform', label: 'Item name', enabled: true },
+  { key: 'vendor', label: 'Vendor', enabled: true },
+  { key: 'comments', label: 'Comments', enabled: true },
+  { key: 'notes', label: 'Notes', enabled: true },
+  { key: 'urgency_level', label: 'Urgency', enabled: true },
+  { key: 'project_purpose', label: 'Project / purpose', enabled: true },
+  { key: 'department', label: 'Department', enabled: true },
+  { key: 'cart_id', label: 'Cart', enabled: true },
+];
+
+export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId }) => {
   const { toast } = useToast();
+  /** In Page Builder we disable row-click modal so editing isn't interrupted; modal opens on row click only on the live page. */
+  const isInPageBuilder = typeof pageId !== 'undefined';
   const [data, setData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -326,6 +362,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     if (et === 'inventory_cart') return 'inventory_cart' as const;
     return 'lead_card';
   }, [config?.detailMode, config?.entityType]);
+
+  /** Use form-style modal when detail mode is record_form_modal or when record detail modal type is form_edit. */
+  const useFormModal = effectiveDetailMode === 'record_form_modal' || (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit');
 
   // Load cart options when opening record detail for inventory_request (not for receive_shipments modal)
   useEffect(() => {
@@ -813,6 +852,27 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     }
   }, [session?.access_token, toast]);
 
+  // Status change button click: PATCH record with new status (for items table)
+  const handleStatusButtonClick = useCallback(async (row: any, newStatus: string) => {
+    if (!effectiveApiEndpoint || !row?.id) return;
+    const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+    const url = `${base}/${row.id}/`;
+    const existingData = (row.data as Record<string, unknown>) || {};
+    try {
+      const response = await apiClient.patch(url, { data: { ...existingData, status: newStatus } });
+      const updated = response.data;
+      setData((prev) =>
+        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, status: newStatus } } : r))
+      );
+      setFilteredData((prev) =>
+        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, status: newStatus } } : r))
+      );
+      toast({ title: 'Status updated', description: `Status set to ${newStatus}` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Failed to update status', variant: 'destructive' });
+    }
+  }, [effectiveApiEndpoint, toast]);
+
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
     let value = row[column.accessor];
@@ -915,6 +975,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
       );
     }
     
+    // Items table: first column as normal text (no ShortProfileCard)
+    const isItemsTableFirstColumn = config?.tableType === 'itemsTable' && columnIndex === 0;
+    if (isItemsTableFirstColumn) {
+      return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
+    }
+    
     // Special handling for name column - show avatar, name, and email
     if (column.accessor === 'name' || column.header.toLowerCase().includes('name')) {
       return (
@@ -948,6 +1014,24 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         >
           {column.header || 'Action'}
         </CustomButton>
+      );
+    }
+
+    // Status change buttons column (items table): group of buttons that set record status
+    if (column.type === 'status_buttons' && column.statusButtons?.length) {
+      return (
+        <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+          {column.statusButtons.map((btn) => (
+            <CustomButton
+              key={btn.statusValue}
+              variant="outline"
+              size="sm"
+              onClick={() => handleStatusButtonClick(row, btn.statusValue)}
+            >
+              {btn.label}
+            </CustomButton>
+          ))}
+        </div>
       );
     }
     
@@ -1031,22 +1115,33 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
     
     // Default text rendering
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, handleActionClick]);
+  }, [config?.statusColors, config?.tableType, handleActionClick, handleStatusButtonClick]);
 
-  // Memoize table columns
-  const tableColumns: Column[] = useMemo(() => 
-    config?.columns?.map(col => ({
+  // Memoize table columns (append status buttons column when itemsTable + statusButtons)
+  const tableColumns: Column[] = useMemo(() => {
+    const base: Column[] = (config?.columns?.map(col => ({
       header: col.label,
       accessor: col.key,
-      type: col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text',
+      type: (col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text') as Column['type'],
       openCard: col.openCard,
       actionApiEndpoint: col.actionApiEndpoint,
       actionApiMethod: col.actionApiMethod,
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
-    })) || defaultColumns,
-    [config?.columns]
-  );
+    })) || defaultColumns) as Column[];
+    if (config?.tableType === 'itemsTable' && config?.statusButtons?.length) {
+      return [
+        ...base,
+        {
+          header: 'Status',
+          accessor: '__status_actions__',
+          type: 'status_buttons' as const,
+          statusButtons: config.statusButtons,
+        },
+      ];
+    }
+    return base;
+  }, [config?.columns, config?.tableType, config?.statusButtons]);
 
   // Get unique values for filters
   const getUniqueLeadStatuses = () => {
@@ -1893,11 +1988,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             data={filteredData}
             loading={tableLoading}
             emptyMessage={config?.emptyMessage || 'No data found'}
-            onRowClick={effectiveDetailMode !== 'none' ? handleRowClick : undefined}
+            onRowClick={!isInPageBuilder && effectiveDetailMode !== 'none' ? handleRowClick : undefined}
             renderCell={renderCell}
             headerBgColor="bg-black"
             headerTextColor="text-white"
-            hoverable={effectiveDetailMode !== 'none'}
+            hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
           />
         </div>
         
@@ -2158,8 +2253,60 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         />
       )}
 
-      {/* Generic record detail modal (inventory_request, inventory_cart, inventory_item, etc.) */}
-      {effectiveDetailMode !== 'receive_shipments' && (
+      {/* Form-style edit modal (inventory form layout + action buttons) */}
+      {effectiveDetailMode !== 'receive_shipments' && useFormModal && (
+        <InventoryFormEditModal
+          open={isRecordDetailModalOpen}
+          onOpenChange={(open) => {
+            setIsRecordDetailModalOpen(open);
+            if (!open) setSelectedRecord(null);
+          }}
+          record={selectedRecord}
+          entityType={config?.entityType}
+          formModalFields={
+            (config?.formModalFields?.length ? config.formModalFields : config?.entityType === 'inventory_request' ? DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS : []) ?? []
+          }
+          formModalTitle={config?.formModalTitle}
+          formModalDescription={config?.formModalDescription}
+          actionButtons={config?.statusButtons}
+          cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
+          onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
+            ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
+                const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+                const url = `${base}/${recordId}/`;
+                const currentFromSelected = selectedRecord && selectedRecord.id === recordId ? selectedRecord : null;
+                const currentFromList = currentFromSelected == null ? data.find((r: any) => r.id === recordId) : null;
+                const existingData =
+                  (currentFromSelected?.data as Record<string, unknown> | undefined) ||
+                  (currentFromList?.data as Record<string, unknown> | undefined) ||
+                  {};
+                const fullData = patch.data != null ? { ...existingData, ...patch.data } : existingData;
+                const body = patch.data != null ? { ...patch, data: fullData } : patch;
+                const response = await apiClient.patch(url, body);
+                const updated = response.data;
+                setSelectedRecord((prev: any) =>
+                  prev?.id === recordId ? { ...prev, ...updated, data: updated?.data ?? fullData } : prev,
+                );
+                setData((prev) =>
+                  prev.map((r: any) =>
+                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
+                  ),
+                );
+                setFilteredData((prev) =>
+                  prev.map((r: any) =>
+                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
+                  ),
+                );
+              }
+            : undefined}
+          onRecordUpdated={async (recordId: number) => {
+            try { await fetchFilteredData(); } catch (e) { console.error('Error refreshing table after form modal update', e); }
+          }}
+        />
+      )}
+
+      {/* Default record detail modal (inventory_request, inventory_cart, inventory_item, etc.) */}
+      {effectiveDetailMode !== 'receive_shipments' && !useFormModal && (
       <RecordDetailModal
         open={isRecordDetailModalOpen}
         onOpenChange={(open) => {
@@ -2168,6 +2315,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
         }}
         record={selectedRecord}
         entityType={config?.entityType}
+        editableFields={(() => {
+          const fromColumns = (config?.columns ?? []).filter((c: { key?: string; editable?: boolean }) => c.key && c.editable).map((c: { key: string }) => c.key);
+          const fromModalConfig = (config?.modalFieldConfig ?? []).filter((f: { key: string; editable: boolean }) => f.key && f.editable).map((f: { key: string }) => f.key);
+          const merged = [...new Set([...fromColumns, ...fromModalConfig])];
+          return merged.length > 0 ? merged : undefined;
+        })()}
         cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
         onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
           ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
@@ -2251,6 +2404,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config }) => {
             console.error('Error refreshing table after record update:', e);
           }
         }}
+        actionButtons={config?.statusButtons}
       />
       )}
     </>

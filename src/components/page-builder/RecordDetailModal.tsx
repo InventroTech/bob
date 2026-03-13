@@ -27,6 +27,7 @@ import {
   X,
   FileStack,
   ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 
 export type RecordDetailEntityType =
@@ -111,6 +112,8 @@ interface RecordDetailModalProps {
   onDeleted?: (recordId: number) => void;
   /** Called after a record is updated by an action (e.g. Proceed to PM) so the parent can refresh the table. */
   onRecordUpdated?: (recordId: number) => void;
+  /** Optional action buttons that set record data.status on click (e.g. from table config statusButtons). Shown in modal footer. */
+  actionButtons?: Array<{ label: string; statusValue: string }>;
 }
 
 /**
@@ -180,6 +183,37 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
+/** Keys that typically hold URLs; show as clickable links. */
+const LINK_KEYS = new Set(['tracking_link', 'tracking_link_url', 'link', 'url', 'profile_link', 'user_profile_link', 'whatsapp_link']);
+
+function isUrl(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const v = value.trim();
+  return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('mailto:');
+}
+
+/** Render display value as clickable link when it is a URL or key is a known link field. */
+function renderDisplayValue(key: string, value: unknown): React.ReactNode {
+  const str = formatValue(value);
+  if (str === '—') return <span className="text-foreground">{str}</span>;
+  const isLink = isUrl(value) || (LINK_KEYS.has(key) && typeof value === 'string' && value.trim().length > 0);
+  if (isLink) {
+    const href = typeof value === 'string' ? value.trim() : str;
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline inline-flex items-center gap-1 break-all"
+      >
+        {str}
+        <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+      </a>
+    );
+  }
+  return <span className="text-foreground">{str}</span>;
+}
+
 const ENTITY_LABELS: Record<string, string> = {
   inventory_request: 'Request',
   inventory_cart: 'Cart',
@@ -237,6 +271,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   cartOptions,
   onDeleted,
   onRecordUpdated,
+  actionButtons,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
@@ -296,6 +331,8 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const [applyingToCart, setApplyingToCart] = useState(false);
   const [removingFromRequestId, setRemovingFromRequestId] = useState<number | null>(null);
   const [deletingCart, setDeletingCart] = useState(false);
+  /** When set, an action button is applying that status value (loading). */
+  const [applyingStatusValue, setApplyingStatusValue] = useState<string | null>(null);
   /** Selected cart id for "Add to existing cart" (string to match Select value). */
   const [selectedCartIdForAdd, setSelectedCartIdForAdd] = useState<string>('');
   /** Carts loaded by modal when parent does not pass cartOptions (PM add-to-cart dropdown). */
@@ -661,6 +698,29 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     }
   }, [isInventoryRequest, record?.id, record?.data, user, selectedCartIdForAdd, onUpdate, toast, addingToCart]);
 
+  /** Apply a status from config action buttons: PATCH record.data.status and notify parent. */
+  const handleActionButtonClick = useCallback(
+    async (statusValue: string) => {
+      if (!record?.id || !onUpdate) return;
+      try {
+        setApplyingStatusValue(statusValue);
+        const existingData = (record.data as Record<string, unknown>) || {};
+        await onUpdate(record.id, { data: { ...existingData, status: statusValue } });
+        toast({ title: 'Status updated', description: `Status set to ${statusValue.replace(/_/g, ' ')}.` });
+        onRecordUpdated?.(record.id);
+      } catch (e: any) {
+        toast({
+          title: 'Update failed',
+          description: e?.message || 'Could not update status.',
+          variant: 'destructive',
+        });
+      } finally {
+        setApplyingStatusValue(null);
+      }
+    },
+    [record?.id, record?.data, onUpdate, toast, onRecordUpdated]
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
@@ -790,25 +850,32 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                           <Button
                             type="button"
                             variant="secondary"
-                            size="sm"
-                            className="h-9 gap-1.5 rounded-md shrink-0"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 rounded-md"
                             disabled={isSaving}
                             onClick={() => handleSaveClick(key, value)}
+                            title={isSaving ? 'Saving…' : 'Save'}
                           >
                             {isSaving ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                             ) : (
                               <Save className="h-3.5 w-3.5" aria-hidden />
                             )}
-                            {isSaving ? 'Saving…' : 'Save'}
                           </Button>
                         </div>
                       ) : key === 'status' && String(displayValue ?? '').trim() ? (
                         <Badge variant="secondary" className="font-normal">
                           {String(displayValue).replace(/_/g, ' ')}
                         </Badge>
+                      ) : key === 'estimated_cost' ? (
+                        <span className="text-foreground">
+                          {formatValue(displayValue)}
+                          {record?.data && typeof record.data === 'object' && (record.data as Record<string, unknown>).including_gst === true
+                            ? ' (including GST)'
+                            : ' (without GST)'}
+                        </span>
                       ) : (
-                        <span className="text-foreground">{formatValue(displayValue)}</span>
+                        renderDisplayValue(key, displayValue)
                       )}
                     </dd>
                   </div>
@@ -929,6 +996,28 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             </section>
           )}
         </div>
+        {actionButtons && actionButtons.length > 0 && record?.id && canEdit && (
+          <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-2 flex-wrap">
+            <div className="flex flex-wrap gap-2">
+              {actionButtons.map((btn) => (
+                <Button
+                  key={btn.statusValue}
+                  type="button"
+                  variant="outline"
+                  size="default"
+                  className="gap-2 h-9 rounded-md"
+                  disabled={!!applyingStatusValue}
+                  onClick={() => handleActionButtonClick(btn.statusValue)}
+                >
+                  {applyingStatusValue === btn.statusValue ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : null}
+                  {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
+                </Button>
+              ))}
+            </div>
+          </DialogFooter>
+        )}
         {isInventoryRequest && isRequester && (
           <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row justify-between sm:justify-between">
             <Button
