@@ -1,29 +1,28 @@
 import { apiClient } from '../client';
 
 export interface PageRecord {
-  id: string;
-  name: string;
-  updated_at: string;
-  role: string;
-  display_order: number;
+  id?: string;
+  name?: string;
+  updated_at?: string;
+  role?: string | null;
+  display_order?: number;
+  config?: any;          // The JSON data for your drag-and-drop components
+  icon_name?: string;    // The icon chosen in the builder
+  header_title?: string; // The title shown in the app
+  tenant_id?: string;
+  user_id?: string;
 }
 
 export const pageService = {
   /**
-   * Get all pages for the current user
-   * Maps to: GET /pages/
+   * 1. Get all pages (Used in MyPages dashboard)
+   * GET /pages/
    */
   async getPages(userId: string): Promise<PageRecord[]> {
     try {
-      // The backend might filter automatically via your Auth token, 
-      // but passing user_id as a query param is a safe standard approach.
-      const response = await apiClient.get(`/pages/`, {
-        params: { user_id: userId }
-      });
-      
+      const response = await apiClient.get(`/pages/`, { params: { user_id: userId } });
       const responseData = response.data;
-
-      // Robust parsing (same as your membershipService)
+      
       if (Array.isArray(responseData)) return responseData;
       if (responseData && typeof responseData === 'object') {
         if ('results' in responseData && Array.isArray(responseData.results)) return responseData.results;
@@ -31,22 +30,43 @@ export const pageService = {
       }
       return [];
     } catch (error) {
-      console.error('Error fetching pages from Render API:', error);
+      console.error('Error fetching pages:', error);
       throw error;
     }
   },
 
   /**
-   * Delete a page by ID
-   * Maps to: DELETE /pages/{id}/
+   * 2. Delete a page (Used in MyPages dashboard)
+   * DELETE /pages/{id}/
    */
   async deletePage(pageId: string): Promise<void> {
-    try {
-      // Notice the trailing slash - Django/Python backends usually require it!
-      await apiClient.delete(`/pages/${pageId}/`);
-    } catch (error) {
-      console.error(`Error deleting page ${pageId}:`, error);
-      throw error;
-    }
+    await apiClient.delete(`/pages/${pageId}/`);
+  },
+
+  /**
+   * 3. Get a single page's exact layout and settings (Used in PageBuilder)
+   * GET /pages/{id}/
+   */
+  async getPageById(pageId: string): Promise<PageRecord> {
+    const response = await apiClient.get(`/pages/${pageId}/`);
+    // Depending on how your backend wraps single objects
+    return response.data.data || response.data; 
+  },
+
+  /**
+   * 4. Save a brand new page (Used in PageBuilder)
+   * POST /pages/
+   */
+  async createPage(pageData: Partial<PageRecord>): Promise<{ id: string }> {
+    const response = await apiClient.post(`/pages/`, pageData);
+    return response.data.data || response.data;
+  },
+
+  /**
+   * 5. Overwrite an existing page (Used in PageBuilder)
+   * PATCH /pages/{id}/
+   */
+  async updatePage(pageId: string, pageData: Partial<PageRecord>): Promise<void> {
+    await apiClient.patch(`/pages/${pageId}/`, pageData);
   }
 };

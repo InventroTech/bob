@@ -76,13 +76,12 @@ import {
 } from "@/components/page-builder";
 import RoutingRulesComponent from "@/components/page-builder/RoutingRulesComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
-import { membershipService } from '@/lib/api';
+import { membershipService, pageService } from '@/lib/api';
 import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
@@ -975,7 +974,6 @@ const PageBuilder = () => {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [activeComponent, setActiveComponent] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
-  const [collections, setCollections] = useState<{ id: string; name: string }[]>([]);
   const [selectedRole, setSelectedRole] = useState<string>("");
   // Update sensors with less restrictive configuration
   const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
@@ -1011,44 +1009,29 @@ const PageBuilder = () => {
     const fetchPageData = async () => {
       if (pageId && pageId !== 'new') {
         try {
-          const { data, error } = await supabase
-            .from('pages')
-            .select('name, config, role, header_title, display_order, icon_name')
-            .eq('id', pageId)
-            .single();
-
-          if (error) throw error;
+          // --- NEW RENDER API CALL ---
+          const data = await pageService.getPageById(pageId);
 
           if (data) {
-            // Supabase `pages.config` stores the canvas components. Older rows might be arrays.
-            // Normalize to array of CanvasComponentData.
             setPageName(data.name || 'Untitled Page');
-            // Try to get header_title if column exists, otherwise use empty string
-            setHeaderTitle((data as any).header_title || '');
-            setDisplayOrder((data as any).display_order || 0);
-            setPageIcon((data as any).icon_name || 'Sparkles');
-            setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
+            setHeaderTitle(data.header_title || '');
+            setDisplayOrder(data.display_order || 0);
+            setPageIcon(data.icon_name || 'Sparkles');
+            setCanvasComponents(Array.isArray(data.config) ? data.config : []);
             if (data.role) setSelectedRole(data.role);
           } else {
             toast.error("Page not found.");
-            navigate('/'); // Redirect if page not found
+            navigate('/');
           }
         } catch (error: any) {
           toast.error(`Error loading page: ${error.message}`);
-          navigate('/'); // Redirect on error
+          navigate('/');
         }
       }
     };
 
     fetchPageData();
   }, [pageId, navigate]);
-
-  useEffect(() => {
-    if (!tenantId) return;
-    supabase.from('custom_tables').select('id, name').eq('tenant_id', tenantId).then(({ data }) => {
-      if (data) setCollections(data);
-    });
-  }, [tenantId]);
 
   // Ensure all filters in canvas components have proper unique keys
   useEffect(() => {
@@ -1248,74 +1231,39 @@ const PageBuilder = () => {
 
     setIsSaving(true);
     try {
+      // 1. Build the payload matching your Python backend Serializer
       const pageData: any = {
-        user_id: user.id,
-        tenant_id: tenantId,
         name: pageName.trim(),
-        config: canvasComponents as unknown as Json,
-        updated_at: new Date().toISOString(),
+        // We don't need 'as unknown as Json' anymore with the Render API
+        config: canvasComponents, 
         role: selectedRole || null,
         display_order: displayOrder,
         icon_name: pageIcon,
       };
       
-      // Only include header_title if it has a value (optional field)
       if (headerTitle.trim()) {
         pageData.header_title = headerTitle.trim();
       }
 
-      let response;
+      // 2. Send to Render API
       if (pageId && pageId !== 'new') {
-        // Update existing page row by id
-        response = await supabase
-          .from('pages')
-          .update(pageData)
-          .eq('id', pageId);
-      } else {
-        // Insert new page and return its id (used to navigate to the edit URL)
-        response = await supabase
-          .from('pages')
-          .insert([pageData])
-          .select('id')
-          .single();
-      }
-
-      if (response.error) {
-        // If error is about missing column, try saving without header_title
-        if (response.error.message?.includes('header_title') || response.error.message?.includes('column')) {
-          const pageDataWithoutHeader = { ...pageData };
-          delete pageDataWithoutHeader.header_title;
-          
-          let retryResponse;
-          if (pageId && pageId !== 'new') {
-            retryResponse = await supabase
-              .from('pages')
-              .update(pageDataWithoutHeader)
-              .eq('id', pageId);
-          } else {
-            retryResponse = await supabase
-              .from('pages')
-              .insert([pageDataWithoutHeader])
-              .select('id')
-              .single();
-          }
-          
-          if (retryResponse.error) throw retryResponse.error;
-          toast.success("Page saved successfully! (Header title column not available in database)");
-        } else {
-          throw response.error;
-        }
-      } else {
+        // UPDATE an existing page
+        await pageService.updatePage(pageId, pageData);
         toast.success("Page saved successfully!");
-      }
-
-      // If it was a new page, navigate to the edit URL with the new ID
-      if (!(pageId && pageId !== 'new') && response.data?.id) {
-          navigate(`/builder/${response.data.id}`, { replace: true });
+      } else {
+        // CREATE a new page
+        const response = await pageService.createPage(pageData);
+        toast.success("Page created successfully!");
+        
+        // Navigate to the edit URL with the newly created ID
+        if (response?.id) {
+          navigate(`/builder/${response.id}`, { replace: true });
+        }
       }
 
     } catch (error: any) {
-      toast.error(`Error saving page: ${error.message}`);
+      console.error("Save error:", error);
+      toast.error(`Error saving page: ${error.message || 'Failed to save via API'}`);
     } finally {
       setIsSaving(false);
     }
