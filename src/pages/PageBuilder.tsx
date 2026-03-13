@@ -256,6 +256,8 @@ interface ComponentConfig {
   showTable?: boolean;
   showDiagram?: boolean;
   // InventoryRequestForm specific fields
+  entityType?: string;
+  initialStatus?: string;
   defaultStatus?: string;
 }
 
@@ -346,7 +348,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     /** Records table: entity type for API (e.g. inventory_request, inventory_cart). */
     entityType?: string;
     /** Records table: row click behavior — lead card, record detail modal, receive shipment modal, none, or auto (infer from entityType). */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'receive_shipments' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'none' | 'auto';
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -384,7 +386,20 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showTable?: boolean;
     showDiagram?: boolean;
     // InventoryRequestForm specific fields
+    initialStatus?: string;
     defaultStatus?: string;
+    // Records table (leadTable / inventoryTable): items table mode
+    tableType?: 'default' | 'itemsTable';
+    statusButtons?: Array<{ label: string; statusValue: string }>;
+    /** Per-field config for record detail modal: which data keys are editable (key + editable toggle). */
+    modalFieldConfig?: Array<{ key: string; editable: boolean }>;
+    /** 'default' | 'form_edit' — form_edit = inventory-form-style modal with action buttons. */
+    recordDetailModalType?: 'default' | 'form_edit';
+    /** For form_edit modal: fields (key, label, enabled). */
+    formModalFields?: Array<{ key: string; label: string; enabled: boolean }>;
+    formModalTitle?: string;
+    formModalDescription?: string;
+    paymentModalConfig?: import('@/component-config').PaymentModalConfig;
   };
 
   // Local state for all input fields
@@ -438,7 +453,17 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showTable: initialConfig.showTable !== false,
     showDiagram: initialConfig.showDiagram !== false,
     // InventoryRequestForm
+    initialStatus: (initialConfig as any).initialStatus || initialConfig.defaultStatus || 'DRAFT',
     defaultStatus: initialConfig.defaultStatus || 'DRAFT',
+    // Records table: items table + status buttons
+    tableType: (initialConfig as any).tableType || 'default',
+    statusButtons: (initialConfig as any).statusButtons ?? [],
+    modalFieldConfig: (initialConfig as any).modalFieldConfig ?? [],
+    recordDetailModalType: (initialConfig as any).recordDetailModalType ?? 'default',
+    formModalFields: (initialConfig as any).formModalFields ?? [],
+    formModalTitle: (initialConfig as any).formModalTitle ?? '',
+    formModalDescription: (initialConfig as any).formModalDescription ?? '',
+    paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
@@ -484,7 +509,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   );
 
   // Handle local input changes
-  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean) => {
+  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | import('@/component-config').PaymentModalConfig) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
     debouncedUpdateWithDelay({ [field]: value });
   }, [debouncedUpdateWithDelay]);
@@ -897,13 +922,24 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         return (
           <div className="space-y-4">
             <div>
-              <Label>Default Status</Label>
+              <Label>Entity type</Label>
+              <Input
+                value={localConfig.entityType ?? 'inventory_request'}
+                onChange={(e) => handleInputChange('entityType', e.target.value)}
+                placeholder="inventory_request"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Entity type to save (e.g. inventory_request).
+              </p>
+            </div>
+            <div>
+              <Label>Initial status</Label>
               <Select
-                value={localConfig.defaultStatus || 'DRAFT'}
-                onValueChange={(value) => handleInputChange('defaultStatus', value)}
+                value={localConfig.initialStatus || localConfig.defaultStatus || 'DRAFT'}
+                onValueChange={(value) => handleInputChange('initialStatus', value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select default status" />
+                  <SelectValue placeholder="Select initial status" />
                 </SelectTrigger>
                 <SelectContent>
                   {INVENTORY_REQUEST_STATUSES.map((s) => (
@@ -912,7 +948,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
-                Status to set on new inventory requests created from this form.
+                Status to set on new records created from this form.
               </p>
             </div>
           </div>
