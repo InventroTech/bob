@@ -45,6 +45,11 @@ interface InventoryFormEditModalProps {
   formModalTitle?: string;
   /** Modal description text below the title. */
   formModalDescription?: string;
+  /** When set, show one button: conditional if attribute matches, else default (e.g. Inventory Payment modal). */
+  paymentButtonConfig?: {
+    conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string };
+    defaultButton: { label: string; statusValue: string };
+  };
 }
 
 function formatDisplayValue(value: unknown): string {
@@ -59,7 +64,7 @@ const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_fr
 /** Keys that are typically numbers. */
 const NUMBER_KEYS = new Set([
   'quantity', 'quantity_required', 'allocated_quantity', 'available_quantity',
-  'estimated_cost', 'total_quantity', 'cart_id',
+  'estimated_cost', 'total_quantity', 'cart_id', 'total_price', 'unit_price',
 ]);
 
 export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
@@ -74,6 +79,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   cartOptions,
   formModalTitle,
   formModalDescription,
+  paymentButtonConfig,
 }) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -163,23 +169,26 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       return;
     }
     const data = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
+    const recordAny = record as Record<string, unknown>;
     const initial: Record<string, unknown> = {};
     formModalFields.forEach((f) => {
-      if (f.key in data) initial[f.key] = data[f.key];
-      else initial[f.key] = '';
+      const val = data[f.key] ?? recordAny[f.key];
+      initial[f.key] = val !== undefined && val !== null ? val : '';
     });
     setFormData(initial);
-    if (data.total_price != null && data.total_price !== '') {
-      setFinalPriceValue(String(data.total_price));
-      setFinalPriceIsTotal(true);
-    } else if (data.unit_price != null && data.unit_price !== '') {
-      setFinalPriceValue(String(data.unit_price));
-      setFinalPriceIsTotal(false);
-    } else {
-      setFinalPriceValue('');
-      setFinalPriceIsTotal(false);
+    if (!paymentButtonConfig) {
+      if (data.total_price != null && data.total_price !== '') {
+        setFinalPriceValue(String(data.total_price));
+        setFinalPriceIsTotal(true);
+      } else if (data.unit_price != null && data.unit_price !== '') {
+        setFinalPriceValue(String(data.unit_price));
+        setFinalPriceIsTotal(false);
+      } else {
+        setFinalPriceValue('');
+        setFinalPriceIsTotal(false);
+      }
     }
-  }, [open, record?.id, record?.data, formModalFields]);
+  }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig]);
 
   /** Get quantity from form or record for price calculation. */
   const getQuantity = useCallback(() => {
@@ -204,7 +213,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(statusValue);
-        const dataToSend = { ...formData, ...getComputedPriceFields() };
+        const priceOverrides = paymentButtonConfig ? {} : getComputedPriceFields();
+        const dataToSend = { ...formData, ...priceOverrides };
         if (entityType === 'inventory_item') {
           const alloc = dataToSend.allocated_quantity ?? (record?.data as any)?.allocated_quantity;
           const avail = dataToSend.available_quantity ?? (record?.data as any)?.available_quantity;
@@ -225,14 +235,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, onUpdate, onRecordUpdated, toast]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, toast]
   );
 
   const handleSaveAll = useCallback(async () => {
     if (!record?.id || !onUpdate) return;
     try {
       setSaving(true);
-      const dataToSend = { ...formData, ...getComputedPriceFields() };
+      const priceOverrides = paymentButtonConfig ? {} : getComputedPriceFields();
+      const dataToSend = { ...formData, ...priceOverrides };
       if (entityType === 'inventory_item') {
         const alloc = dataToSend.allocated_quantity ?? (record?.data as any)?.allocated_quantity;
         const avail = dataToSend.available_quantity ?? (record?.data as any)?.available_quantity;
@@ -252,11 +263,44 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, onUpdate, onRecordUpdated, toast]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, toast]);
 
   if (!record) return null;
 
-  const hasActionButtons = actionButtons && actionButtons.length > 0;
+  /** For payment modal: evaluate condition on record.data[attribute] vs value; return true if conditional button should show. */
+  const paymentConditionMatches = paymentButtonConfig
+    ? (() => {
+        const { attribute, operator, value } = paymentButtonConfig.conditionalButton;
+        const raw = (record?.data as Record<string, unknown>)?.[attribute];
+        const numVal = typeof value === 'number' ? value : Number(value);
+        const numRaw = typeof raw === 'number' ? raw : Number(raw);
+        if (Number.isFinite(numVal) && Number.isFinite(numRaw)) {
+          switch (operator) {
+            case 'gt': return numRaw > numVal;
+            case 'gte': return numRaw >= numVal;
+            case 'lt': return numRaw < numVal;
+            case 'lte': return numRaw <= numVal;
+            default: return false;
+          }
+        }
+        const strRaw = raw == null ? '' : String(raw);
+        const strVal = value == null ? '' : String(value);
+        const cmp = strRaw.localeCompare(strVal, undefined, { numeric: true });
+        switch (operator) {
+          case 'gt': return cmp > 0;
+          case 'gte': return cmp >= 0;
+          case 'lt': return cmp < 0;
+          case 'lte': return cmp <= 0;
+          default: return false;
+        }
+      })()
+    : false;
+
+  const usePaymentButtons = paymentButtonConfig?.conditionalButton && paymentButtonConfig?.defaultButton;
+  const effectiveActionButtons = usePaymentButtons
+    ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
+    : actionButtons;
+  const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
 
   return (
@@ -445,40 +489,42 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             })
           )}
 
-          {/* Final price (modal-only): saves total_price and unit_price on save */}
-          <div className="space-y-3 pt-2 border-t border-border/60">
-            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Final price
-            </Label>
-            <div className="flex flex-wrap items-center gap-4">
-              <Input
-                type="number"
-                min={0}
-                step={0.01}
-                placeholder="0.00"
-                value={finalPriceValue}
-                onChange={(e) => setFinalPriceValue(e.target.value)}
-                className="h-9 text-sm rounded-md w-32"
-                disabled={!canUpdate}
-              />
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground">
-                <Checkbox
-                  checked={finalPriceIsTotal}
-                  onCheckedChange={(c) => setFinalPriceIsTotal(c === true)}
+          {/* Final price (form-style modal only; not shown for Inventory Payment modal — use modal fields for total_price/unit_price there) */}
+          {!paymentButtonConfig && (
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Final price
+              </Label>
+              <div className="flex flex-wrap items-center gap-4">
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder="0.00"
+                  value={finalPriceValue}
+                  onChange={(e) => setFinalPriceValue(e.target.value)}
+                  className="h-9 text-sm rounded-md w-32"
                   disabled={!canUpdate}
                 />
-                <span>Total price (uncheck for unit price)</span>
-              </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={finalPriceIsTotal}
+                    onCheckedChange={(c) => setFinalPriceIsTotal(c === true)}
+                    disabled={!canUpdate}
+                  />
+                  <span>Total price (uncheck for unit price)</span>
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                On save, total_price and unit_price are calculated from quantity and saved to the record.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              On save, total_price and unit_price are calculated from quantity and saved to the record.
-            </p>
-          </div>
+          )}
         </div>
         <DialogFooter className="border-t pt-4 gap-2 flex-wrap">
           {hasActionButtons && (
             <div className="flex flex-wrap gap-2">
-              {actionButtons!.map((btn) => (
+              {effectiveActionButtons!.map((btn) => (
                 <Button
                   key={btn.statusValue}
                   type="button"

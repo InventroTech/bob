@@ -288,7 +288,7 @@ interface LeadTableProps {
     };
     entityType?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'receive_shipments' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'none' | 'auto';
     statusOptions?: string[];
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
@@ -317,6 +317,11 @@ interface LeadTableProps {
     formModalFields?: Array<{ key: string; label: string; enabled: boolean }>;
     formModalTitle?: string;
     formModalDescription?: string;
+    /** For Inventory Payment modal: conditional button (when attribute op value) + default button. */
+    paymentModalConfig?: {
+      conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string; label: string; statusValue: string };
+      defaultButton: { label: string; statusValue: string };
+    };
   };
 }
 
@@ -333,6 +338,17 @@ const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: s
   { key: 'project_purpose', label: 'Project / purpose', enabled: true },
   { key: 'department', label: 'Department', enabled: true },
   { key: 'cart_id', label: 'Cart', enabled: true },
+];
+
+/** Default fields for Inventory Payment modal when none configured (mix of show-only and editable). */
+const DEFAULT_PAYMENT_MODAL_FIELDS: Array<{ key: string; label: string; enabled: boolean }> = [
+  { key: 'status', label: 'Status', enabled: true },
+  { key: 'item_name_freeform', label: 'Item name', enabled: false },
+  { key: 'quantity', label: 'Quantity', enabled: false },
+  { key: 'total_price', label: 'Total price', enabled: false },
+  { key: 'unit_price', label: 'Unit price', enabled: false },
+  { key: 'vendor', label: 'Vendor', enabled: false },
+  { key: 'comments', label: 'Comments', enabled: true },
 ];
 
 export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId }) => {
@@ -363,8 +379,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     return 'lead_card';
   }, [config?.detailMode, config?.entityType]);
 
-  /** Use form-style modal when detail mode is record_form_modal or when record detail modal type is form_edit. */
-  const useFormModal = effectiveDetailMode === 'record_form_modal' || (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit');
+  /** Use form-style modal when detail mode is record_form_modal, inventory_payment_modal, or when record detail modal type is form_edit. */
+  const useFormModal = effectiveDetailMode === 'record_form_modal' || effectiveDetailMode === 'inventory_payment_modal' || (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit');
 
   // Load cart options when opening record detail for inventory_request (not for receive_shipments modal)
   useEffect(() => {
@@ -2264,11 +2280,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           record={selectedRecord}
           entityType={config?.entityType}
           formModalFields={
-            (config?.formModalFields?.length ? config.formModalFields : config?.entityType === 'inventory_request' ? DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS : []) ?? []
+            (config?.formModalFields?.length
+              ? config.formModalFields
+              : effectiveDetailMode === 'inventory_payment_modal'
+                ? DEFAULT_PAYMENT_MODAL_FIELDS
+                : config?.entityType === 'inventory_request'
+                  ? DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS
+                  : []) ?? []
           }
           formModalTitle={config?.formModalTitle}
           formModalDescription={config?.formModalDescription}
-          actionButtons={config?.statusButtons}
+          actionButtons={effectiveDetailMode === 'inventory_payment_modal' ? undefined : config?.statusButtons}
+          paymentButtonConfig={effectiveDetailMode === 'inventory_payment_modal' ? config?.paymentModalConfig : undefined}
           cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
           onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
             ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {

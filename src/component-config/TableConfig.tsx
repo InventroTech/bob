@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DynamicFilterConfig, FilterConfig } from './DynamicFilterConfig';
+
+export type PaymentModalConfig = {
+  conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string; label: string; statusValue: string };
+  defaultButton: { label: string; statusValue: string };
+};
 
 export interface ColumnConfig {
   key: string;
@@ -48,12 +54,14 @@ interface TableConfigProps {
     formModalTitle?: string;
     /** Form modal description text below the title. */
     formModalDescription?: string;
+    /** For Inventory Payment modal: conditional button (when attribute op value) and default button. */
+    paymentModalConfig?: PaymentModalConfig;
   };
   localColumns: ColumnConfig[];
   numColumns: number;
   localFilters: FilterConfig[];
   numFilters: number;
-  handleInputChange: (field: string, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }>) => void;
+  handleInputChange: (field: string, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | PaymentModalConfig) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string | boolean) => void;
   handleColumnDelete?: (index: number) => void;
@@ -120,30 +128,6 @@ export const TableConfig: React.FC<TableConfigProps> = ({
         />
         <p className="text-xs text-gray-500 mt-1">
           For records API: entity_type sent to the API. Used to infer row-click behavior if Detail Mode is not set.
-        </p>
-      </div>
-
-      <div>
-        <Label>Detail Mode (row click)</Label>
-        <Select
-          value={localConfig.detailMode && localConfig.detailMode !== 'auto' ? localConfig.detailMode : 'auto'}
-          onValueChange={(value) => handleInputChange('detailMode', value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Auto (from Entity Type)" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="auto">Auto (from Entity Type)</SelectItem>
-            <SelectItem value="lead_card">Lead card (lead modal)</SelectItem>
-            <SelectItem value="inventory_request">Record detail (request)</SelectItem>
-            <SelectItem value="inventory_cart">Record detail (cart)</SelectItem>
-            <SelectItem value="record_form_modal">Record form modal</SelectItem>
-            <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
-            <SelectItem value="none">None (no row click)</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-gray-500 mt-1">
-          What happens when a row is clicked. Record form modal: form-style edit with action buttons; receive_shipments: quick add-to-inventory / roll-back modal.
         </p>
       </div>
 
@@ -217,208 +201,208 @@ export const TableConfig: React.FC<TableConfigProps> = ({
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label>Modal fields (record detail)</Label>
-        <p className="text-xs text-gray-500">
-          Choose which <code className="bg-muted px-1 rounded">record.data</code> keys appear in the record detail modal and toggle <strong>Editable</strong> on or off per field. Merged with columns marked &quot;Editable in record detail modal&quot;.
-        </p>
-        {modalFields.map((field, idx) => (
-          <div key={idx} className="flex flex-wrap gap-2 items-center p-2 border rounded-md bg-muted/30">
-            <Input
-              placeholder="Data key (e.g. status, comments)"
-              value={field.key}
-              onChange={(e) => {
-                const next = [...modalFields];
-                next[idx] = { ...next[idx], key: e.target.value };
-                setModalFields(next);
-                handleInputChange('modalFieldConfig', next);
-              }}
-              className="min-w-[140px]"
-            />
-            <div className="flex items-center gap-2 shrink-0">
-              <Switch
-                id={`modal-field-editable-${idx}`}
-                checked={field.editable}
-                onCheckedChange={(checked) => {
-                  const next = [...modalFields];
-                  next[idx] = { ...next[idx], editable: !!checked };
-                  setModalFields(next);
-                  handleInputChange('modalFieldConfig', next);
-                }}
-              />
-              <Label htmlFor={`modal-field-editable-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">
-                Editable
-              </Label>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const next = modalFields.filter((_, i) => i !== idx);
-                setModalFields(next);
-                handleInputChange('modalFieldConfig', next);
-              }}
-              className="text-red-600 hover:text-red-700"
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Modal settings</CardTitle>
+          <p className="text-xs text-muted-foreground font-normal">
+            Row-click behavior and modal title, fields, and action buttons.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label>Detail Mode (row click)</Label>
+            <Select
+              value={localConfig.detailMode && localConfig.detailMode !== 'auto' ? localConfig.detailMode : 'auto'}
+              onValueChange={(value) => handleInputChange('detailMode', value)}
             >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            const next = [...modalFields, { key: '', editable: true }];
-            setModalFields(next);
-            handleInputChange('modalFieldConfig', next);
-          }}
-        >
-          Add modal field
-        </Button>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Record detail modal type</Label>
-        <Select
-          value={localConfig.recordDetailModalType === 'form_edit' ? 'form_edit' : 'default'}
-          onValueChange={(value: 'default' | 'form_edit') => handleInputChange('recordDetailModalType', value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Default" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="default">Default (record detail view/edit)</SelectItem>
-            <SelectItem value="form_edit">Form-style (inventory form layout + action buttons)</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-gray-500 mt-1">
-          Form-style: same layout as inventory form; action buttons update the entry. Configure fields below.
-        </p>
-      </div>
-
-      {(localConfig.recordDetailModalType === 'form_edit' || localConfig.detailMode === 'record_form_modal') && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Form modal title</Label>
-            <Input
-              value={localConfig.formModalTitle ?? ''}
-              onChange={(e) => handleInputChange('formModalTitle', e.target.value)}
-              placeholder="e.g. Edit record"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Form modal description</Label>
-            <Input
-              value={localConfig.formModalDescription ?? ''}
-              onChange={(e) => handleInputChange('formModalDescription', e.target.value)}
-              placeholder="e.g. Edit fields below. Use an action button to save and set status, or Save to save changes only."
-            />
-            <p className="text-xs text-gray-500">
-              Shown below the title. Leave empty to use the default text.
+              <SelectTrigger>
+                <SelectValue placeholder="Auto (from Entity Type)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto (from Entity Type)</SelectItem>
+                <SelectItem value="lead_card">Lead card (lead modal)</SelectItem>
+                <SelectItem value="inventory_request">Record detail (request)</SelectItem>
+                <SelectItem value="inventory_cart">Record detail (cart)</SelectItem>
+                <SelectItem value="record_form_modal">Record form modal</SelectItem>
+                <SelectItem value="inventory_payment_modal">Inventory Payment modal</SelectItem>
+                <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
+                <SelectItem value="none">None (no row click)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500 mt-1">
+              What happens when a row is clicked. Payment modal: one conditional + one default action button.
             </p>
           </div>
-          <div className="space-y-2">
-            <Label>Form modal fields</Label>
-            <p className="text-xs text-gray-500">
-              Fields shown in the form-style modal. <strong>Key</strong> = data key, <strong>Text</strong> = label to show. Toggle <strong>Enabled</strong> to allow editing (disabled = read-only). Default: all enabled for inventory request.
-            </p>
-          {formModalFieldsList.map((field, idx) => (
-            <div key={idx} className="flex flex-wrap gap-2 items-center p-2 border rounded-md bg-muted/30">
-              <Input
-                placeholder="Key (e.g. status, comments)"
-                value={field.key}
-                onChange={(e) => {
-                  const next = [...formModalFieldsList];
-                  next[idx] = { ...next[idx], key: e.target.value };
-                  setFormModalFieldsList(next);
-                  handleInputChange('formModalFields', next);
-                }}
-                className="min-w-[120px]"
-              />
-              <Input
-                placeholder="Text to show (label)"
-                value={field.label}
-                onChange={(e) => {
-                  const next = [...formModalFieldsList];
-                  next[idx] = { ...next[idx], label: e.target.value };
-                  setFormModalFieldsList(next);
-                  handleInputChange('formModalFields', next);
-                }}
-                className="min-w-[140px]"
-              />
-              <div className="flex items-center gap-2 shrink-0">
-                <Switch
-                  id={`form-field-enabled-${idx}`}
-                  checked={field.enabled}
-                  onCheckedChange={(checked) => {
-                    const next = [...formModalFieldsList];
-                    next[idx] = { ...next[idx], enabled: !!checked };
-                    setFormModalFieldsList(next);
-                    handleInputChange('formModalFields', next);
-                  }}
-                />
-                <Label htmlFor={`form-field-enabled-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">
-                  Enabled
-                </Label>
+
+          {/* Record detail (request/cart) — default or form-style */}
+          {(localConfig.detailMode === 'inventory_request' || localConfig.detailMode === 'inventory_cart') && (
+            <>
+              <div className="space-y-2">
+                <Label>Record detail modal type</Label>
+                <Select
+                  value={localConfig.recordDetailModalType === 'form_edit' ? 'form_edit' : 'default'}
+                  onValueChange={(value: 'default' | 'form_edit') => handleInputChange('recordDetailModalType', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default (view/edit)</SelectItem>
+                    <SelectItem value="form_edit">Form-style (fields + action buttons)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  const next = formModalFieldsList.filter((_, i) => i !== idx);
-                  setFormModalFieldsList(next);
-                  handleInputChange('formModalFields', next);
-                }}
-                className="text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {localConfig.recordDetailModalType !== 'form_edit' && (
+                <div className="space-y-2">
+                  <Label>Modal fields (record detail)</Label>
+                  <p className="text-xs text-gray-500">
+                    <code className="bg-muted px-1 rounded">record.data</code> keys and Editable toggle.
+                  </p>
+                  {modalFields.map((field, idx) => (
+                    <div key={idx} className="flex flex-wrap gap-2 items-center p-2 border rounded-md bg-muted/30">
+                      <Input
+                        placeholder="Data key"
+                        value={field.key}
+                        onChange={(e) => {
+                          const next = [...modalFields];
+                          next[idx] = { ...next[idx], key: e.target.value };
+                          setModalFields(next);
+                          handleInputChange('modalFieldConfig', next);
+                        }}
+                        className="min-w-[140px]"
+                      />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Switch
+                          id={`modal-field-editable-${idx}`}
+                          checked={field.editable}
+                          onCheckedChange={(checked) => {
+                            const next = [...modalFields];
+                            next[idx] = { ...next[idx], editable: !!checked };
+                            setModalFields(next);
+                            handleInputChange('modalFieldConfig', next);
+                          }}
+                        />
+                        <Label htmlFor={`modal-field-editable-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">Editable</Label>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => { const next = modalFields.filter((_, i) => i !== idx); setModalFields(next); handleInputChange('modalFieldConfig', next); }} className="text-red-600 hover:text-red-700">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" onClick={() => { const next = [...modalFields, { key: '', editable: true }]; setModalFields(next); handleInputChange('modalFieldConfig', next); }}>
+                    Add modal field
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Form-style modal: title, description, form fields — for record_form_modal or form_edit */}
+          {((localConfig.detailMode === 'record_form_modal') || ((localConfig.detailMode === 'inventory_request' || localConfig.detailMode === 'inventory_cart') && localConfig.recordDetailModalType === 'form_edit')) && (
+            <div className="space-y-4 border-t pt-4">
+              <div className="space-y-2">
+                <Label>Modal title</Label>
+                <Input value={localConfig.formModalTitle ?? ''} onChange={(e) => handleInputChange('formModalTitle', e.target.value)} placeholder="e.g. Edit record" />
+              </div>
+              <div className="space-y-2">
+                <Label>Modal description</Label>
+                <Input value={localConfig.formModalDescription ?? ''} onChange={(e) => handleInputChange('formModalDescription', e.target.value)} placeholder="Shown below the title" />
+              </div>
+              <div className="space-y-2">
+                <Label>Form modal fields</Label>
+                <p className="text-xs text-gray-500">Key = data key, Text = label. Toggle Enabled for editing.</p>
+                {formModalFieldsList.map((field, idx) => (
+                  <div key={idx} className="flex flex-wrap gap-2 items-center p-2 border rounded-md bg-muted/30">
+                    <Input placeholder="Key" value={field.key} onChange={(e) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], key: e.target.value }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="min-w-[120px]" />
+                    <Input placeholder="Label" value={field.label} onChange={(e) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], label: e.target.value }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="min-w-[140px]" />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Switch id={`form-field-enabled-${idx}`} checked={field.enabled} onCheckedChange={(checked) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], enabled: !!checked }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} />
+                      <Label htmlFor={`form-field-enabled-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">Enabled</Label>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { const next = formModalFieldsList.filter((_, i) => i !== idx); setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="text-red-600 hover:text-red-700"><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => { const next = [...formModalFieldsList, { key: '', label: '', enabled: true }]; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }}>Add field</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => {
+                    const defaultFields: Array<{ key: string; label: string; enabled: boolean }> = [
+                      { key: 'status', label: 'Status', enabled: true }, { key: 'quantity_required', label: 'Quantity required', enabled: true }, { key: 'quantity', label: 'Quantity', enabled: true }, { key: 'item_name_freeform', label: 'Item name', enabled: true }, { key: 'vendor', label: 'Vendor', enabled: true }, { key: 'comments', label: 'Comments', enabled: true }, { key: 'notes', label: 'Notes', enabled: true }, { key: 'urgency_level', label: 'Urgency', enabled: true }, { key: 'project_purpose', label: 'Project / purpose', enabled: true }, { key: 'department', label: 'Department', enabled: true }, { key: 'cart_id', label: 'Cart', enabled: true },
+                    ];
+                    setFormModalFieldsList(defaultFields);
+                    handleInputChange('formModalFields', defaultFields);
+                  }}>Use default (inventory request)</Button>
+                </div>
+              </div>
             </div>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const next = [...formModalFieldsList, { key: '', label: '', enabled: true }];
-                setFormModalFieldsList(next);
-                handleInputChange('formModalFields', next);
-              }}
-            >
-              Add field
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const defaultFields: Array<{ key: string; label: string; enabled: boolean }> = [
-                  { key: 'status', label: 'Status', enabled: true },
-                  { key: 'quantity_required', label: 'Quantity required', enabled: true },
-                  { key: 'quantity', label: 'Quantity', enabled: true },
-                  { key: 'item_name_freeform', label: 'Item name', enabled: true },
-                  { key: 'vendor', label: 'Vendor', enabled: true },
-                  { key: 'comments', label: 'Comments', enabled: true },
-                  { key: 'notes', label: 'Notes', enabled: true },
-                  { key: 'urgency_level', label: 'Urgency', enabled: true },
-                  { key: 'project_purpose', label: 'Project / purpose', enabled: true },
-                  { key: 'department', label: 'Department', enabled: true },
-                  { key: 'cart_id', label: 'Cart', enabled: true },
-                ];
-                setFormModalFieldsList(defaultFields);
-                handleInputChange('formModalFields', defaultFields);
-              }}
-            >
-              Use default (inventory request)
-            </Button>
-          </div>
-          </div>
-        </div>
-      )}
+          )}
+
+          {/* Inventory Payment modal: title, description, fields (show/enable), conditional + default button */}
+          {localConfig.detailMode === 'inventory_payment_modal' && (
+            <div className="space-y-4 border-t pt-4">
+              <div className="space-y-2">
+                <Label>Modal title</Label>
+                <Input value={localConfig.formModalTitle ?? ''} onChange={(e) => handleInputChange('formModalTitle', e.target.value)} placeholder="e.g. Payment" />
+              </div>
+              <div className="space-y-2">
+                <Label>Modal description</Label>
+                <Input value={localConfig.formModalDescription ?? ''} onChange={(e) => handleInputChange('formModalDescription', e.target.value)} placeholder="Shown below the title" />
+              </div>
+              <div className="space-y-2">
+                <Label>Modal fields (details to show)</Label>
+                <p className="text-xs text-gray-500">Choose which fields appear in the payment modal. <strong>Key</strong> = data key, <strong>Label</strong> = text to show. Toggle <strong>Enabled</strong> to allow editing (disabled = read-only).</p>
+                {formModalFieldsList.map((field, idx) => (
+                  <div key={idx} className="flex flex-wrap gap-2 items-center p-2 border rounded-md bg-muted/30">
+                    <Input placeholder="Key (e.g. total_price, status)" value={field.key} onChange={(e) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], key: e.target.value }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="min-w-[120px]" />
+                    <Input placeholder="Label" value={field.label} onChange={(e) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], label: e.target.value }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="min-w-[140px]" />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Switch id={`payment-form-enabled-${idx}`} checked={field.enabled} onCheckedChange={(checked) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], enabled: !!checked }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} />
+                      <Label htmlFor={`payment-form-enabled-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">Enabled</Label>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { const next = formModalFieldsList.filter((_, i) => i !== idx); setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="text-red-600 hover:text-red-700"><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => { const next = [...formModalFieldsList, { key: '', label: '', enabled: true }]; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }}>Add field</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => {
+                    const defaultFields: Array<{ key: string; label: string; enabled: boolean }> = [
+                      { key: 'status', label: 'Status', enabled: true }, { key: 'item_name_freeform', label: 'Item name', enabled: false }, { key: 'quantity', label: 'Quantity', enabled: false }, { key: 'total_price', label: 'Total price', enabled: false }, { key: 'unit_price', label: 'Unit price', enabled: false }, { key: 'vendor', label: 'Vendor', enabled: false }, { key: 'comments', label: 'Comments', enabled: true },
+                    ];
+                    setFormModalFieldsList(defaultFields);
+                    handleInputChange('formModalFields', defaultFields);
+                  }}>Use default (payment)</Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Conditional button (when attribute matches)</Label>
+                <p className="text-xs text-gray-500">Show this button when <code className="bg-muted px-1 rounded">record.data[attribute]</code> is greater/less than value.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input placeholder="Attribute (e.g. amount)" value={localConfig.paymentModalConfig?.conditionalButton?.attribute ?? ''} onChange={(e) => handleInputChange('paymentModalConfig', { ...localConfig.paymentModalConfig, conditionalButton: { ...localConfig.paymentModalConfig?.conditionalButton, attribute: e.target.value, operator: localConfig.paymentModalConfig?.conditionalButton?.operator ?? 'gt', value: localConfig.paymentModalConfig?.conditionalButton?.value ?? '', label: localConfig.paymentModalConfig?.conditionalButton?.label ?? '', statusValue: localConfig.paymentModalConfig?.conditionalButton?.statusValue ?? '' }, defaultButton: localConfig.paymentModalConfig?.defaultButton ?? { label: '', statusValue: '' } })} />
+                  <Select value={localConfig.paymentModalConfig?.conditionalButton?.operator ?? 'gt'} onValueChange={(v: 'gt'|'lt'|'gte'|'lte') => handleInputChange('paymentModalConfig', { ...localConfig.paymentModalConfig, conditionalButton: { ...localConfig.paymentModalConfig?.conditionalButton, attribute: localConfig.paymentModalConfig?.conditionalButton?.attribute ?? '', operator: v, value: localConfig.paymentModalConfig?.conditionalButton?.value ?? '', label: localConfig.paymentModalConfig?.conditionalButton?.label ?? '', statusValue: localConfig.paymentModalConfig?.conditionalButton?.statusValue ?? '' }, defaultButton: localConfig.paymentModalConfig?.defaultButton ?? { label: '', statusValue: '' } })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gt">Greater than</SelectItem>
+                      <SelectItem value="gte">Greater or equal</SelectItem>
+                      <SelectItem value="lt">Less than</SelectItem>
+                      <SelectItem value="lte">Less or equal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input placeholder="Value (e.g. 1000)" value={localConfig.paymentModalConfig?.conditionalButton?.value ?? ''} onChange={(e) => handleInputChange('paymentModalConfig', { ...localConfig.paymentModalConfig, conditionalButton: { ...localConfig.paymentModalConfig?.conditionalButton, attribute: localConfig.paymentModalConfig?.conditionalButton?.attribute ?? '', operator: localConfig.paymentModalConfig?.conditionalButton?.operator ?? 'gt', value: e.target.value, label: localConfig.paymentModalConfig?.conditionalButton?.label ?? '', statusValue: localConfig.paymentModalConfig?.conditionalButton?.statusValue ?? '' }, defaultButton: localConfig.paymentModalConfig?.defaultButton ?? { label: '', statusValue: '' } })} />
+                  <Input placeholder="Button label" value={localConfig.paymentModalConfig?.conditionalButton?.label ?? ''} onChange={(e) => handleInputChange('paymentModalConfig', { ...localConfig.paymentModalConfig, conditionalButton: { ...localConfig.paymentModalConfig?.conditionalButton, attribute: localConfig.paymentModalConfig?.conditionalButton?.attribute ?? '', operator: localConfig.paymentModalConfig?.conditionalButton?.operator ?? 'gt', value: localConfig.paymentModalConfig?.conditionalButton?.value ?? '', label: e.target.value, statusValue: localConfig.paymentModalConfig?.conditionalButton?.statusValue ?? '' }, defaultButton: localConfig.paymentModalConfig?.defaultButton ?? { label: '', statusValue: '' } })} />
+                  <Input placeholder="Status value" value={localConfig.paymentModalConfig?.conditionalButton?.statusValue ?? ''} onChange={(e) => handleInputChange('paymentModalConfig', { ...localConfig.paymentModalConfig, conditionalButton: { ...localConfig.paymentModalConfig?.conditionalButton, attribute: localConfig.paymentModalConfig?.conditionalButton?.attribute ?? '', operator: localConfig.paymentModalConfig?.conditionalButton?.operator ?? 'gt', value: localConfig.paymentModalConfig?.conditionalButton?.value ?? '', label: localConfig.paymentModalConfig?.conditionalButton?.label ?? '', statusValue: e.target.value }, defaultButton: localConfig.paymentModalConfig?.defaultButton ?? { label: '', statusValue: '' } })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Default button (otherwise)</Label>
+                <p className="text-xs text-gray-500">Shown when the condition above does not match.</p>
+                <div className="flex gap-2">
+                  <Input placeholder="Button label" value={localConfig.paymentModalConfig?.defaultButton?.label ?? ''} onChange={(e) => handleInputChange('paymentModalConfig', { ...localConfig.paymentModalConfig, conditionalButton: localConfig.paymentModalConfig?.conditionalButton ?? { attribute: '', operator: 'gt', value: '', label: '', statusValue: '' }, defaultButton: { ...localConfig.paymentModalConfig?.defaultButton, label: e.target.value, statusValue: localConfig.paymentModalConfig?.defaultButton?.statusValue ?? '' } })} />
+                  <Input placeholder="Status value" value={localConfig.paymentModalConfig?.defaultButton?.statusValue ?? ''} onChange={(e) => handleInputChange('paymentModalConfig', { ...localConfig.paymentModalConfig, conditionalButton: localConfig.paymentModalConfig?.conditionalButton ?? { attribute: '', operator: 'gt', value: '', label: '', statusValue: '' }, defaultButton: { ...localConfig.paymentModalConfig?.defaultButton, label: localConfig.paymentModalConfig?.defaultButton?.label ?? '', statusValue: e.target.value } })} />
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="columns" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
