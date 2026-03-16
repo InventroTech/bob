@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
+import { getEffectiveToken, isSpoofing, getSpoofUserLabel, fetchPagesForRole } from '@/lib/spoof';
 
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -39,15 +40,15 @@ const CustomAppDashboard: React.FC = () => {
       try {
         // Get session to extract JWT token
 
-        if (!session?.access_token) {
+        const token = await getEffectiveToken(session?.access_token ?? null);
+        if (!token) {
           console.error('No session found');
           toast.error('Failed to load user data');
           setLoading(false);
           return;
         }
 
-        // Extract tenant_id and role_id from JWT token (no API call needed)
-        const token = session.access_token;
+        // Extract tenant_id and role_id from JWT token (spoof or real)
         const tenantId = getTenantIdFromJWT(token);
         const roleId = getRoleIdFromJWT(token);
 
@@ -63,22 +64,24 @@ const CustomAppDashboard: React.FC = () => {
 
         console.log('Tenant ID:', tenantId, 'Role ID:', roleId);
 
-        // Fetch pages for this tenant and role
-        const { data: pages, error: pagesError } = await supabase
-          .from('pages')
-          .select('id, name')
-          .eq('tenant_id', tenantId)
-          .eq('role', roleId)
-          .order('display_order', { ascending: true });
+        const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
+        let pages: { id: string; name: string }[] | null = null;
 
-        console.log('Pages query result:', { pages, pagesError });
-
-        if (pagesError) {
-          console.error('Error fetching pages:', pagesError);
-          toast.error('Failed to load pages');
-          setLoading(false);
-          return;
+        if (spoofToken) {
+          const navPages = await fetchPagesForRole(tenantId, roleId, spoofToken);
+          pages = navPages.map((p) => ({ id: p.id, name: p.name }));
+        } else {
+          const { data: pagesData, error: pagesError } = await supabase
+            .from('pages')
+            .select('id, name')
+            .eq('tenant_id', tenantId)
+            .eq('role', roleId)
+            .order('display_order', { ascending: true });
+          if (pagesError) throw pagesError;
+          pages = pagesData;
         }
+
+        console.log('Pages query result:', { pages });
 
         if (pages && pages.length > 0) {
           console.log('Found pages:', pages);
@@ -134,7 +137,7 @@ const CustomAppDashboard: React.FC = () => {
             Contact your administrator to create pages for your account.
           </p>
           <p className="text-xs text-gray-500">
-            User: {user?.email}
+            User: {isSpoofing() && getSpoofUserLabel() ? getSpoofUserLabel() : user?.email}
           </p>
           {userRoleId && (
             <p className="text-xs text-gray-500">

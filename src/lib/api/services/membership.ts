@@ -370,5 +370,21 @@ export const membershipService = {
       return null;
     }
   },
+
+  /**
+   * Generate a spoofing JWT for a specific tenant membership.
+   * Used by admin tools to temporarily act as another user.
+   */
+  async spoofUserToken(
+    membershipId: string
+  ): Promise<{ token: string; email: string; name?: string; tenant_id?: string }> {
+    const response = await apiClient.post<{
+      token: string;
+      email: string;
+      name?: string;
+      tenant_id?: string;
+    }>(`/membership/users/${membershipId}/spoof-token/`);
+    return response.data;
+  },
 };
 
