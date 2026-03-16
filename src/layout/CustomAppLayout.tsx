@@ -7,6 +7,7 @@ import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layer
 import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
+import { getEffectiveToken, isSpoofing, getSpoofUserLabel, SPOOF_CHANGED_EVENT, fetchPagesForRole } from '@/lib/spoof';
 import { icons} from 'lucide-react';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon} from '@/components/icons/CustomIcons';
 import { useLeadFollowupsWithUnread, formatNextCallRelative } from '@/hooks/useLeadFollowups';
@@ -52,6 +53,8 @@ const CustomAppLayout: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const [spoofBannerVisible, setSpoofBannerVisible] = useState(() => isSpoofing());
+  const [spoofVersion, setSpoofVersion] = useState(0);
 
   const sidebarWidths = {
     expanded: 288,
@@ -59,11 +62,13 @@ const CustomAppLayout: React.FC = () => {
   };
 
   const profileImage = user?.user_metadata?.picture || user?.user_metadata?.avatar_url || '';
-  const profileName =
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.name ||
-    user?.email?.split('@')[0] ||
-    'User';
+  const spoofLabel = getSpoofUserLabel();
+  const profileName = isSpoofing() && spoofLabel
+    ? spoofLabel
+    : user?.user_metadata?.full_name ||
+      user?.user_metadata?.name ||
+      user?.email?.split('@')[0] ||
+      'User';
 
   const dataExtractedRef = useRef(false); // Track if we've already extracted data from JWT
   const { unread, unreadCount, markAsRead, markAllAsRead } = useLeadFollowupsWithUnread();
@@ -77,7 +82,7 @@ const CustomAppLayout: React.FC = () => {
     }
   }, [user]);
 
-  // Step 1: Get current user and their role from JWT (no API calls needed)
+  // Step 1: Get current user and their role from JWT (use spoof token when spoofing)
   useEffect(() => {
     // Reset ref when user changes (e.g., on logout/login)
     if (!user) {
@@ -92,17 +97,17 @@ const CustomAppLayout: React.FC = () => {
       if (dataExtractedRef.current && tenantId && userRoleId) {
         return;
       }
-      
-      if (!session?.access_token) {
+
+      const token = await getEffectiveToken(session?.access_token ?? null);
+      if (!token) {
         console.error('No session found');
         return;
       }
-    
-      // Extract tenant_id and role_id from JWT token
-      const token = session.access_token;
+
+      // Extract tenant_id and role_id from JWT token (spoof or real)
       const extractedTenantId = getTenantIdFromJWT(token);
       const extractedRoleId = getRoleIdFromJWT(token);
-      
+
       if (extractedTenantId && extractedRoleId) {
         console.log('Extracted from JWT - tenantId:', extractedTenantId, 'roleId:', extractedRoleId);
         setTenantId(extractedTenantId);
@@ -118,16 +123,52 @@ const CustomAppLayout: React.FC = () => {
         }
       }
     };
-    
+
     extractUserDataFromJWT();
-  }, [user]);
+  }, [user, session?.access_token, spoofVersion]);
+
+  // Re-extract and update UI when spoof state changes (same tab or other tab)
+  useEffect(() => {
+    const onStorageChange = (e: StorageEvent) => {
+      if (e.key === 'pyro_spoof_jwt' || e.key === 'pyro_spoof_user_label') {
+        setSpoofBannerVisible(isSpoofing());
+        dataExtractedRef.current = false;
+        setSpoofVersion((v) => v + 1);
+      }
+    };
+    const onSpoofChanged = () => {
+      setSpoofBannerVisible(isSpoofing());
+      dataExtractedRef.current = false;
+      setSpoofVersion((v) => v + 1);
+    };
+    window.addEventListener('storage', onStorageChange);
+    window.addEventListener(SPOOF_CHANGED_EVENT, onSpoofChanged);
+    return () => {
+      window.removeEventListener('storage', onStorageChange);
+      window.removeEventListener(SPOOF_CHANGED_EVENT, onSpoofChanged);
+    };
+  }, []);
 
   // Step 2: Fetch pages that match the user's role
   useEffect(() => {
     const fetchPages = async () => {
       if (!tenantId || !userRoleId) return;
 
-      const { data : pagesData, error } = await supabase 
+      const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
+      if (spoofToken) {
+        // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
+        try {
+          const pagesData = await fetchPagesForRole(tenantId, userRoleId, spoofToken);
+          setPages(pagesData || []);
+        } catch (err) {
+          console.error('Pages fetch error (spoof):', err);
+          toast.error('Failed to load pages');
+          setPages([]);
+        }
+        return;
+      }
+
+      const { data: pagesData, error } = await supabase
         .from('pages')
         .select('id, name, display_order, icon_name')
         .eq('tenant_id', tenantId)
@@ -147,6 +188,20 @@ const CustomAppLayout: React.FC = () => {
 
     fetchPages();
   }, [tenantId, userRoleId]);
+
+  const handleStopSpoofing = () => {
+    try {
+      window.localStorage.removeItem('pyro_spoof_jwt');
+      window.localStorage.removeItem('pyro_spoof_original_jwt');
+      window.localStorage.removeItem('pyro_spoof_user_label');
+      dataExtractedRef.current = false;
+      setTenantId(null);
+      setUserRoleId(null);
+      navigate('/');
+    } catch (err) {
+      console.error('Failed to stop spoofing:', err);
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -345,8 +400,22 @@ const CustomAppLayout: React.FC = () => {
         className="flex-1 bg-white transition-all duration-200 overflow-auto"
         style={{ marginLeft: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
+        {spoofBannerVisible && spoofLabel && (
+          <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">
+            <span className="truncate">
+              Spoofing as <span className="font-semibold">{spoofLabel}</span>
+            </span>
+            <button
+              type="button"
+              onClick={handleStopSpoofing}
+              className="ml-4 rounded border border-black/40 px-2 py-0.5 text-xs font-medium hover:bg-black hover:text-amber-300"
+            >
+              Stop spoofing
+            </button>
+          </div>
+        )}
         <div className="min-h-screen w-full">
-          <Outlet />
+          <Outlet context={{ tenantId, userRoleId }} />
         </div>
       </main>
     </div>

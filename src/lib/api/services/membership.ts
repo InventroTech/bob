@@ -76,6 +76,10 @@ export interface MyMembershipResponse {
   is_active?: boolean;
   department?: string | null;
   error?: string;
+  /** Current user's TenantMembership id (integer). Used for team_lead when user_parent_id is null. */
+  tenant_membership_id?: number | null;
+  /** Parent TenantMembership id (user_parent_id_id). If null, use tenant_membership_id as team_lead. */
+  user_parent_id?: number | null;
 }
 
 /**
@@ -365,6 +369,22 @@ export const membershipService = {
       });
       return null;
     }
+  },
+
+  /**
+   * Generate a spoofing JWT for a specific tenant membership.
+   * Used by admin tools to temporarily act as another user.
+   */
+  async spoofUserToken(
+    membershipId: string
+  ): Promise<{ token: string; email: string; name?: string; tenant_id?: string }> {
+    const response = await apiClient.post<{
+      token: string;
+      email: string;
+      name?: string;
+      tenant_id?: string;
+    }>(`/membership/users/${membershipId}/spoof-token/`);
+    return response.data;
   },
 };
 

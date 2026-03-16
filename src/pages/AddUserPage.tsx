@@ -9,8 +9,9 @@ import { toast } from 'sonner';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Trash2 } from 'lucide-react';
+import { Trash2, Eye } from 'lucide-react';
 import { membershipService } from '@/lib/api';
+import { getEffectiveToken, dispatchSpoofChanged } from '@/lib/spoof';
 
 interface Role {
   id: string;
@@ -19,11 +20,14 @@ interface Role {
 
 interface User {
   uid: string;
+  membershipId?: string;
+  supabaseUserId?: string;
   name: string;
   email: string;
   role_id: string;
   created_at: string;
   role?: Role;
+  department?: string;
 }
 
 interface DatabaseUser {
@@ -46,7 +50,7 @@ const AddUserPage = () => {
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleKey, setNewRoleKey] = useState('');
-  const [formData, setFormData] = useState({ name: '', email: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', department: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
 
@@ -89,7 +93,7 @@ const AddUserPage = () => {
     setIsLoading(true);
 
     try {
-      const token = session?.access_token;
+      const token = await getEffectiveToken(session?.access_token ?? null);
 
       if (!token) {
         console.error('No authentication token available');
@@ -134,11 +138,14 @@ const AddUserPage = () => {
       // Transform the data to match expected format
       const transformedUsers: User[] = usersData.map((user: any, index: number) => ({
         uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
+        membershipId: user.id ? String(user.id) : undefined,
+        supabaseUserId: user.user_id ? String(user.user_id) : undefined,
         name: user.name || user.full_name || 'Unnamed User',
         email: user.email || 'No Email',
         role_id: user.role_id || user.role?.id || '',
         created_at: user.created_at || user.date_joined || new Date().toISOString(),
-        role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined)
+        role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined),
+        department: user.department ?? user.department_name ?? undefined
       }));
 
       setUsers(transformedUsers);
@@ -203,7 +210,7 @@ const AddUserPage = () => {
       return;
     }
     try {
-      const token = session?.access_token;
+      const token = await getEffectiveToken(session?.access_token ?? null);
 
       if (!token) {
         toast.error('Authentication required');
@@ -217,6 +224,13 @@ const AddUserPage = () => {
       console.log('Creating user via:', apiUrl);
       console.log('Payload:', { name: formData.name, email: formData.email, role_id: selectedRoleId });
 
+      const payload: Record<string, string> = {
+        name: formData.name,
+        email: formData.email,
+        role_id: selectedRoleId
+      };
+      if (formData.department?.trim()) payload.department = formData.department.trim();
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -224,11 +238,7 @@ const AddUserPage = () => {
           'Authorization': `Bearer ${token}`,
           'X-Tenant-Slug': 'bibhab-thepyro-ai'
         },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          role_id: selectedRoleId
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -242,7 +252,7 @@ const AddUserPage = () => {
 
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
-      setFormData({ name: '', email: '' });
+      setFormData({ name: '', email: '', department: '' });
       setSelectedRoleId('');
 
       // Refresh the users list
@@ -260,7 +270,7 @@ const AddUserPage = () => {
     }
 
     try {
-      const token = session?.access_token;
+      const token = await getEffectiveToken(session?.access_token ?? null);
 
       if (!token) {
         toast.error('Authentication required');
@@ -312,6 +322,43 @@ const AddUserPage = () => {
     }
   };
 
+  const handleSpoofUser = async (user: User) => {
+    try {
+      if (!user.membershipId) {
+        toast.error('Cannot spoof this user: missing membership id');
+        return;
+      }
+
+      // Get current "real" token once and store as original if not already stored
+      try {
+        const current = await getEffectiveToken(session?.access_token ?? null);
+        if (current && !window.localStorage.getItem('pyro_spoof_original_jwt')) {
+          window.localStorage.setItem('pyro_spoof_original_jwt', current);
+        }
+      } catch (err) {
+        console.warn('Unable to capture original JWT before spoofing', err);
+      }
+
+      const result = await membershipService.spoofUserToken(user.membershipId);
+
+      if (!result?.token) {
+        toast.error('Failed to generate spoof token for user');
+        return;
+      }
+
+      window.localStorage.setItem('pyro_spoof_jwt', result.token);
+      const label = user.name && user.email ? `${user.name} (${user.email})` : user.email || 'Unknown user';
+      window.localStorage.setItem('pyro_spoof_user_label', label);
+      dispatchSpoofChanged();
+
+      toast.success(`Now spoofing as ${label}`);
+    } catch (error: any) {
+      console.error('Error starting spoof session:', error);
+      const message = error?.response?.data?.error || error.message || 'Failed to start spoof session';
+      toast.error(message);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6 max-w-4xl mx-auto space-y-8">
@@ -336,6 +383,17 @@ const AddUserPage = () => {
               name="email"
               placeholder="user@example.com"
               value={formData.email}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="department">Department (optional)</Label>
+            <Input
+              id="department"
+              name="department"
+              placeholder="e.g. Engineering, Sales"
+              value={formData.department}
               onChange={handleChange}
             />
           </div>
@@ -441,6 +499,7 @@ const AddUserPage = () => {
                   <TableRow className="bg-black border-b border-gray-200">
                     <TableHead className="text-white font-medium">Name</TableHead>
                     <TableHead className="text-white font-medium">Email</TableHead>
+                    <TableHead className="text-white font-medium">Department</TableHead>
                     <TableHead className="text-white font-medium">Role</TableHead>
                     <TableHead className="text-white font-medium">Created At</TableHead>
                     <TableHead className="text-white font-medium text-right">Actions</TableHead>
@@ -453,19 +512,31 @@ const AddUserPage = () => {
                       <TableRow key={`${user.uid}-${index}`}>
                         <TableCell className="font-medium">{user.name}</TableCell>
                         <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.department || '—'}</TableCell>
                         <TableCell>{user.role?.name || 'No Role'}</TableCell>
                         <TableCell>
                           {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleDeleteUser(user.email, user.uid)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => handleSpoofUser(user)}
+                              title="Spoof this user"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteUser(user.email, user.uid)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
