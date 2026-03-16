@@ -1,17 +1,22 @@
 import { apiClient } from '../client';
 
 export interface PageRecord {
-  id: string;
-  name: string;
-  updated_at: string;
-  role: string;
-  display_order: number;
+  id?: string;
+  name?: string;
+  updated_at?: string;
+  role?: string | null;
+  display_order?: number;
+  config?: any;          // The JSON data for your drag-and-drop components
+  icon_name?: string;    // The icon chosen in the builder
+  header_title?: string; // The title shown in the app
+  tenant_id?: string;
+  user_id?: string;
 }
 
 export const pageService = {
   /**
-   * Get all pages for the current user
-   * Maps to: GET /pages/
+   * 1. Get all pages (Used in MyPages dashboard)
+   * GET /pages/
    */
   async getPages(userId: string): Promise<PageRecord[]> {
     try {
@@ -20,10 +25,8 @@ export const pageService = {
       const response = await apiClient.get(`/pages/`, {
         params: { user_id: userId },
       });
-
       const responseData = response.data;
-
-      // Robust parsing (same as your membershipService)
+      
       if (Array.isArray(responseData)) return responseData;
       if (responseData && typeof responseData === 'object') {
         if ('results' in responseData && Array.isArray((responseData as any).results))
@@ -33,7 +36,7 @@ export const pageService = {
       }
       return [];
     } catch (error) {
-      console.error('Error fetching pages from Render API:', error);
+      console.error('Error fetching pages:', error);
       throw error;
     }
   },
@@ -119,4 +122,21 @@ export const pageService = {
       throw error;
     }
   },
+
+  /**
+   * Save a brand new page (Used in PageBuilder)
+   * POST /pages/
+   */
+  async createPage(pageData: Partial<PageRecord>): Promise<{ id: string }> {
+    const response = await apiClient.post(`/pages/`, pageData);
+    return response.data.data || response.data;
+  },
+
+  /**
+   * Overwrite an existing page (Used in PageBuilder)
+   * PATCH /pages/{id}/
+   */
+  async updatePage(pageId: string, pageData: Partial<PageRecord>): Promise<void> {
+    await apiClient.patch(`/pages/${pageId}/`, pageData);
+  }
 };

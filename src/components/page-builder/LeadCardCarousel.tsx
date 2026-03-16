@@ -1207,11 +1207,8 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
   const handleSubmitCallBackLater = async (nextCallAt: string): Promise<boolean> => {
-    if (!nextCallAt) {
-      toast({ title: "Select time", description: "Please choose a valid date and time.", variant: "destructive" });
-      return false;
-    }
-    const result = await handleActionButton("Call Back Later", { nextCallAt });
+    // Time is optional: with time → 48h unassign; without → 12h unassign (backend rule engine)
+    const result = await handleActionButton("Call Back Later", { nextCallAt: nextCallAt || "" });
     // Note: onActionComplete will be called from handleActionButton if successful
     return result;
   };

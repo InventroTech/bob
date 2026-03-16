@@ -76,14 +76,15 @@ import {
 } from "@/components/page-builder";
 import RoutingRulesComponent from "@/components/page-builder/RoutingRulesComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
-import { membershipService } from '@/lib/api';
+
+import { membershipService, pageService } from '@/lib/api';
 import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
+
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
@@ -257,6 +258,8 @@ interface ComponentConfig {
   showTable?: boolean;
   showDiagram?: boolean;
   // InventoryRequestForm specific fields
+  entityType?: string;
+  initialStatus?: string;
   defaultStatus?: string;
 }
 
@@ -347,7 +350,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     /** Records table: entity type for API (e.g. inventory_request, inventory_cart). */
     entityType?: string;
     /** Records table: row click behavior — lead card, record detail modal, receive shipment modal, none, or auto (infer from entityType). */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'receive_shipments' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'none' | 'auto';
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -385,7 +388,21 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showTable?: boolean;
     showDiagram?: boolean;
     // InventoryRequestForm specific fields
+    initialStatus?: string;
     defaultStatus?: string;
+    // Records table (leadTable / inventoryTable): items table mode
+    tableType?: 'default' | 'itemsTable';
+    statusButtons?: Array<{ label: string; statusValue: string }>;
+    /** Per-field config for record detail modal: which data keys are editable (key + editable toggle). */
+    modalFieldConfig?: Array<{ key: string; editable: boolean }>;
+    /** 'default' | 'form_edit' — form_edit = inventory-form-style modal with action buttons. */
+    recordDetailModalType?: 'default' | 'form_edit';
+    /** For form_edit modal: fields (key, label, enabled). */
+    formModalFields?: Array<{ key: string; label: string; enabled: boolean }>;
+    formModalTitle?: string;
+    formModalDescription?: string;
+    paymentModalConfig?: import('@/component-config').PaymentModalConfig;
+    showFormModalSaveButton?: boolean;
   };
 
   // Local state for all input fields
@@ -438,8 +455,19 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // UserHierarchy
     showTable: initialConfig.showTable !== false,
     showDiagram: initialConfig.showDiagram !== false,
-    // InventoryRequestForm
-    defaultStatus: initialConfig.defaultStatus || 'DRAFT',
+    // InventoryRequestForm (empty by default so user can set from config)
+    initialStatus: (initialConfig as any).initialStatus ?? (initialConfig as any).defaultStatus ?? '',
+    defaultStatus: (initialConfig as any).defaultStatus ?? '',
+    // Records table: items table + status buttons
+    tableType: (initialConfig as any).tableType || 'default',
+    statusButtons: (initialConfig as any).statusButtons ?? [],
+    modalFieldConfig: (initialConfig as any).modalFieldConfig ?? [],
+    recordDetailModalType: (initialConfig as any).recordDetailModalType ?? 'default',
+    formModalFields: (initialConfig as any).formModalFields ?? [],
+    formModalTitle: (initialConfig as any).formModalTitle ?? '',
+    formModalDescription: (initialConfig as any).formModalDescription ?? '',
+    paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
+    showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
@@ -485,7 +513,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   );
 
   // Handle local input changes
-  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean) => {
+  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | import('@/component-config').PaymentModalConfig) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
     debouncedUpdateWithDelay({ [field]: value });
   }, [debouncedUpdateWithDelay]);
@@ -898,22 +926,25 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         return (
           <div className="space-y-4">
             <div>
-              <Label>Default Status</Label>
-              <Select
-                value={localConfig.defaultStatus || 'DRAFT'}
-                onValueChange={(value) => handleInputChange('defaultStatus', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select default status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INVENTORY_REQUEST_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Entity type</Label>
+              <Input
+                value={localConfig.entityType ?? 'inventory_request'}
+                onChange={(e) => handleInputChange('entityType', e.target.value)}
+                placeholder="inventory_request"
+              />
               <p className="text-xs text-muted-foreground mt-1">
-                Status to set on new inventory requests created from this form.
+                Entity type to save (e.g. inventory_request).
+              </p>
+            </div>
+            <div>
+              <Label>Initial status</Label>
+              <Input
+                value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
+                onChange={(e) => handleInputChange('initialStatus', e.target.value)}
+                placeholder="e.g. DRAFT"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Status for new requests. Leave empty to use default (DRAFT).
               </p>
             </div>
           </div>
@@ -975,7 +1006,6 @@ const PageBuilder = () => {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [activeComponent, setActiveComponent] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
-  const [collections, setCollections] = useState<{ id: string; name: string }[]>([]);
   const [selectedRole, setSelectedRole] = useState<string>("");
   // Update sensors with less restrictive configuration
   const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
@@ -1011,44 +1041,29 @@ const PageBuilder = () => {
     const fetchPageData = async () => {
       if (pageId && pageId !== 'new') {
         try {
-          const { data, error } = await supabase
-            .from('pages')
-            .select('name, config, role, header_title, display_order, icon_name')
-            .eq('id', pageId)
-            .single();
-
-          if (error) throw error;
+          // --- NEW RENDER API CALL ---
+          const data = await pageService.getPageById(pageId);
 
           if (data) {
-            // Supabase `pages.config` stores the canvas components. Older rows might be arrays.
-            // Normalize to array of CanvasComponentData.
             setPageName(data.name || 'Untitled Page');
-            // Try to get header_title if column exists, otherwise use empty string
-            setHeaderTitle((data as any).header_title || '');
-            setDisplayOrder((data as any).display_order || 0);
-            setPageIcon((data as any).icon_name || 'Sparkles');
-            setCanvasComponents(Array.isArray(data.config) ? (data.config as unknown as CanvasComponentData[]) : []);
+            setHeaderTitle(data.header_title || '');
+            setDisplayOrder(data.display_order || 0);
+            setPageIcon(data.icon_name || 'Sparkles');
+            setCanvasComponents(Array.isArray(data.config) ? data.config : []);
             if (data.role) setSelectedRole(data.role);
           } else {
             toast.error("Page not found.");
-            navigate('/'); // Redirect if page not found
+            navigate('/');
           }
         } catch (error: any) {
           toast.error(`Error loading page: ${error.message}`);
-          navigate('/'); // Redirect on error
+          navigate('/');
         }
       }
     };
 
     fetchPageData();
   }, [pageId, navigate]);
-
-  useEffect(() => {
-    if (!tenantId) return;
-    supabase.from('custom_tables').select('id, name').eq('tenant_id', tenantId).then(({ data }) => {
-      if (data) setCollections(data);
-    });
-  }, [tenantId]);
 
   // Ensure all filters in canvas components have proper unique keys
   useEffect(() => {
@@ -1248,74 +1263,39 @@ const PageBuilder = () => {
 
     setIsSaving(true);
     try {
+      // 1. Build the payload matching your Python backend Serializer
       const pageData: any = {
-        user_id: user.id,
-        tenant_id: tenantId,
         name: pageName.trim(),
-        config: canvasComponents as unknown as Json,
-        updated_at: new Date().toISOString(),
+        // We don't need 'as unknown as Json' anymore with the Render API
+        config: canvasComponents, 
         role: selectedRole || null,
         display_order: displayOrder,
         icon_name: pageIcon,
       };
       
-      // Only include header_title if it has a value (optional field)
       if (headerTitle.trim()) {
         pageData.header_title = headerTitle.trim();
       }
 
-      let response;
+      // 2. Send to Render API
       if (pageId && pageId !== 'new') {
-        // Update existing page row by id
-        response = await supabase
-          .from('pages')
-          .update(pageData)
-          .eq('id', pageId);
-      } else {
-        // Insert new page and return its id (used to navigate to the edit URL)
-        response = await supabase
-          .from('pages')
-          .insert([pageData])
-          .select('id')
-          .single();
-      }
-
-      if (response.error) {
-        // If error is about missing column, try saving without header_title
-        if (response.error.message?.includes('header_title') || response.error.message?.includes('column')) {
-          const pageDataWithoutHeader = { ...pageData };
-          delete pageDataWithoutHeader.header_title;
-          
-          let retryResponse;
-          if (pageId && pageId !== 'new') {
-            retryResponse = await supabase
-              .from('pages')
-              .update(pageDataWithoutHeader)
-              .eq('id', pageId);
-          } else {
-            retryResponse = await supabase
-              .from('pages')
-              .insert([pageDataWithoutHeader])
-              .select('id')
-              .single();
-          }
-          
-          if (retryResponse.error) throw retryResponse.error;
-          toast.success("Page saved successfully! (Header title column not available in database)");
-        } else {
-          throw response.error;
-        }
-      } else {
+        // UPDATE an existing page
+        await pageService.updatePage(pageId, pageData);
         toast.success("Page saved successfully!");
-      }
-
-      // If it was a new page, navigate to the edit URL with the new ID
-      if (!(pageId && pageId !== 'new') && response.data?.id) {
-          navigate(`/builder/${response.data.id}`, { replace: true });
+      } else {
+        // CREATE a new page
+        const response = await pageService.createPage(pageData);
+        toast.success("Page created successfully!");
+        
+        // Navigate to the edit URL with the newly created ID
+        if (response?.id) {
+          navigate(`/builder/${response.id}`, { replace: true });
+        }
       }
 
     } catch (error: any) {
-      toast.error(`Error saving page: ${error.message}`);
+      console.error("Save error:", error);
+      toast.error(`Error saving page: ${error.message || 'Failed to save via API'}`);
     } finally {
       setIsSaving(false);
     }

@@ -24,6 +24,7 @@ interface User {
   role_id: string;
   created_at: string;
   role?: Role;
+  department?: string;
 }
 
 interface DatabaseUser {
@@ -46,7 +47,7 @@ const AddUserComponent: React.FC = () => {
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleKey, setNewRoleKey] = useState('');
-  const [formData, setFormData] = useState({ name: '', email: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', department: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
 
@@ -119,7 +120,8 @@ const AddUserComponent: React.FC = () => {
         email: user.email || 'No Email',
         role_id: user.role_id || user.role?.id || '',
         created_at: user.created_at || user.date_joined || new Date().toISOString(),
-        role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined)
+        role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined),
+        department: user.department ?? user.department_name ?? undefined
       }));
 
       setUsers(transformedUsers);
@@ -197,6 +199,13 @@ const AddUserComponent: React.FC = () => {
       console.log('Creating user via:', apiUrl);
       console.log('Payload:', { name: formData.name, email: formData.email, role_id: selectedRoleId });
 
+      const payload: Record<string, string> = {
+        name: formData.name,
+        email: formData.email,
+        role_id: selectedRoleId
+      };
+      if (formData.department?.trim()) payload.department = formData.department.trim();
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -204,11 +213,7 @@ const AddUserComponent: React.FC = () => {
           'Authorization': `Bearer ${token}`,
           'X-Tenant-Slug': 'bibhab-thepyro-ai'
         },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          role_id: selectedRoleId
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -222,7 +227,7 @@ const AddUserComponent: React.FC = () => {
 
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
-      setFormData({ name: '', email: '' });
+      setFormData({ name: '', email: '', department: '' });
       setSelectedRoleId('');
 
       // Refresh the users list
@@ -324,6 +329,17 @@ const AddUserComponent: React.FC = () => {
                 name="email"
                 placeholder="user@example.com"
                 value={formData.email}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="department">Department (optional)</Label>
+              <Input
+                id="department"
+                name="department"
+                placeholder="e.g. Engineering, Sales"
+                value={formData.department}
                 onChange={handleChange}
               />
             </div>
@@ -431,6 +447,7 @@ const AddUserComponent: React.FC = () => {
                   <TableRow className="bg-black border-b border-gray-200">
                     <TableHead className="text-white font-medium">Name</TableHead>
                     <TableHead className="text-white font-medium">Email</TableHead>
+                    <TableHead className="text-white font-medium">Department</TableHead>
                     <TableHead className="text-white font-medium">Role</TableHead>
                     <TableHead className="text-white font-medium">Created At</TableHead>
                     <TableHead className="text-white font-medium text-right">Actions</TableHead>
@@ -443,6 +460,7 @@ const AddUserComponent: React.FC = () => {
                       <TableRow key={`${user.uid}-${index}`}>
                         <TableCell className="text-body-medium">{user.name}</TableCell>
                         <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.department || '—'}</TableCell>
                         <TableCell>{user.role?.name || 'No Role'}</TableCell>
                         <TableCell>
                           {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
