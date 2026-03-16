@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const RECORDS_URL = '/crm-records/records/';
@@ -126,6 +126,28 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setVendorsLoading(false);
     }
   }, []);
+
+  const deleteVendor = useCallback(
+    async (vendorId: number, vendorName: string) => {
+      try {
+        await apiClient.delete(`${RECORDS_URL}${vendorId}/`);
+        // Optimistically remove from local list
+        setVendors((prev) => prev.filter((v) => v.id !== vendorId));
+        // Clear vendor field if current selection matches
+        setField('vendor', (prev => (prev === vendorName ? '' : prev)) as unknown as string);
+        toast({ title: 'Vendor deleted' });
+        // Refresh from server in background
+        fetchVendors();
+      } catch (err: any) {
+        toast({
+          title: 'Failed to delete vendor',
+          description: err?.message || 'Could not delete vendor.',
+          variant: 'destructive',
+        });
+      }
+    },
+    [fetchVendors, setField, toast]
+  );
 
   useEffect(() => {
     if (open && formModalFields.some((f) => f.key === 'vendor')) fetchVendors();
@@ -385,35 +407,53 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <Select
-                        value={displayStr || undefined}
-                        onValueChange={(v) => {
-                          if (v === ADD_VENDOR_VALUE) {
-                            setShowAddVendor(true);
-                            return;
-                          }
-                          setField(field.key, v ?? '');
-                        }}
-                        disabled={!isEnabled}
-                      >
-                        <SelectTrigger className="h-9 text-sm rounded-md">
-                          <SelectValue placeholder="Select or add vendor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {vendorsLoading ? (
-                            <SelectItem value="__loading__" disabled>Loading…</SelectItem>
-                          ) : (
-                            <>
-                              {vendors.map((v) => (
-                                <SelectItem key={v.id} value={v.name}>
-                                  {v.name}
-                                </SelectItem>
-                              ))}
-                              <SelectItem value={ADD_VENDOR_VALUE}>+ Add vendor</SelectItem>
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={displayStr || undefined}
+                          onValueChange={(v) => {
+                            if (v === ADD_VENDOR_VALUE) {
+                              setShowAddVendor(true);
+                              return;
+                            }
+                            setField(field.key, v ?? '');
+                          }}
+                          disabled={!isEnabled}
+                        >
+                          <SelectTrigger className="h-9 text-sm rounded-md">
+                            <SelectValue placeholder="Select or add vendor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {vendorsLoading ? (
+                              <SelectItem value="__loading__" disabled>Loading…</SelectItem>
+                            ) : (
+                              <>
+                                {vendors.map((v) => (
+                                  <SelectItem key={v.id} value={v.name}>
+                                    {v.name}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value={ADD_VENDOR_VALUE}>+ Add vendor</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            const current = vendors.find((v) => v.name === displayStr);
+                            if (current) {
+                              deleteVendor(current.id, current.name);
+                            }
+                          }}
+                          disabled={!displayStr || !vendors.some((v) => v.name === displayStr)}
+                          aria-label="Delete selected vendor"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     )
                   ) : isStatus ? (
                     <Select
