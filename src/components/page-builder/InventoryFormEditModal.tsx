@@ -45,6 +45,8 @@ interface InventoryFormEditModalProps {
   formModalTitle?: string;
   /** Modal description text below the title. */
   formModalDescription?: string;
+  /** Whether to show the Save button in the footer. If undefined, Save shows only when there are no action buttons. */
+  showSaveButton?: boolean;
   /** When set, show one button: conditional if attribute matches, else default (e.g. Inventory Payment modal). */
   paymentButtonConfig?: {
     conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string };
@@ -79,6 +81,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   cartOptions,
   formModalTitle,
   formModalDescription,
+  showSaveButton,
   paymentButtonConfig,
 }) => {
   const { toast } = useToast();
@@ -225,6 +228,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         await onUpdate(record.id, { data: { ...dataToSend, status: statusValue } });
         toast({ title: 'Saved', description: `Status set to ${statusValue.replace(/_/g, ' ')}.` });
         onRecordUpdated?.(record.id);
+        onOpenChange(false);
       } catch (e: any) {
         toast({
           title: 'Update failed',
@@ -235,7 +239,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, toast]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -254,6 +258,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       await onUpdate(record.id, { data: dataToSend });
       toast({ title: 'Saved', description: 'All changes saved.' });
       onRecordUpdated?.(record.id);
+      onOpenChange(false);
     } catch (e: any) {
       toast({
         title: 'Update failed',
@@ -263,7 +268,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, toast]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast]);
 
   if (!record) return null;
 
@@ -302,6 +307,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     : actionButtons;
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
+  // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
+  const effectiveShowSaveButton =
+    showSaveButton !== undefined ? showSaveButton : !hasActionButtons;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -542,7 +550,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               ))}
             </div>
           )}
-          {canUpdate && hasEditableField && (
+          {canUpdate && hasEditableField && effectiveShowSaveButton && (
             <Button
               type="button"
               variant="default"

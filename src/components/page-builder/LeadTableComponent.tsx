@@ -322,6 +322,8 @@ interface LeadTableProps {
       conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string; label: string; statusValue: string };
       defaultButton: { label: string; statusValue: string };
     };
+    /** Show Save button in form-style modal footer. If undefined, Save shows only when there are no action buttons. */
+    showFormModalSaveButton?: boolean;
   };
 }
 
@@ -1133,9 +1135,19 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
   }, [config?.statusColors, config?.tableType, handleActionClick, handleStatusButtonClick]);
 
-  // Memoize table columns (append status buttons column when itemsTable + statusButtons)
+  // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
+  const effectiveStatusButtons = useMemo(() => {
+    const list = config?.tableType === 'itemsTable' && Array.isArray(config?.statusButtons)
+      ? config.statusButtons.filter((b) => (b?.label ?? '').trim() !== '' && (b?.statusValue ?? '').trim() !== '')
+      : [];
+    return list;
+  }, [config?.tableType, config?.statusButtons]);
+
+  // Build table columns from config only. No auto-appended Status column.
+  // Status column appears only if you add a column with key "status" in the Columns config (shows data.status).
+  // "Status action buttons" in config are used only in the row-click modal (record detail / form modal), not as a table column.
   const tableColumns: Column[] = useMemo(() => {
-    const base: Column[] = (config?.columns?.map(col => ({
+    const mapped = config?.columns?.map(col => ({
       header: col.label,
       accessor: col.key,
       type: (col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text') as Column['type'],
@@ -1144,20 +1156,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       actionApiMethod: col.actionApiMethod,
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
-    })) || defaultColumns) as Column[];
-    if (config?.tableType === 'itemsTable' && config?.statusButtons?.length) {
-      return [
-        ...base,
-        {
-          header: 'Status',
-          accessor: '__status_actions__',
-          type: 'status_buttons' as const,
-          statusButtons: config.statusButtons,
-        },
-      ];
+    })) ?? [];
+    let base: Column[] = (mapped.length > 0 ? mapped : defaultColumns) as Column[];
+    // When Items table and no status buttons configured, hide any Status column from config so there's no extra column
+    if (config?.tableType === 'itemsTable' && effectiveStatusButtons.length === 0) {
+      base = base.filter((col) => col.accessor !== 'status');
     }
     return base;
-  }, [config?.columns, config?.tableType, config?.statusButtons]);
+  }, [config?.columns, config?.tableType, effectiveStatusButtons]);
 
   // Get unique values for filters
   const getUniqueLeadStatuses = () => {
@@ -2292,6 +2298,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           formModalDescription={config?.formModalDescription}
           actionButtons={effectiveDetailMode === 'inventory_payment_modal' ? undefined : config?.statusButtons}
           paymentButtonConfig={effectiveDetailMode === 'inventory_payment_modal' ? config?.paymentModalConfig : undefined}
+          showSaveButton={config?.showFormModalSaveButton}
           cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
           onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
             ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {

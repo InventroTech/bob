@@ -74,6 +74,24 @@ const URGENCY_OPTIONS = [
   { value: 'CRITICAL', label: 'Critical' },
 ];
 
+/** Format a number as currency string with thousands separator and 2 decimal places (e.g. 1,234.00). */
+function formatCurrencyDisplay(val: string | number | ''): string {
+  if (val === '' || val === undefined || val === null) return '';
+  const n = typeof val === 'number' ? val : Number(String(val).replace(/,/g, ''));
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Parse user input (with optional commas) to number or empty. Only one decimal point allowed. */
+function parseCurrencyInput(str: string): number | '' {
+  const cleaned = str.replace(/,/g, '').trim();
+  if (cleaned === '' || cleaned === '.') return '';
+  const parts = cleaned.split('.');
+  const normalized = parts.length > 2 ? `${parts[0]}.${parts[1]}` : cleaned;
+  const n = Number(normalized);
+  return Number.isFinite(n) && n >= 0 ? n : '';
+}
+
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
@@ -97,6 +115,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
+  const [focusedEstimatedCostId, setFocusedEstimatedCostId] = useState<string | null>(null);
 
   const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
 
@@ -413,16 +432,26 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium">Estimated cost</Label>
                       <Input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        placeholder="0"
-                        value={item.estimated_cost === '' ? '' : item.estimated_cost}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={
+                          focusedEstimatedCostId === item.id
+                            ? (item.estimated_cost === '' ? '' : String(item.estimated_cost))
+                            : formatCurrencyDisplay(item.estimated_cost)
+                        }
+                        onFocus={() => setFocusedEstimatedCostId(item.id)}
                         onChange={(e) => {
-                          const v = e.target.value;
-                          updateItem(item.id, 'estimated_cost', v === '' ? '' : (e.target.value as string));
+                          const parsed = parseCurrencyInput(e.target.value);
+                          updateItem(item.id, 'estimated_cost', parsed);
                         }}
-                        className="h-9 w-28"
+                        onBlur={() => {
+                          setFocusedEstimatedCostId(null);
+                          if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
+                            updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
+                          }
+                        }}
+                        className="h-9 w-32 font-mono tabular-nums"
                       />
                     </div>
                     <label className="flex items-center gap-2 cursor-pointer pb-2 text-muted-foreground shrink-0">
@@ -547,32 +576,36 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           </section>
         </CardContent>
 
-        <CardFooter className="flex flex-wrap items-center gap-3 border-t bg-muted/20 px-6 py-4">
-          <Button type="submit" disabled={submitting || !user} className="min-w-[140px] gap-2 shadow-sm">
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating…
-              </>
-            ) : (
-              <>
-                <Send className="h-4 w-4" />
-                Create Request{items.filter((i) => (i.item_name_freeform ?? '').trim() && i.quantity_required !== '').length > 1 ? 's' : ''}
-              </>
+        <CardFooter className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-6 py-4">
+          <div>
+            {!user && (
+              <span className="text-muted-foreground text-sm">You must be signed in to submit.</span>
             )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleClear}
-            disabled={submitting || isFormEmpty}
-            className="min-w-[100px]"
-          >
-            Clear form
-          </Button>
-          {!user && (
-            <span className="text-muted-foreground text-sm">You must be signed in to submit.</span>
-          )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" disabled={submitting || !user} className="min-w-[140px] gap-2 shadow-sm">
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Create Request{items.filter((i) => (i.item_name_freeform ?? '').trim() && i.quantity_required !== '').length > 1 ? 's' : ''}
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClear}
+              disabled={submitting || isFormEmpty}
+              className="min-w-[100px]"
+            >
+              Clear form
+            </Button>
+          </div>
         </CardFooter>
       </form>
     </Card>

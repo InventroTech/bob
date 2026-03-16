@@ -83,7 +83,6 @@ import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
-import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
   import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
@@ -401,6 +400,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalTitle?: string;
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
+    showFormModalSaveButton?: boolean;
   };
 
   // Local state for all input fields
@@ -453,9 +453,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // UserHierarchy
     showTable: initialConfig.showTable !== false,
     showDiagram: initialConfig.showDiagram !== false,
-    // InventoryRequestForm
-    initialStatus: (initialConfig as any).initialStatus || initialConfig.defaultStatus || 'DRAFT',
-    defaultStatus: initialConfig.defaultStatus || 'DRAFT',
+    // InventoryRequestForm (empty by default so user can set from config)
+    initialStatus: (initialConfig as any).initialStatus ?? (initialConfig as any).defaultStatus ?? '',
+    defaultStatus: (initialConfig as any).defaultStatus ?? '',
     // Records table: items table + status buttons
     tableType: (initialConfig as any).tableType || 'default',
     statusButtons: (initialConfig as any).statusButtons ?? [],
@@ -465,6 +465,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalTitle: (initialConfig as any).formModalTitle ?? '',
     formModalDescription: (initialConfig as any).formModalDescription ?? '',
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
+    showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
@@ -935,21 +936,13 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             </div>
             <div>
               <Label>Initial status</Label>
-              <Select
-                value={localConfig.initialStatus || localConfig.defaultStatus || 'DRAFT'}
-                onValueChange={(value) => handleInputChange('initialStatus', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select initial status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INVENTORY_REQUEST_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
+                onChange={(e) => handleInputChange('initialStatus', e.target.value)}
+                placeholder="e.g. DRAFT"
+              />
               <p className="text-xs text-muted-foreground mt-1">
-                Status to set on new records created from this form.
+                Status for new requests. Leave empty to use default (DRAFT).
               </p>
             </div>
           </div>

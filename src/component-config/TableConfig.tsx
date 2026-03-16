@@ -56,6 +56,8 @@ interface TableConfigProps {
     formModalDescription?: string;
     /** For Inventory Payment modal: conditional button (when attribute op value) and default button. */
     paymentModalConfig?: PaymentModalConfig;
+    /** Show Save button in form-style record modal footer (in addition to any action buttons). */
+    showFormModalSaveButton?: boolean;
   };
   localColumns: ColumnConfig[];
   numColumns: number;
@@ -307,6 +309,22 @@ export const TableConfig: React.FC<TableConfigProps> = ({
               <div className="space-y-2">
                 <Label>Modal description</Label>
                 <Input value={localConfig.formModalDescription ?? ''} onChange={(e) => handleInputChange('formModalDescription', e.target.value)} placeholder="Shown below the title" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Save button in modal</Label>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-form-modal-save"
+                    checked={localConfig.showFormModalSaveButton ?? false}
+                    onCheckedChange={(checked) => handleInputChange('showFormModalSaveButton', checked)}
+                  />
+                  <Label htmlFor="show-form-modal-save" className="text-sm font-normal cursor-pointer">
+                    Show Save button (in addition to any action buttons)
+                  </Label>
+                </div>
+                <p className="text-xs text-gray-500">
+                  When off, Save is shown only if there are no action buttons. When on, Save is always shown.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Form modal fields</Label>
