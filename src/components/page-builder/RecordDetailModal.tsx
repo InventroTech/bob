@@ -708,6 +708,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         await onUpdate(record.id, { data: { ...existingData, status: statusValue } });
         toast({ title: 'Status updated', description: `Status set to ${statusValue.replace(/_/g, ' ')}.` });
         onRecordUpdated?.(record.id);
+        onOpenChange(false);
       } catch (e: any) {
         toast({
           title: 'Update failed',
@@ -718,7 +719,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, onUpdate, toast, onRecordUpdated]
+    [record?.id, record?.data, onUpdate, toast, onRecordUpdated, onOpenChange]
   );
 
   return (
