@@ -34,7 +34,10 @@ export interface ApiCallOperation {
 }
 
 interface OperationsProgramsComponentProps {
-  config?: { title?: string };
+  config?: { 
+    title?: string;
+    defaultEndpoint?: string; // <-- Add this line
+  };
 }
 
 // Generate one random lead payload
@@ -42,10 +45,29 @@ function generateRandomLead(): Record<string, unknown> {
   const firstNames = ['Rajagopalam', 'Anand', 'Sanjay', 'Meena', 'Priya', 'Vikram', 'Quincy', 'Chaitanya', 'Udyati', 'Vedika', 'Jack', 'Rahul', 'Sneha', 'Arjun', 'Kavya'];
   const lastNames = ['Pinninti', 'Reddy', 'Sharma', 'Kaur', 'Jain', 'Verma', 'Khatri', 'Chhabra', 'Bedi', 'Mitra', 'Mahajan', 'Patel', 'Singh', 'Kumar', 'Gupta'];
   const parties = ['BJP', 'INC', 'AAP', 'Congress', 'Independent'];
-
+  const leadSources = [
+    'APP_INSTALL_SINGLE_PARTY_JOINED_BJP_TG', 'MANUAL', 'APP_INSTALL_SINGLE_LEADER_CIRCLE_JOINED_YSRCP',
+    'MANUAL_HIGH_END_DEVICE', 'APP_UNINSTALL_SINGLE_PARTY_JOINED_YSRCP', 'APP_INSTALL_ML_PB',
+    'APP_INSTALL_SINGLE_LEADER_CIRCLE_JOINED_INC_TG', 'APP_INSTALL_SINGLE_PARTY_JOINED_JSP',
+    'SELF_TRIAL_DROPPED_LEADER_POSTER_SHARE', 'LEADER_PROFESSION', 'APP_UNINSTALL_POLITICAL_SUPER_SET',
+    'APP_INSTALL_SINGLE_PARTY_JOINED_BJP_AP', 'WATI_DEMO_PITCH', 'APP_INSTALL_SINGLE_PARTY_JOINED_TDP',
+    'APP_UNINSTALL_SINGLE_PARTY_JOINED_INC_TG', 'SELF_TRIAL_DROPPED_GENERIC_USER', 'OLD_LEAD',
+    'APP_UNINSTALL_SINGLE_PARTY_JOINED_JSP', 'UNKNOWN', 'APP_INSTALL_POLITICAL_SUPER_SET',
+    'LEADER_POSTER_SHARE', 'APP_UNINSTALL_SINGLE_PARTY_JOINED_INC_AP', 'APP_INSTALL_SINGLE_PARTY_JOINED_INC_AP',
+    'APP_UNINSTALL_SINGLE_PARTY_JOINED_BJP_AP', 'HIGH_END_DEVICE', 'NO_LAYOUT_CUST_SUPPORT',
+    'HIGH_END_DEVICE_NON_LEADER', 'SIGNUP_AT_SINGLE_PARTY', 'APP_INSTALL_SINGLE_PARTY_JOINED_BRS',
+    'SELF_TRIAL', 'SELF_TRIAL_DROPPED_HIGH_END_DEVICE_NON_LEADER', 'APP_UNINSTALL_ML_PB',
+    'PREMIUM_REFERRAL', 'SELF_TRIAL_DROPPED_LEADER_PROFESSION', 'REFERRAL_TO_RM',
+    'APP_UNINSTALL_SINGLE_PARTY_JOINED_BJP_TG', 'APP_UNINSTALL_SINGLE_PARTY_JOINED_BRS',
+    'APP_UNINSTALL_SINGLE_PARTY_JOINED_TDP', 'SIGNUP_AT_SINGLE_PARTY_HIGH_END_DEVICE',
+    'AGENT_PARTNER', 'SELF_TRIAL_DROPPED_SIGNUP_AT_SINGLE_PARTY', 'APP_INSTALL_SINGLE_PARTY_JOINED_INC_TG',
+    'SELF_TRIAL_DROPPED_AT_FINAL_STEP', 'APP_INSTALL_SINGLE_PARTY_JOINED_YSRCP', 'SELF_TRIAL_DROPPED_HIGH_END_DEVICE'
+  ];
+  const leadStatuses = ['SALES LEAD', 'SELF TRIAL'];
   const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
   const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
   const name = `${firstName} ${lastName}`;
+  const states = ['Telangana', 'Andhra Pradesh', 'Tamil Nadu'];
   const prefix = [7, 8, 9][Math.floor(Math.random() * 3)];
   const phone = `+91${prefix}${Math.floor(Math.random() * 900000000) + 100000000}`;
   const phoneClean = phone.replace('+', '');
@@ -57,6 +79,7 @@ function generateRandomLead(): Record<string, unknown> {
     data: {
       praja_id: randomId,
       name,
+      state: states[Math.floor(Math.random() * states.length)],
       tasks: [
         { task: 'Sending a Demo', status: 'Yes' },
         { task: 'App Installation', status: 'Yes' },
@@ -66,6 +89,8 @@ function generateRandomLead(): Record<string, unknown> {
         { task: 'Premium Poster/ Video Poster Share', status: 'Null' },
       ],
       lead_score: parseFloat((Math.random() * 65 + 30).toFixed(2)),
+      lead_source: leadSources[Math.floor(Math.random() * leadSources.length)],
+      lead_status: leadStatuses[Math.floor(Math.random() * leadStatuses.length)],
       phone_number: phone,
       whatsapp_link: `https://wa.me/${phoneClean}`,
       affiliated_party: parties[Math.floor(Math.random() * parties.length)],
@@ -92,7 +117,7 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
   const [formPayload, setFormPayload] = useState('');
 
   // Push Random Leads
-  const [leadEndpoint, setLeadEndpoint] = useState('/crm-records/records/');
+  const [leadEndpoint, setLeadEndpoint] = useState(config?.defaultEndpoint || '');
   const [leadCount, setLeadCount] = useState(10);
   const [isPushingLeads, setIsPushingLeads] = useState(false);
 
@@ -201,7 +226,7 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
       toast.error('Please log in first');
       return;
     }
-    const path = (leadEndpoint.trim() || '/crm-records/records/').replace(/^\/+/, '');
+    const path = (leadEndpoint.trim() || config?.defaultEndpoint || '').replace(/^\/+/, '');
     const endpoint = `/${path}`;
     const count = Math.max(1, Math.min(100, leadCount || 10));
     setIsPushingLeads(true);
@@ -212,6 +237,7 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session.access_token}`,
       'X-Tenant-Slug': TENANT_ID,
+      "X-Secret-Pyro": "test",
     };
     for (let i = 0; i < count; i++) {
       try {
@@ -325,7 +351,7 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
         <CardContent className="space-y-4">
           <div>
             <Label>Endpoint path</Label>
-            <Input value={leadEndpoint} onChange={(e) => setLeadEndpoint(e.target.value)} placeholder="/crm-records/records/" />
+            <Input value={leadEndpoint} onChange={(e) => setLeadEndpoint(e.target.value)} placeholder={config?.defaultEndpoint || "/endpoint/path/"} />
             <p className="text-xs text-gray-500 mt-1">Base URL: {PUSH_LEADS_API_PREFIX}</p>
           </div>
           <div>
