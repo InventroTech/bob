@@ -97,10 +97,14 @@ export const pageService = {
    * Get a single page by ID for a given tenant
    * Maps to: GET /pages/{id}/?tenant_id=
    */
+  /**
+   * Get a single page by ID for a given tenant
+   * Maps to: GET /pages/{id}/?tenant_id=
+   */
   async getPageById(
     pageId: string,
     tenantId: string
-  ): Promise<{ name: string; config: any } | null> {
+  ): Promise<PageRecord | null> { // Changed return type to PageRecord
     try {
       const response = await apiClient.get(`/pages/${pageId}/`, {
         params: { tenant_id: tenantId },
@@ -109,14 +113,20 @@ export const pageService = {
       const data = response.data;
       if (!data) return null;
 
-      if (typeof data === 'object' && 'name' in data && 'config' in data) {
-        return {
-          name: (data as any).name,
-          config: (data as any).config,
-        };
-      }
+      // Handle both direct objects and nested .data objects
+      const pageData = data.data || data;
 
-      return null;
+      // Return the FULL object so the PageBuilder gets icon_name, display_order, etc.
+      return {
+        ...pageData,
+        id: pageData.id,
+        name: pageData.name,
+        config: pageData.config,
+        icon_name: pageData.icon_name,
+        display_order: pageData.display_order,
+        header_title: pageData.header_title,
+        role: pageData.role
+      };
     } catch (error) {
       console.error(`Error fetching page ${pageId} from API:`, error);
       throw error;
