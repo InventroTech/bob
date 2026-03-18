@@ -37,6 +37,12 @@ interface VendorOption {
   name: string;
 }
 
+type InventoryItemSuggestion = {
+  id: number;
+  name: string;
+  data: Record<string, unknown>;
+};
+
 interface FormItem {
   id: string;
   item_name_freeform: string;
@@ -116,6 +122,11 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
   const [focusedEstimatedCostId, setFocusedEstimatedCostId] = useState<string | null>(null);
+  const [focusedItemNameId, setFocusedItemNameId] = useState<string | null>(null);
+  const [itemNameQuery, setItemNameQuery] = useState<string>('');
+  const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
+  const [itemNameSuggestionsOpen, setItemNameSuggestionsOpen] = useState(false);
+  const [itemNameSuggestionsLoading, setItemNameSuggestionsLoading] = useState(false);
 
   const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
 
@@ -140,6 +151,41 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setVendors([]);
     } finally {
       setVendorsLoading(false);
+    }
+  }, []);
+
+  const fetchItemSuggestions = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setItemNameSuggestions([]);
+      setItemNameSuggestionsOpen(false);
+      return;
+    }
+    try {
+      setItemNameSuggestionsLoading(true);
+      const res = await apiClient.get<any>(
+        `${RECORDS_URL}?entity_type=inventory_item&page_size=8&search=${encodeURIComponent(q)}`
+      );
+      const raw = res.data?.data ?? (res.data as any)?.results ?? [];
+      const list = Array.isArray(raw) ? raw : [];
+      const mapped = list
+        .map((r: any) => {
+          const id = r.id ?? r.data?.id;
+          const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
+          const name =
+            String(
+              data.item_name_freeform ?? data.name ?? data.item_name ?? r.item_name_freeform ?? r.name ?? ''
+            ).trim();
+          return id != null && name ? ({ id: Number(id), name, data } as InventoryItemSuggestion) : null;
+        })
+        .filter(Boolean) as InventoryItemSuggestion[];
+      setItemNameSuggestions(mapped);
+      setItemNameSuggestionsOpen(mapped.length > 0);
+    } catch {
+      setItemNameSuggestions([]);
+      setItemNameSuggestionsOpen(false);
+    } finally {
+      setItemNameSuggestionsLoading(false);
     }
   }, []);
 
@@ -172,6 +218,15 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   useEffect(() => {
     fetchVendors();
   }, [fetchVendors]);
+
+  // Debounced typeahead for item name
+  useEffect(() => {
+    if (!focusedItemNameId) return;
+    const t = window.setTimeout(() => {
+      fetchItemSuggestions(itemNameQuery);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [focusedItemNameId, itemNameQuery, fetchItemSuggestions]);
 
   // Pre-fill department and team_lead from current user's membership (API only)
   useEffect(() => {
@@ -432,12 +487,79 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Item name *</Label>
-                    <Input
-                      placeholder="Describe the item"
-                      value={item.item_name_freeform}
-                      onChange={(e) => updateItem(item.id, 'item_name_freeform', e.target.value)}
-                      className="h-9"
-                    />
+                    <div className="relative">
+                      <Input
+                        placeholder="Describe the item"
+                        value={item.item_name_freeform}
+                        onFocus={() => {
+                          setFocusedItemNameId(item.id);
+                          setItemNameQuery(item.item_name_freeform || '');
+                          if ((item.item_name_freeform || '').trim().length >= 2) {
+                            setItemNameSuggestionsOpen(itemNameSuggestions.length > 0);
+                          }
+                        }}
+                        onBlur={() => {
+                          window.setTimeout(() => {
+                            setFocusedItemNameId((prev) => (prev === item.id ? null : prev));
+                            setItemNameSuggestionsOpen(false);
+                          }, 150);
+                        }}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          updateItem(item.id, 'item_name_freeform', v);
+                          setFocusedItemNameId(item.id);
+                          setItemNameQuery(v);
+                          if (v.trim().length >= 2) setItemNameSuggestionsOpen(true);
+                        }}
+                        className="h-9"
+                      />
+
+                      {focusedItemNameId === item.id && (itemNameSuggestionsOpen || itemNameSuggestionsLoading) && (
+                        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
+                          {itemNameSuggestionsLoading ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">Searching…</div>
+                          ) : itemNameSuggestions.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">No matches</div>
+                          ) : (
+                            <div className="max-h-56 overflow-auto">
+                              {itemNameSuggestions.map((s) => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    updateItem(item.id, 'item_name_freeform', s.name);
+                                    const d = s.data || {};
+
+                                    const vendor = String((d.default_vendor ?? d.vendor ?? '') as any).trim();
+                                    if (vendor) updateItem(item.id, 'vendor', vendor);
+
+                                    const costRaw = d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
+                                    const costNum = costRaw === '' || costRaw == null ? '' : Number(costRaw);
+                                    if (costNum !== '' && Number.isFinite(costNum)) updateItem(item.id, 'estimated_cost', costNum);
+
+                                    const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
+                                    if (productLink) updateItem(item.id, 'product_link', productLink);
+
+                                    const additionalLink = String((d.additional_link ?? d.vendor_site_link ?? '') as any).trim();
+                                    if (additionalLink) updateItem(item.id, 'additional_link', additionalLink);
+
+                                    if (typeof d.including_gst === 'boolean') updateItem(item.id, 'including_gst', d.including_gst);
+
+                                    setItemNameSuggestionsOpen(false);
+                                    setFocusedItemNameId(null);
+                                  }}
+                                >
+                                  <span className="truncate">{s.name}</span>
+                                  <span className="text-xs text-muted-foreground shrink-0">#{s.id}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-end gap-4 sm:col-span-2 w-full">
                     <div className="space-y-1.5">
