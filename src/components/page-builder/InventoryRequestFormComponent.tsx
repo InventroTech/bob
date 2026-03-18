@@ -127,6 +127,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
   const [itemNameSuggestionsOpen, setItemNameSuggestionsOpen] = useState(false);
   const [itemNameSuggestionsLoading, setItemNameSuggestionsLoading] = useState(false);
+  const [focusedVendorId, setFocusedVendorId] = useState<string | null>(null);
+  const [vendorQuery, setVendorQuery] = useState<string>('');
+  const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
 
   const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
 
@@ -643,32 +646,83 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <Select
-                            value={item.vendor || undefined}
-                            onValueChange={(value) => {
-                              if (value === ADD_VENDOR_VALUE) {
-                                startAddVendor(item.id);
-                                return;
-                              }
-                              updateItem(item.id, 'vendor', value ?? '');
-                            }}
-                          >
-                            <SelectTrigger className="h-9 w-full">
-                              <SelectValue placeholder="Select or add vendor" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {vendorsLoading ? (
-                                <SelectItem value="__loading__" disabled>Loading…</SelectItem>
-                              ) : (
-                                <>
-                                  {vendors.map((v) => (
-                                    <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>
-                                  ))}
-                                  <SelectItem value={ADD_VENDOR_VALUE}>+ Add vendor</SelectItem>
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
+                          <div className="relative w-full">
+                            <Input
+                              value={item.vendor}
+                              placeholder="Search or add vendor"
+                              className="h-9 w-full"
+                              onFocus={() => {
+                                setFocusedVendorId(item.id);
+                                setVendorQuery(item.vendor || '');
+                                setVendorSuggestionsOpen(true);
+                              }}
+                              onBlur={() => {
+                                window.setTimeout(() => {
+                                  setFocusedVendorId((prev) => (prev === item.id ? null : prev));
+                                  setVendorSuggestionsOpen(false);
+                                }, 150);
+                              }}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                updateItem(item.id, 'vendor', v);
+                                setFocusedVendorId(item.id);
+                                setVendorQuery(v);
+                                setVendorSuggestionsOpen(true);
+                              }}
+                            />
+
+                            {focusedVendorId === item.id && vendorSuggestionsOpen && (
+                              <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
+                                {vendorsLoading ? (
+                                  <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
+                                ) : (
+                                  <div className="max-h-56 overflow-auto">
+                                    {(() => {
+                                      const q = vendorQuery.trim().toLowerCase();
+                                      const filtered = q
+                                        ? vendors.filter((v) => v.name.toLowerCase().includes(q)).slice(0, 12)
+                                        : vendors.slice(0, 12);
+                                      if (filtered.length === 0) {
+                                        return (
+                                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                                            No matches
+                                          </div>
+                                        );
+                                      }
+                                      return filtered.map((v) => (
+                                        <button
+                                          key={v.id}
+                                          type="button"
+                                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                                          onMouseDown={(ev) => ev.preventDefault()}
+                                          onClick={() => {
+                                            updateItem(item.id, 'vendor', v.name);
+                                            setVendorSuggestionsOpen(false);
+                                            setFocusedVendorId(null);
+                                          }}
+                                        >
+                                          <span className="truncate">{v.name}</span>
+                                          <span className="text-xs text-muted-foreground shrink-0">#{v.id}</span>
+                                        </button>
+                                      ));
+                                    })()}
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        startAddVendor(item.id);
+                                        setVendorSuggestionsOpen(false);
+                                        setFocusedVendorId(null);
+                                      }}
+                                    >
+                                      + Add vendor
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           <Button
                             type="button"
                             size="icon"
