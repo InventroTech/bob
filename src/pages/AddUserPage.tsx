@@ -496,7 +496,7 @@ const AddUserPage = () => {
             <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-black border-b border-gray-200">
+                  <TableRow className="bg-black hover:!bg-black text-white hover:text-white border-b border-gray-200">
                     <TableHead className="text-white font-medium">Name</TableHead>
                     <TableHead className="text-white font-medium">Email</TableHead>
                     <TableHead className="text-white font-medium">Department</TableHead>
