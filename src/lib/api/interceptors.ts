@@ -21,14 +21,21 @@ import {
 export const setupRequestInterceptor = (instance: any) => {
   instance.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
-      // Get session token from Supabase
+      // Prefer spoof token (if present) over the Supabase session token.
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          config.headers.Authorization = `Bearer ${session.access_token}`;
+        const spoofToken = window.localStorage.getItem('pyro_spoof_jwt');
+        if (spoofToken) {
+          config.headers.Authorization = `Bearer ${spoofToken}`;
+        } else {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            config.headers.Authorization = `Bearer ${session.access_token}`;
+          }
         }
       } catch (error) {
-        console.warn('Failed to get session token:', error);
+        console.warn('Failed to get auth token for request:', error);
       }
 
       // Add tenant slug header if not already present

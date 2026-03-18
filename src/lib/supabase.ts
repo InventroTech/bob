@@ -13,3 +13,9 @@ if (!supabaseAnonKey) {
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+
+/** Used when spoofing to call Supabase REST with the spoof token so RLS sees the spoofed user */
+export const getSupabaseRestConfig = () => ({
+  url: supabaseUrl,
+  anonKey: supabaseAnonKey,
+});

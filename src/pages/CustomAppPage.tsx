@@ -1,16 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { componentMap } from '@/pages/PageBuilder';
+import { fetchPageConfig } from '@/lib/spoof';
 
 // Module-level cache to prevent duplicate page fetches across component remounts
 const pageCache = new Map<string, { data: any; timestamp: number }>();
 const PAGE_CACHE_TTL = 5000; // 5 seconds
 
+interface CustomAppOutletContext {
+  tenantId: string | null;
+  userRoleId: string | null;
+}
+
 const CustomAppPage: React.FC = () => {
   const { tenantSlug, pageId } = useParams<{ tenantSlug: string; pageId: string }>();
+  const { tenantId: contextTenantId } = useOutletContext<CustomAppOutletContext>();
+  const tenantId = contextTenantId ?? (typeof window !== 'undefined' ? localStorage.getItem('tenant_id') : null);
   
   const [page, setPage] = useState<{ name: string; config: any } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -18,7 +26,6 @@ const CustomAppPage: React.FC = () => {
   const fetchingRef = useRef<string | null>(null); // Track which pageId is currently being fetched
 
   useEffect(() => {
-    const tenantId = localStorage.getItem('tenant_id');
     if (!tenantId || !pageId) return;
     
     // Track if component is still mounted
@@ -48,44 +55,55 @@ const CustomAppPage: React.FC = () => {
       setLoading(true);
       setError(null);
     }
-    
-    const fetchPromise = supabase
-      .from('pages')
-      .select('name, config')
-      .eq('id', pageId)
-      .eq('tenant_id', tenantId)
-      .single();
-    
-    fetchPromise.then(({ data, error }) => {
-      fetchingRef.current = null;
-      
-      // Only update state if component is still mounted
-      if (!isMounted) return;
-      
-      if (error) {
-        setError(error.message);
-        toast.error('Failed to load page');
-      } else if (data) {
-        const pageData = { name: data.name, config: data.config };
-        setPage(pageData);
-        // Cache the result
-        pageCache.set(cacheKey, { data: pageData, timestamp: now });
+
+    const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
+
+    const fetchPage = async () => {
+      try {
+        if (spoofToken && tenantId) {
+          const pageData = await fetchPageConfig(pageId, tenantId, spoofToken);
+          if (!isMounted) return;
+          fetchingRef.current = null;
+          if (pageData) {
+            setPage(pageData);
+            pageCache.set(cacheKey, { data: pageData, timestamp: now });
+          } else {
+            setError('Page not found');
+            toast.error('Failed to load page');
+          }
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('pages')
+          .select('name, config')
+          .eq('id', pageId)
+          .eq('tenant_id', tenantId)
+          .single();
+
+        if (!isMounted) return;
+        fetchingRef.current = null;
+
+        if (error) {
+          setError(error.message);
+          toast.error('Failed to load page');
+        } else if (data) {
+          const pageData = { name: data.name, config: data.config };
+          setPage(pageData);
+          pageCache.set(cacheKey, { data: pageData, timestamp: now });
+        }
+        setLoading(false);
+      } catch (err: any) {
+        fetchingRef.current = null;
+        if (!isMounted) return;
+        if (err.name === 'AbortError' || err.message?.includes('aborted')) return;
+        setError(err.message);
+        setLoading(false);
       }
-      setLoading(false);
-    }).catch((err) => {
-      fetchingRef.current = null;
-      
-      // Only update state if component is still mounted and it's not an abort error
-      if (!isMounted) return;
-      
-      // Don't show error for aborted requests
-      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-        return;
-      }
-      
-      setError(err.message);
-      setLoading(false);
-    });
+    };
+
+    fetchPage();
     
     // Cleanup function
     return () => {
@@ -95,7 +113,7 @@ const CustomAppPage: React.FC = () => {
         fetchingRef.current = null;
       }
     };
-  }, [pageId]);
+  }, [pageId, tenantId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;
