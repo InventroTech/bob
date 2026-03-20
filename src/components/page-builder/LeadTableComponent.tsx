@@ -27,6 +27,7 @@ import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
+import { convertGMTtoIST } from '@/lib/timeUtils';
 
 interface Column {
   header: string;
@@ -54,6 +55,11 @@ const getStatusColor = (status: string, statusColors?: Record<string, string>) =
     case 'paid':
     case 'active':
       return 'bg-green-50 text-green-700 border-green-200';
+    case 'on_hold':
+    case 'on hold':
+      return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+    case 'rejected':
+      return 'bg-red-50 text-red-700 border-red-200';
     case 'auto pay not set':
     case 'autopay_setup_no_layout':
     case 'auto_pay_not_set_up':
@@ -219,7 +225,11 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
         // Apply default transformations based on field type
         switch (col.type) {
           case 'date':
-            transformedLead[col.key] = value !== null && value !== undefined ? formatRelativeTime(value) : 'N/A';
+            transformedLead[col.key] = value !== null && value !== undefined
+              ? (config?.entityType?.startsWith('inventory_')
+                  ? convertGMTtoIST(String(value), 'date')
+                  : formatRelativeTime(String(value)))
+              : 'N/A';
             break;
           default:
             transformedLead[col.key] = value !== null && value !== undefined ? value : 'N/A';
@@ -307,7 +317,7 @@ interface LeadTableProps {
 
     /** Table type: default (first column can be profile card) or itemsTable (first column normal text, supports status buttons). */
     tableType?: 'default' | 'itemsTable';
-    /** When tableType is itemsTable: list of buttons that update record status on click. Each sets data.status to statusValue. */
+    /** When tableType is itemsTable: list of buttons that update record status on click. */
     statusButtons?: Array<{ label: string; statusValue: string }>;
     /** Per-field config for record detail modal: which data keys are editable (key + editable toggle). */
     modalFieldConfig?: Array<{ key: string; editable: boolean }>;
@@ -324,6 +334,13 @@ interface LeadTableProps {
     };
     /** Show Save button in form-style modal footer. If undefined, Save shows only when there are no action buttons. */
     showFormModalSaveButton?: boolean;
+    /** Checkbox flags shown beside action buttons; each can be conditional. */
+    modalFlags?: Array<{
+      label: string;
+      key: string;
+      enabled?: boolean;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number };
+    }>;
   };
 }
 
@@ -1158,10 +1175,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       actionApiPayload: col.actionApiPayload,
     })) ?? [];
     let base: Column[] = (mapped.length > 0 ? mapped : defaultColumns) as Column[];
-    // When Items table and no status buttons configured, hide any Status column from config so there's no extra column
-    if (config?.tableType === 'itemsTable' && effectiveStatusButtons.length === 0) {
-      base = base.filter((col) => col.accessor !== 'status');
-    }
     return base;
   }, [config?.columns, config?.tableType, effectiveStatusButtons]);
 
@@ -2299,6 +2312,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           actionButtons={effectiveDetailMode === 'inventory_payment_modal' ? undefined : config?.statusButtons}
           paymentButtonConfig={effectiveDetailMode === 'inventory_payment_modal' ? config?.paymentModalConfig : undefined}
           showSaveButton={config?.showFormModalSaveButton}
+          modalFlags={config?.modalFlags}
           cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
           onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
             ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
@@ -2352,6 +2366,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           return merged.length > 0 ? merged : undefined;
         })()}
         cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
+        modalFlags={config?.modalFlags}
         onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
           ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
               const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');

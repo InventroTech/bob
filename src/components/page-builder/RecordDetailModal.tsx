@@ -10,13 +10,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { apiClient } from '@/lib/api';
+import { apiClient, membershipService } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
+import { convertGMTtoIST } from '@/lib/timeUtils';
 import {
   Loader2,
   Save,
@@ -112,8 +115,15 @@ interface RecordDetailModalProps {
   onDeleted?: (recordId: number) => void;
   /** Called after a record is updated by an action (e.g. Proceed to PM) so the parent can refresh the table. */
   onRecordUpdated?: (recordId: number) => void;
-  /** Optional action buttons that set record data.status on click (e.g. from table config statusButtons). Shown in modal footer. */
+  /** Optional action buttons that set record data.status on click. */
   actionButtons?: Array<{ label: string; statusValue: string }>;
+  /** Optional checkbox flags shown beside action buttons; each can be conditional. */
+  modalFlags?: Array<{
+    label: string;
+    key: string;
+    enabled?: boolean;
+    conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+  }>;
 }
 
 /**
@@ -179,8 +189,36 @@ function formatValue(value: unknown): string {
       // keep as-is
     }
   }
-  if (Array.isArray(value)) return value.join(', ');
+  if (Array.isArray(value)) {
+    // Special-case comments history arrays: show only the last comment text.
+    const first = value[0] as any;
+    if (first && typeof first === 'object' && 'comment' in first) {
+      const last = value[value.length - 1] as any;
+      return last?.comment != null ? String(last.comment) : '';
+    }
+    return value.join(', ');
+  }
   return String(value);
+}
+
+function normalizeCommentsHistory(value: unknown): Array<{ name: string; role: string; comment: string }> {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return (value as any[])
+      .map((v) => {
+        if (!v || typeof v !== 'object') return null;
+        const name = typeof (v as any).name === 'string' ? (v as any).name : '';
+        const role = typeof (v as any).role === 'string' ? (v as any).role : '';
+        const comment = typeof (v as any).comment === 'string' ? (v as any).comment : '';
+        if (!comment.trim()) return null;
+        return { name, role, comment };
+      })
+      .filter(Boolean) as Array<{ name: string; role: string; comment: string }>;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return [{ name: '', role: '', comment: value.trim() }];
+  }
+  return [];
 }
 
 /** Keys that typically hold URLs; show as clickable links. */
@@ -194,6 +232,41 @@ function isUrl(value: unknown): boolean {
 
 /** Render display value as clickable link when it is a URL or key is a known link field. */
 function renderDisplayValue(key: string, value: unknown): React.ReactNode {
+  if (key === 'comments') {
+    const history = normalizeCommentsHistory(value);
+    return (
+      <div className="space-y-2">
+        {history.length === 0 ? (
+          <span className="text-muted-foreground text-sm">No comments yet.</span>
+        ) : (
+          history.map((c, idx) => (
+            <div key={idx} className="rounded-md border border-border/60 bg-muted/20 p-2 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                {c.name ? (
+                  <Badge variant="outline" className="text-[11px] font-medium">
+                    {c.name}
+                  </Badge>
+                ) : null}
+                {c.role ? (
+                  <Badge variant="secondary" className="text-[11px] font-normal text-muted-foreground">
+                    {c.role}
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="text-sm whitespace-pre-wrap">{c.comment}</div>
+            </div>
+          ))
+        )}
+      </div>
+    );
+  }
+  if (
+    (key === 'created_at' || key === 'updated_at' || key === 'submitted_at') &&
+    typeof value === 'string' &&
+    value.trim()
+  ) {
+    return <span className="text-foreground">{convertGMTtoIST(value, 'date')}</span>;
+  }
   const str = formatValue(value);
   if (str === '—') return <span className="text-foreground">{str}</span>;
   const isLink = isUrl(value) || (LINK_KEYS.has(key) && typeof value === 'string' && value.trim().length > 0);
@@ -272,6 +345,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   onDeleted,
   onRecordUpdated,
   actionButtons,
+  modalFlags,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
@@ -280,6 +354,9 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const [proceeding, setProceeding] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
   const { user } = useAuth();
+  const myName =
+    user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
+  const [myRoleName, setMyRoleName] = useState<string>('');
 
   const displayRows = record ? buildDisplayRows(record, entityType) : [];
   const statusOptions = entityType ? ALLOWED_STATUSES[entityType] ?? [] : [];
@@ -333,6 +410,25 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const [deletingCart, setDeletingCart] = useState(false);
   /** When set, an action button is applying that status value (loading). */
   const [applyingStatusValue, setApplyingStatusValue] = useState<string | null>(null);
+  const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!open || !user) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const membership = await membershipService.getMyMembership();
+        if (cancelled) return;
+        setMyRoleName(membership?.role_name ?? membership?.role_key ?? '');
+      } catch {
+        // Non-fatal
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, user]);
   /** Selected cart id for "Add to existing cart" (string to match Select value). */
   const [selectedCartIdForAdd, setSelectedCartIdForAdd] = useState<string>('');
   /** Carts loaded by modal when parent does not pass cartOptions (PM add-to-cart dropdown). */
@@ -409,6 +505,18 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     };
   }, [open, isInventoryCart, record?.id, cartRequestsVersion]);
 
+  useEffect(() => {
+    const data = (record?.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {}) ?? {};
+    const next: Record<string, boolean> = {};
+    (modalFlags ?? []).forEach((flag) => {
+      const key = (flag.key ?? '').trim();
+      if (!key) return;
+      const existing = data[key];
+      next[key] = typeof existing === 'boolean' ? existing : flag.enabled === true;
+    });
+    setFlagValues(next);
+  }, [record?.id, record?.data, modalFlags]);
+
   const handleApplyToAllRequestsInCart = useCallback(async () => {
     if (!isInventoryCart || !record?.id || !applyTargetStatus) return;
     try {
@@ -436,6 +544,75 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       setApplyingToCart(false);
     }
   }, [isInventoryCart, record?.id, applyTargetStatus, copyInvoiceAndTerms, toast]);
+
+  const flagConditionMatches = useCallback(
+    (flag: {
+      label: string;
+      key: string;
+      enabled?: boolean;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    }) => {
+      const cond = flag.conditional;
+      if (!cond?.attribute || !cond.attribute.trim()) return true;
+      const attribute = cond.attribute.trim();
+
+      // Prefer the edited/pending value (if any) over record value.
+      const raw =
+        pending?.[attribute] !== undefined
+          ? pending?.[attribute]
+          : (record?.data as any)?.[attribute];
+
+      const threshold = cond.value;
+
+      const numRaw = Number(raw);
+      const numThreshold = Number(threshold);
+      if (Number.isFinite(numRaw) && Number.isFinite(numThreshold)) {
+        switch (cond.operator) {
+          case 'gt':
+            return numRaw > numThreshold;
+          case 'gte':
+            return numRaw >= numThreshold;
+          case 'lt':
+            return numRaw < numThreshold;
+          case 'lte':
+            return numRaw <= numThreshold;
+          case 'eq':
+            return numRaw === numThreshold;
+          default:
+            return false;
+        }
+      }
+
+      const strRaw = raw == null ? '' : String(raw);
+      const strVal = threshold == null ? '' : String(threshold);
+      const cmp = strRaw.localeCompare(strVal, undefined, { numeric: true });
+      const rawLower = strRaw.trim().toLowerCase();
+      const valLower = strVal.trim().toLowerCase();
+      const rawBool =
+        rawLower === 'true' ? true : rawLower === 'false' ? false : null;
+      const valBool =
+        valLower === 'true' ? true : valLower === 'false' ? false : null;
+
+      switch (cond.operator) {
+        case 'gt':
+          return cmp > 0;
+        case 'gte':
+          return cmp >= 0;
+        case 'lt':
+          return cmp < 0;
+        case 'lte':
+          return cmp <= 0;
+        case 'eq':
+          if (rawBool !== null && valBool !== null) {
+            return rawBool === valBool;
+          }
+          return rawLower === valLower;
+        default:
+          return false;
+      }
+    },
+    [pending, record?.data]
+  );
 
   const handleRemoveRequestFromCart = useCallback(
     async (req: { id: number; data?: Record<string, unknown> }) => {
@@ -496,7 +673,23 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     if (!onUpdate || record?.id == null) return;
     setSaving(key);
     try {
-      const dataPatch: Record<string, unknown> = { [key]: value };
+      let dataPatch: Record<string, unknown> = { [key]: value };
+      if (key === 'comments') {
+        const existingRaw = (record?.data as any)?.comments;
+        const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
+        if (Array.isArray(existingRaw)) {
+          existingHistory.push(...(existingRaw as any));
+        } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
+          existingHistory.push({ name: '', role: '', comment: existingRaw.trim() });
+        }
+
+        const commentText = typeof value === 'string' ? value.trim() : '';
+        if (commentText) {
+          existingHistory.push({ name: myName, role: myRoleName ?? '', comment: commentText });
+        }
+
+        dataPatch = { comments: existingHistory };
+      }
       if (entityType === 'inventory_item' && (key === 'allocated_quantity' || key === 'available_quantity')) {
         const data = record?.data || {};
         const allocated = key === 'allocated_quantity' ? value : (pending.allocated_quantity ?? data.allocated_quantity);
@@ -521,7 +714,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } finally {
       setSaving(null);
     }
-  }, [onUpdate, record?.id, record?.data, entityType, toast]);
+  }, [onUpdate, record?.id, record?.data, entityType, toast, pending, myName, myRoleName]);
 
   const handleEditableChange = useCallback((key: string, currentValue: unknown, newValueStr: string) => {
     const row = displayRows.find((r) => r.key === key);
@@ -589,6 +782,25 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     }
     try {
       setProceeding(true);
+
+      // Include stage comment history before submitting to RM.
+      const commentText = typeof pending.comments === 'string' ? pending.comments.trim() : '';
+      if (commentText) {
+        const existingRaw = (record?.data as any)?.comments;
+        const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
+        if (Array.isArray(existingRaw)) {
+          existingHistory.push(...(existingRaw as any));
+        } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
+          existingHistory.push({ name: '', role: '', comment: existingRaw.trim() });
+        }
+        existingHistory.push({ name: myName, role: myRoleName ?? '', comment: commentText });
+        if (onUpdate) {
+          await onUpdate(record.id, { data: { comments: existingHistory } });
+        } else {
+          await apiClient.patch(`/crm-records/records/${record.id}/`, { data: { comments: existingHistory } });
+        }
+      }
+
       await apiClient.post('/crm-records/records/events/', {
         record_id: Number(record.id),
         event: 'inventory_request.mark_pending_pm',
@@ -609,7 +821,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } finally {
       setProceeding(false);
     }
-  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, toast, onOpenChange, onRecordUpdated]);
+  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, toast, onOpenChange, onRecordUpdated, pending, myName, myRoleName, onUpdate]);
 
   /** Create a new cart and add this request to it. */
   const handleAddToNewCart = useCallback(async () => {
@@ -698,15 +910,41 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     }
   }, [isInventoryRequest, record?.id, record?.data, user, selectedCartIdForAdd, onUpdate, toast, addingToCart]);
 
-  /** Apply a status from config action buttons: PATCH record.data.status and notify parent. */
+  /** Apply status and save configured flag checkboxes as true/false. */
   const handleActionButtonClick = useCallback(
-    async (statusValue: string) => {
+    async (btn: { label: string; statusValue: string }) => {
       if (!record?.id || !onUpdate) return;
       try {
-        setApplyingStatusValue(statusValue);
+        setApplyingStatusValue(btn.statusValue);
         const existingData = (record.data as Record<string, unknown>) || {};
-        await onUpdate(record.id, { data: { ...existingData, status: statusValue } });
-        toast({ title: 'Status updated', description: `Status set to ${statusValue.replace(/_/g, ' ')}.` });
+        const payload: Record<string, unknown> = { ...existingData, status: btn.statusValue };
+
+        // Stage comments history: append a new `{name, role, comment}` object into `data.comments[]`
+        if (Object.prototype.hasOwnProperty.call(existingData, 'comments') || typeof pending?.comments !== 'undefined') {
+          const existingRaw = existingData.comments;
+          const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
+          if (Array.isArray(existingRaw)) {
+            existingHistory.push(...(existingRaw as any));
+          } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
+            existingHistory.push({ name: '', role: '', comment: existingRaw.trim() });
+          }
+
+          const commentText = typeof pending.comments === 'string' ? pending.comments.trim() : '';
+          if (commentText) {
+            existingHistory.push({ name: myName, role: myRoleName ?? '', comment: commentText });
+          }
+          payload.comments = existingHistory;
+        }
+
+        (modalFlags ?? [])
+          .filter((f) => flagConditionMatches(f))
+          .forEach((flag) => {
+          const key = (flag.key ?? '').trim();
+          if (!key) return;
+          payload[key] = flagValues[key] === true;
+          });
+        await onUpdate(record.id, { data: payload });
+        toast({ title: 'Status updated', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
       } catch (e: any) {
@@ -719,7 +957,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, onUpdate, toast, onRecordUpdated, onOpenChange]
+    [record?.id, record?.data, onUpdate, toast, onRecordUpdated, onOpenChange, modalFlags, flagValues, pending, myName, myRoleName, flagConditionMatches]
   );
 
   return (
@@ -835,18 +1073,25 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               </SelectContent>
                             </Select>
                           ) : (
-                            <Input
-                              className="max-w-[280px] h-9 text-sm rounded-md"
-                              value={
-                                pending[key] !== undefined
-                                  ? String(pending[key])
-                                  : formatValue(value)
-                              }
-                              onChange={(e) =>
-                                handleEditableChange(key, value, e.target.value)
-                              }
-                              disabled={isSaving}
-                            />
+                            key === 'comments' ? (
+                              <div className="w-full space-y-2">
+                                {renderDisplayValue('comments', value)}
+                                <Textarea
+                                  className="max-w-[520px] min-h-[80px] text-sm rounded-md"
+                                  value={pending[key] !== undefined ? String(pending[key]) : ''}
+                                  onChange={(e) => handleEditableChange(key, value, e.target.value)}
+                                  disabled={isSaving}
+                                  placeholder="Add a new comment..."
+                                />
+                              </div>
+                            ) : (
+                              <Input
+                                className="max-w-[280px] h-9 text-sm rounded-md"
+                                value={pending[key] !== undefined ? String(pending[key]) : formatValue(value)}
+                                onChange={(e) => handleEditableChange(key, value, e.target.value)}
+                                disabled={isSaving}
+                              />
+                            )
                           )}
                           <Button
                             type="button"
@@ -1000,21 +1245,37 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         {actionButtons && actionButtons.length > 0 && record?.id && canEdit && (
           <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-2 flex-wrap">
             <div className="flex flex-wrap gap-2">
+              {(modalFlags ?? [])
+                .filter((f) => (f.key ?? '').trim() && (f.label ?? '').trim())
+                .filter((f) => flagConditionMatches(f))
+                .map((f) => {
+                const key = f.key.trim();
+                return (
+                  <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background">
+                    <Checkbox
+                      checked={flagValues[key] === true}
+                      onCheckedChange={(checked) => setFlagValues((prev) => ({ ...prev, [key]: checked === true }))}
+                      disabled={!!applyingStatusValue}
+                    />
+                    <span className="text-xs text-muted-foreground">{f.label}</span>
+                  </label>
+                );
+              })}
               {actionButtons.map((btn) => (
-                <Button
-                  key={btn.statusValue}
-                  type="button"
-                  variant="outline"
-                  size="default"
-                  className="gap-2 h-9 rounded-md"
-                  disabled={!!applyingStatusValue}
-                  onClick={() => handleActionButtonClick(btn.statusValue)}
-                >
-                  {applyingStatusValue === btn.statusValue ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  ) : null}
-                  {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
-                </Button>
+                  <Button
+                    key={btn.statusValue}
+                    type="button"
+                    variant="outline"
+                    size="default"
+                    className="gap-2 h-9 rounded-md"
+                    disabled={!!applyingStatusValue}
+                    onClick={() => handleActionButtonClick(btn)}
+                  >
+                    {applyingStatusValue === btn.statusValue ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : null}
+                    {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
+                  </Button>
               ))}
             </div>
           </DialogFooter>

@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { apiClient } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import { apiClient, membershipService } from '@/lib/api';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -52,11 +53,26 @@ interface InventoryFormEditModalProps {
     conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string };
     defaultButton: { label: string; statusValue: string };
   };
+  /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
+  modalFlags?: Array<{
+    label: string;
+    key: string;
+    enabled?: boolean;
+    conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+  }>;
 }
 
 function formatDisplayValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (Array.isArray(value)) {
+    const first = value[0] as any;
+    if (first && typeof first === 'object' && 'comment' in first) {
+      const last = value[value.length - 1] as any;
+      return last?.comment != null ? String(last.comment) : '';
+    }
+    return value.join(', ');
+  }
   return String(value);
 }
 
@@ -68,6 +84,7 @@ const NUMBER_KEYS = new Set([
   'quantity', 'quantity_required', 'allocated_quantity', 'available_quantity',
   'estimated_cost', 'total_quantity', 'cart_id', 'total_price', 'unit_price',
 ]);
+const PRICE_KEYS = new Set(['estimated_cost', 'total_price', 'unit_price']);
 
 export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   open,
@@ -83,8 +100,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   formModalDescription,
   showSaveButton,
   paymentButtonConfig,
+  modalFlags,
 }) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [applyingStatusValue, setApplyingStatusValue] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -96,10 +115,36 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [savingNewVendor, setSavingNewVendor] = useState(false);
   const [finalPriceValue, setFinalPriceValue] = useState<string>('');
   const [finalPriceIsTotal, setFinalPriceIsTotal] = useState<boolean>(false);
+  const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
+  const [myRoleName, setMyRoleName] = useState<string>('');
+
+  const myName =
+    user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
 
   const statusOptions = entityType ? (ALLOWED_STATUSES[entityType] ?? []) : [];
   const isInventoryRequest = entityType === 'inventory_request';
   const canUpdate = Boolean(onUpdate && record?.id != null);
+  const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
+
+  useEffect(() => {
+    if (!open || !user) return;
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const membership = await membershipService.getMyMembership();
+        if (cancelled) return;
+        setMyRoleName(membership?.role_name ?? membership?.role_key ?? '');
+      } catch {
+        // Non-fatal: still store comment with name only.
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, user]);
 
   const setField = useCallback((key: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -198,8 +243,25 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     const initial: Record<string, unknown> = {};
     formModalFields.forEach((f) => {
       const val = data[f.key] ?? recordAny[f.key];
+      if (f.key === 'comments') {
+        // If backend stores comments as history array, keep input blank for "new stage comment".
+        initial[f.key] = Array.isArray(val) ? '' : val !== undefined && val !== null ? val : '';
+        return;
+      }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
+    if ((hasPriceFieldInForm || !paymentButtonConfig) && !initial.price_currency) {
+      const savedCurrency = String(data.price_currency ?? data.currency ?? '').toUpperCase();
+      initial.price_currency = savedCurrency === 'USD' ? 'USD' : 'INR';
+    }
+    const nextFlags: Record<string, boolean> = {};
+    (modalFlags ?? []).forEach((flag) => {
+      const key = (flag.key ?? '').trim();
+      if (!key) return;
+      const existing = data[key];
+      nextFlags[key] = typeof existing === 'boolean' ? existing : flag.enabled === true;
+    });
+    setFlagValues(nextFlags);
     setFormData(initial);
     if (!paymentButtonConfig) {
       if (data.total_price != null && data.total_price !== '') {
@@ -213,7 +275,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setFinalPriceIsTotal(false);
       }
     }
-  }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig]);
+  }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig, hasPriceFieldInForm, modalFlags]);
 
   /** Get quantity from form or record for price calculation. */
   const getQuantity = useCallback(() => {
@@ -233,13 +295,105 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     return { unit_price: val, total_price: Math.round(val * qty * 100) / 100 };
   }, [finalPriceValue, finalPriceIsTotal, getQuantity]);
 
+  const flagConditionMatches = useCallback(
+    (flag: {
+      label: string;
+      key: string;
+      enabled?: boolean;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    }) => {
+      const cond = flag.conditional;
+      if (!cond?.attribute || !cond.attribute.trim()) return true;
+      const attribute = cond.attribute.trim();
+      const raw =
+        (formData as any)?.[attribute] !== undefined ? (formData as any)[attribute] : (record?.data as any)?.[attribute];
+      const threshold = cond.value;
+
+      const numRaw = Number(raw);
+      const numThreshold = Number(threshold);
+      if (Number.isFinite(numRaw) && Number.isFinite(numThreshold)) {
+        switch (cond.operator) {
+          case 'gt':
+            return numRaw > numThreshold;
+          case 'gte':
+            return numRaw >= numThreshold;
+          case 'lt':
+            return numRaw < numThreshold;
+          case 'lte':
+            return numRaw <= numThreshold;
+          case 'eq':
+            return numRaw === numThreshold;
+          default:
+            return false;
+        }
+      }
+
+      const strRaw = raw == null ? '' : String(raw);
+      const strVal = threshold == null ? '' : String(threshold);
+      const cmp = strRaw.localeCompare(strVal, undefined, { numeric: true });
+      const rawLower = strRaw.trim().toLowerCase();
+      const valLower = strVal.trim().toLowerCase();
+      const rawBool =
+        rawLower === 'true' ? true : rawLower === 'false' ? false : null;
+      const valBool =
+        valLower === 'true' ? true : valLower === 'false' ? false : null;
+
+      switch (cond.operator) {
+        case 'gt':
+          return cmp > 0;
+        case 'gte':
+          return cmp >= 0;
+        case 'lt':
+          return cmp < 0;
+        case 'lte':
+          return cmp <= 0;
+        case 'eq':
+          if (rawBool !== null && valBool !== null) {
+            return rawBool === valBool;
+          }
+          return rawLower === valLower;
+        default:
+          return false;
+      }
+    },
+    [formData, record?.data]
+  );
+
   const handleActionClick = useCallback(
-    async (statusValue: string) => {
+    async (btn: { label: string; statusValue: string }) => {
       if (!record?.id || !onUpdate) return;
       try {
-        setApplyingStatusValue(statusValue);
+        setApplyingStatusValue(btn.statusValue);
         const priceOverrides = paymentButtonConfig ? {} : getComputedPriceFields();
-        const dataToSend = { ...formData, ...priceOverrides };
+        const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides, status: btn.statusValue };
+
+        // Stage comment history: append `{name, role, comment}` into `data.comments`.
+        if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
+          const existingRaw = (record?.data as any)?.comments;
+          let history: Array<{ name: string; role: string; comment: string }> = [];
+          if (Array.isArray(existingRaw)) {
+            history = existingRaw as any;
+          } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
+            history = [{ name: '', role: '', comment: existingRaw.trim() }];
+          }
+
+          const commentText = typeof formData.comments === 'string' ? formData.comments.trim() : '';
+          if (commentText) {
+            history = [
+              ...history,
+              { name: myName, role: myRoleName ?? '', comment: commentText },
+            ];
+          }
+          dataToSend.comments = history;
+        }
+
+        (modalFlags ?? [])
+          .filter((f) => flagConditionMatches(f))
+          .forEach((flag) => {
+          const key = (flag.key ?? '').trim();
+          if (!key) return;
+          dataToSend[key] = flagValues[key] === true;
+          });
         if (entityType === 'inventory_item') {
           const alloc = dataToSend.allocated_quantity ?? (record?.data as any)?.allocated_quantity;
           const avail = dataToSend.available_quantity ?? (record?.data as any)?.available_quantity;
@@ -247,8 +401,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             dataToSend.total_quantity = alloc + avail;
           }
         }
-        await onUpdate(record.id, { data: { ...dataToSend, status: statusValue } });
-        toast({ title: 'Saved', description: `Status set to ${statusValue.replace(/_/g, ' ')}.` });
+        await onUpdate(record.id, { data: dataToSend });
+        toast({ title: 'Saved', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
       } catch (e: any) {
@@ -261,7 +415,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -269,7 +423,31 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     try {
       setSaving(true);
       const priceOverrides = paymentButtonConfig ? {} : getComputedPriceFields();
-      const dataToSend = { ...formData, ...priceOverrides };
+      const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides };
+
+      if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
+        const existingRaw = (record?.data as any)?.comments;
+        let history: Array<{ name: string; role: string; comment: string }> = [];
+        if (Array.isArray(existingRaw)) {
+          history = existingRaw as any;
+        } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
+          history = [{ name: '', role: '', comment: existingRaw.trim() }];
+        }
+
+        const commentText = typeof formData.comments === 'string' ? formData.comments.trim() : '';
+        if (commentText) {
+          history = [...history, { name: myName, role: myRoleName ?? '', comment: commentText }];
+        }
+        dataToSend.comments = history;
+      }
+
+      (modalFlags ?? [])
+        .filter((f) => flagConditionMatches(f))
+        .forEach((flag) => {
+          const key = (flag.key ?? '').trim();
+          if (!key) return;
+          dataToSend[key] = flagValues[key] === true;
+        });
       if (entityType === 'inventory_item') {
         const alloc = dataToSend.allocated_quantity ?? (record?.data as any)?.allocated_quantity;
         const avail = dataToSend.available_quantity ?? (record?.data as any)?.available_quantity;
@@ -290,7 +468,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
 
   if (!record) return null;
 
@@ -364,7 +542,52 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     {field.label || field.key.replace(/_/g, ' ')}
                   </Label>
-                  {isVendor ? (
+                  {field.key === 'comments' ? (
+                    (() => {
+                      const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as any).comments : undefined) as unknown;
+                      const history: Array<{ name: string; role: string; comment: string }> = Array.isArray(existingRaw)
+                        ? (existingRaw as any).filter((x: any) => x && typeof x === 'object' && typeof x.comment === 'string')
+                        : typeof existingRaw === 'string' && existingRaw.trim()
+                          ? [{ name: '', role: '', comment: existingRaw.trim() }]
+                          : [];
+
+                      const newCommentValue = typeof formData.comments === 'string' ? formData.comments : '';
+                      return (
+                        <div className="space-y-2">
+                          <div className="space-y-2">
+                            {history.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">No comments yet.</p>
+                            ) : (
+                              history.map((c, idx) => (
+                                <div key={idx} className="rounded-md border border-border/60 bg-muted/20 p-2 space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {c.name ? (
+                                      <span className="text-[11px] font-medium px-2 py-0.5 rounded border border-border/60 bg-background">
+                                        {c.name}
+                                      </span>
+                                    ) : null}
+                                    {c.role ? (
+                                      <span className="text-[11px] font-normal px-2 py-0.5 rounded border border-border/60 bg-muted/20 text-muted-foreground">
+                                        {c.role}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-sm whitespace-pre-wrap">{c.comment}</div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <Textarea
+                            className="min-h-[80px] text-sm rounded-md"
+                            value={newCommentValue}
+                            onChange={(e) => setField('comments', e.target.value)}
+                            disabled={!isEnabled}
+                            placeholder="Add a new comment..."
+                          />
+                        </div>
+                      );
+                    })()
+                  ) : isVendor ? (
                     showAddVendor ? (
                       <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
                         <Input
@@ -513,16 +736,44 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       placeholder={field.label || field.key}
                     />
                   ) : isNumber ? (
-                    <Input
-                      type="number"
-                      className="h-9 text-sm rounded-md"
-                      value={displayStr}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setField(field.key, v === '' ? '' : Number(v));
-                      }}
-                      disabled={!isEnabled}
-                    />
+                    PRICE_KEYS.has(field.key) ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          className="h-9 text-sm rounded-md"
+                          value={displayStr}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setField(field.key, v === '' ? '' : Number(v));
+                          }}
+                          disabled={!isEnabled}
+                        />
+                        <Select
+                          value={String(formData.price_currency || 'INR')}
+                          onValueChange={(v) => setField('price_currency', v === 'USD' ? 'USD' : 'INR')}
+                          disabled={!isEnabled}
+                        >
+                          <SelectTrigger className="h-9 w-20 text-sm rounded-md">
+                            <SelectValue placeholder="INR" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INR">INR</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <Input
+                        type="number"
+                        className="h-9 text-sm rounded-md"
+                        value={displayStr}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setField(field.key, v === '' ? '' : Number(v));
+                        }}
+                        disabled={!isEnabled}
+                      />
+                    )
                   ) : (
                     <Input
                       className="h-9 text-sm rounded-md"
@@ -554,6 +805,19 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   className="h-9 text-sm rounded-md w-32"
                   disabled={!canUpdate}
                 />
+                <Select
+                  value={String(formData.price_currency || 'INR')}
+                  onValueChange={(v) => setField('price_currency', v === 'USD' ? 'USD' : 'INR')}
+                  disabled={!canUpdate}
+                >
+                  <SelectTrigger className="h-9 w-20 text-sm rounded-md">
+                    <SelectValue placeholder="INR" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="INR">INR</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                  </SelectContent>
+                </Select>
                 <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground">
                   <Checkbox
                     checked={finalPriceIsTotal}
@@ -572,6 +836,22 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         <DialogFooter className="border-t pt-4 gap-2 flex-wrap">
           {hasActionButtons && (
             <div className="flex flex-wrap gap-2">
+              {(modalFlags ?? [])
+                .filter((f) => (f.key ?? '').trim() && (f.label ?? '').trim())
+                .filter((f) => flagConditionMatches(f))
+                .map((f) => {
+                const key = f.key.trim();
+                return (
+                  <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background">
+                    <Checkbox
+                      checked={flagValues[key] === true}
+                      onCheckedChange={(checked) => setFlagValues((prev) => ({ ...prev, [key]: checked === true }))}
+                      disabled={!!applyingStatusValue}
+                    />
+                    <span className="text-xs text-muted-foreground">{f.label}</span>
+                  </label>
+                );
+              })}
               {effectiveActionButtons!.map((btn) => (
                 <Button
                   key={btn.statusValue}
@@ -580,7 +860,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   size="default"
                   className="gap-2 h-9 rounded-md"
                   disabled={!!applyingStatusValue}
-                  onClick={() => handleActionClick(btn.statusValue)}
+                  onClick={() => handleActionClick(btn)}
                 >
                   {applyingStatusValue === btn.statusValue ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
