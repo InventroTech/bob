@@ -100,7 +100,7 @@ export const pageService = {
   async getPageById(
     pageId: string,
     tenantId: string
-  ): Promise<{ name: string; config: any } | null> {
+  ): Promise<PageRecord | null> {
     try {
       const response = await apiClient.get(`/pages/${pageId}/`, {
         params: { tenant_id: tenantId },
@@ -109,14 +109,10 @@ export const pageService = {
       const data = response.data;
       if (!data) return null;
 
-      if (typeof data === 'object' && 'name' in data && 'config' in data) {
-        return {
-          name: (data as any).name,
-          config: (data as any).config,
-        };
+      if (typeof data === 'object' && ('name' in data || 'config' in data)) {
+        return data as PageRecord;
       }
-
-      return null;
+      return data as PageRecord;
     } catch (error) {
       console.error(`Error fetching page ${pageId} from API:`, error);
       throw error;

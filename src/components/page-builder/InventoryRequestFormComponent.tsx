@@ -30,12 +30,20 @@ interface InventoryRequestFormConfig {
   initialStatus?: string;
   /** @deprecated Use initialStatus */
   defaultStatus?: string;
+  /** Options shown in the Priority / Urgency picker. Saved as `urgency_level`. */
+  urgencyOptions?: Array<{ value: string; label: string }>;
 }
 
 interface VendorOption {
   id: number;
   name: string;
 }
+
+type InventoryItemSuggestion = {
+  id: number;
+  name: string;
+  data: Record<string, unknown>;
+};
 
 interface FormItem {
   id: string;
@@ -45,6 +53,7 @@ interface FormItem {
   additional_link: string;
   vendor: string;
   estimated_cost: string | number | '';
+  price_currency: 'INR' | 'USD';
   including_gst: boolean;
   urgency_level: string;
   comments: string;
@@ -58,6 +67,7 @@ const newEmptyItem = (): FormItem => ({
   additional_link: '',
   vendor: '',
   estimated_cost: '',
+  price_currency: 'INR',
   including_gst: false,
   urgency_level: '',
   comments: '',
@@ -67,7 +77,7 @@ interface InventoryRequestFormProps {
   config?: InventoryRequestFormConfig;
 }
 
-const URGENCY_OPTIONS = [
+const DEFAULT_URGENCY_OPTIONS = [
   { value: 'LOW', label: 'Low' },
   { value: 'MEDIUM', label: 'Medium' },
   { value: 'HIGH', label: 'High' },
@@ -102,9 +112,19 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const entityType = config?.entityType ?? 'inventory_request';
   const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'DRAFT';
+  // If `urgencyOptions` exists in config (even empty), treat it as an override.
+  const urgencyOptions =
+    config?.urgencyOptions !== undefined ? config.urgencyOptions : DEFAULT_URGENCY_OPTIONS;
+  const normalizedUrgencyOptions = urgencyOptions
+    .map((o) => ({
+      value: String(o.value ?? '').trim(),
+      label: String(o.label ?? '').trim() || String(o.value ?? '').trim(),
+    }))
+    .filter((o) => o.value !== '');
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
+  const [myRoleName, setMyRoleName] = useState<string>('');
   // team_lead should store the parent user's user_id (string), not the TenantMembership id
   const [teamLeadUserId, setTeamLeadUserId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
@@ -116,6 +136,14 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
   const [focusedEstimatedCostId, setFocusedEstimatedCostId] = useState<string | null>(null);
+  const [focusedItemNameId, setFocusedItemNameId] = useState<string | null>(null);
+  const [itemNameQuery, setItemNameQuery] = useState<string>('');
+  const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
+  const [itemNameSuggestionsOpen, setItemNameSuggestionsOpen] = useState(false);
+  const [itemNameSuggestionsLoading, setItemNameSuggestionsLoading] = useState(false);
+  const [focusedVendorId, setFocusedVendorId] = useState<string | null>(null);
+  const [vendorQuery, setVendorQuery] = useState<string>('');
+  const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
 
   const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
 
@@ -140,6 +168,41 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setVendors([]);
     } finally {
       setVendorsLoading(false);
+    }
+  }, []);
+
+  const fetchItemSuggestions = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setItemNameSuggestions([]);
+      setItemNameSuggestionsOpen(false);
+      return;
+    }
+    try {
+      setItemNameSuggestionsLoading(true);
+      const res = await apiClient.get<any>(
+        `${RECORDS_URL}?entity_type=unmannd_request&page_size=8&search=${encodeURIComponent(q)}`
+      );
+      const raw = res.data?.data ?? (res.data as any)?.results ?? [];
+      const list = Array.isArray(raw) ? raw : [];
+      const mapped = list
+        .map((r: any) => {
+          const id = r.id ?? r.data?.id;
+          const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
+          const name =
+            String(
+              data.item_name_freeform ?? data.name ?? data.item_name ?? r.item_name_freeform ?? r.name ?? ''
+            ).trim();
+          return id != null && name ? ({ id: Number(id), name, data } as InventoryItemSuggestion) : null;
+        })
+        .filter(Boolean) as InventoryItemSuggestion[];
+      setItemNameSuggestions(mapped);
+      setItemNameSuggestionsOpen(mapped.length > 0);
+    } catch {
+      setItemNameSuggestions([]);
+      setItemNameSuggestionsOpen(false);
+    } finally {
+      setItemNameSuggestionsLoading(false);
     }
   }, []);
 
@@ -173,6 +236,15 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     fetchVendors();
   }, [fetchVendors]);
 
+  // Debounced typeahead for item name
+  useEffect(() => {
+    if (!focusedItemNameId) return;
+    const t = window.setTimeout(() => {
+      fetchItemSuggestions(itemNameQuery);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [focusedItemNameId, itemNameQuery, fetchItemSuggestions]);
+
   // Pre-fill department and team_lead from current user's membership (API only)
   useEffect(() => {
     if (!user) return;
@@ -183,6 +255,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       if (!membership || cancelled) return;
 
       setDepartment(membership.department ?? '');
+      setMyRoleName(membership.role_name ?? membership.role_key ?? '');
 
       const parentMembershipId = membership.user_parent_id ?? null;
 
@@ -305,20 +378,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setSubmitting(true);
 
       for (const item of validItems) {
-        const payloadData: Record<string, string | number | boolean> = {
+        const payloadData: Record<string, unknown> = {
           status: initialStatus,
           request_date: requestDate,
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
           urgency_level: (item.urgency_level ?? '').trim() || '',
-          comments: (item.comments ?? '').trim() || '',
           vendor: (item.vendor ?? '').trim() || '',
           item_name_freeform: (item.item_name_freeform ?? '').trim(),
           quantity_required: typeof item.quantity_required === 'number' ? item.quantity_required : Number(item.quantity_required) || 0,
           product_link: (item.product_link ?? '').trim() || '',
           additional_link: (item.additional_link ?? '').trim() || '',
+          price_currency: item.price_currency === 'USD' ? 'USD' : 'INR',
         };
+        const commentText = (item.comments ?? '').trim();
+        payloadData.comments =
+          commentText.length > 0
+            ? [{ name: requesterDisplay ?? '', role: myRoleName ?? '', comment: commentText }]
+            : [];
         const estCost = item.estimated_cost;
         if (estCost !== '' && estCost !== undefined) {
           payloadData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
@@ -432,12 +510,83 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Item name *</Label>
-                    <Input
-                      placeholder="Describe the item"
-                      value={item.item_name_freeform}
-                      onChange={(e) => updateItem(item.id, 'item_name_freeform', e.target.value)}
-                      className="h-9"
-                    />
+                    <div className="relative">
+                      <Input
+                        placeholder="Describe the item"
+                        value={item.item_name_freeform}
+                        onFocus={() => {
+                          setFocusedItemNameId(item.id);
+                          setItemNameQuery(item.item_name_freeform || '');
+                          if ((item.item_name_freeform || '').trim().length >= 2) {
+                            setItemNameSuggestionsOpen(itemNameSuggestions.length > 0);
+                          }
+                        }}
+                        onBlur={() => {
+                          window.setTimeout(() => {
+                            setFocusedItemNameId((prev) => (prev === item.id ? null : prev));
+                            setItemNameSuggestionsOpen(false);
+                          }, 150);
+                        }}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          updateItem(item.id, 'item_name_freeform', v);
+                          setFocusedItemNameId(item.id);
+                          setItemNameQuery(v);
+                          if (v.trim().length >= 2) setItemNameSuggestionsOpen(true);
+                        }}
+                        className="h-9"
+                      />
+
+                      {focusedItemNameId === item.id && (itemNameSuggestionsOpen || itemNameSuggestionsLoading) && (
+                        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
+                          {itemNameSuggestionsLoading ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">Searching…</div>
+                          ) : itemNameSuggestions.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">No matches</div>
+                          ) : (
+                            <div className="max-h-56 overflow-auto">
+                              {itemNameSuggestions.map((s) => (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    updateItem(item.id, 'item_name_freeform', s.name);
+                                    const d = s.data || {};
+
+                                    const vendor = String((d.default_vendor ?? d.vendor ?? '') as any).trim();
+                                    if (vendor) updateItem(item.id, 'vendor', vendor);
+
+                                    const costRaw = d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
+                                    const costNum = costRaw === '' || costRaw == null ? '' : Number(costRaw);
+                                    if (costNum !== '' && Number.isFinite(costNum)) updateItem(item.id, 'estimated_cost', costNum);
+                                    const suggestedCurrency = String((d.price_currency ?? d.currency ?? 'INR') as any).trim().toUpperCase();
+                                    if (suggestedCurrency === 'USD' || suggestedCurrency === 'INR') {
+                                      updateItem(item.id, 'price_currency', suggestedCurrency as 'INR' | 'USD');
+                                    }
+
+                                    const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
+                                    if (productLink) updateItem(item.id, 'product_link', productLink);
+
+                                    const additionalLink = String((d.additional_link ?? d.vendor_site_link ?? '') as any).trim();
+                                    if (additionalLink) updateItem(item.id, 'additional_link', additionalLink);
+
+                                    if (typeof d.including_gst === 'boolean') updateItem(item.id, 'including_gst', d.including_gst);
+
+                                    setItemNameSuggestionsOpen(false);
+                                    setFocusedItemNameId(null);
+                                  }}
+                                >
+                                  <span className="truncate">{s.name}</span>
+                                  <span className="text-xs text-muted-foreground shrink-0">#{s.id}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-end gap-4 sm:col-span-2 w-full">
                     <div className="space-y-1.5">
@@ -457,28 +606,42 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium">Estimated cost</Label>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={
-                          focusedEstimatedCostId === item.id
-                            ? (item.estimated_cost === '' ? '' : String(item.estimated_cost))
-                            : formatCurrencyDisplay(item.estimated_cost)
-                        }
-                        onFocus={() => setFocusedEstimatedCostId(item.id)}
-                        onChange={(e) => {
-                          const parsed = parseCurrencyInput(e.target.value);
-                          updateItem(item.id, 'estimated_cost', parsed);
-                        }}
-                        onBlur={() => {
-                          setFocusedEstimatedCostId(null);
-                          if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
-                            updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={
+                            focusedEstimatedCostId === item.id
+                              ? (item.estimated_cost === '' ? '' : String(item.estimated_cost))
+                              : formatCurrencyDisplay(item.estimated_cost)
                           }
-                        }}
-                        className="h-9 w-32 font-mono tabular-nums"
-                      />
+                          onFocus={() => setFocusedEstimatedCostId(item.id)}
+                          onChange={(e) => {
+                            const parsed = parseCurrencyInput(e.target.value);
+                            updateItem(item.id, 'estimated_cost', parsed);
+                          }}
+                          onBlur={() => {
+                            setFocusedEstimatedCostId(null);
+                            if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
+                              updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
+                            }
+                          }}
+                          className="h-9 w-28 font-mono tabular-nums"
+                        />
+                        <Select
+                          value={item.price_currency || 'INR'}
+                          onValueChange={(v) => updateItem(item.id, 'price_currency', (v === 'USD' ? 'USD' : 'INR'))}
+                        >
+                          <SelectTrigger className="h-9 w-20">
+                            <SelectValue placeholder="INR" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INR">INR</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <label className="flex items-center gap-2 cursor-pointer pb-2 text-muted-foreground shrink-0">
                       <Checkbox
@@ -521,32 +684,83 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <Select
-                            value={item.vendor || undefined}
-                            onValueChange={(value) => {
-                              if (value === ADD_VENDOR_VALUE) {
-                                startAddVendor(item.id);
-                                return;
-                              }
-                              updateItem(item.id, 'vendor', value ?? '');
-                            }}
-                          >
-                            <SelectTrigger className="h-9 w-full">
-                              <SelectValue placeholder="Select or add vendor" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {vendorsLoading ? (
-                                <SelectItem value="__loading__" disabled>Loading…</SelectItem>
-                              ) : (
-                                <>
-                                  {vendors.map((v) => (
-                                    <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>
-                                  ))}
-                                  <SelectItem value={ADD_VENDOR_VALUE}>+ Add vendor</SelectItem>
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
+                          <div className="relative w-full">
+                            <Input
+                              value={item.vendor}
+                              placeholder="Search or add vendor"
+                              className="h-9 w-full"
+                              onFocus={() => {
+                                setFocusedVendorId(item.id);
+                                setVendorQuery(item.vendor || '');
+                                setVendorSuggestionsOpen(true);
+                              }}
+                              onBlur={() => {
+                                window.setTimeout(() => {
+                                  setFocusedVendorId((prev) => (prev === item.id ? null : prev));
+                                  setVendorSuggestionsOpen(false);
+                                }, 150);
+                              }}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                updateItem(item.id, 'vendor', v);
+                                setFocusedVendorId(item.id);
+                                setVendorQuery(v);
+                                setVendorSuggestionsOpen(true);
+                              }}
+                            />
+
+                            {focusedVendorId === item.id && vendorSuggestionsOpen && (
+                              <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
+                                {vendorsLoading ? (
+                                  <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
+                                ) : (
+                                  <div className="max-h-56 overflow-auto">
+                                    {(() => {
+                                      const q = vendorQuery.trim().toLowerCase();
+                                      const filtered = q
+                                        ? vendors.filter((v) => v.name.toLowerCase().includes(q)).slice(0, 12)
+                                        : vendors.slice(0, 12);
+                                      if (filtered.length === 0) {
+                                        return (
+                                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                                            No matches
+                                          </div>
+                                        );
+                                      }
+                                      return filtered.map((v) => (
+                                        <button
+                                          key={v.id}
+                                          type="button"
+                                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                                          onMouseDown={(ev) => ev.preventDefault()}
+                                          onClick={() => {
+                                            updateItem(item.id, 'vendor', v.name);
+                                            setVendorSuggestionsOpen(false);
+                                            setFocusedVendorId(null);
+                                          }}
+                                        >
+                                          <span className="truncate">{v.name}</span>
+                                          <span className="text-xs text-muted-foreground shrink-0">#{v.id}</span>
+                                        </button>
+                                      ));
+                                    })()}
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        startAddVendor(item.id);
+                                        setVendorSuggestionsOpen(false);
+                                        setFocusedVendorId(null);
+                                      }}
+                                    >
+                                      + Add vendor
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           <Button
                             type="button"
                             size="icon"
@@ -590,7 +804,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Priority / Urgency</Label>
                     <div className="flex flex-wrap gap-2" role="group" aria-label="Priority level">
-                      {URGENCY_OPTIONS.map((o) => (
+                      {normalizedUrgencyOptions.map((o) => (
                         <Button
                           key={o.value}
                           type="button"
