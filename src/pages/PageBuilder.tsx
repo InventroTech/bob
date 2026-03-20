@@ -403,6 +403,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
     showFormModalSaveButton?: boolean;
+    modalFlags?: import('@/component-config').ModalFlagConfig[];
   };
 
   // Local state for all input fields
@@ -468,6 +469,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription: (initialConfig as any).formModalDescription ?? '',
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
+    modalFlags: (initialConfig as any).modalFlags ?? [],
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
@@ -513,7 +515,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   );
 
   // Handle local input changes
-  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | import('@/component-config').PaymentModalConfig) => {
+  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
     debouncedUpdateWithDelay({ [field]: value });
   }, [debouncedUpdateWithDelay]);
@@ -1042,7 +1044,8 @@ const PageBuilder = () => {
       if (pageId && pageId !== 'new') {
         try {
           // --- NEW RENDER API CALL ---
-          const data = await pageService.getPageById(pageId);
+          if (!tenantId) return;
+          const data = await pageService.getPageById(pageId, tenantId);
 
           if (data) {
             setPageName(data.name || 'Untitled Page');
@@ -1063,7 +1066,7 @@ const PageBuilder = () => {
     };
 
     fetchPageData();
-  }, [pageId, navigate]);
+  }, [pageId, navigate, tenantId]);
 
   // Ensure all filters in canvas components have proper unique keys
   useEffect(() => {

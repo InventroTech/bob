@@ -14,6 +14,21 @@ export type PaymentModalConfig = {
   defaultButton: { label: string; statusValue: string };
 };
 
+export type ModalFlagConfig = {
+  /** Checkbox text shown beside action buttons. */
+  label: string;
+  /** Key in record.data to save as true/false based on checkbox state. */
+  key: string;
+  /** Default checkbox state when record has no existing value for this key. */
+  enabled?: boolean;
+  /** Optional condition to show this checkbox (based on record.data[attribute]). */
+  conditional?: {
+    attribute: string;
+    operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq';
+    value: string | number;
+  };
+};
+
 export interface ColumnConfig {
   key: string;
   label: string;
@@ -42,7 +57,7 @@ interface TableConfigProps {
     detailMode?: string;
     /** 'default' | 'itemsTable' — when itemsTable, first column is normal text and status buttons column can be shown */
     tableType?: 'default' | 'itemsTable';
-    /** For itemsTable: buttons that set record data.status on click */
+    /** For itemsTable: buttons that set record data.status on click. */
     statusButtons?: Array<{ label: string; statusValue: string }>;
     /** Per-field config for record detail modal: which data keys to show and whether each is editable. */
     modalFieldConfig?: Array<{ key: string; editable: boolean }>;
@@ -58,12 +73,14 @@ interface TableConfigProps {
     paymentModalConfig?: PaymentModalConfig;
     /** Show Save button in form-style record modal footer (in addition to any action buttons). */
     showFormModalSaveButton?: boolean;
+    /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
+    modalFlags?: ModalFlagConfig[];
   };
   localColumns: ColumnConfig[];
   numColumns: number;
   localFilters: FilterConfig[];
   numFilters: number;
-  handleInputChange: (field: string, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | PaymentModalConfig) => void;
+  handleInputChange: (field: string, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | PaymentModalConfig | ModalFlagConfig[]) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string | boolean) => void;
   handleColumnDelete?: (index: number) => void;
@@ -97,6 +114,9 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   );
   const [formModalFieldsList, setFormModalFieldsList] = useState<Array<{ key: string; label: string; enabled: boolean }>>(
     () => localConfig.formModalFields ?? []
+  );
+  const [modalFlagsList, setModalFlagsList] = useState<ModalFlagConfig[]>(
+    () => localConfig.modalFlags ?? []
   );
 
   return (
@@ -351,6 +371,168 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                   }}>Use default (inventory request)</Button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {(localConfig.detailMode === 'record_form_modal' ||
+            localConfig.detailMode === 'inventory_payment_modal' ||
+            localConfig.detailMode === 'inventory_request' ||
+            localConfig.detailMode === 'inventory_cart') && (
+            <div className="space-y-2 border-t pt-4">
+              <Label>Flag toggles (beside action buttons)</Label>
+              <p className="text-xs text-gray-500">
+                Each checkbox is shown near modal action buttons. On save/action, it writes
+                <code className="bg-muted px-1 rounded ml-1">data[key] = true/false</code>.
+              </p>
+              {modalFlagsList.map((flag, idx) => (
+                <div key={idx} className="flex flex-wrap gap-2 items-center p-2 border rounded-md bg-muted/30">
+                  <Input
+                    placeholder="Checkbox text"
+                    value={flag.label}
+                    onChange={(e) => {
+                      const next = [...modalFlagsList];
+                      next[idx] = { ...next[idx], label: e.target.value };
+                      setModalFlagsList(next);
+                      handleInputChange('modalFlags', next);
+                    }}
+                    className="min-w-[140px]"
+                  />
+                  <Input
+                    placeholder="DB key (e.g. approved)"
+                    value={flag.key}
+                    onChange={(e) => {
+                      const next = [...modalFlagsList];
+                      next[idx] = { ...next[idx], key: e.target.value };
+                      setModalFlagsList(next);
+                      handleInputChange('modalFlags', next);
+                    }}
+                    className="min-w-[140px]"
+                  />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Switch
+                      id={`modal-flag-enabled-${idx}`}
+                      checked={flag.enabled === true}
+                      onCheckedChange={(checked) => {
+                        const next = [...modalFlagsList];
+                        next[idx] = { ...next[idx], enabled: checked === true };
+                        setModalFlagsList(next);
+                        handleInputChange('modalFlags', next);
+                      }}
+                    />
+                    <Label htmlFor={`modal-flag-enabled-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">
+                      Default checked
+                    </Label>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pl-1 w-full">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                      Show only if:
+                    </Label>
+                    <Input
+                      placeholder="attr (e.g. amount)"
+                      value={flag.conditional?.attribute ?? ''}
+                      className="h-8 w-40 text-xs"
+                      onChange={(e) => {
+                        const next = [...modalFlagsList];
+                        const attr = e.target.value.trim();
+                        if (!attr) {
+                          next[idx] = { ...next[idx], conditional: undefined };
+                        } else {
+                          next[idx] = {
+                            ...next[idx],
+                            conditional: {
+                              attribute: attr,
+                              operator: next[idx].conditional?.operator ?? 'gt',
+                              value: next[idx].conditional?.value ?? '',
+                            },
+                          };
+                        }
+                        setModalFlagsList(next);
+                        handleInputChange('modalFlags', next);
+                      }}
+                    />
+                    <Select
+                      value={flag.conditional?.operator ?? 'gt'}
+                      onValueChange={(v: 'gt' | 'lt' | 'gte' | 'lte' | 'eq') => {
+                        const next = [...modalFlagsList];
+                        const current = next[idx];
+                        if (!current.conditional?.attribute?.trim()) {
+                          // If attribute is empty, keep condition disabled.
+                          next[idx] = { ...current, conditional: undefined };
+                        } else {
+                          next[idx] = {
+                            ...current,
+                            conditional: {
+                              attribute: current.conditional!.attribute,
+                              operator: v,
+                              value: current.conditional!.value,
+                            },
+                          };
+                        }
+                        setModalFlagsList(next);
+                        handleInputChange('modalFlags', next);
+                      }}
+                      disabled={!flag.conditional?.attribute}
+                    >
+                      <SelectTrigger className="h-8 w-28 text-xs">
+                        <SelectValue placeholder="op" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gt">Greater than</SelectItem>
+                        <SelectItem value="gte">GTE</SelectItem>
+                        <SelectItem value="lt">Less than</SelectItem>
+                        <SelectItem value="lte">LTE</SelectItem>
+                        <SelectItem value="eq">Equal to</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="value (e.g. 1000)"
+                      value={String(flag.conditional?.value ?? '')}
+                      className="h-8 w-32 text-xs"
+                      onChange={(e) => {
+                        const next = [...modalFlagsList];
+                        const attr = next[idx].conditional?.attribute?.trim() ?? '';
+                        if (!attr) return;
+                        next[idx] = {
+                          ...next[idx],
+                          conditional: {
+                            attribute: attr,
+                            operator: next[idx].conditional?.operator ?? 'gt',
+                            value: e.target.value,
+                          },
+                        };
+                        setModalFlagsList(next);
+                        handleInputChange('modalFlags', next);
+                      }}
+                      disabled={!flag.conditional?.attribute}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const next = modalFlagsList.filter((_, i) => i !== idx);
+                      setModalFlagsList(next);
+                      handleInputChange('modalFlags', next);
+                    }}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const next = [...modalFlagsList, { label: '', key: '', enabled: false }];
+                  setModalFlagsList(next);
+                  handleInputChange('modalFlags', next);
+                }}
+              >
+                Add flag toggle
+              </Button>
             </div>
           )}
 

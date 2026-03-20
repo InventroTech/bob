@@ -51,6 +51,7 @@ interface FormItem {
   additional_link: string;
   vendor: string;
   estimated_cost: string | number | '';
+  price_currency: 'INR' | 'USD';
   including_gst: boolean;
   urgency_level: string;
   comments: string;
@@ -64,6 +65,7 @@ const newEmptyItem = (): FormItem => ({
   additional_link: '',
   vendor: '',
   estimated_cost: '',
+  price_currency: 'INR',
   including_gst: false,
   urgency_level: '',
   comments: '',
@@ -111,6 +113,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
+  const [myRoleName, setMyRoleName] = useState<string>('');
   // team_lead should store the parent user's user_id (string), not the TenantMembership id
   const [teamLeadUserId, setTeamLeadUserId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
@@ -167,7 +170,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     try {
       setItemNameSuggestionsLoading(true);
       const res = await apiClient.get<any>(
-        `${RECORDS_URL}?entity_type=inventory_item&page_size=8&search=${encodeURIComponent(q)}`
+        `${RECORDS_URL}?entity_type=unmannd_request&page_size=8&search=${encodeURIComponent(q)}`
       );
       const raw = res.data?.data ?? (res.data as any)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
@@ -241,6 +244,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       if (!membership || cancelled) return;
 
       setDepartment(membership.department ?? '');
+      setMyRoleName(membership.role_name ?? membership.role_key ?? '');
 
       const parentMembershipId = membership.user_parent_id ?? null;
 
@@ -363,20 +367,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setSubmitting(true);
 
       for (const item of validItems) {
-        const payloadData: Record<string, string | number | boolean> = {
+        const payloadData: Record<string, unknown> = {
           status: initialStatus,
           request_date: requestDate,
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
           urgency_level: (item.urgency_level ?? '').trim() || '',
-          comments: (item.comments ?? '').trim() || '',
           vendor: (item.vendor ?? '').trim() || '',
           item_name_freeform: (item.item_name_freeform ?? '').trim(),
           quantity_required: typeof item.quantity_required === 'number' ? item.quantity_required : Number(item.quantity_required) || 0,
           product_link: (item.product_link ?? '').trim() || '',
           additional_link: (item.additional_link ?? '').trim() || '',
+          price_currency: item.price_currency === 'USD' ? 'USD' : 'INR',
         };
+        const commentText = (item.comments ?? '').trim();
+        payloadData.comments =
+          commentText.length > 0
+            ? [{ name: requesterDisplay ?? '', role: myRoleName ?? '', comment: commentText }]
+            : [];
         const estCost = item.estimated_cost;
         if (estCost !== '' && estCost !== undefined) {
           payloadData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
@@ -541,6 +550,10 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                     const costRaw = d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
                                     const costNum = costRaw === '' || costRaw == null ? '' : Number(costRaw);
                                     if (costNum !== '' && Number.isFinite(costNum)) updateItem(item.id, 'estimated_cost', costNum);
+                                    const suggestedCurrency = String((d.price_currency ?? d.currency ?? 'INR') as any).trim().toUpperCase();
+                                    if (suggestedCurrency === 'USD' || suggestedCurrency === 'INR') {
+                                      updateItem(item.id, 'price_currency', suggestedCurrency as 'INR' | 'USD');
+                                    }
 
                                     const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
                                     if (productLink) updateItem(item.id, 'product_link', productLink);
@@ -582,28 +595,42 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium">Estimated cost</Label>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={
-                          focusedEstimatedCostId === item.id
-                            ? (item.estimated_cost === '' ? '' : String(item.estimated_cost))
-                            : formatCurrencyDisplay(item.estimated_cost)
-                        }
-                        onFocus={() => setFocusedEstimatedCostId(item.id)}
-                        onChange={(e) => {
-                          const parsed = parseCurrencyInput(e.target.value);
-                          updateItem(item.id, 'estimated_cost', parsed);
-                        }}
-                        onBlur={() => {
-                          setFocusedEstimatedCostId(null);
-                          if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
-                            updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={
+                            focusedEstimatedCostId === item.id
+                              ? (item.estimated_cost === '' ? '' : String(item.estimated_cost))
+                              : formatCurrencyDisplay(item.estimated_cost)
                           }
-                        }}
-                        className="h-9 w-32 font-mono tabular-nums"
-                      />
+                          onFocus={() => setFocusedEstimatedCostId(item.id)}
+                          onChange={(e) => {
+                            const parsed = parseCurrencyInput(e.target.value);
+                            updateItem(item.id, 'estimated_cost', parsed);
+                          }}
+                          onBlur={() => {
+                            setFocusedEstimatedCostId(null);
+                            if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
+                              updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
+                            }
+                          }}
+                          className="h-9 w-28 font-mono tabular-nums"
+                        />
+                        <Select
+                          value={item.price_currency || 'INR'}
+                          onValueChange={(v) => updateItem(item.id, 'price_currency', (v === 'USD' ? 'USD' : 'INR'))}
+                        >
+                          <SelectTrigger className="h-9 w-20">
+                            <SelectValue placeholder="INR" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INR">INR</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <label className="flex items-center gap-2 cursor-pointer pb-2 text-muted-foreground shrink-0">
                       <Checkbox

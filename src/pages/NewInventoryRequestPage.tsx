@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/hooks/useAuth';
-import { apiClient } from '@/lib/api';
+import { apiClient, membershipService } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,6 +33,22 @@ const NewInventoryRequestPage: React.FC = () => {
     try {
       setSubmitting(true);
 
+      const requesterName =
+        user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
+      let roleName = '';
+      try {
+        const membership = await membershipService.getMyMembership();
+        roleName = membership?.role_name ?? membership?.role_key ?? '';
+      } catch {
+        // Non-fatal
+      }
+
+      const commentText = comments.trim();
+      const commentsPayload =
+        commentText.length > 0
+          ? [{ name: requesterName, role: roleName, comment: commentText }]
+          : [];
+
       await apiClient.post('/crm-records/records/', {
         entity_type: 'inventory_request',
         data: {
@@ -40,7 +56,7 @@ const NewInventoryRequestPage: React.FC = () => {
           requester_id: user.id,
           item_name_freeform: itemName,
           quantity_required: quantity,
-          comments,
+          comments: commentsPayload,
         },
       });
 
