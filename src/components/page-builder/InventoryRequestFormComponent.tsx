@@ -30,6 +30,8 @@ interface InventoryRequestFormConfig {
   initialStatus?: string;
   /** @deprecated Use initialStatus */
   defaultStatus?: string;
+  /** Options shown in the Priority / Urgency picker. Saved as `urgency_level`. */
+  urgencyOptions?: Array<{ value: string; label: string }>;
 }
 
 interface VendorOption {
@@ -75,7 +77,7 @@ interface InventoryRequestFormProps {
   config?: InventoryRequestFormConfig;
 }
 
-const URGENCY_OPTIONS = [
+const DEFAULT_URGENCY_OPTIONS = [
   { value: 'LOW', label: 'Low' },
   { value: 'MEDIUM', label: 'Medium' },
   { value: 'HIGH', label: 'High' },
@@ -110,6 +112,15 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const entityType = config?.entityType ?? 'inventory_request';
   const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'DRAFT';
+  // If `urgencyOptions` exists in config (even empty), treat it as an override.
+  const urgencyOptions =
+    config?.urgencyOptions !== undefined ? config.urgencyOptions : DEFAULT_URGENCY_OPTIONS;
+  const normalizedUrgencyOptions = urgencyOptions
+    .map((o) => ({
+      value: String(o.value ?? '').trim(),
+      label: String(o.label ?? '').trim() || String(o.value ?? '').trim(),
+    }))
+    .filter((o) => o.value !== '');
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
@@ -793,7 +804,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Priority / Urgency</Label>
                     <div className="flex flex-wrap gap-2" role="group" aria-label="Priority level">
-                      {URGENCY_OPTIONS.map((o) => (
+                      {normalizedUrgencyOptions.map((o) => (
                         <Button
                           key={o.value}
                           type="button"
