@@ -261,6 +261,7 @@ interface ComponentConfig {
   entityType?: string;
   initialStatus?: string;
   defaultStatus?: string;
+  urgencyOptions?: Array<{ label: string; value: string }>;
 }
 
 // Update CanvasComponentData to include config
@@ -390,6 +391,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // InventoryRequestForm specific fields
     initialStatus?: string;
     defaultStatus?: string;
+    urgencyOptions?: Array<{ label: string; value: string }>;
     // Records table (leadTable / inventoryTable): items table mode
     tableType?: 'default' | 'itemsTable';
     statusButtons?: Array<{ label: string; statusValue: string }>;
@@ -403,6 +405,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
     showFormModalSaveButton?: boolean;
+    modalFlags?: import('@/component-config').ModalFlagConfig[];
   };
 
   // Local state for all input fields
@@ -458,6 +461,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // InventoryRequestForm (empty by default so user can set from config)
     initialStatus: (initialConfig as any).initialStatus ?? (initialConfig as any).defaultStatus ?? '',
     defaultStatus: (initialConfig as any).defaultStatus ?? '',
+    urgencyOptions: (initialConfig as any).urgencyOptions ?? undefined,
     // Records table: items table + status buttons
     tableType: (initialConfig as any).tableType || 'default',
     statusButtons: (initialConfig as any).statusButtons ?? [],
@@ -468,6 +472,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription: (initialConfig as any).formModalDescription ?? '',
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
+    modalFlags: (initialConfig as any).modalFlags ?? [],
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
@@ -513,7 +518,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   );
 
   // Handle local input changes
-  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | import('@/component-config').PaymentModalConfig) => {
+  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ label: string; value: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
     debouncedUpdateWithDelay({ [field]: value });
   }, [debouncedUpdateWithDelay]);
@@ -922,7 +927,19 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
-      case 'inventoryRequestForm':
+      case 'inventoryRequestForm': {
+        const defaultUrgencyOptions = [
+          { value: 'LOW', label: 'Low' },
+          { value: 'MEDIUM', label: 'Medium' },
+          { value: 'HIGH', label: 'High' },
+          { value: 'CRITICAL', label: 'Critical' },
+        ];
+
+        const currentUrgencyOptions =
+          localConfig.urgencyOptions !== undefined && localConfig.urgencyOptions.length >= 0
+            ? localConfig.urgencyOptions
+            : defaultUrgencyOptions;
+
         return (
           <div className="space-y-4">
             <div>
@@ -936,6 +953,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
                 Entity type to save (e.g. inventory_request).
               </p>
             </div>
+
             <div>
               <Label>Initial status</Label>
               <Input
@@ -947,8 +965,65 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
                 Status for new requests. Leave empty to use default (DRAFT).
               </p>
             </div>
+
+            <div>
+              <Label>Urgency options</Label>
+              <div className="space-y-2 mt-2">
+                {(currentUrgencyOptions ?? defaultUrgencyOptions).map((opt, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={opt.value}
+                      onChange={(e) => {
+                        const next = [...(currentUrgencyOptions ?? defaultUrgencyOptions)];
+                        next[idx] = { ...next[idx], value: e.target.value };
+                        handleInputChange('urgencyOptions', next);
+                      }}
+                      placeholder="Value (e.g. HIGH)"
+                    />
+                    <Input
+                      value={opt.label}
+                      onChange={(e) => {
+                        const next = [...(currentUrgencyOptions ?? defaultUrgencyOptions)];
+                        next[idx] = { ...next[idx], label: e.target.value };
+                        handleInputChange('urgencyOptions', next);
+                      }}
+                      placeholder="Label (e.g. High)"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => {
+                        const next = [...(currentUrgencyOptions ?? defaultUrgencyOptions)].filter((_, i) => i !== idx);
+                        handleInputChange('urgencyOptions', next);
+                      }}
+                      disabled={(currentUrgencyOptions ?? defaultUrgencyOptions).length <= 1}
+                      aria-label="Remove urgency option"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const next = [...(currentUrgencyOptions ?? defaultUrgencyOptions), { value: '', label: '' }];
+                    handleInputChange('urgencyOptions', next);
+                  }}
+                >
+                  Add option
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Picker values saved into `urgency_level`.
+              </p>
+            </div>
           </div>
         );
+      }
 
       default:
         return <div>No configuration available for this component type.</div>;
@@ -1042,7 +1117,8 @@ const PageBuilder = () => {
       if (pageId && pageId !== 'new') {
         try {
           // --- NEW RENDER API CALL ---
-          const data = await pageService.getPageById(pageId);
+          if (!tenantId) return;
+          const data = await pageService.getPageById(pageId, tenantId);
 
           if (data) {
             setPageName(data.name || 'Untitled Page');
@@ -1063,7 +1139,7 @@ const PageBuilder = () => {
     };
 
     fetchPageData();
-  }, [pageId, navigate]);
+  }, [pageId, navigate, tenantId]);
 
   // Ensure all filters in canvas components have proper unique keys
   useEffect(() => {
