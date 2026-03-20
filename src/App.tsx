@@ -35,6 +35,7 @@ import PublicTenantPage from "./pages/PublicTenantPage";
 import TeamDashboardPage from "./pages/TeamDashboardPage";
 import OperationsProgramsPage from "./pages/OperationsProgramsPage";
 import UserHierarchyPage from "./pages/UserHierarchyPage";
+import { LeadFollowupNotifier } from "./components/LeadFollowupNotifier";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -43,6 +44,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+              <LeadFollowupNotifier />
           <Routes>
           {/* Public Route - Login/Signup */}
           <Route path="/auth" element={<AuthPage />} />
