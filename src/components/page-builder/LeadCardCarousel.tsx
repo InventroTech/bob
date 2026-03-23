@@ -11,7 +11,6 @@ import { FaWhatsapp } from "react-icons/fa";
 import {
   User,
   Phone,
-  Coffee,
   CheckCircle2,
   Check,
   XCircle,
@@ -1134,6 +1133,9 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
   const handleTakeBreak = async () => {
+    if (isInModal) {
+      return;
+    }
     if (!currentLead?.id) {
       toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
       return;
@@ -1152,6 +1154,17 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       await fetchLeadStats();
     }
   };
+
+  const handleTakeBreakRef = useRef(handleTakeBreak);
+  handleTakeBreakRef.current = handleTakeBreak;
+
+  useEffect(() => {
+    const onTakeBreak = () => {
+      void handleTakeBreakRef.current();
+    };
+    window.addEventListener("pyro-lead-take-break", onTakeBreak);
+    return () => window.removeEventListener("pyro-lead-take-break", onTakeBreak);
+  }, []);
 
   const handleRefresh = async () => {
     if (!currentLead?.id) {
@@ -1496,15 +1509,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
           >
             Refresh
           </CustomButton>
-          <CustomButton
-            onClick={handleTakeBreak}
-            variant="outline"
-            size="sm"
-            icon={<Coffee className="h-3 w-3" />}
-            disabled={updating || isInModal}
-          >
-            Take a Break
-          </CustomButton>
         </div>
         <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
@@ -1663,14 +1667,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                   className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
                   onClick={handleRefresh}
                   disabled={updating || !currentLead}
-                />
-                <CustomButton
-                  type="button"
-                  variant="outline"
-                  icon={<Coffee className="h-4 w-4 text-gray-500" />}
-                  className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
-                  onClick={handleTakeBreak}
-                  disabled={updating || isInModal}
                 />
                 <CustomButton
                   type="button"
