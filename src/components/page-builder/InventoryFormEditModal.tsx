@@ -60,6 +60,12 @@ interface InventoryFormEditModalProps {
     enabled?: boolean;
     conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
   }>;
+  /**
+   * Show the extra “Final price” block (computed total/unit from one input).
+   * When false, that section is hidden and computed price overrides are not applied on save.
+   * Default: true (when omitted).
+   */
+  showFinalPriceSection?: boolean;
 }
 
 function formatDisplayValue(value: unknown): string {
@@ -101,6 +107,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   showSaveButton,
   paymentButtonConfig,
   modalFlags,
+  showFinalPriceSection,
 }) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -125,6 +132,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const isInventoryRequest = entityType === 'inventory_request';
   const canUpdate = Boolean(onUpdate && record?.id != null);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
+  const effectiveShowFinalPrice = showFinalPriceSection !== false;
 
   useEffect(() => {
     if (!open || !user) return;
@@ -250,7 +258,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
-    if ((hasPriceFieldInForm || !paymentButtonConfig) && !initial.price_currency) {
+    if ((hasPriceFieldInForm || (!paymentButtonConfig && effectiveShowFinalPrice)) && !initial.price_currency) {
       const savedCurrency = String(data.price_currency ?? data.currency ?? '').toUpperCase();
       initial.price_currency = savedCurrency === 'USD' ? 'USD' : 'INR';
     }
@@ -263,7 +271,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     });
     setFlagValues(nextFlags);
     setFormData(initial);
-    if (!paymentButtonConfig) {
+    if (!paymentButtonConfig && effectiveShowFinalPrice) {
       if (data.total_price != null && data.total_price !== '') {
         setFinalPriceValue(String(data.total_price));
         setFinalPriceIsTotal(true);
@@ -275,7 +283,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setFinalPriceIsTotal(false);
       }
     }
-  }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig, hasPriceFieldInForm, modalFlags]);
+  }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig, hasPriceFieldInForm, modalFlags, effectiveShowFinalPrice]);
 
   /** Get quantity from form or record for price calculation. */
   const getQuantity = useCallback(() => {
@@ -364,7 +372,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(btn.statusValue);
-        const priceOverrides = paymentButtonConfig ? {} : getComputedPriceFields();
+        const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
         const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides, status: btn.statusValue };
 
         // Stage comment history: append `{name, role, comment}` into `data.comments`.
@@ -415,14 +423,14 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
   );
 
   const handleSaveAll = useCallback(async () => {
     if (!record?.id || !onUpdate) return;
     try {
       setSaving(true);
-      const priceOverrides = paymentButtonConfig ? {} : getComputedPriceFields();
+      const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
       const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides };
 
       if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
@@ -468,7 +476,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
 
   if (!record) return null;
 
@@ -789,7 +797,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           )}
 
           {/* Final price (form-style modal only; not shown for Inventory Payment modal — use modal fields for total_price/unit_price there) */}
-          {!paymentButtonConfig && (
+          {!paymentButtonConfig && effectiveShowFinalPrice && (
             <div className="space-y-3 pt-2 border-t border-border/60">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Final price

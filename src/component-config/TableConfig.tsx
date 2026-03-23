@@ -73,6 +73,8 @@ interface TableConfigProps {
     paymentModalConfig?: PaymentModalConfig;
     /** Show Save button in form-style record modal footer (in addition to any action buttons). */
     showFormModalSaveButton?: boolean;
+    /** Form-style modal: show the extra “Final price” block (computed from quantity). Default on when omitted. */
+    showFinalPriceSection?: boolean;
     /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
     modalFlags?: ModalFlagConfig[];
   };
@@ -344,6 +346,22 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 </div>
                 <p className="text-xs text-gray-500">
                   When off, Save is shown only if there are no action buttons. When on, Save is always shown.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Final price section</Label>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-final-price-form-modal"
+                    checked={localConfig.showFinalPriceSection !== false}
+                    onCheckedChange={(checked) => handleInputChange('showFinalPriceSection', checked)}
+                  />
+                  <Label htmlFor="show-final-price-form-modal" className="text-sm font-normal cursor-pointer">
+                    Show computed final price block (below configured fields)
+                  </Label>
+                </div>
+                <p className="text-xs text-gray-500">
+                  When off, the “Final price” area is hidden and total/unit price are not computed from that input on save—use configured fields (e.g. total_price, unit_price) instead.
                 </p>
               </div>
               <div className="space-y-2">

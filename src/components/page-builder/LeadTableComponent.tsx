@@ -334,6 +334,8 @@ interface LeadTableProps {
     };
     /** Show Save button in form-style modal footer. If undefined, Save shows only when there are no action buttons. */
     showFormModalSaveButton?: boolean;
+    /** Form-style modal: show the extra “Final price” computed block. Default true when omitted. */
+    showFinalPriceSection?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;
@@ -2312,6 +2314,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           actionButtons={effectiveDetailMode === 'inventory_payment_modal' ? undefined : config?.statusButtons}
           paymentButtonConfig={effectiveDetailMode === 'inventory_payment_modal' ? config?.paymentModalConfig : undefined}
           showSaveButton={config?.showFormModalSaveButton}
+          showFinalPriceSection={config?.showFinalPriceSection}
           modalFlags={config?.modalFlags}
           cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
           onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
