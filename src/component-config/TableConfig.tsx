@@ -361,7 +361,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                   </Label>
                 </div>
                 <p className="text-xs text-gray-500">
-                  When off, the “Final price” area is hidden and total/unit price are not computed from that input on save—use configured fields (e.g. total_price, unit_price) instead.
+                  When off, the “Final price” block is hidden in the form-style modal, computed totals are not applied on save, and the default record detail modal hides price fields (total_price, unit_price, estimated cost, currency).
                 </p>
               </div>
               <div className="space-y-2">

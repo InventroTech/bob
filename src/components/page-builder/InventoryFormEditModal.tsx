@@ -18,8 +18,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
 
 const RECORDS_URL = '/crm-records/records/';
 const ADD_VENDOR_VALUE = '__add_vendor__';
@@ -82,6 +83,13 @@ function formatDisplayValue(value: unknown): string {
   return String(value);
 }
 
+function formatPriceFieldDisplay(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '';
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+  if (!Number.isFinite(n)) return formatDisplayValue(value);
+  return formatCurrencyDisplay(n);
+}
+
 /** Keys that we render as textarea (multi-line). */
 const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_freeform', 'project_purpose']);
 
@@ -116,12 +124,14 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [vendors, setVendors] = useState<Array<{ id: number; name: string }>>([]);
   const [vendorsLoading, setVendorsLoading] = useState(false);
-  const [showAddVendor, setShowAddVendor] = useState(false);
+  const [isAddVendorModalOpen, setIsAddVendorModalOpen] = useState(false);
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
   const [finalPriceValue, setFinalPriceValue] = useState<string>('');
   const [finalPriceIsTotal, setFinalPriceIsTotal] = useState<boolean>(false);
+  /** Live-formatted strings for price form fields while typing (cleared on blur). */
+  const [priceFieldDraft, setPriceFieldDraft] = useState<Record<string, string>>({});
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
   const [myRoleName, setMyRoleName] = useState<string>('');
 
@@ -180,28 +190,6 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     }
   }, []);
 
-  const deleteVendor = useCallback(
-    async (vendorId: number, vendorName: string) => {
-      try {
-        await apiClient.delete(`${RECORDS_URL}${vendorId}/`);
-        // Optimistically remove from local list
-        setVendors((prev) => prev.filter((v) => v.id !== vendorId));
-        // Clear vendor field if current selection matches
-        setField('vendor', (prev => (prev === vendorName ? '' : prev)) as unknown as string);
-        toast({ title: 'Vendor deleted' });
-        // Refresh from server in background
-        fetchVendors();
-      } catch (err: any) {
-        toast({
-          title: 'Failed to delete vendor',
-          description: err?.message || 'Could not delete vendor.',
-          variant: 'destructive',
-        });
-      }
-    },
-    [fetchVendors, setField, toast]
-  );
-
   useEffect(() => {
     if (open && formModalFields.some((f) => f.key === 'vendor')) fetchVendors();
   }, [open, fetchVendors, formModalFields]);
@@ -220,7 +208,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       });
       await fetchVendors();
       setField('vendor', name);
-      setShowAddVendor(false);
+      setIsAddVendorModalOpen(false);
       setNewVendorName('');
       setNewVendorLink('');
       toast({ title: 'Vendor added' });
@@ -239,15 +227,17 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   useEffect(() => {
     if (!open || !record) {
       setFormData({});
-      setShowAddVendor(false);
+      setIsAddVendorModalOpen(false);
       setNewVendorName('');
       setNewVendorLink('');
       setFinalPriceValue('');
       setFinalPriceIsTotal(false);
+      setPriceFieldDraft({});
       return;
     }
     const data = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
     const recordAny = record as Record<string, unknown>;
+    setPriceFieldDraft({});
     const initial: Record<string, unknown> = {};
     formModalFields.forEach((f) => {
       const val = data[f.key] ?? recordAny[f.key];
@@ -273,10 +263,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     setFormData(initial);
     if (!paymentButtonConfig && effectiveShowFinalPrice) {
       if (data.total_price != null && data.total_price !== '') {
-        setFinalPriceValue(String(data.total_price));
+        setFinalPriceValue(formatCurrencyDisplay(Number(data.total_price)));
         setFinalPriceIsTotal(true);
       } else if (data.unit_price != null && data.unit_price !== '') {
-        setFinalPriceValue(String(data.unit_price));
+        setFinalPriceValue(formatCurrencyDisplay(Number(data.unit_price)));
         setFinalPriceIsTotal(false);
       } else {
         setFinalPriceValue('');
@@ -294,8 +284,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
   /** Compute total_price and unit_price from final price input and checkbox for inclusion in save payload. */
   const getComputedPriceFields = useCallback((): Record<string, number> => {
-    const val = finalPriceValue.trim() === '' ? NaN : Number(finalPriceValue);
-    if (!Number.isFinite(val) || val < 0) return {};
+    const parsed = parseCurrencyInput(finalPriceValue);
+    if (parsed === '' || !Number.isFinite(parsed)) return {};
+    const val = parsed;
     const qty = getQuantity();
     if (finalPriceIsTotal) {
       return { total_price: val, unit_price: qty > 0 ? Math.round((val / qty) * 100) / 100 : val };
@@ -536,7 +527,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           ) : (
             formModalFields.map((field) => {
               const value = formData[field.key];
-              const displayStr = formatDisplayValue(value);
+              const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const isEnabled = field.enabled && canUpdate;
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isCartId = field.key === 'cart_id' && isInventoryRequest && cartOptions && cartOptions.length > 0;
@@ -596,96 +587,46 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       );
                     })()
                   ) : isVendor ? (
-                    showAddVendor ? (
-                      <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
-                        <Input
-                          placeholder="Vendor name *"
-                          value={newVendorName}
-                          onChange={(e) => setNewVendorName(e.target.value)}
-                          className="h-9 text-sm"
-                          disabled={!isEnabled}
-                        />
-                        <Input
-                          placeholder="Vendor site link (optional)"
-                          type="url"
-                          value={newVendorLink}
-                          onChange={(e) => setNewVendorLink(e.target.value)}
-                          className="h-9 text-sm"
-                          disabled={!isEnabled}
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={saveNewVendor}
-                            disabled={!isEnabled || savingNewVendor || !newVendorName.trim()}
-                          >
-                            {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                            Save vendor
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setShowAddVendor(false);
-                              setNewVendorName('');
-                              setNewVendorLink('');
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={displayStr || undefined}
-                          onValueChange={(v) => {
-                            if (v === ADD_VENDOR_VALUE) {
-                              setShowAddVendor(true);
-                              return;
-                            }
-                            setField(field.key, v ?? '');
-                          }}
-                          disabled={!isEnabled}
-                        >
-                          <SelectTrigger className="h-9 text-sm rounded-md">
-                            <SelectValue placeholder="Select or add vendor" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {vendorsLoading ? (
-                              <SelectItem value="__loading__" disabled>Loading…</SelectItem>
-                            ) : (
-                              <>
-                                {vendors.map((v) => (
-                                  <SelectItem key={v.id} value={v.name}>
-                                    {v.name}
-                                  </SelectItem>
-                                ))}
-                                <SelectItem value={ADD_VENDOR_VALUE}>+ Add vendor</SelectItem>
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => {
-                            const current = vendors.find((v) => v.name === displayStr);
-                            if (current) {
-                              deleteVendor(current.id, current.name);
-                            }
-                          }}
-                          disabled={!displayStr || !vendors.some((v) => v.name === displayStr)}
-                          aria-label="Delete selected vendor"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={displayStr || undefined}
+                        onValueChange={(v) => {
+                          if (v === ADD_VENDOR_VALUE) {
+                            setIsAddVendorModalOpen(true);
+                            return;
+                          }
+                          setField(field.key, v ?? '');
+                        }}
+                        disabled={!isEnabled}
+                      >
+                        <SelectTrigger className="h-9 text-sm rounded-md">
+                          <SelectValue placeholder="Select or add vendor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {vendorsLoading ? (
+                            <SelectItem value="__loading__" disabled>Loading…</SelectItem>
+                          ) : (
+                            <>
+                              {vendors.map((v) => (
+                                <SelectItem key={v.id} value={v.name}>
+                                  {v.name}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 shrink-0"
+                        onClick={() => setIsAddVendorModalOpen(true)}
+                        disabled={!isEnabled}
+                      >
+                        + Add vendor
+                      </Button>
+                    </div>
                   ) : isStatus ? (
                     <Select
                       value={displayStr || statusOptions[0]}
@@ -747,12 +688,30 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     PRICE_KEYS.has(field.key) ? (
                       <div className="flex items-center gap-2">
                         <Input
-                          type="number"
-                          className="h-9 text-sm rounded-md"
-                          value={displayStr}
+                          type="text"
+                          inputMode="decimal"
+                          className="h-9 min-w-[7rem] text-sm rounded-md font-mono tabular-nums"
+                          value={
+                            priceFieldDraft[field.key] ??
+                            formatCurrencyDisplay(
+                              formData[field.key] as number | '' | string | undefined,
+                            )
+                          }
                           onChange={(e) => {
-                            const v = e.target.value;
-                            setField(field.key, v === '' ? '' : Number(v));
+                            const { display, value: v } = formatCurrencyInputLive(e.target.value);
+                            setPriceFieldDraft((prev) => ({ ...prev, [field.key]: display }));
+                            setField(field.key, v);
+                          }}
+                          onBlur={() => {
+                            setPriceFieldDraft((prev) => {
+                              const next = { ...prev };
+                              delete next[field.key];
+                              return next;
+                            });
+                            const cur = formData[field.key];
+                            if (typeof cur === 'number' && Number.isFinite(cur)) {
+                              setField(field.key, Math.round(cur * 100) / 100);
+                            }
                           }}
                           disabled={!isEnabled}
                         />
@@ -804,13 +763,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               </Label>
               <div className="flex flex-wrap items-center gap-4">
                 <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.00"
                   value={finalPriceValue}
-                  onChange={(e) => setFinalPriceValue(e.target.value)}
-                  className="h-9 text-sm rounded-md w-32"
+                  onChange={(e) => {
+                    const { display } = formatCurrencyInputLive(e.target.value);
+                    setFinalPriceValue(display);
+                  }}
+                  className="h-9 text-sm rounded-md min-w-[7rem] font-mono tabular-nums"
                   disabled={!canUpdate}
                 />
                 <Select
@@ -893,6 +854,51 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           )}
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={isAddVendorModalOpen} onOpenChange={setIsAddVendorModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add vendor</DialogTitle>
+            <DialogDescription>Create a new vendor and select it for this record.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Vendor name *"
+              value={newVendorName}
+              onChange={(e) => setNewVendorName(e.target.value)}
+              className="h-9 text-sm"
+            />
+            <Input
+              placeholder="Vendor site link (optional)"
+              type="url"
+              value={newVendorLink}
+              onChange={(e) => setNewVendorLink(e.target.value)}
+              className="h-9 text-sm"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsAddVendorModalOpen(false);
+                setNewVendorName('');
+                setNewVendorLink('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={saveNewVendor}
+              disabled={savingNewVendor || !newVendorName.trim()}
+            >
+              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save vendor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

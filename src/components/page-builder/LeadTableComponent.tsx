@@ -28,6 +28,7 @@ import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 import { convertGMTtoIST } from '@/lib/timeUtils';
+import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 
 interface Column {
   header: string;
@@ -937,8 +938,19 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       value = '0'; // Keep 0 as 0, don't convert to N/A
     }
     
-    // Convert to string for display
-    const displayValue = String(value);
+    // Convert to string for display (formatted money for known price fields)
+    let displayValue = String(value);
+    if (
+      value !== null &&
+      value !== undefined &&
+      value !== 'N/A' &&
+      PRICE_FIELD_KEYS.has(column.accessor)
+    ) {
+      const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+      if (Number.isFinite(n)) {
+        displayValue = formatCurrencyDisplay(n);
+      }
+    }
     
     // Helper function to truncate text based on column width
     const truncateText = (text: string, columnIndex: number) => {
@@ -1151,6 +1163,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
     
     // Default text rendering
+    if (PRICE_FIELD_KEYS.has(column.accessor)) {
+      return (
+        <span className="text-sm block font-mono tabular-nums" title={displayValue}>
+          {truncateText(displayValue, columnIndex)}
+        </span>
+      );
+    }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
   }, [config?.statusColors, config?.tableType, handleActionClick, handleStatusButtonClick]);
 
@@ -2370,6 +2389,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         })()}
         cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
         modalFlags={config?.modalFlags}
+        showFinalPriceSection={config?.showFinalPriceSection}
         onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
           ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
               const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
