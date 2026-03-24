@@ -32,15 +32,11 @@ const CustomAppAuthPage: React.FC = () => {
     localStorage.setItem('user_email', userEmail);
 
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      const isAlreadyLinked = currentSession?.access_token && getRoleIdFromJWT(currentSession.access_token);
+      const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
 
       if (isAlreadyLinked) return;
 
-      const result = await authService.linkUserUid(
-        { uid, email: userEmail },
-        tenantSlug || 'bibhab-thepyro-ai'
-      );
+      const result = await authService.linkUserUid({ uid, email: userEmail });
 
       if (result.success === false || result.error) {
         const errorCode = (result as any).code;
