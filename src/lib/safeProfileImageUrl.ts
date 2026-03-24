@@ -18,14 +18,21 @@ export function safeProfileImageUrl(url: unknown): string | null {
   try {
     const parsed = new URL(t, base);
     const protocol = parsed.protocol.toLowerCase();
+    // Only allow http/https URLs
     if (protocol === "http:" || protocol === "https:") {
-      return t;
+      // Use the normalized href instead of the raw input to avoid
+      // accidentally reinterpreting malformed input.
+      return parsed.href;
     }
+    // Reject all other protocols such as javascript:, data:, file:, etc.
     return null;
   } catch {
+    // If it looks like it has a scheme (for example "javascript:"),
+    // reject it outright.
     if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(t)) {
       return null;
     }
+    // Otherwise allow it as a relative URL/path (e.g. "/images/avatar.png").
     return t;
   }
 }

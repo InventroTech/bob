@@ -316,6 +316,9 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const [profilePicFailed, setProfilePicFailed] = useState(false);
 
   const profilePicSrc = safeProfileImageUrl(currentLead?.display_pic_url);
+  const iframeSrc = safeProfileImageUrl(
+    currentLead?.linkedin_profile || currentLead?.website
+  );
   const profilePicAlt = currentLead
     ? `${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`
     : "Lead profile";
@@ -1215,7 +1218,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {/* Modal Content - Iframe */}
             <div className="flex-1 p-4">
               <iframe
-                src={currentLead.linkedin_profile || currentLead.website}
+                src={iframeSrc || undefined}
                 className="w-full h-full border-0 rounded-md"
                 title={`${(currentLead as any)?.data?.name || currentLead?.name || "Lead"} Profile`}
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
