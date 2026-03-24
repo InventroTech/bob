@@ -53,6 +53,12 @@ type InventoryItemSuggestion = {
   data: Record<string, unknown>;
 };
 
+const normalizeProductName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
 interface FormItem {
   id: string;
   item_name_freeform: string;
@@ -115,6 +121,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
   const [myRoleName, setMyRoleName] = useState<string>('');
+  const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
   // team_lead should store the parent user's user_id (string), not the TenantMembership id
   const [teamLeadUserId, setTeamLeadUserId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
@@ -136,7 +143,11 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [vendorQuery, setVendorQuery] = useState<string>('');
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
 
-  const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
+  const requesterDisplay =
+    requesterNameFromMembership ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    '—';
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -172,7 +183,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     try {
       setItemNameSuggestionsLoading(true);
       const res = await apiClient.get<any>(
-        `${RECORDS_URL}?entity_type=unmannd_request&page_size=8&search=${encodeURIComponent(q)}`
+        `${RECORDS_URL}?entity_type=unmannd_product&page_size=12&search=${encodeURIComponent(q)}`
       );
       const raw = res.data?.data ?? (res.data as any)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
@@ -182,13 +193,22 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
           const name =
             String(
-              data.item_name_freeform ?? data.name ?? data.item_name ?? r.item_name_freeform ?? r.name ?? ''
+              data.name ?? data.item_name_freeform ?? data.item_name ?? r.item_name_freeform ?? r.name ?? ''
             ).trim();
           return id != null && name ? ({ id: Number(id), name, data } as InventoryItemSuggestion) : null;
         })
         .filter(Boolean) as InventoryItemSuggestion[];
-      setItemNameSuggestions(mapped);
-      setItemNameSuggestionsOpen(mapped.length > 0);
+      // De-duplicate suggestions by normalized product name so repeated requests
+      // don't show the same item multiple times.
+      const deduped = new Map<string, InventoryItemSuggestion>();
+      mapped.forEach((m) => {
+        const k = normalizeProductName(m.name);
+        if (!k) return;
+        if (!deduped.has(k)) deduped.set(k, m);
+      });
+      const uniqueSuggestions = Array.from(deduped.values());
+      setItemNameSuggestions(uniqueSuggestions);
+      setItemNameSuggestionsOpen(uniqueSuggestions.length > 0);
     } catch {
       setItemNameSuggestions([]);
       setItemNameSuggestionsOpen(false);
@@ -196,6 +216,84 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setItemNameSuggestionsLoading(false);
     }
   }, []);
+
+
+  /**
+   * Keep a de-duplicated product catalog entry for typeahead.
+   * Uses entity_type=unmannd_product and exact-name match (case-insensitive) on fetched candidates.
+   */
+  const upsertUnmanndProduct = useCallback(async (item: FormItem) => {
+    const productName = String(item.item_name_freeform ?? '').trim();
+    if (!productName) return;
+    const normalizedName = normalizeProductName(productName);
+    const productVendor = String(item.vendor ?? '').trim();
+
+    const productData: Record<string, unknown> = {
+      name: productName,
+      normalized_name: normalizedName,
+      vendor: productVendor || '',
+      default_vendor: productVendor || '',
+      product_link: String(item.product_link ?? '').trim() || '',
+    };
+    const estCost = item.estimated_cost;
+    if (estCost !== '' && estCost !== undefined) {
+      productData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
+    }
+
+    const searchRes = await apiClient.get<any>(
+      `${RECORDS_URL}?entity_type=unmannd_product&page_size=20&search=${encodeURIComponent(productName)}`
+    );
+    const raw = searchRes.data?.data ?? (searchRes.data as any)?.results ?? [];
+    const list = Array.isArray(raw) ? raw : [];
+    const existing = list.find((r: any) => {
+      const d = r?.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
+      const n = normalizeProductName(
+        String(d.normalized_name ?? d.name ?? d.item_name_freeform ?? r?.name ?? '')
+      );
+      return n === normalizedName;
+    });
+
+    if (existing?.id != null) {
+      await apiClient.patch(`${RECORDS_URL}${existing.id}/`, {
+        data: {
+          ...(existing?.data && typeof existing.data === 'object' ? existing.data : {}),
+          ...productData,
+        },
+      });
+      return;
+    }
+
+    await apiClient.post(RECORDS_URL, {
+      entity_type: 'unmannd_product',
+      data: productData,
+    });
+  }, []);
+
+  const deleteVendor = useCallback(
+    async (vendor: VendorOption) => {
+      try {
+        await apiClient.delete(`${RECORDS_URL}${vendor.id}/`);
+        // Optimistically remove from local list
+        setVendors((prev) => prev.filter((v) => v.id !== vendor.id));
+        // Clear vendor field on any items using this vendor name
+        setItems((prev) =>
+          prev.map((item) =>
+            item.vendor === vendor.name ? { ...item, vendor: '' } : item
+          )
+        );
+        toast.success('Vendor deleted.');
+        // Refresh from server in background
+        fetchVendors();
+      } catch (err: unknown) {
+        const msg =
+          err && typeof err === 'object' && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Failed to delete vendor.';
+        toast.error(msg);
+      }
+    },
+    [fetchVendors, setItems]
+  );
 
   useEffect(() => {
     fetchVendors();
@@ -221,37 +319,54 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
       setDepartment(membership.department ?? '');
       setMyRoleName(membership.role_name ?? membership.role_key ?? '');
+      const membershipAny = membership as any;
+      const membershipName = String(membershipAny.name ?? membershipAny.full_name ?? '').trim();
+      if (!cancelled && membershipName) {
+        setRequesterNameFromMembership(membershipName);
+      }
 
       const parentMembershipId = membership.user_parent_id ?? null;
 
-      // If there is a parent membership, resolve its user_id from /membership/users/
-      if (parentMembershipId != null) {
-        try {
-          const resp = await apiClient.get<any>('/membership/users/');
-          const respData = resp.data;
-          let users: MembershipUser[] = [];
+      // Resolve current user's membership name from authz_tenantmembership list
+      // and manager user_id (if parent membership exists).
+      try {
+        const resp = await apiClient.get<any>('/membership/users/');
+        const respData = resp.data;
+        let users: MembershipUser[] = [];
 
-          if (Array.isArray(respData)) {
-            users = respData as MembershipUser[];
-          } else if (respData && typeof respData === 'object') {
-            if (Array.isArray(respData.results)) {
-              users = respData.results as MembershipUser[];
-            } else if (Array.isArray(respData.data)) {
-              users = respData.data as MembershipUser[];
-            }
+        if (Array.isArray(respData)) {
+          users = respData as MembershipUser[];
+        } else if (respData && typeof respData === 'object') {
+          if (Array.isArray(respData.results)) {
+            users = respData.results as MembershipUser[];
+          } else if (Array.isArray(respData.data)) {
+            users = respData.data as MembershipUser[];
           }
+        }
 
+        const selfMembership = users.find((u) => {
+          const uid = String(user?.id ?? '');
+          return (
+            (u.user_id != null && String(u.user_id) === uid) ||
+            (u.uid != null && String(u.uid) === uid)
+          );
+        });
+        const selfName = String(selfMembership?.name ?? selfMembership?.full_name ?? '').trim();
+        if (!cancelled && selfName) {
+          setRequesterNameFromMembership(selfName);
+        }
+
+        if (parentMembershipId != null) {
           const parent = users.find(
             (u) => u.id != null && Number(u.id) === Number(parentMembershipId)
           );
-
           if (!cancelled && parent?.user_id) {
             setTeamLeadUserId(String(parent.user_id));
             return;
           }
-        } catch (err) {
-          console.warn('Failed to resolve parent user_id for team_lead', err);
         }
+      } catch (err) {
+        console.warn('Failed to resolve membership users for requester/team_lead', err);
       }
 
       // Fallback: use current user's own id as team_lead
@@ -343,6 +458,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setSubmitting(true);
 
       for (const item of validItems) {
+        await upsertUnmanndProduct(item);
+
         const payloadData: Record<string, unknown> = {
           status: initialStatus,
           request_date: requestDate,
