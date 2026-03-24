@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
+import { safeProfileImageUrl } from "@/lib/safeProfileImageUrl";
 
 interface Lead {
   id: number;
@@ -207,12 +208,6 @@ const formatPriority = (priority: string): { label: string; color: string; bgCol
   }
 };
 
-function leadProfilePicUrl(url: unknown): string | null {
-  if (typeof url !== "string") return null;
-  const t = url.trim();
-  return t.length > 0 ? t : null;
-}
-
 interface LeadCardProps {
   config?: {
     apiEndpoint?: string;
@@ -320,7 +315,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const [whatsappPhone, setWhatsappPhone] = useState<string>("");
   const [profilePicFailed, setProfilePicFailed] = useState(false);
 
-  const profilePicSrc = leadProfilePicUrl(currentLead?.display_pic_url);
+  const profilePicSrc = safeProfileImageUrl(currentLead?.display_pic_url);
   const profilePicAlt = currentLead
     ? `${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`
     : "Lead profile";

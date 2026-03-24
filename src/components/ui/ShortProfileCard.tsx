@@ -1,6 +1,7 @@
 'use client'
 import React, { useEffect, useState } from 'react'
 import { User } from 'lucide-react'
+import { safeProfileImageUrl } from '@/lib/safeProfileImageUrl'
 
 interface ShortProfileCardProps {
   image?: string;
@@ -9,7 +10,7 @@ interface ShortProfileCardProps {
 }
 
 const ShortProfileCard = ({ image, name = '', address = '' }: ShortProfileCardProps) => {
-  const imageSrc = typeof image === 'string' ? image.trim() : '';
+  const imageSrc = safeProfileImageUrl(image) ?? '';
   const hasImage = imageSrc.length > 0;
   const [imageFailed, setImageFailed] = useState(false);
 
