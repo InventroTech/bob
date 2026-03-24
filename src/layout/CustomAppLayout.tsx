@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 import { getEffectiveToken, isSpoofing, getSpoofUserLabel, SPOOF_CHANGED_EVENT, fetchPagesForRole } from '@/lib/spoof';
 import { icons} from 'lucide-react';
+import { CustomIcons } from '@/components/page-builder/NewCustomIcons';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon} from '@/components/icons/CustomIcons';
 
   const navigationIconMap: Record<string, JSX.Element> = {
@@ -29,15 +30,19 @@ import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, Analyt
   };
 
 const DynamicSidebarIcon = ({ iconName }: { iconName: string }) => {
-  // 1. Check if it's a custom icon from your manual map
-  const CustomIcon = navigationIconMap[iconName];
-  if (CustomIcon) return CustomIcon;
+  // 1. Check if it's one of your new custom Figma icons
+  const FigmaIcon = CustomIcons[iconName];
+  if (FigmaIcon) return <FigmaIcon className="h-4 w-4" />;
 
-  // 2. Check if it's a standard Lucide icon name from the library
+  // 2. Check if it's a custom icon from your manual navigation map
+  const CustomMapIcon = navigationIconMap[iconName.toLowerCase()];
+  if (CustomMapIcon) return CustomMapIcon;
+
+  // 3. Check if it's a standard Lucide icon name from the library
   const LucideIcon = (icons as any)[iconName];
   if (LucideIcon) return <LucideIcon className="h-4 w-4" />;
 
-  // 3. Final Fallback
+  // 4. Final Fallback
   return <Sparkles className="h-4 w-4" />;
 };
 

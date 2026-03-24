@@ -10,6 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -19,9 +27,9 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar, User, Send, Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/currencyFormat';
 
 const RECORDS_URL = '/crm-records/records/';
-const ADD_VENDOR_VALUE = '__add_vendor__';
 
 interface InventoryRequestFormConfig {
   /** Entity type to save (e.g. inventory_request). */
@@ -44,6 +52,12 @@ type InventoryItemSuggestion = {
   name: string;
   data: Record<string, unknown>;
 };
+
+const normalizeProductName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
 
 interface FormItem {
   id: string;
@@ -84,24 +98,6 @@ const DEFAULT_URGENCY_OPTIONS = [
   { value: 'CRITICAL', label: 'Critical' },
 ];
 
-/** Format a number as currency string with thousands separator and 2 decimal places (e.g. 1,234.00). */
-function formatCurrencyDisplay(val: string | number | ''): string {
-  if (val === '' || val === undefined || val === null) return '';
-  const n = typeof val === 'number' ? val : Number(String(val).replace(/,/g, ''));
-  if (!Number.isFinite(n)) return '';
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-/** Parse user input (with optional commas) to number or empty. Only one decimal point allowed. */
-function parseCurrencyInput(str: string): number | '' {
-  const cleaned = str.replace(/,/g, '').trim();
-  if (cleaned === '' || cleaned === '.') return '';
-  const parts = cleaned.split('.');
-  const normalized = parts.length > 2 ? `${parts[0]}.${parts[1]}` : cleaned;
-  const n = Number(normalized);
-  return Number.isFinite(n) && n >= 0 ? n : '';
-}
-
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
@@ -125,6 +121,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
   const [myRoleName, setMyRoleName] = useState<string>('');
+  const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
   // team_lead should store the parent user's user_id (string), not the TenantMembership id
   const [teamLeadUserId, setTeamLeadUserId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
@@ -135,7 +132,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
-  const [focusedEstimatedCostId, setFocusedEstimatedCostId] = useState<string | null>(null);
+  /** Live-formatted price strings while typing (cleared on blur). */
+  const [priceDraftByItemId, setPriceDraftByItemId] = useState<Record<string, string>>({});
   const [focusedItemNameId, setFocusedItemNameId] = useState<string | null>(null);
   const [itemNameQuery, setItemNameQuery] = useState<string>('');
   const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
@@ -145,7 +143,11 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [vendorQuery, setVendorQuery] = useState<string>('');
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
 
-  const requesterDisplay = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
+  const requesterDisplay =
+    requesterNameFromMembership ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    '—';
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -181,7 +183,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     try {
       setItemNameSuggestionsLoading(true);
       const res = await apiClient.get<any>(
-        `${RECORDS_URL}?entity_type=unmannd_request&page_size=8&search=${encodeURIComponent(q)}`
+        `${RECORDS_URL}?entity_type=unmannd_product&page_size=12&search=${encodeURIComponent(q)}`
       );
       const raw = res.data?.data ?? (res.data as any)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
@@ -191,19 +193,80 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
           const name =
             String(
-              data.item_name_freeform ?? data.name ?? data.item_name ?? r.item_name_freeform ?? r.name ?? ''
+              data.name ?? data.item_name_freeform ?? data.item_name ?? r.item_name_freeform ?? r.name ?? ''
             ).trim();
           return id != null && name ? ({ id: Number(id), name, data } as InventoryItemSuggestion) : null;
         })
         .filter(Boolean) as InventoryItemSuggestion[];
-      setItemNameSuggestions(mapped);
-      setItemNameSuggestionsOpen(mapped.length > 0);
+      // De-duplicate suggestions by normalized product name so repeated requests
+      // don't show the same item multiple times.
+      const deduped = new Map<string, InventoryItemSuggestion>();
+      mapped.forEach((m) => {
+        const k = normalizeProductName(m.name);
+        if (!k) return;
+        if (!deduped.has(k)) deduped.set(k, m);
+      });
+      const uniqueSuggestions = Array.from(deduped.values());
+      setItemNameSuggestions(uniqueSuggestions);
+      setItemNameSuggestionsOpen(uniqueSuggestions.length > 0);
     } catch {
       setItemNameSuggestions([]);
       setItemNameSuggestionsOpen(false);
     } finally {
       setItemNameSuggestionsLoading(false);
     }
+  }, []);
+
+
+  /**
+   * Keep a de-duplicated product catalog entry for typeahead.
+   * Uses entity_type=unmannd_product and exact-name match (case-insensitive) on fetched candidates.
+   */
+  const upsertUnmanndProduct = useCallback(async (item: FormItem) => {
+    const productName = String(item.item_name_freeform ?? '').trim();
+    if (!productName) return;
+    const normalizedName = normalizeProductName(productName);
+    const productVendor = String(item.vendor ?? '').trim();
+
+    const productData: Record<string, unknown> = {
+      name: productName,
+      normalized_name: normalizedName,
+      vendor: productVendor || '',
+      default_vendor: productVendor || '',
+      product_link: String(item.product_link ?? '').trim() || '',
+    };
+    const estCost = item.estimated_cost;
+    if (estCost !== '' && estCost !== undefined) {
+      productData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
+    }
+
+    const searchRes = await apiClient.get<any>(
+      `${RECORDS_URL}?entity_type=unmannd_product&page_size=20&search=${encodeURIComponent(productName)}`
+    );
+    const raw = searchRes.data?.data ?? (searchRes.data as any)?.results ?? [];
+    const list = Array.isArray(raw) ? raw : [];
+    const existing = list.find((r: any) => {
+      const d = r?.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
+      const n = normalizeProductName(
+        String(d.normalized_name ?? d.name ?? d.item_name_freeform ?? r?.name ?? '')
+      );
+      return n === normalizedName;
+    });
+
+    if (existing?.id != null) {
+      await apiClient.patch(`${RECORDS_URL}${existing.id}/`, {
+        data: {
+          ...(existing?.data && typeof existing.data === 'object' ? existing.data : {}),
+          ...productData,
+        },
+      });
+      return;
+    }
+
+    await apiClient.post(RECORDS_URL, {
+      entity_type: 'unmannd_product',
+      data: productData,
+    });
   }, []);
 
   const deleteVendor = useCallback(
@@ -256,37 +319,54 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
       setDepartment(membership.department ?? '');
       setMyRoleName(membership.role_name ?? membership.role_key ?? '');
+      const membershipAny = membership as any;
+      const membershipName = String(membershipAny.name ?? membershipAny.full_name ?? '').trim();
+      if (!cancelled && membershipName) {
+        setRequesterNameFromMembership(membershipName);
+      }
 
       const parentMembershipId = membership.user_parent_id ?? null;
 
-      // If there is a parent membership, resolve its user_id from /membership/users/
-      if (parentMembershipId != null) {
-        try {
-          const resp = await apiClient.get<any>('/membership/users/');
-          const respData = resp.data;
-          let users: MembershipUser[] = [];
+      // Resolve current user's membership name from authz_tenantmembership list
+      // and manager user_id (if parent membership exists).
+      try {
+        const resp = await apiClient.get<any>('/membership/users/');
+        const respData = resp.data;
+        let users: MembershipUser[] = [];
 
-          if (Array.isArray(respData)) {
-            users = respData as MembershipUser[];
-          } else if (respData && typeof respData === 'object') {
-            if (Array.isArray(respData.results)) {
-              users = respData.results as MembershipUser[];
-            } else if (Array.isArray(respData.data)) {
-              users = respData.data as MembershipUser[];
-            }
+        if (Array.isArray(respData)) {
+          users = respData as MembershipUser[];
+        } else if (respData && typeof respData === 'object') {
+          if (Array.isArray(respData.results)) {
+            users = respData.results as MembershipUser[];
+          } else if (Array.isArray(respData.data)) {
+            users = respData.data as MembershipUser[];
           }
+        }
 
+        const selfMembership = users.find((u) => {
+          const uid = String(user?.id ?? '');
+          return (
+            (u.user_id != null && String(u.user_id) === uid) ||
+            (u.uid != null && String(u.uid) === uid)
+          );
+        });
+        const selfName = String(selfMembership?.name ?? selfMembership?.full_name ?? '').trim();
+        if (!cancelled && selfName) {
+          setRequesterNameFromMembership(selfName);
+        }
+
+        if (parentMembershipId != null) {
           const parent = users.find(
             (u) => u.id != null && Number(u.id) === Number(parentMembershipId)
           );
-
           if (!cancelled && parent?.user_id) {
             setTeamLeadUserId(String(parent.user_id));
             return;
           }
-        } catch (err) {
-          console.warn('Failed to resolve parent user_id for team_lead', err);
         }
+      } catch (err) {
+        console.warn('Failed to resolve membership users for requester/team_lead', err);
       }
 
       // Fallback: use current user's own id as team_lead
@@ -378,6 +458,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setSubmitting(true);
 
       for (const item of validItems) {
+        await upsertUnmanndProduct(item);
+
         const payloadData: Record<string, unknown> = {
           status: initialStatus,
           request_date: requestDate,
@@ -483,10 +565,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           <section className="space-y-4 border-t pt-6">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Items</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
-                <Plus className="h-4 w-4" />
-                Add item
-              </Button>
             </div>
 
             {items.map((item) => (
@@ -612,22 +690,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                           inputMode="decimal"
                           placeholder="0.00"
                           value={
-                            focusedEstimatedCostId === item.id
-                              ? (item.estimated_cost === '' ? '' : String(item.estimated_cost))
-                              : formatCurrencyDisplay(item.estimated_cost)
+                            priceDraftByItemId[item.id] ??
+                            formatCurrencyDisplay(item.estimated_cost)
                           }
-                          onFocus={() => setFocusedEstimatedCostId(item.id)}
                           onChange={(e) => {
-                            const parsed = parseCurrencyInput(e.target.value);
-                            updateItem(item.id, 'estimated_cost', parsed);
+                            const { display, value } = formatCurrencyInputLive(e.target.value);
+                            setPriceDraftByItemId((prev) => ({ ...prev, [item.id]: display }));
+                            updateItem(item.id, 'estimated_cost', value);
                           }}
                           onBlur={() => {
-                            setFocusedEstimatedCostId(null);
+                            setPriceDraftByItemId((prev) => {
+                              const next = { ...prev };
+                              delete next[item.id];
+                              return next;
+                            });
                             if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
                               updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
                             }
                           }}
-                          className="h-9 w-28 font-mono tabular-nums"
+                          className="h-9 min-w-[7.5rem] font-mono tabular-nums"
                         />
                         <Select
                           value={item.price_currency || 'INR'}
@@ -652,39 +733,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     </label>
                     <div className="space-y-1.5 flex-1 min-w-[180px]">
                       <Label className="text-xs font-medium">Vendor</Label>
-                      {addVendorForItemId === item.id ? (
-                        <div className="space-y-2 rounded border border-border/60 bg-background p-3">
-                          <Input
-                            placeholder="Vendor name *"
-                            value={newVendorName}
-                            onChange={(e) => setNewVendorName(e.target.value)}
-                            className="h-9"
-                          />
-                          <Input
-                            placeholder="Vendor site link (optional)"
-                            type="url"
-                            value={newVendorLink}
-                            onChange={(e) => setNewVendorLink(e.target.value)}
-                            className="h-9"
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={saveNewVendor}
-                              disabled={savingNewVendor || !newVendorName.trim()}
-                            >
-                              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                              Save vendor
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={cancelAddVendor}>
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="relative w-full">
+                      <div className="flex items-center gap-2">
+                        <div className="relative w-full">
                             <Input
                               value={item.vendor}
                               placeholder="Search or add vendor"
@@ -744,41 +794,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                         </button>
                                       ));
                                     })()}
-                                    <button
-                                      type="button"
-                                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                                      onMouseDown={(ev) => ev.preventDefault()}
-                                      onClick={() => {
-                                        startAddVendor(item.id);
-                                        setVendorSuggestionsOpen(false);
-                                        setFocusedVendorId(null);
-                                      }}
-                                    >
-                                      + Add vendor
-                                    </button>
                                   </div>
                                 )}
                               </div>
                             )}
-                          </div>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => {
-                              const current = vendors.find((v) => v.name === item.vendor);
-                              if (current) {
-                                deleteVendor(current);
-                              }
-                            }}
-                            disabled={!item.vendor || !vendors.some((v) => v.name === item.vendor)}
-                            aria-label="Delete selected vendor"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
-                      )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 shrink-0"
+                          onClick={() => {
+                            startAddVendor(item.id);
+                            setVendorSuggestionsOpen(false);
+                            setFocusedVendorId(null);
+                          }}
+                        >
+                          + Add vendor
+                        </Button>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
@@ -831,6 +865,12 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 </div>
               </div>
             ))}
+            <div className="pt-1">
+              <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
+                <Plus className="h-4 w-4" />
+                Add item
+              </Button>
+            </div>
           </section>
         </CardContent>
 
@@ -866,6 +906,43 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           </div>
         </CardFooter>
       </form>
+
+      <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add vendor</DialogTitle>
+            <DialogDescription>Create a vendor and auto-fill it for this item.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Vendor name *"
+              value={newVendorName}
+              onChange={(e) => setNewVendorName(e.target.value)}
+              className="h-9"
+            />
+            <Input
+              placeholder="Vendor site link (optional)"
+              type="url"
+              value={newVendorLink}
+              onChange={(e) => setNewVendorLink(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={cancelAddVendor}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={saveNewVendor}
+              disabled={savingNewVendor || !newVendorName.trim()}
+            >
+              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save vendor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

@@ -141,6 +141,7 @@ import { WhatsAppTemplateConfig } from "@/components/page-builder/component-conf
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 import type { RoutingRulesConfigData, RoutingFilterField } from "@/component-config";
+import { CustomIcons, CUSTOM_ICON_NAMES } from "@/components/page-builder/NewCustomIcons";
 
 // Wrapper component to prevent unnecessary re-renders in RoutingRulesConfig
 interface RoutingRulesConfigWrapperProps {
@@ -405,6 +406,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
     showFormModalSaveButton?: boolean;
+    /** Form-style modal: show extra “Final price” block. Default true when omitted. */
+    showFinalPriceSection?: boolean;
     modalFlags?: import('@/component-config').ModalFlagConfig[];
   };
 
@@ -472,6 +475,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription: (initialConfig as any).formModalDescription ?? '',
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
+    showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
     modalFlags: (initialConfig as any).modalFlags ?? [],
   });
 
@@ -1045,11 +1049,17 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 };
 
 // Use the built-in 'icons' object from lucide-react
-const AVAILABLE_ICONS = Object.keys(icons);
+// This merges your custom Figma names with the 1,500+ Lucide names
+const AVAILABLE_ICONS = [...CUSTOM_ICON_NAMES, ...Object.keys(icons)];
 
 const DynamicIcon = ({ name, className }: { name: string; className?: string }) => {
   // Look up the component in the full icons map
   const IconComponent = (icons as any)[name];
+  const CustomIcon = CustomIcons[name];
+
+  if (CustomIcon) {
+    return <CustomIcon className={className} />;
+  }
 
   if (IconComponent) {
     return <IconComponent className={className} />;
@@ -1065,17 +1075,23 @@ const PageBuilder = () => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
   const [isSaving, setIsSaving] = useState(false);
+  const [visibleIconsCount, setVisibleIconsCount] = useState(100);
   const [pageName, setPageName] = useState("Untitled Page");
   const [headerTitle, setHeaderTitle] = useState("");
   const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [pageIcon, setPageIcon] = useState<string>("Sparkles"); // Standard library default
   const filteredIcons = useMemo(() => {
-  if (!searchTerm) return AVAILABLE_ICONS.slice(0, 100);
-  return AVAILABLE_ICONS.filter(icon => 
-    icon.toLowerCase().includes(searchTerm.toLowerCase())
-  ).slice(0, 100);
-}, [searchTerm]);
+    // First, filter the list if there is a search term
+    const allMatching = searchTerm
+      ? AVAILABLE_ICONS.filter(icon =>
+          icon.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : AVAILABLE_ICONS;
+
+    // Then, return only the amount allowed by our "Load More" state
+    return allMatching.slice(0, visibleIconsCount);
+  }, [searchTerm, visibleIconsCount]);
   const [activeTab, setActiveTab] = useState("components");
   const [canvasComponents, setCanvasComponents] = useState<CanvasComponentData[]>([]);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -1111,14 +1127,17 @@ const PageBuilder = () => {
     }
   }, []);
 
-  useEffect(() => {
-    // If editing an existing page, fetch its data
+useEffect(() => {
     const fetchPageData = async () => {
       if (pageId && pageId !== 'new') {
         try {
-          // --- NEW RENDER API CALL ---
-          if (!tenantId) return;
-          const data = await pageService.getPageById(pageId, tenantId);
+          const response = await pageService.getPageById(pageId, tenantId);
+          
+          // Debugging: Check your console to see the real shape of the data
+          console.log("API Response:", response);
+
+          // Standardize the data object (handle nesting if it exists)
+          const data = (response as any).data || response;
 
           if (data) {
             setPageName(data.name || 'Untitled Page');
@@ -1126,20 +1145,17 @@ const PageBuilder = () => {
             setDisplayOrder(data.display_order || 0);
             setPageIcon(data.icon_name || 'Sparkles');
             setCanvasComponents(Array.isArray(data.config) ? data.config : []);
+            
+            // Fix for Role: ensure it matches the ID in your dropdown
             if (data.role) setSelectedRole(data.role);
-          } else {
-            toast.error("Page not found.");
-            navigate('/');
           }
         } catch (error: any) {
           toast.error(`Error loading page: ${error.message}`);
-          navigate('/');
         }
       }
     };
-
     fetchPageData();
-  }, [pageId, navigate, tenantId]);
+  }, [pageId]);
 
   // Ensure all filters in canvas components have proper unique keys
   useEffect(() => {
@@ -1340,32 +1356,32 @@ const PageBuilder = () => {
     setIsSaving(true);
     try {
       // 1. Build the payload matching your Python backend Serializer
+      // Ensure every field is present so the backend doesn't overwrite them with defaults
       const pageData: any = {
         name: pageName.trim(),
-        // We don't need 'as unknown as Json' anymore with the Render API
         config: canvasComponents, 
         role: selectedRole || null,
-        display_order: displayOrder,
+        display_order: Number(displayOrder), // Force number type
         icon_name: pageIcon,
+        header_title: headerTitle.trim() || "", // Always include, even if empty string
       };
-      
-      if (headerTitle.trim()) {
-        pageData.header_title = headerTitle.trim();
-      }
 
       // 2. Send to Render API
       if (pageId && pageId !== 'new') {
-        // UPDATE an existing page
+        // UPDATE an existing page (PATCH/PUT)
         await pageService.updatePage(pageId, pageData);
-        toast.success("Page saved successfully!");
+        toast.success("Page updated successfully!");
       } else {
-        // CREATE a new page
+        // CREATE a new page (POST)
         const response = await pageService.createPage(pageData);
+        
+        // Handle nested response data if necessary
+        const newPage = (response as any).data || response;
+        
         toast.success("Page created successfully!");
         
-        // Navigate to the edit URL with the newly created ID
-        if (response?.id) {
-          navigate(`/builder/${response.id}`, { replace: true });
+        if (newPage?.id) {
+          navigate(`/builder/${newPage.id}`, { replace: true });
         }
       }
 
@@ -1489,6 +1505,18 @@ const PageBuilder = () => {
                 </div>
                   )}
                 </div>
+                {filteredIcons.length < (searchTerm ? AVAILABLE_ICONS.filter(i => i.toLowerCase().includes(searchTerm.toLowerCase())).length : AVAILABLE_ICONS.length) && (
+                <div className="mt-4 pb-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full text-[10px] h-8 border-dashed hover:bg-primary/5 hover:text-primary transition-colors"
+                    onClick={() => setVisibleIconsCount(prev => prev + 100)}
+                  >
+                    Load More Icons (+100)
+                  </Button>
+                </div>
+                )}
               </ScrollArea>
                 </PopoverContent>
               </Popover>
