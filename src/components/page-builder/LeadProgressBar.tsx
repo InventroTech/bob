@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { userSettingsApi } from '@/lib/userSettingsApi';
 import { crmLeadsApi } from '@/lib/crmLeadsApi';
 import { TrophyIcon } from '@/components/icons/CustomIcons';
+import { Coffee } from 'lucide-react';
 
 interface LeadProgressBarProps {
   config?: {
@@ -258,9 +259,9 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
 
   return (
     <Card className="p-4 bg-white border border-gray-200 shadow-sm">
-      <div className="flex items-start justify-between gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 md:gap-6">
         {/* Left Section: Title and Description */}
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h5>
             {config?.title || "Target Progress"}
           </h5>
@@ -275,54 +276,65 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
           )}
         </div>
 
-        {/* Right Section: Progress Count Bubble and Progress Bar */}
-        <div className="flex flex-col gap-2 items-end">
-          {/* Progress Count Bubble */}
-          {isBelow ? (
-            <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-              <span className="text-body-sm-medium text-green-800">
-                {trialActivated}/{targetCount} Trial subscriptions
-              </span>
-            </div>
-          ) : isAchieved && !isOverdone ? (
-            <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-              <span className="text-body-sm-medium text-green-800">
-                {targetCount}/{targetCount} Target Achieved
-              </span>
-            </div>
-          ) : (
-            <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-              <span className="text-body-sm-medium text-green-800">
-                {trialActivated - targetCount} More Than Daily Target
-              </span>
-            </div>
-          )}
-          
-          {/* Progress Bar */}
-          <div className="w-48 relative overflow-visible py-2">
-            <div className="h-2.5 bg-gray-200 rounded-full relative">
-              {/* Progress fill - shows actual progress, capped at 100% visually */}
-              <div
-                className="h-full transition-all duration-300 rounded-full"
-                style={{ 
-                  width: `${Math.min(displayProgress, 100)}%`,
-                  backgroundColor: progressBarColor
-                }}
-              />
-              {/* Trophy icon - at 100% when just achieved, fixed under "e" when overdone */}
-              {isAchieved && (
+        {/* Progress + take a break (aligned with target row, break at far right) */}
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <div className="flex flex-col items-end gap-2">
+            {/* Progress Count Bubble */}
+            {isBelow ? (
+              <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
+                <span className="text-body-sm-medium text-green-800">
+                  {trialActivated}/{targetCount} Trial subscriptions
+                </span>
+              </div>
+            ) : isAchieved && !isOverdone ? (
+              <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
+                <span className="text-body-sm-medium text-green-800">
+                  {targetCount}/{targetCount} Target Achieved
+                </span>
+              </div>
+            ) : (
+              <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
+                <span className="text-body-sm-medium text-green-800">
+                  {trialActivated - targetCount} More Than Daily Target
+                </span>
+              </div>
+            )}
+
+            {/* Progress Bar */}
+            <div className="relative w-48 overflow-visible py-2">
+              <div className="relative h-2.5 rounded-full bg-gray-200">
+                {/* Progress fill - shows actual progress, capped at 100% visually */}
                 <div
-                  className="absolute top-1/2 z-20"
+                  className="h-full rounded-full transition-all duration-300"
                   style={{
-                    left: isOverdone ? '85%' : '100%', // Fixed under "e" for overflow, at end for just achieved
-                    transform: 'translate(-50%, -50%)',
+                    width: `${Math.min(displayProgress, 100)}%`,
+                    backgroundColor: progressBarColor,
                   }}
-                >
-                  <TrophyIcon className="h-6 w-6 drop-shadow-sm" />
-                </div>
-              )}
+                />
+                {/* Trophy icon - at 100% when just achieved, fixed under "e" when overdone */}
+                {isAchieved && (
+                  <div
+                    className="absolute top-1/2 z-20"
+                    style={{
+                      left: isOverdone ? '85%' : '100%', // Fixed under "e" for overflow, at end for just achieved
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                  >
+                    <TrophyIcon className="h-6 w-6 drop-shadow-sm" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          <button
+            type="button"
+            aria-label="Take a break"
+            onClick={() => window.dispatchEvent(new CustomEvent('pyro-lead-take-break'))}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
+          >
+            <Coffee className="h-5 w-5" />
+          </button>
         </div>
       </div>
     </Card>
