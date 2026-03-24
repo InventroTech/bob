@@ -32,6 +32,13 @@ import {
   ChevronRight,
   ExternalLink,
 } from 'lucide-react';
+import {
+  formatCurrencyDisplay,
+  formatCurrencyInputLive,
+  formatPriceFieldRead,
+  formatPriceForInput,
+  PRICE_FIELD_KEYS,
+} from '@/lib/currencyFormat';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -124,7 +131,23 @@ interface RecordDetailModalProps {
     enabled?: boolean;
     conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
   }>;
+  /**
+   * When false, hide price-related data rows (total/unit price, currency, estimated cost, GST flag)
+   * so they stay in sync with the form-style modal “Final price section” toggle.
+   * Default: true when omitted.
+   */
+  showFinalPriceSection?: boolean;
 }
+
+/** Data keys hidden in default record when Final price section is off (matches form modal behavior). */
+const FINAL_PRICE_HIDDEN_ROW_KEYS = new Set([
+  'total_price',
+  'unit_price',
+  'estimated_cost',
+  'price_currency',
+  'including_gst',
+]);
+const ADD_VENDOR_VALUE = '__add_vendor__';
 
 /**
  * Build display rows from API-shaped record only:
@@ -232,6 +255,14 @@ function isUrl(value: unknown): boolean {
 
 /** Render display value as clickable link when it is a URL or key is a known link field. */
 function renderDisplayValue(key: string, value: unknown): React.ReactNode {
+  if (PRICE_FIELD_KEYS.has(key)) {
+    const n = typeof value === 'number' ? value : Number(String(value ?? '').replace(/,/g, ''));
+    if (Number.isFinite(n)) {
+      return (
+        <span className="text-foreground font-mono tabular-nums">{formatCurrencyDisplay(n)}</span>
+      );
+    }
+  }
   if (key === 'comments') {
     const history = normalizeCommentsHistory(value);
     return (
@@ -346,9 +377,12 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   onRecordUpdated,
   actionButtons,
   modalFlags,
+  showFinalPriceSection,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
+  /** Live-formatted price strings while typing in editable price fields. */
+  const [priceInputDraft, setPriceInputDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [proceeding, setProceeding] = useState(false);
@@ -379,12 +413,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     assignedToId != null &&
     String(assignedToId) === String(user.id);
 
+  const effectiveShowFinalPrice = showFinalPriceSection !== false;
+
   /** Rows to show: hide system fields for all users, and PM-only fields for requestors. */
   const visibleRows = displayRows.filter((r) => {
     // Hide system fields for all users
     if (FIELDS_HIDDEN_FOR_ALL.includes(r.key)) return false;
     // Hide PM-only fields for requestors
     if (isInventoryRequest && isRequester && FIELDS_HIDDEN_FROM_REQUESTER.includes(r.key)) return false;
+    if (!effectiveShowFinalPrice && FINAL_PRICE_HIDDEN_ROW_KEYS.has(r.key)) return false;
     return true;
   });
 
@@ -411,6 +448,16 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   /** When set, an action button is applying that status value (loading). */
   const [applyingStatusValue, setApplyingStatusValue] = useState<string | null>(null);
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
+  const [vendors, setVendors] = useState<Array<{ id: number; name: string }>>([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
+  const [isAddVendorModalOpen, setIsAddVendorModalOpen] = useState(false);
+  const [newVendorName, setNewVendorName] = useState('');
+  const [newVendorLink, setNewVendorLink] = useState('');
+  const [savingNewVendor, setSavingNewVendor] = useState(false);
+
+  useEffect(() => {
+    setPriceInputDraft({});
+  }, [record?.id, open]);
 
   useEffect(() => {
     if (!open || !user) return;
@@ -429,6 +476,69 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       cancelled = true;
     };
   }, [open, user]);
+
+  useEffect(() => {
+    const hasEditableVendorField =
+      open &&
+      visibleRows.some(
+        (r) => (r.key === 'vendor' || r.key === 'vendor_name') && editableSet.has(r.key),
+      );
+    if (!hasEditableVendorField) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setVendorsLoading(true);
+        const res = await apiClient.get<any>('/crm-records/records/?entity_type=vendor&page_size=500');
+        const raw = res.data?.data ?? (res.data as any)?.results ?? [];
+        const list = Array.isArray(raw) ? raw : [];
+        const options = list
+          .map((r: any) => {
+            const id = r.id ?? r.data?.id;
+            const name = (r.data?.vendor_name ?? r.vendor_name ?? r.data?.name ?? '').trim();
+            return id != null && name ? { id: Number(id), name } : null;
+          })
+          .filter(Boolean) as Array<{ id: number; name: string }>;
+        if (!cancelled) setVendors(options);
+      } catch {
+        if (!cancelled) setVendors([]);
+      } finally {
+        if (!cancelled) setVendorsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, visibleRows, editableSet]);
+
+  const saveNewVendor = useCallback(async () => {
+    const name = (newVendorName ?? '').trim();
+    if (!name) {
+      toast({ title: 'Enter vendor name', variant: 'destructive' });
+      return;
+    }
+    try {
+      setSavingNewVendor(true);
+      await apiClient.post('/crm-records/records/', {
+        entity_type: 'vendor',
+        data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
+      });
+      setPending((p) => ({ ...p, vendor: name }));
+      setVendors((prev) => [{ id: Date.now(), name }, ...prev.filter((v) => v.name !== name)]);
+      setIsAddVendorModalOpen(false);
+      setNewVendorName('');
+      setNewVendorLink('');
+      toast({ title: 'Vendor added' });
+    } catch (e: any) {
+      toast({
+        title: 'Failed to add vendor',
+        description: e?.message || 'Could not add vendor.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingNewVendor(false);
+    }
+  }, [newVendorName, newVendorLink, toast]);
   /** Selected cart id for "Add to existing cart" (string to match Select value). */
   const [selectedCartIdForAdd, setSelectedCartIdForAdd] = useState<string>('');
   /** Carts loaded by modal when parent does not pass cartOptions (PM add-to-cart dropdown). */
@@ -719,6 +829,12 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const handleEditableChange = useCallback((key: string, currentValue: unknown, newValueStr: string) => {
     const row = displayRows.find((r) => r.key === key);
     if (!row) return;
+    if (PRICE_FIELD_KEYS.has(key)) {
+      const { display, value: parsed } = formatCurrencyInputLive(newValueStr);
+      setPriceInputDraft((prev) => ({ ...prev, [key]: display }));
+      setPending((p) => ({ ...p, [key]: parsed === '' ? '' : parsed }));
+      return;
+    }
     let parsed: unknown = newValueStr;
     if (typeof row.value === 'number') {
       const n = Number(newValueStr);
@@ -1058,7 +1174,49 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 </SelectContent>
                               </Select>
                             );
-                          })() : typeof displayValue === 'boolean' ? (
+                          })() : key === 'vendor' || key === 'vendor_name' ? (
+                            <div className="flex items-center gap-2">
+                              <Select
+                                value={String(displayValue ?? '').trim() || undefined}
+                                onValueChange={(val) => {
+                                  if (val === ADD_VENDOR_VALUE) {
+                                    setIsAddVendorModalOpen(true);
+                                    return;
+                                  }
+                                  handleEditableChange(key, value, val);
+                                }}
+                                disabled={isSaving}
+                              >
+                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                  <SelectValue placeholder="Select vendor" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {vendorsLoading ? (
+                                    <SelectItem value="__loading__" disabled>Loading…</SelectItem>
+                                  ) : (
+                                    <>
+                                      {vendors.map((v) => (
+                                        <SelectItem key={v.id} value={v.name}>
+                                          {v.name}
+                                        </SelectItem>
+                                      ))}
+                                      <SelectItem value={ADD_VENDOR_VALUE}>+ Add vendor</SelectItem>
+                                    </>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-9 shrink-0"
+                                onClick={() => setIsAddVendorModalOpen(true)}
+                                disabled={isSaving}
+                              >
+                                + Add vendor
+                              </Button>
+                            </div>
+                          ) : typeof displayValue === 'boolean' ? (
                             <Select
                               value={displayValue ? 'true' : 'false'}
                               onValueChange={(val) => handleEditableChange(key, value, val)}
@@ -1072,8 +1230,30 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 <SelectItem value="false">No</SelectItem>
                               </SelectContent>
                             </Select>
-                          ) : (
-                            key === 'comments' ? (
+                          ) : PRICE_FIELD_KEYS.has(key) ? (
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              className="max-w-[280px] h-9 text-sm rounded-md font-mono tabular-nums"
+                              value={
+                                priceInputDraft[key] ??
+                                formatPriceForInput(pending[key] !== undefined ? pending[key] : value)
+                              }
+                              onChange={(e) => handleEditableChange(key, value, e.target.value)}
+                              onBlur={() => {
+                                setPriceInputDraft((prev) => {
+                                  const next = { ...prev };
+                                  delete next[key];
+                                  return next;
+                                });
+                                const cur = pending[key];
+                                if (typeof cur === 'number' && Number.isFinite(cur)) {
+                                  setPending((p) => ({ ...p, [key]: Math.round(cur * 100) / 100 }));
+                                }
+                              }}
+                              disabled={isSaving}
+                            />
+                          ) : key === 'comments' ? (
                               <div className="w-full space-y-2">
                                 {renderDisplayValue('comments', value)}
                                 <Textarea
@@ -1092,7 +1272,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 disabled={isSaving}
                               />
                             )
-                          )}
+                          }
                           <Button
                             type="button"
                             variant="secondary"
@@ -1114,8 +1294,8 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                           {String(displayValue).replace(/_/g, ' ')}
                         </Badge>
                       ) : key === 'estimated_cost' ? (
-                        <span className="text-foreground">
-                          {formatValue(displayValue)}
+                        <span className="text-foreground font-mono tabular-nums">
+                          {formatPriceFieldRead(displayValue)}
                           {record?.data && typeof record.data === 'object' && (record.data as Record<string, unknown>).including_gst === true
                             ? ' (including GST)'
                             : ' (without GST)'}
@@ -1396,6 +1576,51 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           </DialogFooter>
         )}
       </DialogContent>
+
+      <Dialog open={isAddVendorModalOpen} onOpenChange={setIsAddVendorModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add vendor</DialogTitle>
+            <DialogDescription>Create vendor and use it in this row.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Vendor name *"
+              value={newVendorName}
+              onChange={(e) => setNewVendorName(e.target.value)}
+              className="h-9"
+            />
+            <Input
+              placeholder="Vendor site link (optional)"
+              type="url"
+              value={newVendorLink}
+              onChange={(e) => setNewVendorLink(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsAddVendorModalOpen(false);
+                setNewVendorName('');
+                setNewVendorLink('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={saveNewVendor}
+              disabled={savingNewVendor || !newVendorName.trim()}
+            >
+              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save vendor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

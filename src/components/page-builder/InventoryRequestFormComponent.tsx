@@ -10,6 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -19,9 +27,9 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar, User, Send, Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/currencyFormat';
 
 const RECORDS_URL = '/crm-records/records/';
-const ADD_VENDOR_VALUE = '__add_vendor__';
 
 interface InventoryRequestFormConfig {
   /** Entity type to save (e.g. inventory_request). */
@@ -84,24 +92,6 @@ const DEFAULT_URGENCY_OPTIONS = [
   { value: 'CRITICAL', label: 'Critical' },
 ];
 
-/** Format a number as currency string with thousands separator and 2 decimal places (e.g. 1,234.00). */
-function formatCurrencyDisplay(val: string | number | ''): string {
-  if (val === '' || val === undefined || val === null) return '';
-  const n = typeof val === 'number' ? val : Number(String(val).replace(/,/g, ''));
-  if (!Number.isFinite(n)) return '';
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-/** Parse user input (with optional commas) to number or empty. Only one decimal point allowed. */
-function parseCurrencyInput(str: string): number | '' {
-  const cleaned = str.replace(/,/g, '').trim();
-  if (cleaned === '' || cleaned === '.') return '';
-  const parts = cleaned.split('.');
-  const normalized = parts.length > 2 ? `${parts[0]}.${parts[1]}` : cleaned;
-  const n = Number(normalized);
-  return Number.isFinite(n) && n >= 0 ? n : '';
-}
-
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
@@ -135,7 +125,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
-  const [focusedEstimatedCostId, setFocusedEstimatedCostId] = useState<string | null>(null);
+  /** Live-formatted price strings while typing (cleared on blur). */
+  const [priceDraftByItemId, setPriceDraftByItemId] = useState<Record<string, string>>({});
   const [focusedItemNameId, setFocusedItemNameId] = useState<string | null>(null);
   const [itemNameQuery, setItemNameQuery] = useState<string>('');
   const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
@@ -205,32 +196,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setItemNameSuggestionsLoading(false);
     }
   }, []);
-
-  const deleteVendor = useCallback(
-    async (vendor: VendorOption) => {
-      try {
-        await apiClient.delete(`${RECORDS_URL}${vendor.id}/`);
-        // Optimistically remove from local list
-        setVendors((prev) => prev.filter((v) => v.id !== vendor.id));
-        // Clear vendor field on any items using this vendor name
-        setItems((prev) =>
-          prev.map((item) =>
-            item.vendor === vendor.name ? { ...item, vendor: '' } : item
-          )
-        );
-        toast.success('Vendor deleted.');
-        // Refresh from server in background
-        fetchVendors();
-      } catch (err: unknown) {
-        const msg =
-          err && typeof err === 'object' && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'Failed to delete vendor.';
-        toast.error(msg);
-      }
-    },
-    [fetchVendors, setItems]
-  );
 
   useEffect(() => {
     fetchVendors();
@@ -483,10 +448,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           <section className="space-y-4 border-t pt-6">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Items</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
-                <Plus className="h-4 w-4" />
-                Add item
-              </Button>
             </div>
 
             {items.map((item) => (
@@ -612,22 +573,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                           inputMode="decimal"
                           placeholder="0.00"
                           value={
-                            focusedEstimatedCostId === item.id
-                              ? (item.estimated_cost === '' ? '' : String(item.estimated_cost))
-                              : formatCurrencyDisplay(item.estimated_cost)
+                            priceDraftByItemId[item.id] ??
+                            formatCurrencyDisplay(item.estimated_cost)
                           }
-                          onFocus={() => setFocusedEstimatedCostId(item.id)}
                           onChange={(e) => {
-                            const parsed = parseCurrencyInput(e.target.value);
-                            updateItem(item.id, 'estimated_cost', parsed);
+                            const { display, value } = formatCurrencyInputLive(e.target.value);
+                            setPriceDraftByItemId((prev) => ({ ...prev, [item.id]: display }));
+                            updateItem(item.id, 'estimated_cost', value);
                           }}
                           onBlur={() => {
-                            setFocusedEstimatedCostId(null);
+                            setPriceDraftByItemId((prev) => {
+                              const next = { ...prev };
+                              delete next[item.id];
+                              return next;
+                            });
                             if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
                               updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
                             }
                           }}
-                          className="h-9 w-28 font-mono tabular-nums"
+                          className="h-9 min-w-[7.5rem] font-mono tabular-nums"
                         />
                         <Select
                           value={item.price_currency || 'INR'}
@@ -652,39 +616,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     </label>
                     <div className="space-y-1.5 flex-1 min-w-[180px]">
                       <Label className="text-xs font-medium">Vendor</Label>
-                      {addVendorForItemId === item.id ? (
-                        <div className="space-y-2 rounded border border-border/60 bg-background p-3">
-                          <Input
-                            placeholder="Vendor name *"
-                            value={newVendorName}
-                            onChange={(e) => setNewVendorName(e.target.value)}
-                            className="h-9"
-                          />
-                          <Input
-                            placeholder="Vendor site link (optional)"
-                            type="url"
-                            value={newVendorLink}
-                            onChange={(e) => setNewVendorLink(e.target.value)}
-                            className="h-9"
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={saveNewVendor}
-                              disabled={savingNewVendor || !newVendorName.trim()}
-                            >
-                              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                              Save vendor
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={cancelAddVendor}>
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="relative w-full">
+                      <div className="flex items-center gap-2">
+                        <div className="relative w-full">
                             <Input
                               value={item.vendor}
                               placeholder="Search or add vendor"
@@ -744,41 +677,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                         </button>
                                       ));
                                     })()}
-                                    <button
-                                      type="button"
-                                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                                      onMouseDown={(ev) => ev.preventDefault()}
-                                      onClick={() => {
-                                        startAddVendor(item.id);
-                                        setVendorSuggestionsOpen(false);
-                                        setFocusedVendorId(null);
-                                      }}
-                                    >
-                                      + Add vendor
-                                    </button>
                                   </div>
                                 )}
                               </div>
                             )}
-                          </div>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => {
-                              const current = vendors.find((v) => v.name === item.vendor);
-                              if (current) {
-                                deleteVendor(current);
-                              }
-                            }}
-                            disabled={!item.vendor || !vendors.some((v) => v.name === item.vendor)}
-                            aria-label="Delete selected vendor"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
-                      )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 shrink-0"
+                          onClick={() => {
+                            startAddVendor(item.id);
+                            setVendorSuggestionsOpen(false);
+                            setFocusedVendorId(null);
+                          }}
+                        >
+                          + Add vendor
+                        </Button>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
@@ -831,6 +748,12 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 </div>
               </div>
             ))}
+            <div className="pt-1">
+              <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
+                <Plus className="h-4 w-4" />
+                Add item
+              </Button>
+            </div>
           </section>
         </CardContent>
 
@@ -866,6 +789,43 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           </div>
         </CardFooter>
       </form>
+
+      <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add vendor</DialogTitle>
+            <DialogDescription>Create a vendor and auto-fill it for this item.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Vendor name *"
+              value={newVendorName}
+              onChange={(e) => setNewVendorName(e.target.value)}
+              className="h-9"
+            />
+            <Input
+              placeholder="Vendor site link (optional)"
+              type="url"
+              value={newVendorLink}
+              onChange={(e) => setNewVendorLink(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={cancelAddVendor}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={saveNewVendor}
+              disabled={savingNewVendor || !newVendorName.trim()}
+            >
+              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save vendor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
