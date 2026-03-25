@@ -82,7 +82,7 @@ import { toast } from "sonner";
 import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 
-import { membershipService, pageService } from '@/lib/api';
+import { apiClient, membershipService, pageService } from '@/lib/api';
 import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
@@ -1049,20 +1049,26 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 // This merges your custom Figma names with the 1,500+ Lucide names
 const AVAILABLE_ICONS = [...CUSTOM_ICON_NAMES, ...Object.keys(icons)];
 
-const DynamicIcon = ({ name, className }: { name: string; className?: string }) => {
+// 👇 Add customIcons to the props
+const DynamicIcon = ({ name, className, customIcons = [] }: { name: string; className?: string; customIcons?: any[] }) => {
+  
+  // 1. Check if it's an uploaded custom icon
+  const uploadedIcon = customIcons.find(icon => icon.name === name);
+  if (uploadedIcon) {
+    return <div 
+      className={`flex items-center justify-center [&>svg]:h-full [&>svg]:w-full ${className || ''}`} 
+      dangerouslySetInnerHTML={{ __html: uploadedIcon.svg_content }} 
+    />;
+  }
+
   // Look up the component in the full icons map
   const IconComponent = (icons as any)[name];
   const CustomIcon = CustomIcons[name];
 
-  if (CustomIcon) {
-    return <CustomIcon className={className} />;
-  }
+  if (CustomIcon) return <CustomIcon className={className} />;
+  if (IconComponent) return <IconComponent className={className} />;
 
-  if (IconComponent) {
-    return <IconComponent className={className} />;
-  }
-
-  // Fallback to Sparkles (imported individually)
+  // Fallback to Sparkles
   return <Sparkles className={className} />;
 };
 
@@ -1078,17 +1084,80 @@ const PageBuilder = () => {
   const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [pageIcon, setPageIcon] = useState<string>("Sparkles"); // Standard library default
+  // --- NEW: Custom Icons State & Upload Logic ---
+  const [customIcons, setCustomIcons] = useState<{ id: string, name: string, svg_content: string }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Fetch custom icons when the builder loads
+  // Fetch custom icons when the builder loads
+  useEffect(() => {
+    const fetchIcons = async () => {
+      if (!tenantId) return;
+      try {
+        // Look how clean this is now!
+        const res = await apiClient.get('/pages/custom-icons/');
+        setCustomIcons(res.data);
+      } catch (e) {
+        console.error("Failed to fetch custom icons", e);
+      }
+    };
+    fetchIcons();
+  }, [tenantId]);
+
+  const handleIconUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    if (file.type !== "image/svg+xml") {
+      toast.error("Please upload a valid SVG file.");
+      return;
+    }
+
+    setIsUploading(true);
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+      const rawSvgText = e.target?.result as string;
+      const baseName = file.name.replace('.svg', '').replace(/[^a-zA-Z0-9-]/g, '-');
+      
+      try {
+        // Knock on the Django backend door with the correct badge!
+        const response = await apiClient.post('/pages/custom-icons/', {
+          name: baseName,
+          svg_content: rawSvgText
+        });
+
+        const newIcon = response.data;
+        setCustomIcons(prev => [newIcon, ...prev]); 
+        setPageIcon(newIcon.name); 
+        toast.success("Icon uploaded successfully!");
+      } catch (error) {
+        console.error("Upload error details:", error);
+        toast.error("Failed to upload icon.");
+      } finally {
+        setIsUploading(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+  // 1. THIS FILTERS THE STANDARD LIBRARY (The one you are missing!)
   const filteredIcons = useMemo(() => {
-    // First, filter the list if there is a search term
     const allMatching = searchTerm
       ? AVAILABLE_ICONS.filter(icon =>
           icon.toLowerCase().includes(searchTerm.toLowerCase())
         )
       : AVAILABLE_ICONS;
 
-    // Then, return only the amount allowed by our "Load More" state
     return allMatching.slice(0, visibleIconsCount);
   }, [searchTerm, visibleIconsCount]);
+
+  // 2. THIS FILTERS THE CUSTOM UPLOADED ICONS
+  const filteredCustomIcons = useMemo(() => {
+    if (!searchTerm) return customIcons;
+    return customIcons.filter(icon => 
+      icon.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm, customIcons]);
   const [activeTab, setActiveTab] = useState("components");
   const [canvasComponents, setCanvasComponents] = useState<CanvasComponentData[]>([]);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -1448,7 +1517,7 @@ useEffect(() => {
               <Popover>
                 <PopoverTrigger asChild>
                 <Button variant="outline" className="h-9 w-10 p-0 flex items-center justify-center border-border">
-                <DynamicIcon name={pageIcon} className="h-4 w-4" />
+                <DynamicIcon name={pageIcon} className="h-4 w-4" customIcons={customIcons} />
                 </Button>
                 </PopoverTrigger>
     
@@ -1464,57 +1533,89 @@ useEffect(() => {
                 </div>
       
                 <ScrollArea className="h-64 p-3">
-                {/* 1. Results Count Indicator */}
-                <p className="text-[9px] text-muted-foreground mb-2 uppercase font-medium">
-                  Showing {filteredIcons.length} of {AVAILABLE_ICONS.length} icons
-                </p>
+                {/* --- SECTION 1: CUSTOM ICONS (TOP) --- */}
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[9px] text-muted-foreground uppercase font-medium">
+                      Custom Icons ({filteredCustomIcons.length})
+                    </p>
+    
+                    <div className="relative">
+                      <Input 
+                      type="file" 
+                      accept=".svg" 
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                      onChange={handleIconUpload}
+                      disabled={isUploading}
+                      />
+                      <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" disabled={isUploading}>
+                        <Upload className="h-3 w-3 mr-1" />
+                        {isUploading ? 'Uploading...' : 'Upload SVG'}
+                      </Button>
+                    </div>
+                  </div>
 
-                {/* 2. Grid Container */}
-                <div className="grid grid-cols-5 gap-2">
-                  {filteredIcons.length > 0 ? (
-                  filteredIcons.map((iconKey) => (
-                  <button
+                  {filteredCustomIcons.length > 0 && (
+                  <div className="grid grid-cols-5 gap-2 mb-4 pb-4 border-b">
+                    {filteredCustomIcons.map((icon) => (
+                    <button
+                    key={icon.id}
+                    type="button"
+                    onClick={() => setPageIcon(icon.name)}
+                    className={`flex h-10 w-10 items-center justify-center rounded-md transition hover:bg-muted ${
+                    pageIcon === icon.name ? "bg-primary/10 border border-primary" : "border border-transparent"
+                    }`}
+                    title={icon.name}
+                    >
+                    <DynamicIcon name={icon.name} customIcons={customIcons} className="h-5 w-5 text-foreground" />
+                    </button>
+                    ))}
+                  </div>
+                  )}
+
+                  {/* --- SECTION 2: LIBRARY ICONS (BOTTOM) --- */}
+                  <p className="text-[9px] text-muted-foreground mb-2 uppercase font-medium">
+                    Library Icons (Showing {filteredIcons.length})
+                  </p>
+
+                  <div className="grid grid-cols-5 gap-2">
+                    {filteredIcons.length > 0 ? (
+                    filteredIcons.map((iconKey) => (
+                    <button
                     key={iconKey}
                     type="button"
-                    onClick={() => {
-                    setPageIcon(iconKey);
-                    // Optional: Close popover here if you have a state for it
-                    }}
+                    onClick={() => setPageIcon(iconKey)}
                     className={`flex h-10 w-10 items-center justify-center rounded-md transition hover:bg-muted ${
                     pageIcon === iconKey ? "bg-primary/10 border border-primary" : "border border-transparent"
                     }`}
                     title={iconKey}
-                  >
-                  <DynamicIcon name={iconKey} className="h-5 w-5 text-foreground" />
-                  </button>
-                  ))
-                  ) : (
-                /* 3. Empty State / Fallback */
-                <div className="col-span-5 py-8 text-center">
-                <p className="text-xs text-muted-foreground">No icons found for "{searchTerm}"</p>
-                <Button 
-                  variant="link" 
-                  className="text-[10px] h-auto p-0 mt-1" 
-                  onClick={() => setSearchTerm("")}
-                >
-                Clear Search
-                </Button>
-                </div>
-                  )}
-                </div>
-                {filteredIcons.length < (searchTerm ? AVAILABLE_ICONS.filter(i => i.toLowerCase().includes(searchTerm.toLowerCase())).length : AVAILABLE_ICONS.length) && (
-                <div className="mt-4 pb-2">
-                  <Button 
+                    >
+                    <DynamicIcon name={iconKey} customIcons={customIcons} className="h-5 w-5 text-foreground" />
+                    </button>
+                    ))
+                    ) : (
+                    /* Only show this "No results" if BOTH sections are empty */
+                    filteredCustomIcons.length === 0 && (
+                    <div className="col-span-5 py-8 text-center">
+                      <p className="text-xs text-muted-foreground">No icons found for "{searchTerm}"</p>
+                    </div>
+                    )
+                    )}
+                  </div>
+  
+                  {/* Load More Button - Only for Standard Library */}
+                  {filteredIcons.length < (searchTerm ? AVAILABLE_ICONS.filter(i => i.toLowerCase().includes(searchTerm.toLowerCase())).length : AVAILABLE_ICONS.length) && (
+                  <div className="mt-4 pb-2">
+                    <Button 
                     variant="outline" 
                     size="sm" 
                     className="w-full text-[10px] h-8 border-dashed hover:bg-primary/5 hover:text-primary transition-colors"
                     onClick={() => setVisibleIconsCount(prev => prev + 100)}
-                  >
+                    >
                     Load More Icons (+100)
-                  </Button>
-                </div>
-                )}
-              </ScrollArea>
+                    </Button>
+                  </div>
+                  )}
+                </ScrollArea>
                 </PopoverContent>
               </Popover>
               </div>
