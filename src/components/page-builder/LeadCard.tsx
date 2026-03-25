@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
+import { safeProfileImageUrl } from "@/lib/safeProfileImageUrl";
 
 interface Lead {
   id: number;
@@ -312,6 +313,19 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [whatsappPhone, setWhatsappPhone] = useState<string>("");
+  const [profilePicFailed, setProfilePicFailed] = useState(false);
+
+  const profilePicSrc = safeProfileImageUrl(currentLead?.display_pic_url);
+  const iframeSrc = safeProfileImageUrl(
+    currentLead?.linkedin_profile || currentLead?.website
+  );
+  const profilePicAlt = currentLead
+    ? `${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`
+    : "Lead profile";
+
+  useEffect(() => {
+    setProfilePicFailed(false);
+  }, [profilePicSrc]);
 
   // Function to handle opening profile modal
   const handleOpenProfile = () => {
@@ -945,22 +959,18 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                     }`}
                     onClick={handleOpenProfile}
                   >
-                    {currentLead?.display_pic_url ? (
-                      <img
-                        src={currentLead.display_pic_url}
-                        alt={`${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`}
-                        className="h-12 w-12 rounded-full mr-2 object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                        }}
-                      />
-                    ) : null}
-                    <User
-                      className={`h-3 w-3 mr-2 text-primary ${
-                        currentLead?.display_pic_url ? "hidden" : ""
-                      }`}
-                    />
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-primary mr-2">
+                      {profilePicSrc && !profilePicFailed ? (
+                        <img
+                          src={profilePicSrc}
+                          alt={profilePicAlt}
+                          className="h-full w-full object-cover"
+                          onError={() => setProfilePicFailed(true)}
+                        />
+                      ) : (
+                        <User className="h-6 w-6" aria-hidden />
+                      )}
+                    </div>
                     <div className="flex flex-col w-full gap-2">
                       <div>
                         <p className="font-medium text-lg">{(currentLead as any)?.data?.name || currentLead?.name || "N/A"}</p>
@@ -1179,22 +1189,18 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-3">
-                {currentLead?.display_pic_url ? (
-                  <img
-                    src={currentLead.display_pic_url}
-                    alt={`${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`}
-                    className="h-8 w-8 rounded-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                    }}
-                  />
-                ) : null}
-                <User
-                  className={`h-4 w-4 text-primary ${
-                    currentLead?.display_pic_url ? "hidden" : ""
-                  }`}
-                />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-primary">
+                  {profilePicSrc && !profilePicFailed ? (
+                    <img
+                      src={profilePicSrc}
+                      alt={profilePicAlt}
+                      className="h-full w-full object-cover"
+                      onError={() => setProfilePicFailed(true)}
+                    />
+                  ) : (
+                    <User className="h-4 w-4" aria-hidden />
+                  )}
+                </div>
                 <div>
                   <h3 className="font-semibold text-lg">{(currentLead as any)?.data?.name || currentLead?.name || "Lead Profile"}</h3>
                   <p className="text-sm text-muted-foreground">Company: {currentLead?.company || "N/A"}</p>
@@ -1212,7 +1218,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {/* Modal Content - Iframe */}
             <div className="flex-1 p-4">
               <iframe
-                src={currentLead.linkedin_profile || currentLead.website}
+                src={iframeSrc || undefined}
                 className="w-full h-full border-0 rounded-md"
                 title={`${(currentLead as any)?.data?.name || currentLead?.name || "Lead"} Profile`}
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
