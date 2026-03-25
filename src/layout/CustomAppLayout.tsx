@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers } from 'lucide-react';
-import ShortProfileCard from '@/components/ui/ShortProfileCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 import { getEffectiveToken, isSpoofing, getSpoofUserLabel, SPOOF_CHANGED_EVENT, fetchPagesForRole } from '@/lib/spoof';

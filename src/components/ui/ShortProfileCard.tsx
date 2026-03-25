@@ -1,6 +1,7 @@
 'use client'
-import React from 'react'
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import React, { useEffect, useState } from 'react'
+import { User } from 'lucide-react'
+import { safeProfileImageUrl } from '@/lib/safeProfileImageUrl'
 
 interface ShortProfileCardProps {
   image?: string;
@@ -9,20 +10,28 @@ interface ShortProfileCardProps {
 }
 
 const ShortProfileCard = ({ image, name = '', address = '' }: ShortProfileCardProps) => {
-  const initials = name
-    ? name
-        .split(' ')
-        .map(n => n[0])
-        .join('')
-        .toUpperCase()
-    : '';
+  const imageSrc = safeProfileImageUrl(image) ?? '';
+  const hasImage = imageSrc.length > 0;
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageSrc]);
 
   return (
     <div className='flex flex-row gap-3 items-center'>
-      <Avatar className="h-10 w-10">
-        <AvatarImage src={image || ''} alt={name || 'User'} />
-        <AvatarFallback className="bg-gray-200 text-gray-600">{initials || 'U'}</AvatarFallback>
-      </Avatar>
+      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-gray-600">
+        {hasImage && !imageFailed ? (
+          <img
+            src={imageSrc}
+            alt={name || 'User'}
+            className="h-full w-full object-cover"
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <User className="h-5 w-5" aria-hidden />
+        )}
+      </div>
       <div className='flex flex-col font-body'>
         <span className='text-sm font-bold text-gray-900'>{name || 'Unnamed'}</span>
         <p className='text-xs text-gray-500'>{address || 'No address'}</p>
