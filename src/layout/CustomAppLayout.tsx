@@ -5,6 +5,7 @@ import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { apiClient } from '@/lib/api';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 import { getEffectiveToken, isSpoofing, getSpoofUserLabel, SPOOF_CHANGED_EVENT, fetchPagesForRole } from '@/lib/spoof';
 import { icons} from 'lucide-react';
@@ -28,20 +29,37 @@ import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, Analyt
     "lead score": <LeadScoreIcon />,
   };
 
-const DynamicSidebarIcon = ({ iconName }: { iconName: string }) => {
-  // 1. Check if it's one of your new custom Figma icons
+const DynamicSidebarIcon = ({ iconName, customIcons = [] }: { iconName: string, customIcons?: any[] }) => {
+  
+  // 1. Check if it's an uploaded custom icon from the database
+  const uploadedIcon = customIcons.find(icon => icon.name.toLowerCase() === iconName.toLowerCase());
+  
+  if (uploadedIcon) {
+    return (
+      <div 
+        className="h-4 w-4 flex items-center justify-center 
+                   /* 1. Force the SVG to fit the exact 16x16px box */
+                   [&>svg]:h-4 [&>svg]:w-4 
+                   /* 2. Force the internal SVG colors to follow the text color (currentColor) */
+                   [&>svg]:fill-current [&>svg_path]:fill-current [&>svg_circle]:fill-current" 
+        dangerouslySetInnerHTML={{ __html: uploadedIcon.svg_content }} 
+      />
+    );
+  }
+
+  // 2. Check if it's one of your new custom Figma icons
   const FigmaIcon = CustomIcons[iconName];
   if (FigmaIcon) return <FigmaIcon className="h-4 w-4" />;
 
-  // 2. Check if it's a custom icon from your manual navigation map
+  // 3. Check if it's a custom icon from your manual navigation map
   const CustomMapIcon = navigationIconMap[iconName.toLowerCase()];
-  if (CustomMapIcon) return CustomMapIcon;
+  if (CustomMapIcon) return <div className="h-4 w-4 flex items-center justify-center">{CustomMapIcon}</div>;
 
-  // 3. Check if it's a standard Lucide icon name from the library
+  // 4. Check if it's a standard Lucide icon name from the library
   const LucideIcon = (icons as any)[iconName];
   if (LucideIcon) return <LucideIcon className="h-4 w-4" />;
 
-  // 4. Final Fallback
+  // 5. Final Fallback
   return <Sparkles className="h-4 w-4" />;
 };
 
@@ -50,6 +68,7 @@ const CustomAppLayout: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, session } = useAuth();
   const [pages, setPages] = useState<{ id: string; name: string; icon_name: string }[]>([]);
+  const [customIcons, setCustomIcons] = useState<{ name: string; svg_content: string }[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -150,11 +169,23 @@ const CustomAppLayout: React.FC = () => {
     };
   }, []);
 
-  // Step 2: Fetch pages that match the user's role
+  // Step 2: Fetch pages AND custom icons
   useEffect(() => {
-    const fetchPages = async () => {
+    const fetchPagesAndIcons = async () => {
       if (!tenantId || !userRoleId) return;
 
+      // --- NEW LOGIC: Fetch Custom Icons from Django API ---
+      try {
+        // apiClient automatically points to port 8000 and handles the token!
+        const iconResponse = await apiClient.get('/pages/custom-icons/');
+        
+        // axios stores the data in a .data property
+        setCustomIcons(iconResponse.data || []);
+      } catch (err) {
+        console.error('Failed to fetch custom icons:', err);
+      }
+
+      // --- EXISTING LOGIC: Fetch Pages ---
       const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
       if (spoofToken) {
         // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
@@ -175,9 +206,6 @@ const CustomAppLayout: React.FC = () => {
         .eq('tenant_id', tenantId)
         .eq('role', userRoleId)
         .order('display_order', { ascending: true });
-      console.log("tenantId", tenantId)
-      console.log("userRoleId", userRoleId)
-      console.log("pages data", pagesData)
 
       if (error) {
         toast.error('Failed to load pages');
@@ -187,8 +215,8 @@ const CustomAppLayout: React.FC = () => {
       }
     };
 
-    fetchPages();
-  }, [tenantId, userRoleId]);
+    fetchPagesAndIcons();
+  }, [tenantId, userRoleId, session?.access_token]);
 
   const handleStopSpoofing = () => {
     try {
@@ -278,7 +306,7 @@ const CustomAppLayout: React.FC = () => {
                   <>
                     <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-white' : 'bg-transparent text-gray-600'}`}>
                       {/* Call the helper with the icon_name from your database */}
-                      <DynamicSidebarIcon iconName={page.icon_name} />
+                      <DynamicSidebarIcon iconName={page.icon_name} customIcons={customIcons} />
                     </div>
                     {!sidebarCollapsed && <span>{page.name}</span>}
                   </>

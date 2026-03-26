@@ -14,6 +14,7 @@ import PagesGallery from "./pages/PagesGallery";
 import Dashboard from './pages/Dashboard'
 import ProfilePage from './pages/ProfilePage'
 import AuthPage from './pages/AuthPage'
+import SignupPage from './pages/SignupPage'
 import ProtectedRoute from './hooks/ProtectedRoute'
 import MyPages from './pages/MyPages'
 import CustomAppAuthPage from './pages/CustomAppAuthPage';
@@ -44,8 +45,9 @@ const App = () => (
           <Toaster />
           <Sonner />
           <Routes>
-          {/* Public Route - Login/Signup */}
+          {/* Public routes - login & signup */}
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/signup" element={<SignupPage />} />
 
           {/* Protected Routes - Require Login */}
           <Route element={<ProtectedRoute />}>
