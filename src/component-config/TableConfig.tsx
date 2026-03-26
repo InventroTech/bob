@@ -63,8 +63,8 @@ interface TableConfigProps {
     modalFieldConfig?: Array<{ key: string; editable: boolean }>;
     /** 'default' = record detail modal; 'form_edit' = inventory-form-style modal with action buttons. */
     recordDetailModalType?: 'default' | 'form_edit';
-    /** For form_edit modal: fields to show (key, label text, enabled). Add custom fields with key + label. */
-    formModalFields?: Array<{ key: string; label: string; enabled: boolean }>;
+    /** For form_edit modal: fields to show (key, label text, enabled). */
+    formModalFields?: Array<{ key: string; label: string; enabled: boolean; link?: boolean }>;
     /** Form modal title (e.g. "Edit record"). */
     formModalTitle?: string;
     /** Form modal description text below the title. */
@@ -82,7 +82,7 @@ interface TableConfigProps {
   numColumns: number;
   localFilters: FilterConfig[];
   numFilters: number;
-  handleInputChange: (field: string, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | PaymentModalConfig | ModalFlagConfig[]) => void;
+  handleInputChange: (field: string, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | PaymentModalConfig | ModalFlagConfig[]) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string | boolean) => void;
   handleColumnDelete?: (index: number) => void;
@@ -114,7 +114,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   const [modalFields, setModalFields] = useState<Array<{ key: string; editable: boolean }>>(
     () => localConfig.modalFieldConfig ?? []
   );
-  const [formModalFieldsList, setFormModalFieldsList] = useState<Array<{ key: string; label: string; enabled: boolean }>>(
+  const [formModalFieldsList, setFormModalFieldsList] = useState<Array<{ key: string; label: string; enabled: boolean; link?: boolean }>>(
     () => localConfig.formModalFields ?? []
   );
   const [modalFlagsList, setModalFlagsList] = useState<ModalFlagConfig[]>(
@@ -366,7 +366,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
               </div>
               <div className="space-y-2">
                 <Label>Form modal fields</Label>
-                <p className="text-xs text-gray-500">Key = data key, Text = label. Toggle Enabled for editing.</p>
+                <p className="text-xs text-gray-500">Key = data key, Text = label. Toggle Enabled for editing. Toggle Link to make read-only values clickable.</p>
                 {formModalFieldsList.map((field, idx) => (
                   <div key={idx} className="flex flex-wrap gap-2 items-center p-2 border rounded-md bg-muted/30">
                     <Input placeholder="Key" value={field.key} onChange={(e) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], key: e.target.value }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="min-w-[120px]" />
@@ -374,6 +374,19 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                     <div className="flex items-center gap-2 shrink-0">
                       <Switch id={`form-field-enabled-${idx}`} checked={field.enabled} onCheckedChange={(checked) => { const next = [...formModalFieldsList]; next[idx] = { ...next[idx], enabled: !!checked }; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} />
                       <Label htmlFor={`form-field-enabled-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">Enabled</Label>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Switch
+                        id={`form-field-link-${idx}`}
+                        checked={field.link === true}
+                        onCheckedChange={(checked) => {
+                          const next = [...formModalFieldsList];
+                          next[idx] = { ...next[idx], link: checked === true };
+                          setFormModalFieldsList(next);
+                          handleInputChange('formModalFields', next);
+                        }}
+                      />
+                      <Label htmlFor={`form-field-link-${idx}`} className="text-sm font-normal cursor-pointer whitespace-nowrap">Link</Label>
                     </div>
                     <Button type="button" variant="ghost" size="sm" onClick={() => { const next = formModalFieldsList.filter((_, i) => i !== idx); setFormModalFieldsList(next); handleInputChange('formModalFields', next); }} className="text-red-600 hover:text-red-700"><Trash2 className="h-4 w-4" /></Button>
                   </div>
