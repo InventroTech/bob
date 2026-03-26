@@ -29,6 +29,8 @@ export type FormModalFieldConfig = {
   key: string;
   label: string;
   enabled: boolean;
+  /** When true and field is read-only, render value as a clickable link. */
+  link?: boolean;
 };
 
 interface InventoryFormEditModalProps {
@@ -67,6 +69,12 @@ interface InventoryFormEditModalProps {
    * Default: true (when omitted).
    */
   showFinalPriceSection?: boolean;
+}
+
+function looksLikeUrl(value: string): boolean {
+  const v = (value || '').trim();
+  if (!v) return false;
+  return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('mailto:');
 }
 
 function formatDisplayValue(value: unknown): string {
@@ -529,6 +537,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const isEnabled = field.enabled && canUpdate;
+              const isClickableLink = field.link === true && !isEnabled && looksLikeUrl(displayStr);
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isCartId = field.key === 'cart_id' && isInventoryRequest && cartOptions && cartOptions.length > 0;
               const isVendor = field.key === 'vendor';
@@ -541,7 +550,17 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     {field.label || field.key.replace(/_/g, ' ')}
                   </Label>
-                  {field.key === 'comments' ? (
+                  {isClickableLink ? (
+                    <a
+                      href={displayStr}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm underline underline-offset-4 break-all"
+                    >
+                      {displayStr}
+                      <span className="text-xs text-muted-foreground">(open)</span>
+                    </a>
+                  ) : field.key === 'comments' ? (
                     (() => {
                       const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as any).comments : undefined) as unknown;
                       const history: Array<{ name: string; role: string; comment: string }> = Array.isArray(existingRaw)
