@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { authService } from '@/lib/api/services/auth';
-import { getRoleIdFromJWT } from '@/lib/jwt';
+import { linkCustomAppUserIfNeeded } from '@/pages/customAppAuthShared';
 
 const CustomAppAuthPage: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -21,48 +20,11 @@ const CustomAppAuthPage: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // If already authenticated, redirect to dashboard
   useEffect(() => {
     if (!authLoading && session) {
       navigate(`/app/${tenantSlug}`, { replace: true });
     }
   }, [session, authLoading, navigate, tenantSlug]);
-
-  const linkUserIfNeeded = async (uid: string, userEmail: string) => {
-    localStorage.setItem('user_email', userEmail);
-
-    try {
-      const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
-
-      if (isAlreadyLinked) return;
-
-      const result = await authService.linkUserUid({ uid, email: userEmail });
-
-      if (result.success === false || result.error) {
-        const errorCode = (result as any).code;
-        const errorMessage = result.error || '';
-        const isExpectedError =
-          errorCode === 'NO_TENANT_MEMBERSHIP' ||
-          errorMessage.includes('No TenantMembership found') ||
-          errorMessage.includes('already has a linked UID') ||
-          errorMessage.includes('already linked');
-
-        if (!isExpectedError) {
-          console.error('[CustomAppAuthPage] Error linking user UID:', result.error);
-          toast.error('Warning: User linking failed, but login will continue');
-        }
-        return;
-      }
-
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
-        console.warn('[CustomAppAuthPage] Session refresh failed after linking:', refreshError);
-      }
-    } catch (linkError) {
-      console.error('[CustomAppAuthPage] Error during user linking:', linkError);
-      toast.error('Warning: User linking failed, but login will continue');
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,9 +38,11 @@ const CustomAppAuthPage: React.FC = () => {
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user?.id && user?.email) {
-        await linkUserIfNeeded(user.id, user.email);
+        await linkCustomAppUserIfNeeded(session, user.id, user.email);
       }
 
       toast.success('Login successful! Redirecting…');
@@ -122,14 +86,13 @@ const CustomAppAuthPage: React.FC = () => {
         return;
       }
 
-      // If email confirmation is enabled, Supabase may not create a session immediately.
       if (!data.session) {
         setMessage('Signup successful. Please verify your email, then login.');
         return;
       }
 
       if (data.user?.id && data.user?.email) {
-        await linkUserIfNeeded(data.user.id, data.user.email);
+        await linkCustomAppUserIfNeeded(session, data.user.id, data.user.email);
       }
 
       toast.success('Signup successful! Redirecting…');
@@ -139,24 +102,20 @@ const CustomAppAuthPage: React.FC = () => {
     }
   };
 
-
   const handleGoogleLogin = async () => {
     setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/app/${tenantSlug}/auth/callback`
-      }
+        redirectTo: `${window.location.origin}/app/${tenantSlug}/auth/callback`,
+      },
     });
-  
-    if (error) {
-      setError(error.message);
-      return;
+
+    if (oauthError) {
+      setError(oauthError.message);
     }
-  
-    // Email will be fetched and stored in callback page
   };
-  
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
       <div className="w-full max-w-sm p-6 bg-white rounded shadow space-y-4">
@@ -208,15 +167,21 @@ const CustomAppAuthPage: React.FC = () => {
               </div>
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-            >
-              <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
-                <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+            <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={loading}>
+              <svg
+                className="mr-2 h-4 w-4"
+                aria-hidden="true"
+                focusable="false"
+                data-prefix="fab"
+                data-icon="google"
+                role="img"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 488 512"
+              >
+                <path
+                  fill="currentColor"
+                  d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"
+                ></path>
               </svg>
               Continue with Google
             </Button>
@@ -273,4 +238,4 @@ const CustomAppAuthPage: React.FC = () => {
   );
 };
 
-export default CustomAppAuthPage; 
+export default CustomAppAuthPage;
