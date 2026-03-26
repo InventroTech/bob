@@ -401,7 +401,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     /** 'default' | 'form_edit' — form_edit = inventory-form-style modal with action buttons. */
     recordDetailModalType?: 'default' | 'form_edit';
     /** For form_edit modal: fields (key, label, enabled). */
-    formModalFields?: Array<{ key: string; label: string; enabled: boolean }>;
+    formModalFields?: Array<{ key: string; label: string; enabled: boolean; link?: boolean }>;
     formModalTitle?: string;
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
@@ -522,7 +522,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
   );
 
   // Handle local input changes
-  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ label: string; value: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
+  const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ label: string; value: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
     debouncedUpdateWithDelay({ [field]: value });
   }, [debouncedUpdateWithDelay]);
@@ -664,7 +664,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   const handleFilterOptionsSourceChange = useCallback((index: number, source: 'manual' | 'api') => {
     const newFilters = [...localFilters];
-    const current = newFilters[index] || {};
+    const current = (newFilters[index] || {}) as any;
     if (source === 'api') {
       newFilters[index] = {
         ...current,
@@ -672,7 +672,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         optionsDisplayKey: 'name',
         optionsValueKey: 'id',
         options: [],
-      };
+      } as any;
     } else {
       newFilters[index] = {
         ...current,
@@ -680,7 +680,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         optionsDisplayKey: '',
         optionsValueKey: '',
         options: (current.options?.length ? current.options : [{ label: '', value: '' }]) as FilterConfig['options'],
-      };
+      } as any;
     }
     setLocalFilters(newFilters);
     debouncedUpdateWithDelay({ filters: newFilters });
