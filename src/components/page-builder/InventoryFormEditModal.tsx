@@ -21,6 +21,7 @@ import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
+import { cn } from '@/lib/utils';
 
 const RECORDS_URL = '/crm-records/records/';
 const ADD_VENDOR_VALUE = '__add_vendor__';
@@ -520,7 +521,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] flex flex-col max-w-lg">
+      <DialogContent className="max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full">
         <DialogHeader>
           <DialogTitle>{formModalTitle ?? 'Edit record'}</DialogTitle>
           <DialogDescription>
@@ -533,7 +534,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           {formModalFields.length === 0 ? (
             <p className="text-sm text-muted-foreground">No fields configured. Add fields in table config.</p>
           ) : (
-            formModalFields.map((field) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
+            {formModalFields.map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const isEnabled = field.enabled && canUpdate;
@@ -544,9 +546,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const isBoolean = typeof value === 'boolean';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
               const isNumber = NUMBER_KEYS.has(field.key) && field.key !== 'cart_id';
+              const spanFullWidth = TEXTAREA_KEYS.has(field.key);
 
               return (
-                <div key={field.key} className="space-y-1.5">
+                <div
+                  key={field.key}
+                  className={cn('space-y-1.5 min-w-0', spanFullWidth && 'md:col-span-2 xl:col-span-3')}
+                >
                   <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     {field.label || field.key.replace(/_/g, ' ')}
                   </Label>
@@ -606,7 +612,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       );
                     })()
                   ) : isVendor ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <div className="min-w-0 flex-1">
                       <Select
                         value={displayStr || undefined}
                         onValueChange={(v) => {
@@ -618,7 +625,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         }}
                         disabled={!isEnabled}
                       >
-                        <SelectTrigger className="h-9 text-sm rounded-md">
+                        <SelectTrigger className="h-9 w-full min-w-0 text-sm rounded-md">
                           <SelectValue placeholder="Select or add vendor" />
                         </SelectTrigger>
                         <SelectContent>
@@ -635,6 +642,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                           )}
                         </SelectContent>
                       </Select>
+                      </div>
                       <Button
                         type="button"
                         size="sm"
@@ -771,12 +779,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   )}
                 </div>
               );
-            })
+            })}
+            </div>
           )}
 
           {/* Final price (form-style modal only; not shown for Inventory Payment modal — use modal fields for total_price/unit_price there) */}
           {!paymentButtonConfig && effectiveShowFinalPrice && (
-            <div className="space-y-3 pt-2 border-t border-border/60">
+            <div className="space-y-3 pt-2 border-t border-border/60 max-w-none">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Final price
               </Label>

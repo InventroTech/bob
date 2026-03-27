@@ -39,6 +39,7 @@ import {
   formatPriceForInput,
   PRICE_FIELD_KEYS,
 } from '@/lib/currencyFormat';
+import { cn } from '@/lib/utils';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -148,6 +149,15 @@ const FINAL_PRICE_HIDDEN_ROW_KEYS = new Set([
   'including_gst',
 ]);
 const ADD_VENDOR_VALUE = '__add_vendor__';
+
+/** Detail rows that span both columns (long text, comments). */
+const DETAIL_ROW_FULL_WIDTH_KEYS = new Set([
+  'comments',
+  'notes',
+  'description',
+  'item_name_freeform',
+  'project_purpose',
+]);
 
 /**
  * Build display rows from API-shaped record only:
@@ -1078,7 +1088,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-6xl sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30 shrink-0">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-semibold tracking-tight">
@@ -1104,7 +1114,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
               <p className="text-sm text-muted-foreground">No data to display.</p>
             </div>
           ) : (
-            <dl className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {visibleRows.map(({ key, value, inData }) => {
                 const isEditable =
                   key === 'status' && isInventoryRequest
@@ -1113,11 +1123,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                 const displayValue = pending[key] !== undefined ? pending[key] : value;
                 const isSaving = saving === key;
                 const label = humanizeLabel(key);
+                const rowFullWidth = DETAIL_ROW_FULL_WIDTH_KEYS.has(key);
 
                 return (
                   <div
                     key={key}
-                    className="rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:border-border"
+                    className={cn(
+                      'rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:border-border min-w-0',
+                      rowFullWidth && 'lg:col-span-2 xl:col-span-3',
+                    )}
                   >
                     <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                       {label}
@@ -1137,7 +1151,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 onValueChange={(val) => handleEditableChange(key, value, val)}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full max-w-md min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1161,7 +1175,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 }}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full max-w-md min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select cart" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1175,7 +1189,8 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               </Select>
                             );
                           })() : key === 'vendor' || key === 'vendor_name' ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 w-full min-w-0">
+                              <div className="min-w-0 flex-1">
                               <Select
                                 value={String(displayValue ?? '').trim() || undefined}
                                 onValueChange={(val) => {
@@ -1187,7 +1202,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 }}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select vendor" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1205,6 +1220,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                   )}
                                 </SelectContent>
                               </Select>
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
@@ -1234,7 +1250,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                             <Input
                               type="text"
                               inputMode="decimal"
-                              className="max-w-[280px] h-9 text-sm rounded-md font-mono tabular-nums"
+                              className="w-full max-w-md min-w-0 h-9 text-sm rounded-md font-mono tabular-nums"
                               value={
                                 priceInputDraft[key] ??
                                 formatPriceForInput(pending[key] !== undefined ? pending[key] : value)
@@ -1257,7 +1273,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               <div className="w-full space-y-2">
                                 {renderDisplayValue('comments', value)}
                                 <Textarea
-                                  className="max-w-[520px] min-h-[80px] text-sm rounded-md"
+                                  className="w-full min-h-[80px] text-sm rounded-md"
                                   value={pending[key] !== undefined ? String(pending[key]) : ''}
                                   onChange={(e) => handleEditableChange(key, value, e.target.value)}
                                   disabled={isSaving}
@@ -1266,7 +1282,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               </div>
                             ) : (
                               <Input
-                                className="max-w-[280px] h-9 text-sm rounded-md"
+                                className="w-full max-w-md min-w-0 h-9 text-sm rounded-md"
                                 value={pending[key] !== undefined ? String(pending[key]) : formatValue(value)}
                                 onChange={(e) => handleEditableChange(key, value, e.target.value)}
                                 disabled={isSaving}
@@ -1307,7 +1323,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   </div>
                 );
               })}
-            </dl>
+            </div>
           )}
           {isInventoryCart && (
             <section className="mt-6 rounded-xl border border-border/60 bg-card overflow-hidden">
