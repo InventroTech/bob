@@ -227,9 +227,6 @@ const CustomAppAuthPage: React.FC = () => {
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Signing up...' : 'Create account'}
               </Button>
-              <p className="text-xs text-muted-foreground">
-                This signup is tenant-scoped to <strong>{tenantSlug}</strong> and does not create a new tenant.
-              </p>
             </form>
           </TabsContent>
         </Tabs>
