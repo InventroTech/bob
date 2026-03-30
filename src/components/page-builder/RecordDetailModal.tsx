@@ -39,6 +39,7 @@ import {
   formatPriceForInput,
   PRICE_FIELD_KEYS,
 } from '@/lib/currencyFormat';
+import { cn } from '@/lib/utils';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -137,6 +138,8 @@ interface RecordDetailModalProps {
    * Default: true when omitted.
    */
   showFinalPriceSection?: boolean;
+  /** Whether requestor can see the "Delete request" button (any status). Default: false. */
+  showDeleteRequestButton?: boolean;
 }
 
 /** Data keys hidden in default record when Final price section is off (matches form modal behavior). */
@@ -148,6 +151,15 @@ const FINAL_PRICE_HIDDEN_ROW_KEYS = new Set([
   'including_gst',
 ]);
 const ADD_VENDOR_VALUE = '__add_vendor__';
+
+/** Detail rows that span both columns (long text, comments). */
+const DETAIL_ROW_FULL_WIDTH_KEYS = new Set([
+  'comments',
+  'notes',
+  'description',
+  'item_name_freeform',
+  'project_purpose',
+]);
 
 /**
  * Build display rows from API-shaped record only:
@@ -378,6 +390,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   actionButtons,
   modalFlags,
   showFinalPriceSection,
+  showDeleteRequestButton,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
@@ -414,6 +427,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     String(assignedToId) === String(user.id);
 
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
+  const canShowDeleteRequestButton = showDeleteRequestButton === true;
 
   /** Rows to show: hide system fields for all users, and PM-only fields for requestors. */
   const visibleRows = displayRows.filter((r) => {
@@ -853,15 +867,6 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   const handleDelete = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
-    const currentStatus = record?.data?.status;
-    if (currentStatus && currentStatus !== 'DRAFT') {
-      toast({
-        title: 'Cannot delete',
-        description: 'Only draft requests can be deleted.',
-        variant: 'destructive',
-      });
-      return;
-    }
     if (!window.confirm('Are you sure you want to delete this request? This cannot be undone.')) {
       return;
     }
@@ -883,7 +888,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } finally {
       setDeleting(false);
     }
-  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, onOpenChange, onDeleted, toast]);
+  }, [isInventoryRequest, isRequester, record?.id, onOpenChange, onDeleted, toast]);
 
   const handleProceedToRm = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
@@ -1078,7 +1083,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-6xl sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30 shrink-0">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-semibold tracking-tight">
@@ -1104,7 +1109,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
               <p className="text-sm text-muted-foreground">No data to display.</p>
             </div>
           ) : (
-            <dl className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {visibleRows.map(({ key, value, inData }) => {
                 const isEditable =
                   key === 'status' && isInventoryRequest
@@ -1113,11 +1118,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                 const displayValue = pending[key] !== undefined ? pending[key] : value;
                 const isSaving = saving === key;
                 const label = humanizeLabel(key);
+                const rowFullWidth = DETAIL_ROW_FULL_WIDTH_KEYS.has(key);
 
                 return (
                   <div
                     key={key}
-                    className="rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:border-border"
+                    className={cn(
+                      'rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:border-border min-w-0',
+                      rowFullWidth && 'lg:col-span-2 xl:col-span-3',
+                    )}
                   >
                     <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                       {label}
@@ -1137,7 +1146,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 onValueChange={(val) => handleEditableChange(key, value, val)}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full max-w-md min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1161,7 +1170,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 }}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full max-w-md min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select cart" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1175,7 +1184,8 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               </Select>
                             );
                           })() : key === 'vendor' || key === 'vendor_name' ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 w-full min-w-0">
+                              <div className="min-w-0 flex-1">
                               <Select
                                 value={String(displayValue ?? '').trim() || undefined}
                                 onValueChange={(val) => {
@@ -1187,7 +1197,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 }}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select vendor" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1205,6 +1215,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                   )}
                                 </SelectContent>
                               </Select>
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
@@ -1234,7 +1245,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                             <Input
                               type="text"
                               inputMode="decimal"
-                              className="max-w-[280px] h-9 text-sm rounded-md font-mono tabular-nums"
+                              className="w-full max-w-md min-w-0 h-9 text-sm rounded-md font-mono tabular-nums"
                               value={
                                 priceInputDraft[key] ??
                                 formatPriceForInput(pending[key] !== undefined ? pending[key] : value)
@@ -1257,7 +1268,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               <div className="w-full space-y-2">
                                 {renderDisplayValue('comments', value)}
                                 <Textarea
-                                  className="max-w-[520px] min-h-[80px] text-sm rounded-md"
+                                  className="w-full min-h-[80px] text-sm rounded-md"
                                   value={pending[key] !== undefined ? String(pending[key]) : ''}
                                   onChange={(e) => handleEditableChange(key, value, e.target.value)}
                                   disabled={isSaving}
@@ -1266,7 +1277,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               </div>
                             ) : (
                               <Input
-                                className="max-w-[280px] h-9 text-sm rounded-md"
+                                className="w-full max-w-md min-w-0 h-9 text-sm rounded-md"
                                 value={pending[key] !== undefined ? String(pending[key]) : formatValue(value)}
                                 onChange={(e) => handleEditableChange(key, value, e.target.value)}
                                 disabled={isSaving}
@@ -1307,7 +1318,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   </div>
                 );
               })}
-            </dl>
+            </div>
           )}
           {isInventoryCart && (
             <section className="mt-6 rounded-xl border border-border/60 bg-card overflow-hidden">
@@ -1461,22 +1472,27 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           </DialogFooter>
         )}
         {isInventoryRequest && isRequester && (
-          <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row justify-between sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              size="default"
-              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 order-2 sm:order-1"
-              disabled={deleting || proceeding || record?.data?.status !== 'DRAFT'}
-              onClick={handleDelete}
-            >
-              {deleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Trash2 className="h-4 w-4" aria-hidden />
-              )}
-              {deleting ? 'Deleting…' : 'Delete request'}
-            </Button>
+          <DialogFooter className={cn(
+            "px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row",
+            canShowDeleteRequestButton ? "justify-between sm:justify-between" : "justify-end sm:justify-end",
+          )}>
+            {canShowDeleteRequestButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 order-2 sm:order-1"
+                disabled={deleting || proceeding}
+                onClick={handleDelete}
+              >
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                )}
+                {deleting ? 'Deleting…' : 'Delete request'}
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="default"

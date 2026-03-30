@@ -75,6 +75,8 @@ interface TableConfigProps {
     showFormModalSaveButton?: boolean;
     /** Form-style modal: show the extra “Final price” block (computed from quantity). Default on when omitted. */
     showFinalPriceSection?: boolean;
+    /** Default record detail modal: show requestor-side Delete request button. Default off. */
+    showDeleteRequestButton?: boolean;
     /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
     modalFlags?: ModalFlagConfig[];
   };
@@ -362,6 +364,22 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 </div>
                 <p className="text-xs text-gray-500">
                   When off, the “Final price” block is hidden in the form-style modal, computed totals are not applied on save, and the default record detail modal hides price fields (total_price, unit_price, estimated cost, currency).
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Delete request button</Label>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-delete-request-button"
+                    checked={localConfig.showDeleteRequestButton === true}
+                    onCheckedChange={(checked) => handleInputChange('showDeleteRequestButton', checked)}
+                  />
+                  <Label htmlFor="show-delete-request-button" className="text-sm font-normal cursor-pointer">
+                    Show &quot;Delete request&quot; for requestor (detail + form-style modals)
+                  </Label>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Default is off. When on, requestors can delete inventory requests in any status from both the default record modal and the record form modal. Not shown for the Inventory Payment modal.
                 </p>
               </div>
               <div className="space-y-2">
