@@ -325,7 +325,7 @@ interface LeadTableProps {
     /** 'default' = record detail modal; 'form_edit' = form-style modal with action buttons. */
     recordDetailModalType?: 'default' | 'form_edit';
     /** For form_edit modal: fields (key, label, enabled). */
-    formModalFields?: Array<{ key: string; label: string; enabled: boolean }>;
+    formModalFields?: Array<{ key: string; label: string; enabled: boolean; link?: boolean }>;
     formModalTitle?: string;
     formModalDescription?: string;
     /** For Inventory Payment modal: conditional button (when attribute op value) + default button. */
@@ -348,12 +348,14 @@ interface LeadTableProps {
 }
 
 /** Default form modal fields for inventory_request when none configured; all enabled for edit. */
-const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: string; enabled: boolean }> = [
+const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: string; enabled: boolean; link?: boolean }> = [
   { key: 'status', label: 'Status', enabled: true },
   { key: 'quantity_required', label: 'Quantity required', enabled: true },
   { key: 'quantity', label: 'Quantity', enabled: true },
   { key: 'item_name_freeform', label: 'Item name', enabled: true },
   { key: 'vendor', label: 'Vendor', enabled: true },
+  { key: 'product_link', label: 'Product link', enabled: false, link: true },
+  { key: 'additional_link', label: 'Additional link', enabled: false, link: true },
   { key: 'comments', label: 'Comments', enabled: true },
   { key: 'notes', label: 'Notes', enabled: true },
   { key: 'urgency_level', label: 'Urgency', enabled: true },
