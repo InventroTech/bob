@@ -138,6 +138,8 @@ interface RecordDetailModalProps {
    * Default: true when omitted.
    */
   showFinalPriceSection?: boolean;
+  /** Whether requestor can see the "Delete request" button (any status). Default: false. */
+  showDeleteRequestButton?: boolean;
 }
 
 /** Data keys hidden in default record when Final price section is off (matches form modal behavior). */
@@ -388,6 +390,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   actionButtons,
   modalFlags,
   showFinalPriceSection,
+  showDeleteRequestButton,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
@@ -424,6 +427,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     String(assignedToId) === String(user.id);
 
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
+  const canShowDeleteRequestButton = showDeleteRequestButton === true;
 
   /** Rows to show: hide system fields for all users, and PM-only fields for requestors. */
   const visibleRows = displayRows.filter((r) => {
@@ -863,15 +867,6 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   const handleDelete = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
-    const currentStatus = record?.data?.status;
-    if (currentStatus && currentStatus !== 'DRAFT') {
-      toast({
-        title: 'Cannot delete',
-        description: 'Only draft requests can be deleted.',
-        variant: 'destructive',
-      });
-      return;
-    }
     if (!window.confirm('Are you sure you want to delete this request? This cannot be undone.')) {
       return;
     }
@@ -893,7 +888,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } finally {
       setDeleting(false);
     }
-  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, onOpenChange, onDeleted, toast]);
+  }, [isInventoryRequest, isRequester, record?.id, onOpenChange, onDeleted, toast]);
 
   const handleProceedToRm = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
@@ -1477,22 +1472,27 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           </DialogFooter>
         )}
         {isInventoryRequest && isRequester && (
-          <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row justify-between sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              size="default"
-              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 order-2 sm:order-1"
-              disabled={deleting || proceeding || record?.data?.status !== 'DRAFT'}
-              onClick={handleDelete}
-            >
-              {deleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Trash2 className="h-4 w-4" aria-hidden />
-              )}
-              {deleting ? 'Deleting…' : 'Delete request'}
-            </Button>
+          <DialogFooter className={cn(
+            "px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row",
+            canShowDeleteRequestButton ? "justify-between sm:justify-between" : "justify-end sm:justify-end",
+          )}>
+            {canShowDeleteRequestButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 order-2 sm:order-1"
+                disabled={deleting || proceeding}
+                onClick={handleDelete}
+              >
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                )}
+                {deleting ? 'Deleting…' : 'Delete request'}
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="default"

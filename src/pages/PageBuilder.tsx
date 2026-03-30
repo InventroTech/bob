@@ -408,6 +408,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showFormModalSaveButton?: boolean;
     /** Form-style modal: show extra “Final price” block. Default true when omitted. */
     showFinalPriceSection?: boolean;
+    /** Requestor-side Delete request (any status when on). Default false. */
+    showDeleteRequestButton?: boolean;
     modalFlags?: import('@/component-config').ModalFlagConfig[];
   };
 
@@ -476,6 +478,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
     showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
+    showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
     modalFlags: (initialConfig as any).modalFlags ?? [],
   });
 

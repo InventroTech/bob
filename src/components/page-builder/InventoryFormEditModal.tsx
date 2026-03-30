@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
@@ -70,6 +70,10 @@ interface InventoryFormEditModalProps {
    * Default: true (when omitted).
    */
   showFinalPriceSection?: boolean;
+  /** Requestor-only: show "Delete request" for inventory_request (any status). Default false. */
+  showDeleteRequestButton?: boolean;
+  /** Called after a successful delete (e.g. refresh table). */
+  onDeleted?: (recordId: number) => void;
 }
 
 function looksLikeUrl(value: string): boolean {
@@ -125,12 +129,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   paymentButtonConfig,
   modalFlags,
   showFinalPriceSection,
+  showDeleteRequestButton,
+  onDeleted,
 }) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [applyingStatusValue, setApplyingStatusValue] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [vendors, setVendors] = useState<Array<{ id: number; name: string }>>([]);
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [isAddVendorModalOpen, setIsAddVendorModalOpen] = useState(false);
@@ -149,6 +156,17 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
   const statusOptions = entityType ? (ALLOWED_STATUSES[entityType] ?? []) : [];
   const isInventoryRequest = entityType === 'inventory_request';
+  const requesterId = record?.data?.requester_id;
+  const isRequester =
+    isInventoryRequest &&
+    !!user &&
+    requesterId != null &&
+    String(requesterId) === String(user.id);
+  const canShowDeleteRequestButton =
+    showDeleteRequestButton === true &&
+    isInventoryRequest &&
+    isRequester &&
+    !paymentButtonConfig;
   const canUpdate = Boolean(onUpdate && record?.id != null);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
@@ -477,6 +495,31 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setSaving(false);
     }
   }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
+
+  const handleDeleteRequest = useCallback(async () => {
+    if (!canShowDeleteRequestButton || !record?.id) return;
+    if (!window.confirm('Are you sure you want to delete this request? This cannot be undone.')) {
+      return;
+    }
+    try {
+      setDeleting(true);
+      await apiClient.delete(`/crm-records/records/${record.id}/`);
+      toast({ title: 'Request deleted', description: 'The inventory request has been deleted.' });
+      if (onDeleted) {
+        onDeleted(record.id);
+      } else {
+        onOpenChange(false);
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Delete failed',
+        description: e?.message || 'Could not delete request.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }, [canShowDeleteRequestButton, record?.id, onDeleted, onOpenChange, toast]);
 
   if (!record) return null;
 
@@ -830,56 +873,77 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             </div>
           )}
         </div>
-        <DialogFooter className="border-t pt-4 gap-2 flex-wrap">
-          {hasActionButtons && (
-            <div className="flex flex-wrap gap-2">
-              {(modalFlags ?? [])
-                .filter((f) => (f.key ?? '').trim() && (f.label ?? '').trim())
-                .filter((f) => flagConditionMatches(f))
-                .map((f) => {
-                const key = f.key.trim();
-                return (
-                  <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background">
-                    <Checkbox
-                      checked={flagValues[key] === true}
-                      onCheckedChange={(checked) => setFlagValues((prev) => ({ ...prev, [key]: checked === true }))}
-                      disabled={!!applyingStatusValue}
-                    />
-                    <span className="text-xs text-muted-foreground">{f.label}</span>
-                  </label>
-                );
-              })}
-              {effectiveActionButtons!.map((btn) => (
-                <Button
-                  key={btn.statusValue}
-                  type="button"
-                  variant="outline"
-                  size="default"
-                  className="gap-2 h-9 rounded-md"
-                  disabled={!!applyingStatusValue}
-                  onClick={() => handleActionClick(btn)}
-                >
-                  {applyingStatusValue === btn.statusValue ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  ) : null}
-                  {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
-                </Button>
-              ))}
-            </div>
-          )}
-          {canUpdate && hasEditableField && effectiveShowSaveButton && (
-            <Button
-              type="button"
-              variant="default"
-              size="default"
-              className="gap-2 h-9 rounded-md"
-              disabled={saving}
-              onClick={handleSaveAll}
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          )}
+        <DialogFooter className="border-t pt-4 gap-3 flex-wrap flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2 items-center">
+            {canShowDeleteRequestButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 h-9 rounded-md"
+                disabled={deleting || applyingStatusValue != null || saving}
+                onClick={handleDeleteRequest}
+              >
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                )}
+                {deleting ? 'Deleting…' : 'Delete request'}
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2 items-center justify-end">
+            {hasActionButtons && (
+              <>
+                {(modalFlags ?? [])
+                  .filter((f) => (f.key ?? '').trim() && (f.label ?? '').trim())
+                  .filter((f) => flagConditionMatches(f))
+                  .map((f) => {
+                  const key = f.key.trim();
+                  return (
+                    <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background">
+                      <Checkbox
+                        checked={flagValues[key] === true}
+                        onCheckedChange={(checked) => setFlagValues((prev) => ({ ...prev, [key]: checked === true }))}
+                        disabled={!!applyingStatusValue}
+                      />
+                      <span className="text-xs text-muted-foreground">{f.label}</span>
+                    </label>
+                  );
+                })}
+                {effectiveActionButtons!.map((btn) => (
+                  <Button
+                    key={btn.statusValue}
+                    type="button"
+                    variant="outline"
+                    size="default"
+                    className="gap-2 h-9 rounded-md"
+                    disabled={!!applyingStatusValue}
+                    onClick={() => handleActionClick(btn)}
+                  >
+                    {applyingStatusValue === btn.statusValue ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : null}
+                    {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
+                  </Button>
+                ))}
+              </>
+            )}
+            {canUpdate && hasEditableField && effectiveShowSaveButton && (
+              <Button
+                type="button"
+                variant="default"
+                size="default"
+                className="gap-2 h-9 rounded-md"
+                disabled={saving || applyingStatusValue != null}
+                onClick={handleSaveAll}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
 
