@@ -23,7 +23,7 @@ import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConf
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
-import { apiClient } from '@/lib/api';
+import { apiClient, membershipService } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
@@ -502,6 +502,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const activeUserId = activeUser?.id ?? null;
   const activeUserMetadata = activeUser?.user_metadata ?? null;
   const activeAppMetadata = activeUser?.app_metadata ?? null;
+  const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
   
   // Check if user is GM (General Manager) - GM should see all leads
   const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
@@ -519,14 +520,53 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const runtimeTokenAdapters = useMemo<PlaceholderAdapter[]>(() => {
     const adapters: PlaceholderAdapter[] = [];
 
-    if (activeUserId) {
+    // For unmannd_request "team lead" filtering, team_lead is stored as TenantMembership id.
+    // So for that entity type, resolve {{current_user}} to currentMembershipId when available.
+    const isUnmanndRequestContext =
+      String(config?.entityType || '').toLowerCase() === 'unmannd_request' ||
+      String(config?.apiEndpoint || '').toLowerCase().includes('entity_type=unmannd_request');
+
+    if (activeUserId || currentMembershipId) {
       adapters.push({
         tokens: ['current_user'],
-        resolve: () => activeUserId
+        resolve: () => {
+          if (isUnmanndRequestContext && currentMembershipId) return currentMembershipId;
+          return activeUserId ?? currentMembershipId ?? '';
+        }
+      });
+    }
+
+    if (currentMembershipId) {
+      adapters.push({
+        tokens: ['current_membership_id', 'current_membership', 'current_user_membership_id'],
+        resolve: () => currentMembershipId,
       });
     }
 
     return adapters;
+  }, [activeUserId, currentMembershipId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMembership = async () => {
+      if (!activeUserId) {
+        setCurrentMembershipId(null);
+        return;
+      }
+      try {
+        const membership = await membershipService.getMyMembership();
+        const id = (membership as any)?.tenant_membership_id;
+        if (!cancelled && id != null) {
+          setCurrentMembershipId(String(id));
+        }
+      } catch {
+        if (!cancelled) setCurrentMembershipId(null);
+      }
+    };
+    loadMembership();
+    return () => {
+      cancelled = true;
+    };
   }, [activeUserId]);
 
   // Resolve placeholder tokens to user/session claim values right before fetch time
