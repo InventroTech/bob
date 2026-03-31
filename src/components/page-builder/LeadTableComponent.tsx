@@ -337,6 +337,8 @@ interface LeadTableProps {
     showFormModalSaveButton?: boolean;
     /** Form-style modal: show the extra “Final price” computed block. Default true when omitted. */
     showFinalPriceSection?: boolean;
+    /** Default modal: show requestor-side "Delete request" action. Default false. */
+    showDeleteRequestButton?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;
@@ -2370,6 +2372,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           onRecordUpdated={async (recordId: number) => {
             try { await fetchFilteredData(); } catch (e) { console.error('Error refreshing table after form modal update', e); }
           }}
+          showDeleteRequestButton={config?.showDeleteRequestButton}
+          onDeleted={async (recordId: number) => {
+            setData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setSelectedRecord(null);
+            setIsRecordDetailModalOpen(false);
+            try {
+              await fetchFilteredData();
+            } catch (e) {
+              console.error('Error refreshing table after delete:', e);
+            }
+          }}
         />
       )}
 
@@ -2392,6 +2406,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
         modalFlags={config?.modalFlags}
         showFinalPriceSection={config?.showFinalPriceSection}
+        showDeleteRequestButton={config?.showDeleteRequestButton}
         onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
           ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
               const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
