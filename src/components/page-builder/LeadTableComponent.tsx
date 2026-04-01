@@ -520,25 +520,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const runtimeTokenAdapters = useMemo<PlaceholderAdapter[]>(() => {
     const adapters: PlaceholderAdapter[] = [];
 
-    // For unmannd_request "team lead" filtering, team_lead is stored as TenantMembership id.
-    // So for that entity type, resolve {{current_user}} to currentMembershipId when available.
-    const isUnmanndRequestContext =
-      String(config?.entityType || '').toLowerCase() === 'unmannd_request' ||
-      String(config?.apiEndpoint || '').toLowerCase().includes('entity_type=unmannd_request');
-
-    if (activeUserId || currentMembershipId) {
+    if (activeUserId) {
       adapters.push({
         tokens: ['current_user'],
-        resolve: () => {
-          if (isUnmanndRequestContext && currentMembershipId) return currentMembershipId;
-          return activeUserId ?? currentMembershipId ?? '';
-        }
+        resolve: () => activeUserId
       });
     }
 
     if (currentMembershipId) {
       adapters.push({
-        tokens: ['current_membership_id', 'current_membership', 'current_user_membership_id'],
+        tokens: ['pyro_user_id', 'current_membership_id', 'current_membership', 'current_user_membership_id'],
         resolve: () => currentMembershipId,
       });
     }
