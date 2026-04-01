@@ -502,7 +502,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     const load = async () => {
       try {
         setVendorsLoading(true);
-        const res = await apiClient.get<any>('/crm-records/records/?entity_type=vendor&page_size=500');
+        const res = await apiClient.get<any>('/crm-records/records/?entity_type=unmannd_vendor&page_size=500');
         const raw = res.data?.data ?? (res.data as any)?.results ?? [];
         const list = Array.isArray(raw) ? raw : [];
         const options = list
@@ -534,7 +534,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     try {
       setSavingNewVendor(true);
       await apiClient.post('/crm-records/records/', {
-        entity_type: 'vendor',
+        entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
       });
       setPending((p) => ({ ...p, vendor: name }));

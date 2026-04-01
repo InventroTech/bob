@@ -154,7 +154,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     try {
       setVendorsLoading(true);
       const res = await apiClient.get<{ data?: { vendor_name?: string; id?: number }[]; results?: { data?: { vendor_name?: string; id?: number } }[] }>(
-        `${RECORDS_URL}?entity_type=vendor&page_size=500`
+        `${RECORDS_URL}?entity_type=unmannd_vendor&page_size=500`
       );
       const raw = res.data?.data ?? (res.data as any)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
@@ -428,7 +428,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     try {
       setSavingNewVendor(true);
       await apiClient.post(RECORDS_URL, {
-        entity_type: 'vendor',
+        entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
       });
       await fetchVendors();
