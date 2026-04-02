@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient, membershipService } from '@/lib/api';
+import { crmRecordsApi } from '@/lib/crmRecordsApi';
 import { useAuth } from '@/hooks/useAuth';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { convertGMTtoIST } from '@/lib/timeUtils';
@@ -502,9 +503,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     const load = async () => {
       try {
         setVendorsLoading(true);
-        const res = await apiClient.get<any>('/crm-records/records/?entity_type=vendor&page_size=500');
-        const raw = res.data?.data ?? (res.data as any)?.results ?? [];
-        const list = Array.isArray(raw) ? raw : [];
+        const list = await crmRecordsApi.listRecords({ entity_type: 'unmannd_vendor', page_size: 500 });
         const options = list
           .map((r: any) => {
             const id = r.id ?? r.data?.id;
@@ -533,8 +532,8 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     }
     try {
       setSavingNewVendor(true);
-      await apiClient.post('/crm-records/records/', {
-        entity_type: 'vendor',
+      await crmRecordsApi.createRecord({
+        entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
       });
       setPending((p) => ({ ...p, vendor: name }));
