@@ -101,7 +101,7 @@ const DEFAULT_URGENCY_OPTIONS = [
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
- * team_lead = user_parent_id from TenantMembership (from API), or current user's membership id if null.
+ * team_lead = user_parent_id (TenantMembership id), or current user's TenantMembership id if null.
  */
 export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> = ({ config }) => {
   const { user } = useAuth();
@@ -122,8 +122,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [department, setDepartment] = useState('');
   const [myRoleName, setMyRoleName] = useState<string>('');
   const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
-  // team_lead should store the parent user's user_id (string), not the TenantMembership id
-  const [teamLeadUserId, setTeamLeadUserId] = useState<string | null>(null);
+  // team_lead should store authz_tenantmembership.id (parent membership id preferred).
+  const [teamLeadMembershipId, setTeamLeadMembershipId] = useState<string | null>(null);
+  const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
   const [submitting, setSubmitting] = useState(false);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
@@ -153,7 +154,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     try {
       setVendorsLoading(true);
       const res = await apiClient.get<{ data?: { vendor_name?: string; id?: number }[]; results?: { data?: { vendor_name?: string; id?: number } }[] }>(
-        `${RECORDS_URL}?entity_type=vendor&page_size=500`
+        `${RECORDS_URL}?entity_type=unmannd_vendor&page_size=500`
       );
       const raw = res.data?.data ?? (res.data as any)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
@@ -326,9 +327,14 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       }
 
       const parentMembershipId = membership.user_parent_id ?? null;
+      const ownMembershipId =
+        membership.tenant_membership_id != null ? String(membership.tenant_membership_id) : null;
+      if (!cancelled && ownMembershipId) {
+        setCurrentMembershipId(ownMembershipId);
+      }
 
       // Resolve current user's membership name from authz_tenantmembership list
-      // and manager user_id (if parent membership exists).
+      // and manager membership id (if parent membership exists).
       try {
         const resp = await apiClient.get<any>('/membership/users/');
         const respData = resp.data;
@@ -355,13 +361,16 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         if (!cancelled && selfName) {
           setRequesterNameFromMembership(selfName);
         }
+        if (!cancelled && selfMembership?.id != null) {
+          setCurrentMembershipId(String(selfMembership.id));
+        }
 
         if (parentMembershipId != null) {
           const parent = users.find(
             (u) => u.id != null && Number(u.id) === Number(parentMembershipId)
           );
-          if (!cancelled && parent?.user_id) {
-            setTeamLeadUserId(String(parent.user_id));
+          if (!cancelled && parent?.id != null) {
+            setTeamLeadMembershipId(String(parent.id));
             return;
           }
         }
@@ -369,9 +378,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         console.warn('Failed to resolve membership users for requester/team_lead', err);
       }
 
-      // Fallback: use current user's own id as team_lead
-      if (!cancelled && user?.id) {
-        setTeamLeadUserId(String(user.id));
+      // Fallback: use current user's own membership id as team_lead
+      if (!cancelled && ownMembershipId) {
+        setTeamLeadMembershipId(ownMembershipId);
       }
     };
 
@@ -419,7 +428,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     try {
       setSavingNewVendor(true);
       await apiClient.post(RECORDS_URL, {
-        entity_type: 'vendor',
+        entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
       });
       await fetchVendors();
@@ -484,8 +493,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           payloadData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
         }
         payloadData.including_gst = item.including_gst === true;
-        if (teamLeadUserId) {
-          payloadData.team_lead = teamLeadUserId;
+        if (teamLeadMembershipId) {
+          payloadData.team_lead = teamLeadMembershipId;
         }
         await apiClient.post(RECORDS_URL, {
           entity_type: entityType,
