@@ -198,7 +198,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const fetchVendors = useCallback(async () => {
     try {
       setVendorsLoading(true);
-      const res = await apiClient.get<any>(`${RECORDS_URL}?entity_type=vendor&page_size=500`);
+      const res = await apiClient.get<any>(`${RECORDS_URL}?entity_type=unmannd_vendor&page_size=500`);
       const raw = res.data?.data ?? (res.data as any)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const options = list
@@ -230,7 +230,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     try {
       setSavingNewVendor(true);
       await apiClient.post(RECORDS_URL, {
-        entity_type: 'vendor',
+        entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
       });
       await fetchVendors();
