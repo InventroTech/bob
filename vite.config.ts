@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
@@ -22,5 +23,11 @@ export default defineConfig(({ mode }) => ({
   build: {
     // Generate source maps for better Sentry error reporting
     sourcemap: true,
+  },
+  
+  // 👇 ADD THIS NEW TEST BLOCK 👇
+  test: {
+    environment: "jsdom",
+    globals: true,
   },
 }));
