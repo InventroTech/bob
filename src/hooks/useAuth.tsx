@@ -130,7 +130,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [navigate, getLoginUrl]);
 
   // Proactive token refresh: keep JWT fresh every 10 minutes while user is active

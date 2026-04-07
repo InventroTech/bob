@@ -1230,7 +1230,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
     })) ?? [];
-    let base: Column[] = (mapped.length > 0 ? mapped : defaultColumns) as Column[];
+    const base: Column[] = (mapped.length > 0 ? mapped : defaultColumns) as Column[];
     return base;
   }, [config?.columns, config?.tableType, effectiveStatusButtons]);
 
@@ -1469,8 +1469,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
       const response = await apiClient.get(url);
       const responseData = response.data;
-      let leads = responseData.data || responseData.results || [];
-      let pageMeta = responseData.page_meta;
+      const leads = responseData.data || responseData.results || [];
+      const pageMeta = responseData.page_meta;
 
       const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 
@@ -1608,8 +1608,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         setTableLoading(true);
         const response = await apiClient.get(pagination.nextPageLink);
         const responseData = response.data;
-        let leads = responseData.data || responseData.results || [];
-        let pageMeta = responseData.page_meta;
+        const leads = responseData.data || responseData.results || [];
+        const pageMeta = responseData.page_meta;
 
         const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 
@@ -1641,8 +1641,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         setTableLoading(true);
         const response = await apiClient.get(pagination.previousPageLink);
         const responseData = response.data;
-        let leads = responseData.data || responseData.results || [];
-        let pageMeta = responseData.page_meta;
+        const leads = responseData.data || responseData.results || [];
+        const pageMeta = responseData.page_meta;
 
         const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
 

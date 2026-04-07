@@ -541,7 +541,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
@@ -683,7 +683,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
 
   // Filter and sort applications
   const filteredAndSortedApplications = useMemo(() => {
-    let filtered = applications.filter(app => {
+    const filtered = applications.filter(app => {
       // Job filter
       if (selectedJobId !== 'all' && String(app.jobId) !== String(selectedJobId)) return false;
       
@@ -858,7 +858,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           ? `${url}${applicationId}/` 
           : `${url}/${applicationId}/`;
 
-        let headers: Record<string, string> = {
+        const headers: Record<string, string> = {
           'Content-Type': 'application/json'
         };
 
