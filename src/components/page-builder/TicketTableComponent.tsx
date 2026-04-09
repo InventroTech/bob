@@ -21,9 +21,22 @@ import { format } from 'date-fns';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { convertGMTtoIST } from '@/lib/timeUtils';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
+import { getTenantSlug } from '@/lib/api/config';
+import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
+import { FilterService } from '@/services/filterService';
+import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
+import { useFilters } from '@/hooks/useFilters';
+import { apiClient } from '@/lib/api';
 
 // Use renderer API for ticket search
 const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
+
+/** Append query string to a path or full URL that may already contain `?`. */
+function appendQueryParams(basePathOrUrl: string, params: URLSearchParams): string {
+  if (!params.toString()) return basePathOrUrl;
+  const sep = basePathOrUrl.includes('?') ? '&' : '?';
+  return `${basePathOrUrl}${sep}${params.toString()}`;
+}
 
 interface Column {
   header: string;
@@ -224,6 +237,15 @@ interface TicketTableProps {
     apiPrefix?: 'supabase' | 'renderer';
     /** Comma-separated field names to search in (e.g. "name,email,subject"). Sent as search_fields with search param. */
     searchFields?: string;
+    /**
+     * When non-empty, these filters replace the built-in Resolution / Poster / Assignee / date filters.
+     * Configure in Page Builder → Table → same filter UI as Lead Table (accessor = query param field name).
+     */
+    filters?: FilterConfig[];
+    filterOptions?: {
+      showSummary?: boolean;
+      compact?: boolean;
+    };
   };
 }
 
@@ -266,6 +288,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
+  const latestSearchValueRef = useRef<string>('');
   /** Base data for client-side search (initial load or filter result). Search runs across all fields on this. */
   const baseDataRef = useRef<any[]>([]);
   const [pagination, setPagination] = useState<{
@@ -298,6 +321,162 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     poster_statuses: []
   });
   const { session, user } = useAuth();
+
+  /** Same base + path as initial `fetchTickets` — filters/search/pagination must use this, not a hardcoded analytics URL. */
+  const buildTicketsListUrl = (params: URLSearchParams) => {
+    const baseUrl = (apiPrefix === 'renderer' ? TICKET_API_BASE : import.meta.env.VITE_API_URI || '').replace(
+      /\/+$/,
+      '',
+    );
+    const pathRaw = (config?.apiEndpoint || '/api/tickets').trim();
+    const path = pathRaw.startsWith('/') ? pathRaw : `/${pathRaw}`;
+    return appendQueryParams(`${baseUrl}${path}`, params);
+  };
+
+  const ticketsRequestHeaders = (): Record<string, string> => {
+    const h: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (session?.access_token) {
+      h.Authorization = `Bearer ${session.access_token}`;
+    }
+    if (apiPrefix === 'renderer') {
+      h['X-Tenant-Slug'] = getTenantSlug();
+    }
+    return h;
+  };
+
+  const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
+
+  const normalizedFilters = useMemo(() => {
+    if (!config?.filters || config.filters.length === 0) return [] as FilterConfig[];
+
+    const seenKeys = new Set<string>();
+    const slugify = (s: string) =>
+      s
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+
+    return config.filters.map((f, idx) => {
+      let key = (f.key || '').trim();
+      if (!key) key = (f.accessor || '').trim();
+      if (!key && f.label) key = slugify(f.label);
+      if (!key) key = `filter_${idx}`;
+
+      let uniqueKey = key;
+      let n = 1;
+      while (seenKeys.has(uniqueKey)) {
+        uniqueKey = `${key}_${n++}`;
+      }
+      seenKeys.add(uniqueKey);
+
+      return { ...f, key: uniqueKey };
+    });
+  }, [config?.filters]);
+
+  useEffect(() => {
+    const apiSelectFilters = normalizedFilters.filter(
+      (f): f is FilterConfig & { optionsApiUrl: string; optionsDisplayKey: string; optionsValueKey: string } =>
+        f.type === 'select' &&
+        !!(f.optionsApiUrl && f.optionsApiUrl.trim()) &&
+        !!(f.optionsDisplayKey?.trim() && f.optionsValueKey?.trim()),
+    );
+    if (apiSelectFilters.length === 0) {
+      setResolvedFilterOptions({});
+      return;
+    }
+    let cancelled = false;
+    const fetchOne = async (filter: (typeof apiSelectFilters)[0]) => {
+      try {
+        const url = filter.optionsApiUrl.startsWith('http')
+          ? filter.optionsApiUrl
+          : filter.optionsApiUrl.startsWith('/')
+            ? filter.optionsApiUrl
+            : `/${filter.optionsApiUrl}`;
+        const res = await apiClient.get<unknown>(url);
+        const raw = res.data;
+        const arr = Array.isArray(raw) ? raw : (raw as any)?.results ?? (raw as any)?.data ?? [];
+        const displayKey = filter.optionsDisplayKey.trim();
+        const valueKey = filter.optionsValueKey.trim();
+        let options: FilterOption[] = (arr as any[])
+          .map((item: any) => ({
+            label: String(item?.[displayKey] ?? ''),
+            value: String(item?.[valueKey] ?? ''),
+          }))
+          .filter((o) => o.value !== undefined && o.value !== '');
+        if (filter.optionsIncludeNull) {
+          const nullLabel = (filter.optionsNullLabel ?? 'Unassigned').trim() || 'Unassigned';
+          const nullValue =
+            filter.optionsNullValue !== undefined && filter.optionsNullValue !== null
+              ? String(filter.optionsNullValue)
+              : '';
+          options = [{ label: nullLabel, value: nullValue }, ...options];
+        }
+        if (!cancelled) {
+          setResolvedFilterOptions((prev) => ({ ...prev, [filter.key]: options }));
+        }
+      } catch (err) {
+        console.warn(`[TicketTableComponent] Failed to fetch filter options for ${filter.key}:`, err);
+        if (!cancelled) {
+          setResolvedFilterOptions((prev) => ({ ...prev, [filter.key]: [] }));
+        }
+      }
+    };
+    apiSelectFilters.forEach(fetchOne);
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedFilters]);
+
+  const effectiveFilters = useMemo(() => {
+    return normalizedFilters.map((f) => {
+      if (f.type === 'select' && f.optionsApiUrl && resolvedFilterOptions[f.key]) {
+        return { ...f, options: resolvedFilterOptions[f.key] };
+      }
+      return f;
+    });
+  }, [normalizedFilters, resolvedFilterOptions]);
+
+  const useConfigurableFilters = effectiveFilters.length > 0;
+
+  const filterService = useMemo(() => {
+    if (!useConfigurableFilters) return null;
+    const service = new FilterService(effectiveFilters, {
+      searchFields: config?.searchFields,
+      pageSize: 50,
+    });
+    const validation = service.validateFilters();
+    if (!validation.isValid) {
+      console.error('[TicketTableComponent] Filter config validation failed:', validation.errors);
+    }
+    return service;
+  }, [useConfigurableFilters, effectiveFilters, config?.searchFields]);
+
+  const {
+    filterState,
+    setFilterValue,
+    setFilterValues,
+    clearFilters: clearConfigurableFilters,
+    applyFilters: applyConfigurableFiltersMark,
+    resetFilters: resetConfigurableFilters,
+    isFilterActive,
+    getActiveFiltersCount,
+    getQueryParams,
+    getFilterDisplayValue,
+  } = useFilters();
+
+  /** Append toolbar search box to query params (works with FilterService `search` key). */
+  const mergeToolbarSearchIntoParams = (params: URLSearchParams) => {
+    const st = latestSearchValueRef.current?.trim() ?? '';
+    if (st) {
+      params.set('search', st);
+      if (config?.searchFields) {
+        params.set('search_fields', config.searchFields);
+      }
+    }
+  };
 
   // Memoize table columns to prevent unnecessary re-renders
   const tableColumns: Column[] = useMemo(() => 
@@ -346,6 +525,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   // Fetch filter options from API
   const fetchFilterOptions = async () => {
+    if (apiPrefix !== 'renderer') return;
     try {
       const authToken = session?.access_token;
       const baseUrl = TICKET_API_BASE;
@@ -358,7 +538,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'X-Tenant-Slug': getTenantSlug(),
           'Content-Type': 'application/json'
         }
       });
@@ -401,6 +581,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   // Fetch assignees from API
   const fetchAssignees = async () => {
+    if (apiPrefix !== 'renderer') return;
     try {
       const authToken = session?.access_token;
       const baseUrl = TICKET_API_BASE;
@@ -413,7 +594,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+          'X-Tenant-Slug': getTenantSlug(),
           'Content-Type': 'application/json'
         }
       });
@@ -443,11 +624,26 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   };
 
   const getUniqueAssignedTo = () => {
-    // Return the assignees fetched from API
-    return assignees.map(assignee => ({
-      id: assignee.uid || assignee.id.toString(), // Use uid if available, fallback to id
-      name: assignee.name
-    }));
+    if (assignees.length > 0) {
+      return assignees.map((assignee) => ({
+        id: String(assignee.uid ?? assignee.id),
+        name: assignee.name,
+      }));
+    }
+    const seen = new Set<string>();
+    const out: { id: string; name: string }[] = [];
+    for (const ticket of data) {
+      const raw = ticket.assigned_to ?? ticket.assignee_id ?? ticket.cse_uid;
+      if (raw == null || raw === '') continue;
+      const id = String(raw);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
+        name: getDisplayName(String(ticket.cse_name || ticket.assigned_to || raw)),
+      });
+    }
+    return out;
   };
 
   const getUniquePosterStatuses = () => {
@@ -461,101 +657,24 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     return statuses.filter(status => status && status !== 'N/A' && status !== 'No Poster');
   };
 
-  // Apply filters using analytics endpoint
-  const applyFilters = async (requestSequence?: number) => {
+  /** Shared list fetch used by legacy filters, configurable filters, and search. */
+  const runTicketListRequest = useCallback(async (params: URLSearchParams, requestSequence?: number) => {
     try {
-      setTableLoading(true); // Use table loading instead of full component loading
-      
-      // Cancel any previous request
+      setTableLoading(true);
+
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      
-      // Create new AbortController for this request
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
-      
-      // Use provided sequence or increment for non-search calls
-      const currentSequence = requestSequence || ++requestSequenceRef.current;
-      
-      const authToken = session?.access_token;
 
-      // Always use renderer URL for analytics endpoint
-      const baseUrl = TICKET_API_BASE;
-      const apiUrl = `${baseUrl}/analytics/support-ticket/`;
-      
-      // Build query parameters
-      const params = new URLSearchParams();
-      
-      // Add resolution status filters
-      if (resolutionStatusFilter.length > 0) {
-        resolutionStatusFilter.forEach(status => {
-          // Send null for "Open" status, otherwise send the status as-is
-          const statusToSend = status === 'Open' ? 'null' : status;
-          params.append('resolution_status', statusToSend);
-        });
-      }
-      
-      // Add assigned to filter
-      if (assignedToFilter !== 'all') {
-        if (assignedToFilter === 'myself') {
-          params.append('assigned_to', user?.id || '');
-        } else if (assignedToFilter === 'unassigned') {
-          params.append('assigned_to', 'null');
-        } else {
-          // For specific assignee, use the ID directly
-          params.append('assigned_to', assignedToFilter);
-        }
-      }
-      
-      // Add poster status filters
-      if (posterStatusFilter.length > 0) {
-        posterStatusFilter.forEach(status => {
-          params.append('poster', status);
-        });
-      }
-      
-      // Add date range filters
-      if (dateRangeFilter.startDate) {
-        const startDateTime = new Date(dateRangeFilter.startDate);
-        startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
-        params.append('created_at__gte', startDateTime.toISOString());
-      }
-      if (dateRangeFilter.endDate) {
-        const endDateTime = new Date(dateRangeFilter.endDate);
-        endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
-        params.append('created_at__lte', endDateTime.toISOString());
-      }
-
-      // Include search param for backend search (improves time and accuracy)
-      const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
-      const isSearching = currentSearchTerm !== '';
-      if (currentSearchTerm) {
-        params.append('search', currentSearchTerm);
-        if (config?.searchFields) {
-          params.append('search_fields', config.searchFields);
-        }
-      }
-      
-      // Pagination: always use 50 tickets per page
-      params.append('page', '1');
-      params.append('page_size', '50');
-      
-      const fullUrl = `${apiUrl}?${params.toString()}`;
-      console.log('Filtered API URL:', fullUrl);
-      console.log('Resolution status filter mapping:', resolutionStatusFilter.map(status => ({
-        original: status,
-        sent: status === 'Open' ? 'null' : status
-      })));
+      const currentSequence = requestSequence !== undefined ? requestSequence : ++requestSequenceRef.current;
+      const fullUrl = buildTicketsListUrl(params);
 
       const response = await fetch(fullUrl, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        },
-        signal: abortController.signal
+        headers: ticketsRequestHeaders(),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -566,21 +685,17 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }
 
       const responseData = await response.json();
-      
-      // Check if this response is still relevant (not superseded by a newer request)
+
       if (currentSequence !== requestSequenceRef.current) {
-        console.log(`Ignoring stale response for sequence ${currentSequence}, current is ${requestSequenceRef.current}, search term was: "${searchTerm}"`);
         return;
       }
-      
-      console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length ?? responseData.results?.length ?? (Array.isArray(responseData) ? responseData.length : '?')}`);
-      
-      // Handle different response formats (array or single object)
+
       let tickets: any[] = [];
       let pageMeta = null;
-      
-      const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
-      
+
+      const ensureArray = (val: any): any[] =>
+        Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+
       if (responseData.results !== undefined) {
         tickets = ensureArray(responseData.results);
         pageMeta = responseData.page_meta;
@@ -593,39 +708,27 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         throw new Error('Invalid data format received');
       }
 
-      // Transform the data with the new attributes
       const transformedData = tickets.map((ticket: any) => ({
         ...ticket,
-        // Format created_at with relative time
         created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
-        // Use cse_name for assigned to with display name
         cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-        // Combine first_name and last_name for name
-        name: ticket.first_name && ticket.last_name 
-          ? `${ticket.first_name} ${ticket.last_name}`
-          : ticket.name || 'N/A',
-        // Use reason field
+        name:
+          ticket.first_name && ticket.last_name
+            ? `${ticket.first_name} ${ticket.last_name}`
+            : ticket.name || 'N/A',
         reason: ticket.reason || ticket.Description || 'No reason provided',
-        // Use resolution_status with proper formatting
         resolution_status: ticket.resolution_status || ticket.status || 'Open',
-        // Use poster field directly
         poster: ticket.poster || 'No Poster',
-        // Generate Praja dashboard user link
-        praja_dashboard_user_link: ticket.praja_user_id 
+        praja_dashboard_user_link: ticket.praja_user_id
           ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
           : ticket.praja_dashboard_user_link || 'N/A',
-        // Ensure display_pic_url is included
-        display_pic_url: ticket.display_pic_url || null
+        display_pic_url: ticket.display_pic_url || null,
       }));
 
       baseDataRef.current = transformedData;
-      // Backend already applies search when search param is sent - no client-side filter needed
-      const toShow = transformedData;
-      console.log(`Setting filtered data for sequence ${currentSequence}: ${transformedData.length} from API (search: "${currentSearchTerm}")`);
-      setFilteredData(toShow);
+      setFilteredData(transformedData);
       setFiltersApplied(true);
-      
-      // Update pagination data if available
+
       if (pageMeta) {
         setPagination({
           totalCount: pageMeta.total_count || 0,
@@ -633,29 +736,86 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           currentPage: pageMeta.current_page || 1,
           pageSize: pageMeta.page_size || 50,
           nextPageLink: pageMeta.next_page_link || null,
-          previousPageLink: pageMeta.previous_page_link || null
+          previousPageLink: pageMeta.previous_page_link || null,
         });
-        console.log('Updated pagination from filtered response:', pageMeta);
       }
-    } catch (error) {
-      // Don't show error for aborted requests
-      if (error.name === 'AbortError') {
-        console.log('Request was aborted');
+    } catch (error: unknown) {
+      const err = error as Error;
+      if (err.name === 'AbortError') {
         return;
       }
-      console.error('Error applying filters:', error);
-      
-      // Handle different types of errors
-      if (error.message.includes('Rate limit exceeded')) {
+      console.error('Error fetching tickets:', error);
+      if (err.message?.includes('Rate limit exceeded')) {
         toast.error('Too many requests. Please wait a moment before searching again.');
-      } else if (error.message.includes('429')) {
+      } else if (err.message?.includes('429')) {
         toast.error('Rate limit exceeded. Please wait before making another request.');
       } else {
-        toast.error('Failed to apply filters');
+        toast.error('Failed to load tickets');
       }
     } finally {
-      setTableLoading(false); // Use table loading instead of full component loading
+      setTableLoading(false);
     }
+  }, [apiPrefix, config?.apiEndpoint, session?.access_token]);
+
+  // Legacy hard-coded filters (disabled when config.filters is non-empty)
+  const applyFilters = async (requestSequence?: number) => {
+    if (useConfigurableFilters) return;
+
+    const currentSequence = requestSequence !== undefined ? requestSequence : ++requestSequenceRef.current;
+    const params = new URLSearchParams();
+
+    if (resolutionStatusFilter.length > 0) {
+      resolutionStatusFilter.forEach((status) => {
+        const statusToSend = status === 'Open' ? 'null' : status;
+        params.append('resolution_status', statusToSend);
+      });
+    }
+
+    if (assignedToFilter !== 'all') {
+      if (assignedToFilter === 'myself') {
+        params.append('assigned_to', user?.id || '');
+      } else if (assignedToFilter === 'unassigned') {
+        params.append('assigned_to', 'null');
+      } else {
+        params.append('assigned_to', assignedToFilter);
+      }
+    }
+
+    if (posterStatusFilter.length > 0) {
+      posterStatusFilter.forEach((status) => {
+        params.append('poster', status);
+      });
+    }
+
+    if (dateRangeFilter.startDate) {
+      const startDateTime = new Date(dateRangeFilter.startDate);
+      startDateTime.setHours(
+        parseInt(dateRangeFilter.startTime.split(':')[0], 10),
+        parseInt(dateRangeFilter.startTime.split(':')[1], 10),
+      );
+      params.append('created_at__gte', startDateTime.toISOString());
+    }
+    if (dateRangeFilter.endDate) {
+      const endDateTime = new Date(dateRangeFilter.endDate);
+      endDateTime.setHours(
+        parseInt(dateRangeFilter.endTime.split(':')[0], 10),
+        parseInt(dateRangeFilter.endTime.split(':')[1], 10),
+      );
+      params.append('created_at__lte', endDateTime.toISOString());
+    }
+
+    const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
+    if (currentSearchTerm) {
+      params.append('search', currentSearchTerm);
+      if (config?.searchFields) {
+        params.append('search_fields', config.searchFields);
+      }
+    }
+
+    params.append('page', '1');
+    params.append('page_size', '50');
+
+    await runTicketListRequest(params, currentSequence);
   };
 
   // Reset filters
@@ -680,8 +840,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     setFiltersApplied(false);
   };
 
-  const latestSearchValueRef = useRef<string>('');
-
   // Search: simplified and optimized
   const debouncedSearch = useCallback((value: string) => {
     latestSearchValueRef.current = value;
@@ -698,11 +856,32 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     searchTimeoutRef.current = setTimeout(async () => {
       const term = latestSearchValueRef.current.trim();
       setSearchTerm(term);
-      
+
       // Create new abort controller for this search
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
-      
+
+      // Config-driven filters: keep toolbar search in sync via FilterService (same as Lead Table)
+      if (useConfigurableFilters && filterService) {
+        try {
+          setSearchLoading(!!term);
+          const apiSequence = ++requestSequenceRef.current;
+          const currentFilters = { ...filterState.values };
+          if (term) {
+            currentFilters.search = term;
+          } else {
+            delete currentFilters.search;
+          }
+          const params = filterService.generateQueryParams(currentFilters);
+          params.set('page', '1');
+          params.set('page_size', '50');
+          await runTicketListRequest(params, apiSequence);
+        } finally {
+          setSearchLoading(false);
+        }
+        return;
+      }
+
       // Check if filters are applied
       const hasFilters = filtersApplied || 
         resolutionStatusFilter.length > 0 || 
@@ -721,21 +900,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           // Reset to original first page (50 tickets)
           try {
             setTableLoading(true);
-            const authToken = session?.access_token;
-            const baseUrl = TICKET_API_BASE;
-            const apiUrl = `${baseUrl}/analytics/support-ticket/`;
-            
             const params = new URLSearchParams();
             params.append('page', '1');
             params.append('page_size', '50');
-            
-            const response = await fetch(`${apiUrl}?${params.toString()}`, {
+
+            const response = await fetch(buildTicketsListUrl(params), {
               method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': authToken ? `Bearer ${authToken}` : '',
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
-              },
+              headers: ticketsRequestHeaders(),
               signal: abortController.signal
             });
 
@@ -808,9 +979,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         try {
           setTableLoading(true);
           setSearchLoading(true);
-          const authToken = session?.access_token;
-          const baseUrl = TICKET_API_BASE;
-          const apiUrl = `${baseUrl}/analytics/support-ticket/`;
 
           const params = new URLSearchParams();
           params.append('search', term);
@@ -818,13 +986,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           params.append('page', '1');
           params.append('page_size', '50');
 
-          const response = await fetch(`${apiUrl}?${params.toString()}`, {
+          const response = await fetch(buildTicketsListUrl(params), {
             method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': authToken ? `Bearer ${authToken}` : '',
-              'X-Tenant-Slug': 'bibhab-thepyro-ai'
-            },
+            headers: ticketsRequestHeaders(),
             signal: abortController.signal
           });
 
@@ -894,7 +1058,25 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         }
       }
     }, 500); // Increased debounce to 500ms to reduce API calls
-  }, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
+  }, [
+    data,
+    matchRowBySearchTerm,
+    tableColumns,
+    filtersApplied,
+    resolutionStatusFilter,
+    assignedToFilter,
+    posterStatusFilter,
+    dateRangeFilter,
+    session?.access_token,
+    config?.searchFields,
+    apiPrefix,
+    config?.apiEndpoint,
+    user?.id,
+    useConfigurableFilters,
+    filterService,
+    filterState.values,
+    runTicketListRequest,
+  ]);
 
   // Handle search input change from PrajaTable
   const handleSearchChange = useCallback((value: string) => {
@@ -930,7 +1112,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           {
             'Content-Type': 'application/json',
             'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai',
+            ...(apiPrefix === 'renderer' ? { 'X-Tenant-Slug': getTenantSlug() } : {}),
           },
           'ticket_id'
         );
@@ -941,22 +1123,17 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         toast.error(err?.message || 'Action failed');
       }
     }
-  }, [session?.access_token]);
+  }, [session?.access_token, apiPrefix]);
 
   // Handle pagination navigation
   const handleNextPage = async () => {
     if (pagination.nextPageLink) {
       try {
         setTableLoading(true);
-        const authToken = session?.access_token;
-        
+
         const response = await fetch(pagination.nextPageLink, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
-          }
+          headers: ticketsRequestHeaders(),
         });
 
         if (!response.ok) {
@@ -1018,15 +1195,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     if (pagination.previousPageLink) {
       try {
         setTableLoading(true);
-        const authToken = session?.access_token;
-        
+
         const response = await fetch(pagination.previousPageLink, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
-          }
+          headers: ticketsRequestHeaders(),
         });
 
         if (!response.ok) {
@@ -1093,24 +1265,33 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
     try {
       setTableLoading(true);
-      const authToken = session?.access_token;
 
-      // Always use renderer URL for analytics endpoint
-      const baseUrl = TICKET_API_BASE;
-      const apiUrl = `${baseUrl}/analytics/support-ticket/`;
-      
-      // Build query parameters with all current filters
-      const params = new URLSearchParams();
-      
-      // Add resolution status filters
+      let params: URLSearchParams;
+
+      if (useConfigurableFilters && filterService) {
+        const currentFilters = { ...filterState.values };
+        const st = latestSearchValueRef.current?.trim() ?? '';
+        if (st) {
+          currentFilters.search = st;
+        } else {
+          delete currentFilters.search;
+        }
+        params = filterService.generateQueryParams(currentFilters);
+        params.set('page', String(page));
+        params.set('page_size', '50');
+        await runTicketListRequest(params);
+        return;
+      }
+
+      params = new URLSearchParams();
+
       if (resolutionStatusFilter.length > 0) {
-        resolutionStatusFilter.forEach(status => {
+        resolutionStatusFilter.forEach((status) => {
           const statusToSend = status === 'Open' ? 'null' : status;
           params.append('resolution_status', statusToSend);
         });
       }
-      
-      // Add assigned to filter
+
       if (assignedToFilter !== 'all') {
         if (assignedToFilter === 'myself') {
           params.append('assigned_to', user?.id || '');
@@ -1120,23 +1301,27 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           params.append('assigned_to', assignedToFilter);
         }
       }
-      
-      // Add poster status filters
+
       if (posterStatusFilter.length > 0) {
-        posterStatusFilter.forEach(status => {
+        posterStatusFilter.forEach((status) => {
           params.append('poster', status);
         });
       }
-      
-      // Add date range filters
+
       if (dateRangeFilter.startDate) {
         const startDateTime = new Date(dateRangeFilter.startDate);
-        startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
+        startDateTime.setHours(
+          parseInt(dateRangeFilter.startTime.split(':')[0], 10),
+          parseInt(dateRangeFilter.startTime.split(':')[1], 10),
+        );
         params.append('created_at__gte', startDateTime.toISOString());
       }
       if (dateRangeFilter.endDate) {
         const endDateTime = new Date(dateRangeFilter.endDate);
-        endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
+        endDateTime.setHours(
+          parseInt(dateRangeFilter.endTime.split(':')[0], 10),
+          parseInt(dateRangeFilter.endTime.split(':')[1], 10),
+        );
         params.append('created_at__lte', endDateTime.toISOString());
       }
 
@@ -1147,17 +1332,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }
 
       params.append('page', page.toString());
-      params.append('page_size', '50'); // Always use 50 tickets per page
-      
-      const fullUrl = `${apiUrl}?${params.toString()}`;
+      params.append('page_size', '50');
+
+      const fullUrl = buildTicketsListUrl(params);
 
       const response = await fetch(fullUrl, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
-        }
+        headers: ticketsRequestHeaders(),
       });
 
       if (!response.ok) {
@@ -1228,7 +1409,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     
     // If filters are applied, refresh filtered data
     if (filtersApplied) {
-      applyFilters();
+      if (useConfigurableFilters && filterService) {
+        const currentFilters = { ...filterState.values };
+        const st = latestSearchValueRef.current?.trim() ?? '';
+        if (st) currentFilters.search = st;
+        else delete currentFilters.search;
+        const p = filterService.generateQueryParams(currentFilters);
+        p.set('page', String(pagination.currentPage));
+        p.set('page_size', '50');
+        void runTicketListRequest(p);
+      } else {
+        void applyFilters();
+      }
     } else {
       // If no filters applied, update filtered data with all tickets
       setFilteredData(updatedData);
@@ -1244,28 +1436,18 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     const fetchTickets = async () => {
       try {
         setLoading(true);
-        const authToken = session?.access_token;
 
         const endpoint = config?.apiEndpoint || '/api/tickets';
         const baseUrl = apiPrefix === 'renderer' 
           ? TICKET_API_BASE 
           : import.meta.env.VITE_API_URI;
-        const apiUrl = `${baseUrl}${endpoint}?page=1&page_size=50`;
+        const path = endpoint.trim().startsWith('/') ? endpoint.trim() : `/${endpoint.trim()}`;
+        const apiUrl = appendQueryParams(`${baseUrl?.replace(/\/+$/, '') || ''}${path}`, new URLSearchParams({ page: '1', page_size: '50' }));
         console.log('API URL:', apiUrl);
-        
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : ''
-        };
-
-        // Add X-Tenant-Slug header only for renderer API calls
-        if (apiPrefix === 'renderer') {
-          headers['X-Tenant-Slug'] = 'bibhab-thepyro-ai';
-        }
 
         const response = await fetch(apiUrl, {
           method: 'GET',
-          headers,
+          headers: ticketsRequestHeaders(),
           signal: abortController.signal
         });
 
@@ -1369,13 +1551,17 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     };
   }, [session?.access_token, config?.apiEndpoint, apiPrefix]);
 
-  // Fetch filter options and assignees when component mounts
+  // Filter metadata endpoints exist only on the renderer analytics stack; Supabase/custom APIs use values from loaded rows.
   useEffect(() => {
-    if (session?.access_token) {
+    if (!session?.access_token) return;
+    if (apiPrefix === 'renderer') {
       fetchFilterOptions();
       fetchAssignees();
+    } else {
+      setFilterOptions({ resolution_statuses: [], poster_statuses: [] });
+      setAssignees([]);
     }
-  }, [session?.access_token]);
+  }, [session?.access_token, apiPrefix]);
 
   // Apply filters when filter values change
   useEffect(() => {
@@ -1446,6 +1632,49 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         <div className="mb-4">
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
+              {useConfigurableFilters && filterService ? (
+                <>
+                  <DynamicFilterBuilder
+                    filters={effectiveFilters}
+                    filterContext={{
+                      filterState,
+                      setFilterValue,
+                      setFilterValues,
+                      clearFilters: clearConfigurableFilters,
+                      applyFilters: applyConfigurableFiltersMark,
+                      resetFilters: resetConfigurableFilters,
+                      isFilterActive,
+                      getActiveFiltersCount,
+                      getQueryParams,
+                      getFilterDisplayValue,
+                    }}
+                    onFiltersChange={(incoming) => {
+                      const p = new URLSearchParams(incoming);
+                      mergeToolbarSearchIntoParams(p);
+                      if (!p.has('page')) p.set('page', '1');
+                      if (!p.has('page_size')) p.set('page_size', '50');
+                      void runTicketListRequest(p);
+                    }}
+                    showSummary={config?.filterOptions?.showSummary !== false}
+                    compact={config?.filterOptions?.compact}
+                  />
+                  <div className="mt-3 text-sm text-gray-600">
+                    Showing {filteredData.length} of{' '}
+                    {pagination.totalCount > 0 ? pagination.totalCount : filteredData.length} tickets
+                    {getActiveFiltersCount() > 0 && (
+                      <span className="ml-2">
+                        (Filtered by: {filterService.getFilterDescription(filterState.values)})
+                      </span>
+                    )}
+                    {pagination.totalCount > 0 && (
+                      <span className="ml-2 text-blue-600">
+                        (Page {pagination.currentPage} of {pagination.numberOfPages})
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-gray-700 mb-2">
@@ -1731,6 +1960,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                   </span>
                 )}
               </div>
+                </>
+              )}
             </div>
           )}
         </div>

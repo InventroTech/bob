@@ -85,10 +85,12 @@ export const TicketTableConfig: React.FC<TicketTableConfigProps> = ({
             id="apiEndpoint"
             value={localConfig.apiEndpoint || ""}
             onChange={(e) => handleInputChange("apiEndpoint", e.target.value)}
-            placeholder="e.g., /api/tickets"
+            placeholder="e.g. /rest/v1/ticket or /analytics/support-ticket/"
           />
           <p className="text-xs text-muted-foreground">
-            API endpoint for fetching ticket data
+            List URL used for the table, search, and filters (same path for all). Renderer legacy stack: use{' '}
+            <code className="text-xs">/analytics/support-ticket/</code>. Supabase: your REST path, e.g.{' '}
+            <code className="text-xs">/rest/v1/your_table</code>.
           </p>
         </div>
 
