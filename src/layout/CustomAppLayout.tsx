@@ -13,6 +13,7 @@ import { CustomIcons } from '@/components/page-builder/NewCustomIcons';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon} from '@/components/icons/CustomIcons';
 
   const navigationIconMap: Record<string, JSX.Element> = {
+    "lead groups": <Users className="h-4 w-4" />,
     "lead assignment": <Users className="h-4 w-4" />,
     "user hierarchy": <Users className="h-4 w-4" />,
     "analytics": <AnalyticsIcon />,

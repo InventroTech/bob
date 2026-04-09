@@ -102,3 +102,17 @@ export interface RoutingRuleUpsertPayload {
   name?: string;
   description?: string;
 }
+
+export interface Group {
+  id: number;
+  tenant?: string;
+  name: string;
+  group_data: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupCreatePayload {
+  name: string;
+  group_data: Record<string, any>;
+}

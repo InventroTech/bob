@@ -1716,7 +1716,7 @@ useEffect(() => {
                         />
                         <DraggableSidebarItem
                           id="leadAssignment"
-                          label="Lead Assignment"
+                          label="Lead Groups"
                           icon={<Target className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
