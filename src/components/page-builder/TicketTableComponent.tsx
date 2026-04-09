@@ -23,9 +23,7 @@ import { convertGMTtoIST } from '@/lib/timeUtils';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 import { getTenantSlug } from '@/lib/api/config';
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
-import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
-import { useFilters } from '@/hooks/useFilters';
 import { apiClient } from '@/lib/api';
 
 // Use renderer API for ticket search
@@ -441,43 +439,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   const useConfigurableFilters = effectiveFilters.length > 0;
 
-  const filterService = useMemo(() => {
-    if (!useConfigurableFilters) return null;
-    const service = new FilterService(effectiveFilters, {
-      searchFields: config?.searchFields,
-      pageSize: 50,
-    });
-    const validation = service.validateFilters();
-    if (!validation.isValid) {
-      console.error('[TicketTableComponent] Filter config validation failed:', validation.errors);
-    }
-    return service;
-  }, [useConfigurableFilters, effectiveFilters, config?.searchFields]);
-
-  const {
-    filterState,
-    setFilterValue,
-    setFilterValues,
-    clearFilters: clearConfigurableFilters,
-    applyFilters: applyConfigurableFiltersMark,
-    resetFilters: resetConfigurableFilters,
-    isFilterActive,
-    getActiveFiltersCount,
-    getQueryParams,
-    getFilterDisplayValue,
-  } = useFilters();
-
-  /** Append toolbar search box to query params (works with FilterService `search` key). */
-  const mergeToolbarSearchIntoParams = (params: URLSearchParams) => {
-    const st = latestSearchValueRef.current?.trim() ?? '';
-    if (st) {
-      params.set('search', st);
-      if (config?.searchFields) {
-        params.set('search_fields', config.searchFields);
-      }
-    }
-  };
-
   // Memoize table columns to prevent unnecessary re-renders
   const tableColumns: Column[] = useMemo(() => 
     config?.columns?.map(col => ({
@@ -861,27 +822,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
-      // Config-driven filters: keep toolbar search in sync via FilterService (same as Lead Table)
-      if (useConfigurableFilters && filterService) {
-        try {
-          setSearchLoading(!!term);
-          const apiSequence = ++requestSequenceRef.current;
-          const currentFilters = { ...filterState.values };
-          if (term) {
-            currentFilters.search = term;
-          } else {
-            delete currentFilters.search;
-          }
-          const params = filterService.generateQueryParams(currentFilters);
-          params.set('page', '1');
-          params.set('page_size', '50');
-          await runTicketListRequest(params, apiSequence);
-        } finally {
-          setSearchLoading(false);
-        }
-        return;
-      }
-
       // Check if filters are applied
       const hasFilters = filtersApplied || 
         resolutionStatusFilter.length > 0 || 
@@ -1072,9 +1012,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     apiPrefix,
     config?.apiEndpoint,
     user?.id,
-    useConfigurableFilters,
-    filterService,
-    filterState.values,
     runTicketListRequest,
   ]);
 
@@ -1267,22 +1204,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       setTableLoading(true);
 
       let params: URLSearchParams;
-
-      if (useConfigurableFilters && filterService) {
-        const currentFilters = { ...filterState.values };
-        const st = latestSearchValueRef.current?.trim() ?? '';
-        if (st) {
-          currentFilters.search = st;
-        } else {
-          delete currentFilters.search;
-        }
-        params = filterService.generateQueryParams(currentFilters);
-        params.set('page', String(page));
-        params.set('page_size', '50');
-        await runTicketListRequest(params);
-        return;
-      }
-
       params = new URLSearchParams();
 
       if (resolutionStatusFilter.length > 0) {
@@ -1409,18 +1330,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     
     // If filters are applied, refresh filtered data
     if (filtersApplied) {
-      if (useConfigurableFilters && filterService) {
-        const currentFilters = { ...filterState.values };
-        const st = latestSearchValueRef.current?.trim() ?? '';
-        if (st) currentFilters.search = st;
-        else delete currentFilters.search;
-        const p = filterService.generateQueryParams(currentFilters);
-        p.set('page', String(pagination.currentPage));
-        p.set('page_size', '50');
-        void runTicketListRequest(p);
-      } else {
-        void applyFilters();
-      }
+      void applyFilters();
     } else {
       // If no filters applied, update filtered data with all tickets
       setFilteredData(updatedData);
@@ -1632,25 +1542,17 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         <div className="mb-4">
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
-              {useConfigurableFilters && filterService ? (
+              {useConfigurableFilters ? (
                 <>
                   <DynamicFilterBuilder
                     filters={effectiveFilters}
-                    filterContext={{
-                      filterState,
-                      setFilterValue,
-                      setFilterValues,
-                      clearFilters: clearConfigurableFilters,
-                      applyFilters: applyConfigurableFiltersMark,
-                      resetFilters: resetConfigurableFilters,
-                      isFilterActive,
-                      getActiveFiltersCount,
-                      getQueryParams,
-                      getFilterDisplayValue,
-                    }}
                     onFiltersChange={(incoming) => {
                       const p = new URLSearchParams(incoming);
-                      mergeToolbarSearchIntoParams(p);
+                      const st = latestSearchValueRef.current?.trim() ?? '';
+                      if (st) {
+                        p.set('search', st);
+                        if (config?.searchFields) p.set('search_fields', config.searchFields);
+                      }
                       if (!p.has('page')) p.set('page', '1');
                       if (!p.has('page_size')) p.set('page_size', '50');
                       void runTicketListRequest(p);
@@ -1661,11 +1563,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                   <div className="mt-3 text-sm text-gray-600">
                     Showing {filteredData.length} of{' '}
                     {pagination.totalCount > 0 ? pagination.totalCount : filteredData.length} tickets
-                    {getActiveFiltersCount() > 0 && (
-                      <span className="ml-2">
-                        (Filtered by: {filterService.getFilterDescription(filterState.values)})
-                      </span>
-                    )}
                     {pagination.totalCount > 0 && (
                       <span className="ml-2 text-blue-600">
                         (Page {pagination.currentPage} of {pagination.numberOfPages})
