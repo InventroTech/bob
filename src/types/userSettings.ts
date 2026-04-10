@@ -102,3 +102,27 @@ export interface RoutingRuleUpsertPayload {
   name?: string;
   description?: string;
 }
+
+export interface Group {
+  id: number;
+  tenant?: string;
+  name: string;
+  group_data: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupCreatePayload {
+  name: string;
+  group_data: Record<string, any>;
+}
+
+export interface UserCoreKVSetting {
+  id: number;
+  tenant: string;
+  tenant_membership: number;
+  key: 'GROUP' | 'DAILY_TARGET' | 'DAILY_LIMIT' | string;
+  value: any;
+  created_at: string;
+  updated_at: string;
+}

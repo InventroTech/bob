@@ -219,7 +219,7 @@ const AddUserPage = () => {
 
       // Use renderer URL for user creation
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/accounts/users/legacy/create/`;
+      const apiUrl = `${baseUrl}/accounts/users/create/`;
       
       console.log('Creating user via:', apiUrl);
       console.log('Payload:', { name: formData.name, email: formData.email, role_id: selectedRoleId });
