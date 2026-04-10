@@ -311,7 +311,7 @@ const AddUserComponent: React.FC = () => {
 
       // Use renderer URL for user creation/update
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/accounts/users/legacy/create/`;
+      const apiUrl = `${baseUrl}/accounts/users/create/`;
       
       console.log('Creating user via:', apiUrl);
       console.log('Payload:', { name: formData.name, email: formData.email, role_id: selectedRoleId });
@@ -495,7 +495,7 @@ const AddUserComponent: React.FC = () => {
       }
 
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/accounts/users/legacy/update/`;
+      const apiUrl = `${baseUrl}/accounts/users/update/`;
       const payload: Record<string, string | number> = {
         name: editingRow.name.trim(),
         email: editingRow.email.trim(),
