@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { userSettingsApi } from '@/lib/userSettingsApi';
+import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
 import { crmLeadsApi } from '@/lib/crmLeadsApi';
 import { TrophyIcon } from '@/components/icons/CustomIcons';
 import { Coffee } from 'lucide-react';
@@ -78,7 +78,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
       : '#16a34a'; // Default to green for below limit
 
 
-  // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
+  // Fetch daily target from new core KV settings table
   const fetchDailyTarget = useCallback(async () => {
     try {
       if (!session) {
@@ -91,14 +91,11 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         return;
       }
 
-      // Get the daily target from LEAD_TYPE_ASSIGNMENT record
-      // Lead types are in value column, daily target is in daily_target column
       try {
-        const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
-        
-        // Get from the daily_target column
-        if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
-          const savedTarget = savedSetting.daily_target;
+        const kvRows = await leadTypeAssignmentApi.getUserCoreKVSettings(currentUser.id);
+        const dailyTargetRow = kvRows.find((row) => row.key === 'DAILY_TARGET');
+        if (typeof dailyTargetRow?.value === 'number') {
+          const savedTarget = dailyTargetRow.value;
           setDailyTarget(savedTarget);
           return;
         } else {
