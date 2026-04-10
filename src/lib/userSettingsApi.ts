@@ -11,6 +11,7 @@ import {
   RoutingRuleUpsertPayload,
   Group,
   GroupCreatePayload,
+  UserCoreKVSetting,
 } from '../types/userSettings';
 
 const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
@@ -121,7 +122,7 @@ export const leadTypeAssignmentApi = {
         lead_sources: data.lead_sources ?? [],
         lead_statuses: data.lead_statuses ?? [],
         daily_target: data.daily_target,
-        daily_limit: data.daily_limit
+        daily_limit: data.daily_limit,
       });
 
       const result = response.data;
@@ -250,6 +251,17 @@ export const leadTypeAssignmentApi = {
       return [];
     } catch (error: any) {
       console.error('Error fetching available queue types:', error);
+      return [];
+    }
+  },
+
+  async getUserCoreKVSettings(userId: string): Promise<UserCoreKVSetting[]> {
+    try {
+      const response = await apiClient.get(`/user-settings/users/${userId}/core-kv-settings/`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      if (error.response?.status === 404) return [];
+      console.error('Error fetching user core kv settings:', error);
       return [];
     }
   },

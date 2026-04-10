@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { leadTypeAssignmentApi, groupsApi } from "@/lib/userSettingsApi";
 import { Group, GroupCreatePayload, LeadTypeAssignment } from "@/types/userSettings";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useAuth } from "@/hooks/useAuth";
 
 interface LeadGroupsPageProps {
   className?: string;
@@ -119,9 +121,18 @@ interface GroupEditState {
   lead_statuses: string[];
 }
 
+interface GroupAssignmentUser {
+  name: string;
+  email: string;
+  roleName: string;
+  leadGroupName: string;
+}
+
 const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHeader = true }) => {
+  const { session } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [users, setUsers] = useState<LeadTypeAssignment[]>([]);
+  const [membershipUsers, setMembershipUsers] = useState<GroupAssignmentUser[]>([]);
   const [leadSources, setLeadSources] = useState<string[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<string[]>([]);
   const [leadStates, setLeadStates] = useState<string[]>([]);
@@ -132,6 +143,7 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
   const [queueTypes, setQueueTypes] = useState<string[]>([]);
   const [editingGroup, setEditingGroup] = useState<GroupEditState | null>(null);
   const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
+  const [selectedGroupForDrawer, setSelectedGroupForDrawer] = useState<Group | null>(null);
   const [form, setForm] = useState({
     name: "",
     queue_type: "",
@@ -164,9 +176,59 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
     }
   };
 
+  const loadMembershipUsers = async () => {
+    try {
+      const token = session?.access_token;
+      if (!token) {
+        setMembershipUsers([]);
+        return;
+      }
+
+      const tenantSlug = localStorage.getItem("tenant_slug") || "bibhab-thepyro-ai";
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/membership/users`;
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": tenantSlug,
+        },
+      });
+
+      if (!response.ok) {
+        setMembershipUsers([]);
+        return;
+      }
+
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.results)
+        ? payload.results
+        : Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : [];
+
+      const transformed: GroupAssignmentUser[] = rows.map((u: any) => ({
+        name: u.name || u.full_name || "Unnamed User",
+        email: u.email || "No Email",
+        roleName: u.role?.name || u.role_name || "No Role",
+        leadGroupName: u.lead_group_name || "",
+      }));
+      setMembershipUsers(transformed);
+    } catch {
+      setMembershipUsers([]);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    loadMembershipUsers();
+  }, [session?.access_token]);
 
   const filteredGroups = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -427,6 +489,12 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
     return Array.from(merged).filter(Boolean);
   };
 
+  const usersForSelectedGroup = useMemo(() => {
+    if (!selectedGroupForDrawer) return [];
+    const groupName = selectedGroupForDrawer.name.trim().toLowerCase();
+    return membershipUsers.filter((u) => (u.leadGroupName || "").trim().toLowerCase() === groupName);
+  }, [selectedGroupForDrawer, membershipUsers]);
+
   return (
     <div className={`space-y-6 ${className}`}>
       <div className="flex items-start justify-between gap-4">
@@ -662,7 +730,13 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                     return (
                       <TableRow key={group.id}>
                         <TableCell className="font-medium">
-                          {group.name}
+                          <button
+                            type="button"
+                            className="text-left text-blue-700 hover:text-blue-900 hover:underline"
+                            onClick={() => setSelectedGroupForDrawer(group)}
+                          >
+                            {group.name}
+                          </button>
                         </TableCell>
                         <TableCell>
                           {group.group_data?.queue_type || "-"}
@@ -834,6 +908,47 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
           )}
         </CardContent>
       </Card>
+      <Sheet open={!!selectedGroupForDrawer} onOpenChange={(open) => !open && setSelectedGroupForDrawer(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Group Details</SheetTitle>
+            <SheetDescription>
+              Full configuration and users assigned to this group.
+            </SheetDescription>
+          </SheetHeader>
+
+          {selectedGroupForDrawer && (
+            <div className="mt-6 space-y-6">
+              <div className="rounded-lg border p-4 space-y-2">
+                <p className="text-sm font-semibold text-gray-900">Configuration</p>
+                <p className="text-sm"><span className="font-medium">Group Name:</span> {selectedGroupForDrawer.name}</p>
+                <p className="text-sm"><span className="font-medium">Queue Type:</span> {selectedGroupForDrawer.group_data?.queue_type || "-"}</p>
+                <p className="text-sm"><span className="font-medium">Party:</span> {toList(selectedGroupForDrawer.group_data?.party).join(", ") || "-"}</p>
+                <p className="text-sm"><span className="font-medium">States:</span> {toList(selectedGroupForDrawer.group_data?.states).join(", ") || "-"}</p>
+                <p className="text-sm"><span className="font-medium">Lead Sources:</span> {toList(selectedGroupForDrawer.group_data?.lead_sources).join(", ") || "-"}</p>
+                <p className="text-sm"><span className="font-medium">Lead Statuses:</span> {toList(selectedGroupForDrawer.group_data?.lead_statuses).join(", ") || "-"}</p>
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-3">
+                <p className="text-sm font-semibold text-gray-900">Assigned Users ({usersForSelectedGroup.length})</p>
+                {usersForSelectedGroup.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No users assigned to this group.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {usersForSelectedGroup.map((u) => (
+                      <div key={`${u.email}-${u.name}`} className="rounded-md border p-3">
+                        <p className="text-sm"><span className="font-medium">Name:</span> {u.name}</p>
+                        <p className="text-sm"><span className="font-medium">Email:</span> {u.email}</p>
+                        <p className="text-sm"><span className="font-medium">Role:</span> {u.roleName}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

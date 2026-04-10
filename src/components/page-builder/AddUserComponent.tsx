@@ -18,6 +18,7 @@ interface Role {
 }
 
 interface User {
+  tenant_membership_id?: number;
   uid: string;
   name: string;
   email: string;
@@ -31,16 +32,17 @@ interface User {
   dailyLimit?: string | number;
 }
 
-interface AssignmentSummary {
-  user_id?: string;
-  lead_types: string[];
+interface UserCoreSettingsSummary {
+  group_id?: number;
   daily_target?: number;
   daily_limit?: number;
 }
 
 interface LeadGroupOption {
+  id: number;
   name: string;
   queue_type?: string;
+  group_data?: Record<string, any>;
 }
 
 interface RowEditState {
@@ -73,7 +75,7 @@ const AddUserComponent: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
-  const [assignmentMap, setAssignmentMap] = useState<Record<string, AssignmentSummary>>({});
+  const [coreSettingsMap, setCoreSettingsMap] = useState<Record<string, UserCoreSettingsSummary>>({});
   const [availableLeadGroups, setAvailableLeadGroups] = useState<LeadGroupOption[]>([]);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [selectedQueueType, setSelectedQueueType] = useState<'lead' | 'ticket'>('lead');
@@ -146,6 +148,7 @@ const AddUserComponent: React.FC = () => {
 
       // Transform the data to match expected format
       const transformedUsers: User[] = usersData.map((user: any, index: number) => ({
+        tenant_membership_id: typeof user.id === 'number' ? user.id : Number(user.id) || undefined,
         uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
         name: user.name || user.full_name || 'Unnamed User',
         email: user.email || 'No Email',
@@ -170,31 +173,43 @@ const AddUserComponent: React.FC = () => {
     }
   };
 
-  const fetchAssignments = async () => {
+  const fetchCoreSettings = async () => {
     try {
-      const assignments = await leadTypeAssignmentApi.getAll();
-      const mapped = assignments.reduce<Record<string, AssignmentSummary>>((acc, assignment) => {
-        const key = (assignment.user_email || '').toLowerCase();
-        if (key) {
-          acc[key] = {
-            user_id: assignment.user_id,
-            lead_types: assignment.lead_types ?? [],
-            daily_target: assignment.daily_target,
-            daily_limit: assignment.daily_limit,
-          };
-        }
-        return acc;
-      }, {});
-      setAssignmentMap(mapped);
+      const mapped: Record<string, UserCoreSettingsSummary> = {};
+      const usersWithMembershipId = users.filter((u) => !!u.tenant_membership_id);
+      const rows = await Promise.all(
+        usersWithMembershipId.map(async (u) => ({
+          emailKey: (u.email || '').toLowerCase(),
+          kv: await leadTypeAssignmentApi.getUserCoreKVSettings(String(u.tenant_membership_id)),
+        }))
+      );
+      rows.forEach(({ emailKey, kv }) => {
+        const groupRow = kv.find((r) => r.key === 'GROUP');
+        const targetRow = kv.find((r) => r.key === 'DAILY_TARGET');
+        const limitRow = kv.find((r) => r.key === 'DAILY_LIMIT');
+        mapped[emailKey] = {
+          group_id: typeof groupRow?.value === 'number' ? groupRow.value : undefined,
+          daily_target: typeof targetRow?.value === 'number' ? targetRow.value : undefined,
+          daily_limit: typeof limitRow?.value === 'number' ? limitRow.value : undefined,
+        };
+      });
+      setCoreSettingsMap(mapped);
     } catch {
-      setAssignmentMap({});
+      setCoreSettingsMap({});
     }
   };
 
   useEffect(() => {
     fetchUsers();
-    fetchAssignments();
   }, [tenantId]);
+
+  useEffect(() => {
+    if (users.length > 0) {
+      fetchCoreSettings();
+    } else {
+      setCoreSettingsMap({});
+    }
+  }, [users]);
 
   useEffect(() => {
     const fetchLeadGroupsAndQueueTypes = async () => {
@@ -205,8 +220,10 @@ const AddUserComponent: React.FC = () => {
         ]);
         setAvailableLeadGroups(
           groups.map((group) => ({
+            id: group.id,
             name: group.name,
             queue_type: typeof group.group_data?.queue_type === 'string' ? group.group_data.queue_type : undefined,
+            group_data: group.group_data ?? {},
           }))
         );
         setQueueTypes(queueTypesData);
@@ -221,15 +238,16 @@ const AddUserComponent: React.FC = () => {
   const usersWithSettings = useMemo(
     () =>
       users.map((usr) => {
-        const config = assignmentMap[(usr.email || '').toLowerCase()];
+        const config = coreSettingsMap[(usr.email || '').toLowerCase()];
+        const groupFromKv = availableLeadGroups.find((g) => g.id === config?.group_id)?.name;
         return {
           ...usr,
-          leadGroup: usr.lead_group_name || '—',
+          leadGroup: groupFromKv || usr.lead_group_name || '—',
           dailyTarget: config?.daily_target ?? '—',
           dailyLimit: config?.daily_limit ?? '—',
         };
       }),
-    [users, assignmentMap]
+    [users, coreSettingsMap, availableLeadGroups]
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -354,11 +372,11 @@ const AddUserComponent: React.FC = () => {
 
       // Refresh the users list
       await fetchUsers();
-      await fetchAssignments();
+      await fetchCoreSettings();
 
       // Group and user-level limits are now saved by backend create/update endpoint.
       if (selectedLeadGroup || selectedDailyTarget || selectedDailyLimit) {
-        await fetchAssignments();
+        await fetchCoreSettings();
       }
 
     } catch (error: any) {
@@ -420,7 +438,7 @@ const AddUserComponent: React.FC = () => {
 
       // Refresh the users list after successful deletion
       await fetchUsers();
-      await fetchAssignments();
+      await fetchCoreSettings();
       toast.success('User deleted successfully');
     } catch (error: any) {
       console.error('Error deleting user:', error);
@@ -516,7 +534,7 @@ const AddUserComponent: React.FC = () => {
       toast.success('User updated successfully!');
       handleCancelRowEdit();
       await fetchUsers();
-      await fetchAssignments();
+      await fetchCoreSettings();
     } catch (error: any) {
       console.error('Error updating user:', error);
       toast.error(`Error updating user: ${error.message}`);
@@ -602,7 +620,7 @@ const AddUserComponent: React.FC = () => {
                   const nextType = e.target.value === 'ticket' ? 'ticket' : 'lead';
                   setSelectedQueueType(nextType);
                   if (nextType === 'ticket') {
-                    setFormData((prev) => ({ ...prev, leadGroup: '', dailyTarget: '', dailyLimit: '' }));
+                    setFormData((prev) => ({ ...prev, dailyTarget: '', dailyLimit: '' }));
                   }
                 }}
               >
@@ -615,62 +633,64 @@ const AddUserComponent: React.FC = () => {
             </div>
           </div>
 
-          {selectedQueueType !== 'ticket' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="space-y-2">
-                <Label htmlFor="leadGroup">Lead Group</Label>
-                <select
-                  id="leadGroup"
-                  className="h-11 w-full border rounded-md px-3 text-sm bg-white"
-                  value={formData.leadGroup}
-                  onChange={(e) => {
-                    const selectedName = e.target.value;
-                    const selectedGroup = availableLeadGroups.find((group) => group.name === selectedName);
-                    setFormData((prev) => ({ ...prev, leadGroup: selectedName }));
-                    if (selectedGroup?.queue_type === 'ticket') {
-                      setSelectedQueueType('ticket');
-                      setFormData((prev) => ({ ...prev, leadGroup: '', dailyTarget: '', dailyLimit: '' }));
-                    }
-                  }}
-                >
-                  <option value="">Select Group</option>
-                  {availableLeadGroups
-                    .filter((group) => (group.queue_type || 'lead') !== 'ticket')
-                    .map((group) => (
-                      <option key={group.name} value={group.name}>
-                        {group.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dailyTarget">Daily Target</Label>
-                <Input
-                  id="dailyTarget"
-                  type="number"
-                  min="0"
-                  step="1"
-                  className="h-11"
-                  value={formData.dailyTarget}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, dailyTarget: e.target.value }))}
-                  placeholder="Enter daily target"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dailyLimit">Daily Limit</Label>
-                <Input
-                  id="dailyLimit"
-                  type="number"
-                  min="0"
-                  step="1"
-                  className="h-11"
-                  value={formData.dailyLimit}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, dailyLimit: e.target.value }))}
-                  placeholder="Enter daily limit"
-                />
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-2">
+              <Label htmlFor="leadGroup">Lead Group</Label>
+              <select
+                id="leadGroup"
+                className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                value={formData.leadGroup}
+                onChange={(e) => {
+                  const selectedName = e.target.value;
+                  const selectedGroup = availableLeadGroups.find((group) => group.name === selectedName);
+                  setFormData((prev) => ({ ...prev, leadGroup: selectedName }));
+                  if (selectedGroup?.queue_type === 'ticket') {
+                    setSelectedQueueType('ticket');
+                    setFormData((prev) => ({ ...prev, dailyTarget: '', dailyLimit: '' }));
+                  }
+                }}
+              >
+                <option value="">Select Group</option>
+                {availableLeadGroups
+                  .filter((group) => (selectedQueueType === 'ticket' ? true : (group.queue_type || 'lead') !== 'ticket'))
+                  .map((group) => (
+                    <option key={group.name} value={group.name}>
+                      {group.name}
+                    </option>
+                  ))}
+              </select>
             </div>
-          )}
+            {selectedQueueType !== 'ticket' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="dailyTarget">Daily Target</Label>
+                  <Input
+                    id="dailyTarget"
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="h-11"
+                    value={formData.dailyTarget}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, dailyTarget: e.target.value }))}
+                    placeholder="Enter daily target"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dailyLimit">Daily Limit</Label>
+                  <Input
+                    id="dailyLimit"
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="h-11"
+                    value={formData.dailyLimit}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, dailyLimit: e.target.value }))}
+                    placeholder="Enter daily limit"
+                  />
+                </div>
+              </>
+            )}
+          </div>
           {/* Action Buttons */}
           <div className="flex gap-2">
             <Button 
