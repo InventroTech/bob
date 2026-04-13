@@ -1533,16 +1533,21 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const profileClickable = Boolean(
     currentLead?.linkedin_profile || currentLead?.website || currentLead?.user_profile_link
   );
+  const isAlreadyTrialActivated =
+    lead.leadStatus === "TRIAL_ACTIVATED" ||
+    currentLead?.lead_stage === "TRIAL_ACTIVATED";
+
   const postCallActions = [
     {
       id: "trial-activated",
-      label: "Trial Activated",
+      label: isAlreadyTrialActivated ? "Trial Activated ✓" : "Trial Activated",
       icon: CheckCircle2,
       tone: "neutral" as const,
       onClick: () => {
         void handleActionButton("Trial Activated");
       },
       loadingKey: "Trial Activated",
+      disabled: isAlreadyTrialActivated,
     },
     {
       id: "not-interested",
@@ -1736,7 +1741,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                 icon={action.icon}
                 label={action.label}
                 onClick={action.onClick}
-                disabled={updating || fetchingNext}
+                disabled={updating || fetchingNext || Boolean(action.disabled)}
                 loading={Boolean(processingAction === action.loadingKey && updating)}
                 tone={action.tone}
                 className="flex-1 min-w-[160px]"
