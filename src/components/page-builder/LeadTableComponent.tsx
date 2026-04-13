@@ -13,6 +13,7 @@ import LeadCardCarousel from './LeadCardCarousel';
 import { RecordDetailModal } from './RecordDetailModal';
 import { InventoryFormEditModal } from './InventoryFormEditModal';
 import { ReceiveShipmentDetailModal } from './ReceiveShipmentDetailModal';
+import { TicketCarousel } from './TicketCarousel';
 import { Button } from '@/components/ui/button';
 import ShortProfileCard from '../ui/ShortProfileCard';
 
@@ -28,6 +29,7 @@ import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 import { convertGMTtoIST } from '@/lib/timeUtils';
+import { safeProfileImageUrl } from '@/lib/safeProfileImageUrl';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 
 interface Column {
@@ -35,6 +37,8 @@ interface Column {
   accessor: string;
   type: 'text' | 'chip' | 'link' | 'action' | 'status_buttons';
   linkField?: string;
+  /** When false, do not wrap the cell in a link even if linkField resolves. Default: clickable when linkField is set. */
+  linkClickableInTable?: boolean;
   openCard?: boolean | string;
   actionApiEndpoint?: string;
   actionApiMethod?: string;
@@ -209,15 +213,56 @@ const applyPlaceholderTemplate = (
   });
 };
 
+/** Best label for the "assigned_to" table column without mutating record.data (still holds raw id for APIs). */
+function resolveAssignedToColumnDisplayValue(lead: any): unknown {
+  const rawVal = lead?.data?.assigned_to;
+  const rawStr = rawVal != null && rawVal !== '' ? String(rawVal).trim() : '';
+  const disp =
+    lead?.assigned_to_display != null && lead.assigned_to_display !== ''
+      ? String(lead.assigned_to_display).trim()
+      : '';
+  const cse =
+    lead?.data?.cse_name != null && lead.data.cse_name !== ''
+      ? String(lead.data.cse_name).trim()
+      : '';
+
+  // Backend resolved to a human label (not just echoing the raw id)
+  if (disp && rawStr && disp !== rawStr) {
+    return disp;
+  }
+  // Support-ticket mirrors often store CSE display name when membership lookup misses the raw assigned_to
+  if (cse && cse.toLowerCase() !== 'n/a') {
+    return cse;
+  }
+  if (disp) {
+    return disp;
+  }
+  if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
+    return rawVal;
+  }
+  return lead?.assigned_to;
+}
+
 // Transform backend record to table row based on optional column config
 const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   // If configuration is provided, use it to transform data
   if (config?.columns) {
     const transformedLead: any = { ...lead };
+
+    // Keep raw list API timestamps — a column with key `created_at` and type `date` overwrites
+    // `created_at` with "3 months ago", which breaks TicketCarousel / other modals that need ISO.
+    transformedLead._recordApiCreatedAt = lead.created_at;
+    transformedLead._recordApiUpdatedAt = lead.updated_at;
     
     // Apply transformations for configured columns
     config.columns.forEach(col => {
-      const value = lead.data?.[col.key] !== undefined ? lead.data?.[col.key] : lead[col.key];
+      let value: unknown;
+      if (col.key === 'assigned_to') {
+        value = resolveAssignedToColumnDisplayValue(lead);
+      } else {
+        value =
+          lead.data?.[col.key] !== undefined ? lead.data?.[col.key] : lead[col.key];
+      }
       
       // Use custom transform if provided
       if (col.transform) {
@@ -264,6 +309,200 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   };
 };
 
+const SUPPORT_TICKET_ROW_SYNC_KEYS = [
+  'resolution_status',
+  'call_status',
+  'cse_remarks',
+  'other_reasons',
+  'call_attempts',
+  'resolution_time',
+  'snooze_until',
+  'completed_at',
+  'layout_status',
+  'assigned_to',
+  'cse_name',
+  'reason',
+  'review_requested',
+  'ticket_date',
+  'dumped_at',
+] as const;
+
+function firstNonEmptyScalar(...vals: unknown[]): string {
+  for (const v of vals) {
+    if (v == null || v === '') continue;
+    const s = String(v).trim();
+    if (s && s.toLowerCase() !== 'n/a') return s;
+  }
+  return '';
+}
+
+/** Table rows may have created_at replaced with "6 months ago" by column transforms — skip those for TicketCarousel. */
+function isRelativeOrDisplayTimeLabel(s: string): boolean {
+  const t = s.trim().toLowerCase();
+  if (!t || t === 'n/a') return true;
+  if (t === 'just now') return true;
+  if (/\bago\b/.test(t)) return true;
+  if (/^\d+\s*(sec|secs|second|seconds|min|mins|minute|minutes|hr|hrs|hour|hours|day|days|wk|week|weeks|mo|month|months|yr|yrs|year|years)\b/.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Ticket timestamps that live in record.data (mirrored from support_ticket), not CRM record row created_at.
+ * Order: ticket_date → dumped_at → ticket created_at in data. Includes camelCase alias.
+ */
+function pickTicketEventTimestampFromRecordData(d: Record<string, unknown>): string {
+  const keys = ['ticket_date', 'ticketDate', 'dumped_at', 'created_at'] as const;
+  for (const k of keys) {
+    const v = d[k];
+    if (v == null || v === '') continue;
+    const s = typeof v === 'number' && Number.isFinite(v) ? new Date(v).toISOString() : String(v).trim();
+    if (!s || s.toLowerCase() === 'n/a') continue;
+    if (isRelativeOrDisplayTimeLabel(s)) continue;
+    const ms = Date.parse(s);
+    if (!Number.isNaN(ms)) {
+      return new Date(ms).toISOString();
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      return s;
+    }
+  }
+  return '';
+}
+
+/**
+ * Last-resort timestamps when data JSONB has no ticket fields (include preserved record API ISO).
+ */
+function pickTimestampForTicketCarousel(d: Record<string, unknown>, row: any): string {
+  const candidates: unknown[] = [
+    row._recordApiCreatedAt,
+    row._recordApiUpdatedAt,
+    row.created_at,
+    row.updated_at,
+  ];
+  for (const c of candidates) {
+    if (c == null || c === '') continue;
+    const s = String(c).trim();
+    if (!s || s.toLowerCase() === 'n/a') continue;
+    if (isRelativeOrDisplayTimeLabel(s)) continue;
+    const ms = Date.parse(s);
+    if (!Number.isNaN(ms)) {
+      return new Date(ms).toISOString();
+    }
+  }
+  return '';
+}
+
+/** Maps a CRM record table row to the flat shape expected by TicketCarousel / support-ticket APIs. */
+const recordRowToSupportTicketShape = (row: any): any | null => {
+  if (!row) return null;
+  const d = row.data && typeof row.data === 'object' ? row.data : {};
+  const rawId = d.support_ticket_id ?? d.ticket_id ?? row.id;
+  const stId = Number(rawId);
+  if (!Number.isFinite(stId)) return null;
+
+  const name =
+    (typeof d.name === 'string' && d.name) ||
+    (d.first_name || d.last_name
+      ? [d.first_name, d.last_name].filter(Boolean).join(' ').trim()
+      : '') ||
+    (typeof row.name === 'string' && row.name && row.name !== 'N/A' ? row.name : '') ||
+    'N/A';
+
+  // TicketCarousel shows "ID:" from user_id — mirror TicketTable: prefer Praja numeric id, not empty string.
+  const userIdForCard = firstNonEmptyScalar(
+    d.praja_user_id,
+    d.praja_id,
+    d.user_id,
+    row.praja_id,
+    row.user_id,
+  );
+
+  const prajaForLink = firstNonEmptyScalar(d.praja_user_id, d.praja_id, d.user_id, row.praja_id);
+  const prajaDashboard =
+    d.praja_dashboard_user_link ||
+    (prajaForLink ? `https://app.praja.com/dashboard/user/${prajaForLink}` : null);
+
+  const phone =
+    firstNonEmptyScalar(d.phone, d.phone_no, d.phone_number, row.phone_number, row.phone) || '';
+
+  // Match ticket list: subtitle under reason uses `source`; CRM mirrors may only store layout_status.
+  const source = firstNonEmptyScalar(d.source, d.layout_status, row.source) || 'N/A';
+
+  // Modal header + APIs: one coherent "ticket time" — prefer mirrored ticket_date / dumped_at in data, never row "6 months ago".
+  const ticketTimeIso =
+    pickTicketEventTimestampFromRecordData(d) || pickTimestampForTicketCarousel(d, row);
+
+  const rawProfilePic = firstNonEmptyScalar(
+    d.display_pic_url,
+    d.display_pic,
+    d.profile_image_url,
+    d.avatar_url,
+    d.user_photo,
+    row.display_pic_url,
+    typeof row.image === 'string' ? row.image : '',
+  );
+
+  return {
+    id: stId,
+    _crmRecordId: row.id,
+    created_at: d.created_at ?? row.created_at ?? '',
+    ticket_date: ticketTimeIso || undefined,
+    dumped_at: ticketTimeIso,
+    user_id: userIdForCard,
+    name,
+    phone,
+    source,
+    subscription_status: d.subscription_status ?? null,
+    atleast_paid_once: d.atleast_paid_once ?? null,
+    reason:
+      (d.reason ?? d.Description ?? (typeof row.reason === 'string' ? row.reason : '')) || 'No reason provided',
+    other_reasons: d.other_reasons ?? null,
+    badge: d.badge ?? null,
+    poster: d.poster ?? row.poster ?? null,
+    tenant_id: String(d.tenant_id ?? ''),
+    assigned_to: d.assigned_to ?? null,
+    layout_status: d.layout_status ?? '',
+    resolution_status:
+      (d.resolution_status ?? d.status ?? (typeof row.resolution_status === 'string' ? row.resolution_status : '')) ||
+      'Pending',
+    resolution_time: d.resolution_time ?? null,
+    cse_name: d.cse_name ?? null,
+    cse_remarks: d.cse_remarks ?? null,
+    call_status: d.call_status ?? null,
+    call_attempts: d.call_attempts ?? null,
+    rm_name: d.rm_name ?? null,
+    completed_at: d.completed_at ?? null,
+    snooze_until: d.snooze_until ?? null,
+    praja_dashboard_user_link: prajaDashboard,
+    display_pic_url: safeProfileImageUrl(rawProfilePic),
+    first_name: d.first_name,
+    last_name: d.last_name,
+    praja_user_id: d.praja_user_id,
+    review_requested: d.review_requested ?? null,
+  };
+};
+
+function mergeSupportTicketViewIntoRecordRow(row: any, ticket: any, columnKeys: string[]): any {
+  const recordId = ticket?._crmRecordId ?? row?.id;
+  if (!row || recordId == null || row.id !== recordId) return row;
+  const nextData = { ...(row.data || {}) };
+  for (const key of SUPPORT_TICKET_ROW_SYNC_KEYS) {
+    if (ticket[key] !== undefined) {
+      nextData[key] = ticket[key];
+    }
+  }
+  const next: any = { ...row, data: nextData };
+  const keysToMirror = new Set<string>([...SUPPORT_TICKET_ROW_SYNC_KEYS, ...columnKeys]);
+  for (const key of keysToMirror) {
+    if (nextData[key] !== undefined) {
+      next[key] = nextData[key];
+    }
+  }
+  return next;
+}
+
 // Default columns used if no custom columns are configured
 const defaultColumns: Column[] = [
   { header: 'Stage', accessor: 'lead_stage', type: 'chip' },
@@ -290,6 +529,8 @@ interface LeadTableProps {
       actionApiMethod?: string;
       actionApiHeaders?: string;
       actionApiPayload?: string;
+      linkField?: string;
+      linkClickableInTable?: boolean;
     }>;
     title?: string;
     apiPrefix?: 'supabase' | 'renderer';
@@ -299,7 +540,7 @@ interface LeadTableProps {
     };
     entityType?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'support_ticket' | 'none' | 'auto';
     statusOptions?: string[];
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
@@ -389,6 +630,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [isRecordDetailModalOpen, setIsRecordDetailModalOpen] = useState(false);
+  const [isSupportTicketModalOpen, setIsSupportTicketModalOpen] = useState(false);
   const [cartOptions, setCartOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [cartOptionsLoading, setCartOptionsLoading] = useState(false);
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
@@ -402,11 +644,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     const et = config?.entityType;
     if (et === 'inventory_request') return 'inventory_request' as const;
     if (et === 'inventory_cart') return 'inventory_cart' as const;
+    if (et === 'support_ticket') return 'support_ticket' as const;
     return 'lead_card';
   }, [config?.detailMode, config?.entityType]);
 
   /** Use form-style modal when detail mode is record_form_modal, inventory_payment_modal, or when record detail modal type is form_edit. */
-  const useFormModal = effectiveDetailMode === 'record_form_modal' || effectiveDetailMode === 'inventory_payment_modal' || (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit');
+  const useFormModal =
+    effectiveDetailMode !== 'support_ticket' &&
+    (effectiveDetailMode === 'record_form_modal' ||
+      effectiveDetailMode === 'inventory_payment_modal' ||
+      (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit'));
 
   // Load cart options when opening record detail for inventory_request (not for receive_shipments modal)
   useEffect(() => {
@@ -1165,11 +1412,22 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       // If no valid phone number, fall through to default text rendering below
     }
     
-    // Special handling for columns with configured linkField
-    if (column.linkField && row[column.linkField] && row[column.linkField] !== '#' && row[column.linkField] !== 'N/A') {
+    // Optional: text column + linkField — wrap in link only when "clickable in table" is on (default on for backward compat)
+    const linkFieldKey = column.linkField?.trim();
+    const linkHref =
+      linkFieldKey &&
+      (() => {
+        const v = row[linkFieldKey] ?? row.data?.[linkFieldKey];
+        if (v == null || v === '' || v === '#' || v === 'N/A') return null;
+        const s = String(v).trim();
+        return s && s !== '#' ? s : null;
+      })();
+    const useLinkInTable = !!linkFieldKey && !!linkHref && column.linkClickableInTable !== false;
+
+    if (useLinkInTable) {
       return (
         <a
-          href={row[column.linkField]}
+          href={linkHref}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
@@ -1224,6 +1482,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       header: col.label,
       accessor: col.key,
       type: (col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text') as Column['type'],
+      linkField: col.linkField,
+      linkClickableInTable: col.linkClickableInTable,
       openCard: col.openCard,
       actionApiEndpoint: col.actionApiEndpoint,
       actionApiMethod: col.actionApiMethod,
@@ -1589,17 +1849,52 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
 
   // Row click: behavior depends on detailMode (lead card vs record detail vs none)
-  const handleRowClick = useCallback((row: any) => {
-    if (effectiveDetailMode === 'none') return;
-    if (effectiveDetailMode === 'lead_card') {
-      setSelectedLead(row);
-      setIsLeadModalOpen(true);
-      return;
-    }
-    // inventory_request | inventory_cart (or any other record type)
-    setSelectedRecord(row);
-    setIsRecordDetailModalOpen(true);
-  }, [effectiveDetailMode]);
+  const handleRowClick = useCallback(
+    (row: any) => {
+      if (effectiveDetailMode === 'none') return;
+      if (effectiveDetailMode === 'lead_card') {
+        setSelectedLead(row);
+        setIsLeadModalOpen(true);
+        return;
+      }
+      if (effectiveDetailMode === 'support_ticket') {
+        const shape = recordRowToSupportTicketShape(row);
+        if (!shape) {
+          toast({
+            title: 'Cannot open ticket',
+            description:
+              'This row needs a support ticket id on the record: set data.support_ticket_id or data.ticket_id (or use the record id only if it matches the ticket).',
+            variant: 'destructive',
+          });
+          return;
+        }
+        setSelectedRecord(row);
+        setIsSupportTicketModalOpen(true);
+        return;
+      }
+      // inventory_request | inventory_cart (or any other record type)
+      setSelectedRecord(row);
+      setIsRecordDetailModalOpen(true);
+    },
+    [effectiveDetailMode, toast],
+  );
+
+  const handleSupportTicketCarouselUpdate = useCallback(
+    (updatedTicket: any) => {
+      const columnKeys = (config?.columns ?? []).map((c) => c.key).filter(Boolean) as string[];
+      setData((prev) => prev.map((r: any) => mergeSupportTicketViewIntoRecordRow(r, updatedTicket, columnKeys)));
+      setFilteredData((prev) => prev.map((r: any) => mergeSupportTicketViewIntoRecordRow(r, updatedTicket, columnKeys)));
+      setSelectedRecord((prev: any) =>
+        prev ? mergeSupportTicketViewIntoRecordRow(prev, updatedTicket, columnKeys) : prev,
+      );
+    },
+    [config?.columns],
+  );
+
+  const supportTicketForCarousel = useMemo(() => {
+    if (!isSupportTicketModalOpen || !selectedRecord) return null;
+    return recordRowToSupportTicketShape(selectedRecord);
+  }, [isSupportTicketModalOpen, selectedRecord]);
 
   // Handle pagination navigation
   const handleNextPage = async () => {
@@ -2070,6 +2365,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
               accessor: col.accessor,
               type: col.type,
               linkField: col.linkField,
+              linkClickableInTable: col.linkClickableInTable,
               openCard: col.openCard,
               actionApiEndpoint: col.actionApiEndpoint,
               actionApiMethod: col.actionApiMethod,
@@ -2323,6 +2619,39 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         </DialogContent>
       </Dialog>
 
+      {/* Support ticket: same carousel as ticket queue, embedded from CRM records table */}
+      {effectiveDetailMode === 'support_ticket' && (
+        <Dialog
+          open={isSupportTicketModalOpen}
+          onOpenChange={(open) => {
+            setIsSupportTicketModalOpen(open);
+            if (!open) setSelectedRecord(null);
+          }}
+        >
+          <DialogContent className="font-body max-w-3xl max-h-[85vh] overflow-y-auto p-6">
+            <DialogHeader className="pb-4">
+              <DialogTitle className="text-lg font-semibold text-foreground">
+                {supportTicketForCarousel ? `Ticket #${supportTicketForCarousel.id}` : 'Ticket'}
+              </DialogTitle>
+              <DialogDescription className="sr-only">Support ticket details and actions</DialogDescription>
+            </DialogHeader>
+            {supportTicketForCarousel && (
+              <div className="mt-2 -mx-2">
+                <TicketCarousel
+                  key={supportTicketForCarousel._crmRecordId ?? supportTicketForCarousel.id}
+                  config={{
+                    title: `Ticket #${supportTicketForCarousel.id}`,
+                  }}
+                  initialTicket={supportTicketForCarousel}
+                  skipQueueAfterAction
+                  onUpdate={handleSupportTicketCarouselUpdate}
+                />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Receive Shipments: inventory manager quick-actions modal */}
       {effectiveDetailMode === 'receive_shipments' && (
         <ReceiveShipmentDetailModal
@@ -2345,7 +2674,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       )}
 
       {/* Form-style edit modal (inventory form layout + action buttons) */}
-      {effectiveDetailMode !== 'receive_shipments' && useFormModal && (
+      {effectiveDetailMode !== 'receive_shipments' && effectiveDetailMode !== 'support_ticket' && useFormModal && (
         <InventoryFormEditModal
           open={isRecordDetailModalOpen}
           onOpenChange={(open) => {
@@ -2419,7 +2748,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       )}
 
       {/* Default record detail modal (inventory_request, inventory_cart, inventory_item, etc.) */}
-      {effectiveDetailMode !== 'receive_shipments' && !useFormModal && (
+      {effectiveDetailMode !== 'receive_shipments' && effectiveDetailMode !== 'support_ticket' && !useFormModal && (
       <RecordDetailModal
         open={isRecordDetailModalOpen}
         onOpenChange={(open) => {

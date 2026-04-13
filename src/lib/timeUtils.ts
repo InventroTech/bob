@@ -14,11 +14,26 @@ export const convertGMTtoIST = (
   options?: Intl.DateTimeFormatOptions
 ) => {
   if (!dateString) return 'N/A';
-  
-  // Parse GMT timestamp and add IST offset (+5:30)
-  let gmtDate = new Date(dateString + (dateString.includes('Z') ? '' : 'Z'));
+
+  const trimmed = dateString.trim();
+  // Do not append Z when the string already has a timezone (e.g. +00:00 or +0530) — that yields Invalid Date.
+  const hasExplicitTz =
+    /Z$/i.test(trimmed) ||
+    /[+-]\d{2}:\d{2}$/.test(trimmed) ||
+    /[+-]\d{4}$/.test(trimmed);
+
+  const normalized = hasExplicitTz
+    ? trimmed
+    : trimmed.includes('T')
+      ? `${trimmed}${trimmed.endsWith('Z') ? '' : 'Z'}`
+      : `${trimmed.replace(' ', 'T')}Z`;
+
+  let gmtDate = new Date(normalized);
   if (isNaN(gmtDate.getTime())) {
-    gmtDate = new Date(dateString + ' UTC');
+    gmtDate = new Date(trimmed);
+  }
+  if (isNaN(gmtDate.getTime())) {
+    gmtDate = new Date(`${trimmed} UTC`);
   }
   if (isNaN(gmtDate.getTime())) return 'Invalid date';
   

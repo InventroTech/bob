@@ -34,6 +34,8 @@ export interface ColumnConfig {
   label: string;
   type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
   linkField?: string; // Field to use as link for this column
+  /** When false, show accessor as plain text even if linkField is set. Default true when linkField is set (backward compatible). */
+  linkClickableInTable?: boolean;
   /** If true, this field is editable in the record detail modal (save icon to update). */
   editable?: boolean;
   /** For action type: open detail card (lead/ticket) on click */
@@ -252,6 +254,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 <SelectItem value="record_form_modal">Record form modal</SelectItem>
                 <SelectItem value="inventory_payment_modal">Inventory Payment modal</SelectItem>
                 <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
+                <SelectItem value="support_ticket">Support ticket (ticket carousel)</SelectItem>
                 <SelectItem value="none">None (no row click)</SelectItem>
               </SelectContent>
             </Select>
@@ -751,6 +754,21 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Field to use as link for this column (e.g., user_profile_link for User ID)
+                      </p>
+                      <div className="flex items-center gap-2 mt-3">
+                        <Switch
+                          id={`link-clickable-${index}`}
+                          checked={column.linkClickableInTable !== false}
+                          onCheckedChange={(checked) =>
+                            handleColumnFieldChange(index, 'linkClickableInTable', checked)
+                          }
+                        />
+                        <Label htmlFor={`link-clickable-${index}`} className="text-sm font-normal cursor-pointer">
+                          Clickable in table (open link field in new tab)
+                        </Label>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Turn off to show only the column value; row click can still open the record modal.
                       </p>
                     </div>
                   )}

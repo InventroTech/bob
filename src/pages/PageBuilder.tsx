@@ -321,6 +321,7 @@ interface ColumnConfig {
   label: string;
   type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
   linkField?: string;
+  linkClickableInTable?: boolean;
   openCard?: boolean | string;
   actionApiEndpoint?: string;
   actionApiMethod?: string;

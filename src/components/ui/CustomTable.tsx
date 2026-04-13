@@ -18,9 +18,14 @@ export interface CustomTableColumn {
   type?: 'text' | 'chip' | 'link' | 'action';
   
   /**
-   * Field to use as link (for link type)
+   * Field to use as link (for link type or text columns that open a URL)
    */
   linkField?: string;
+
+  /**
+   * When false, show plain text instead of linking via linkField (LeadTable renderCell).
+   */
+  linkClickableInTable?: boolean;
   
   /**
    * For action type: open detail card (lead/ticket) on click
@@ -123,7 +128,12 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   const defaultRenderCell = (row: any, column: CustomTableColumn, columnIndex: number) => {
     const value = row[column.accessor];
     
-    if (column.type === 'link' && column.linkField && row[column.linkField]) {
+    if (
+      column.type === 'link' &&
+      column.linkField &&
+      column.linkClickableInTable !== false &&
+      row[column.linkField]
+    ) {
       return (
         <a
           href={row[column.linkField]}

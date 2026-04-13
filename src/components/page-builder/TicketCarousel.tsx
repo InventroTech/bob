@@ -47,6 +47,8 @@ import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsC
 interface Ticket {
   id: number;
   created_at: string;
+  /** When set, preferred for the modal header datetime (ticket event time vs row created_at). */
+  ticket_date?: string | null;
   dumped_at: string;
   user_id: string;
   name: string;
@@ -72,6 +74,21 @@ interface Ticket {
   snooze_until: string | null;
   praja_dashboard_user_link: string | null;
   display_pic_url: string | null;
+}
+
+/** Modal header: show ticket_date (dump time / event), not created_at. */
+function pickTicketModalDateRaw(ticket: {
+  ticket_date?: string | null;
+  dumped_at?: string | null;
+  created_at?: string | null;
+} | null | undefined): string {
+  if (!ticket) return '';
+  for (const v of [ticket.ticket_date, ticket.dumped_at, ticket.created_at]) {
+    if (v == null || v === '') continue;
+    const s = String(v).trim();
+    if (s && s.toLowerCase() !== 'n/a') return s;
+  }
+  return '';
 }
 
 const OTHER_REASONS_OPTIONS = [
@@ -188,12 +205,15 @@ interface TicketCarouselProps {
   };
   initialTicket?: any;
   onUpdate?: (updatedTicket: any) => void;
+  /** When true with `initialTicket`, successful actions update the current ticket and call `onUpdate` instead of loading the queue “next ticket”. */
+  skipQueueAfterAction?: boolean;
 }
 
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   config,
   initialTicket,
   onUpdate,
+  skipQueueAfterAction = false,
 }) => {
   const { user, session } = useAuth();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -285,7 +305,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     cseRemarks: initialState.cseRemarks,
     selectedOtherReasons: initialState.selectedOtherReasons,
     ticketStartTime: null as Date | null,
-    reviewRequested: false as boolean,
+    reviewRequested: Boolean(initialTicket?.review_requested),
   });
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -667,7 +687,37 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // After successful API call, fetch next ticket
+      let responseBody: any = null;
+      const responseCt = response.headers.get('content-type');
+      if (responseCt?.includes('application/json')) {
+        try {
+          responseBody = await response.json();
+        } catch {
+          /* ignore non-JSON body */
+        }
+      }
+
+      if (skipQueueAfterAction && initialTicket) {
+        const fromApi =
+          responseBody && typeof responseBody === 'object'
+            ? responseBody.ticket || (responseBody.id ? responseBody : null)
+            : null;
+        const merged: any = {
+          ...(fromApi || currentTicket),
+          resolution_status: resolutionStatus,
+          call_status: callStatus,
+          cse_remarks: ticket.cseRemarks,
+          other_reasons: ticket.selectedOtherReasons,
+        };
+        if (initialTicket._crmRecordId != null) {
+          merged._crmRecordId = initialTicket._crmRecordId;
+        }
+        setCurrentTicket(merged);
+        onUpdate?.(merged);
+        return;
+      }
+
+      // After successful API call, fetch next ticket (queue mode)
       await fetchNextTicket(currentTicket?.id);
 
     } catch (error: any) {
@@ -802,13 +852,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     );
   }
 
-  //formatting the ticket date in IST
-  const formattedDate = currentTicket?.dumped_at
-    ? convertGMTtoIST(currentTicket.dumped_at, 'date', {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
+  const modalDateRaw = pickTicketModalDateRaw(currentTicket);
+  const modalDateFormatOpts: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+  const formattedDate = modalDateRaw
+    ? convertGMTtoIST(modalDateRaw, 'date', modalDateFormatOpts)
     : "N/A";
 
   const isCompact = !!initialTicket;
@@ -866,15 +919,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                 <div className="space-y-2">
                   <div className="space-y-1">
                     <div className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
-                    <span className="font-medium text-sm">
-                  {currentTicket?.dumped_at ? convertGMTtoIST(currentTicket.dumped_at, 'date', {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  }) : "N/A"}
-                </span>
+                    <span className="font-medium text-sm">{formattedDate}</span>
                 <div className="flex flex-col">
                       <span className="font-medium text-lg">{currentTicket?.reason || "No reason provided"}</span>
                       <span className=" text-sm pt-2">{currentTicket?.source || "N/A"}</span>

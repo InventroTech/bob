@@ -2063,6 +2063,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                   title: `Ticket #${selectedTicket.id}`
                 }}
                 initialTicket={selectedTicket}
+                
                 onUpdate={handleTicketUpdate}
               />
             </div>

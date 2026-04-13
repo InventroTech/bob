@@ -20,7 +20,13 @@ function replacePlaceholders(template: string, row: Record<string, any>, idKey =
   let result = template;
   const rowId = row[idKey] ?? row.id ?? row.lead_id ?? row.ticket_id ?? '';
   result = result.replace(/\{id\}/g, String(rowId));
-  result = result.replace(/\{([^}]+)\}/g, (_, key) => String(row[key] ?? ''));
+  result = result.replace(/\{([^}]+)\}/g, (_, key) => {
+    // Table row may show assigned_to_display on row.assigned_to; APIs need data.assigned_to (raw id).
+    if (key === 'assigned_to' && row?.data && row.data.assigned_to !== undefined && row.data.assigned_to !== null) {
+      return String(row.data.assigned_to);
+    }
+    return String(row[key] ?? '');
+  });
   return result;
 }
 
