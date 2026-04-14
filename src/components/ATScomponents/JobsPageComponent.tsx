@@ -494,7 +494,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         url = `${apiBaseUrl}${apiEndpoint}`;
       }
 
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
@@ -631,7 +631,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
   // Filter jobs based on search and filters
   useEffect(() => {
-    let filtered = jobs.filter(job => {
+    const filtered = jobs.filter(job => {
       const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            job.company?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -779,7 +779,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       
       // Extract file URL and scan analysis from response
       resumeUrl = uploadResponse?.files?.[0]?.url || uploadResponse?.url || uploadResponse?.fileUrl || uploadResponse?.file?.url || '';
-      let rawScanAnalysis = uploadResponse?.response || uploadResponse?.analysis || uploadResponse?.data?.response;
+      const rawScanAnalysis = uploadResponse?.response || uploadResponse?.analysis || uploadResponse?.data?.response;
       
       // Parse if it's a JSON string, otherwise use as-is (already an object)
       if (typeof rawScanAnalysis === 'string') {
