@@ -537,7 +537,19 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Select Queue Type</Label>
-                <select className="h-10 w-full border rounded-md px-3" value={form.queue_type} onChange={(e) => updateForm("queue_type", e.target.value)}>
+                <select
+                  className="h-10 w-full border rounded-md px-3"
+                  value={form.queue_type}
+                  onChange={(e) => {
+                    const nextQueueType = e.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      queue_type: nextQueueType,
+                      lead_sources: nextQueueType === "ticket" ? [] : prev.lead_sources,
+                      lead_statuses: nextQueueType === "ticket" ? [] : prev.lead_statuses,
+                    }));
+                  }}
+                >
                   <option value="">Select</option>
                   {(queueTypes.length ? queueTypes : ["lead", "ticket"]).map((q) => (
                     <option key={q} value={q}>
@@ -612,68 +624,72 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="space-y-2">
-                <Label>Lead Source</Label>
-                <SearchableMultiSelect
-                  label="Lead Sources"
-                  options={leadSources}
-                  selected={form.lead_sources}
-                  onToggle={toggleLeadSource}
-                  onSelectAllMatching={(values) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      lead_sources: Array.from(new Set([...prev.lead_sources, ...values])),
-                    }))
-                  }
-                  onClearAllMatching={(values) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      lead_sources: prev.lead_sources.filter((v) => !values.includes(v)),
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Lead Status</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between font-normal">
-                      <span className="truncate">
-                        {form.lead_statuses.length > 0 ? `${form.lead_statuses.length} selected` : "Select"}
-                      </span>
-                      <ChevronDown className="h-4 w-4 opacity-60" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-[280px] p-2">
-                    <div className="max-h-56 overflow-y-auto space-y-2">
-                      {leadStatuses.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No lead status options</p>
-                      ) : (
-                        leadStatuses.map((status) => (
-                          <div key={status} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`status-${status}`}
-                              checked={form.lead_statuses.includes(status)}
-                              onCheckedChange={() =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  lead_statuses: prev.lead_statuses.includes(status)
-                                    ? prev.lead_statuses.filter((item) => item !== status)
-                                    : [...prev.lead_statuses, status],
-                                }))
-                              }
-                            />
-                            <Label htmlFor={`status-${status}`} className="font-normal cursor-pointer">
-                              {status}
-                            </Label>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="flex items-end gap-2 md:justify-end">
+              {form.queue_type !== "ticket" && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Lead Source</Label>
+                    <SearchableMultiSelect
+                      label="Lead Sources"
+                      options={leadSources}
+                      selected={form.lead_sources}
+                      onToggle={toggleLeadSource}
+                      onSelectAllMatching={(values) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          lead_sources: Array.from(new Set([...prev.lead_sources, ...values])),
+                        }))
+                      }
+                      onClearAllMatching={(values) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          lead_sources: prev.lead_sources.filter((v) => !values.includes(v)),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Lead Status</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <span className="truncate">
+                            {form.lead_statuses.length > 0 ? `${form.lead_statuses.length} selected` : "Select"}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-60" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-[280px] p-2">
+                        <div className="max-h-56 overflow-y-auto space-y-2">
+                          {leadStatuses.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No lead status options</p>
+                          ) : (
+                            leadStatuses.map((status) => (
+                              <div key={status} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`status-${status}`}
+                                  checked={form.lead_statuses.includes(status)}
+                                  onCheckedChange={() =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      lead_statuses: prev.lead_statuses.includes(status)
+                                        ? prev.lead_statuses.filter((item) => item !== status)
+                                        : [...prev.lead_statuses, status],
+                                    }))
+                                  }
+                                />
+                                <Label htmlFor={`status-${status}`} className="font-normal cursor-pointer">
+                                  {status}
+                                </Label>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </>
+              )}
+              <div className="col-span-full flex justify-end gap-2">
                 <Button className="bg-black text-white hover:bg-black" onClick={handleCreate} disabled={saving}>
                   {saving ? "Saving..." : "Save changes"}
                 </Button>

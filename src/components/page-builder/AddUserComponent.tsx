@@ -652,7 +652,6 @@ const AddUserComponent: React.FC = () => {
               >
                 <option value="">Select Group</option>
                 {availableLeadGroups
-                  .filter((group) => (selectedQueueType === 'ticket' ? true : (group.queue_type || 'lead') !== 'ticket'))
                   .map((group) => (
                     <option key={group.name} value={group.name}>
                       {group.name}
@@ -807,7 +806,6 @@ const AddUserComponent: React.FC = () => {
                             >
                               <option value="">Select Group</option>
                               {availableLeadGroups
-                                .filter((group) => (group.queue_type || 'lead') !== 'ticket')
                                 .map((group) => (
                                   <option key={group.name} value={group.name}>
                                     {group.name}
