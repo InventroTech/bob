@@ -22,6 +22,7 @@ export const teamAnalyticsApi = {
     average_time_spent_seconds: number | null;
     trail_target: number;
     allotted_leads: number;
+    unassigned_leads: number;
   }> {
     try {
       const response = await apiClient.get('/analytics/team/overview/', {
@@ -80,6 +81,28 @@ export const teamAnalyticsApi = {
       return response.data;
     } catch (error) {
       console.error('[teamAnalyticsApi] Error fetching team events:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get unassigned leads breakdown by lead_source and lead_stage
+   */
+  async getUnassignedLeadsBreakdown(params?: {
+    lead_source?: string;  // comma-separated for multi-select
+    lead_stage?: string;
+  }): Promise<{
+    total: number;
+    by_source: Array<{ lead_source: string; count: number }>;
+    by_status: Array<{ lead_stage: string; count: number }>;
+    available_sources: string[];
+    available_stages: string[];
+  }> {
+    try {
+      const response = await apiClient.get('/analytics/team/unassigned-leads/', { params });
+      return response.data;
+    } catch (error) {
+      console.error('[teamAnalyticsApi] Error fetching unassigned leads breakdown:', error);
       throw error;
     }
   },
