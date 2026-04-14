@@ -1,11 +1,11 @@
 import React from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import LeadTypeAssignmentPage from '@/pages/LeadTypeAssignmentPage';
+import LeadGroupsPage from '@/pages/LeadGroupsPage';
 
 const LeadTypeAssignmentPageWrapper = () => {
   return (
     <DashboardLayout>
-      <LeadTypeAssignmentPage showHeader={true} />
+      <LeadGroupsPage showHeader={true} />
     </DashboardLayout>
   );
 };
