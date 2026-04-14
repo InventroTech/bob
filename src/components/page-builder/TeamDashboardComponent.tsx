@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -12,7 +12,7 @@ import {
 import { teamAnalyticsApi } from '@/lib/teamAnalyticsApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Calendar } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -38,6 +38,7 @@ interface OverviewData {
   average_time_spent_seconds: number | null;
   trail_target: number;
   allotted_leads: number;
+  unassigned_leads: number;
 }
 
 interface MemberData {
@@ -88,6 +89,31 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
   const [events, setEvents] = useState<EventData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUnassignedBreakdown, setShowUnassignedBreakdown] = useState(false);
+  const [unassignedBreakdown, setUnassignedBreakdown] = useState<{
+    total: number;
+    by_source: Array<{ lead_source: string; count: number }>;
+    by_status: Array<{ lead_stage: string; count: number }>;
+    available_sources: string[];
+    available_stages: string[];
+  } | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownTab, setBreakdownTab] = useState<'source' | 'status'>('source');
+  const [sourceFilter, setSourceFilter] = useState<string[]>([]);
+  const [stageFilter, setStageFilter] = useState<string>('');
+  const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+  const [sourceSearch, setSourceSearch] = useState('');
+  const sourceDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sourceDropdownRef.current && !sourceDropdownRef.current.contains(e.target as Node)) {
+        setSourceDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Use allotted_leads from API (sum of daily_limit from user_settings), fallback to config or default
   const allottedLeads = overview?.allotted_leads || config.allottedLeads || 1600;
@@ -121,6 +147,42 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
       console.error('Error fetching team analytics:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUnassignedBreakdown = async (sources?: string[], stage?: string) => {
+    try {
+      setBreakdownLoading(true);
+      const params: { lead_source?: string; lead_stage?: string } = {};
+      if (sources && sources.length > 0) params.lead_source = sources.join(',');
+      if (stage) params.lead_stage = stage;
+      const data = await teamAnalyticsApi.getUnassignedLeadsBreakdown(params);
+      setUnassignedBreakdown(data);
+    } catch (e: any) {
+      console.error('Error fetching unassigned breakdown:', e);
+    } finally {
+      setBreakdownLoading(false);
+    }
+  };
+
+  const toggleSourceOption = (value: string) => {
+    const next = sourceFilter.includes(value)
+      ? sourceFilter.filter((s) => s !== value)
+      : [...sourceFilter, value];
+    setSourceFilter(next);
+    fetchUnassignedBreakdown(next.length > 0 ? next : undefined, stageFilter || undefined);
+  };
+
+  const handleStageFilterChange = (value: string) => {
+    setStageFilter(value);
+    fetchUnassignedBreakdown(sourceFilter.length > 0 ? sourceFilter : undefined, value || undefined);
+  };
+
+  const toggleUnassignedBreakdown = () => {
+    const next = !showUnassignedBreakdown;
+    setShowUnassignedBreakdown(next);
+    if (next && !unassignedBreakdown) {
+      fetchUnassignedBreakdown();
     }
   };
 
@@ -485,7 +547,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
             <h5>Overview</h5>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div>
                 <div className="text-sm font-medium text-gray-600 mb-1">RM Attendance</div>
                 <div className="text-2xl font-bold text-black">
@@ -504,7 +566,200 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
                 <div className="text-sm font-medium text-gray-600 mb-1">Trial Target</div>
                 <div className="text-2xl font-bold text-black">{trailTarget}</div>
               </div>
+              <div
+                className="cursor-pointer hover:bg-gray-50 rounded-lg p-2 -m-2 transition-colors"
+                onClick={toggleUnassignedBreakdown}
+              >
+                <div className="text-sm font-medium text-gray-600 mb-1 flex items-center gap-1">
+                  Unassigned Leads
+                  {showUnassignedBreakdown ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </div>
+                <div className="text-2xl font-bold text-amber-600">
+                  {overview?.unassigned_leads || 0}
+                </div>
+              </div>
             </div>
+
+            {showUnassignedBreakdown && (
+              <div className="mt-4 border-t pt-4">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <button
+                    onClick={() => setBreakdownTab('source')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      breakdownTab === 'source'
+                        ? 'bg-black text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    By Lead Source
+                  </button>
+                  <button
+                    onClick={() => setBreakdownTab('status')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      breakdownTab === 'status'
+                        ? 'bg-black text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    By Lead Status
+                  </button>
+                </div>
+
+                {unassignedBreakdown && (
+                  <div className="space-y-2 mb-3">
+                    <div className="flex flex-wrap gap-3 items-start">
+                      {/* Multi-select Lead Source */}
+                      <div className="relative" ref={sourceDropdownRef}>
+                        <label className="text-xs text-gray-500 block mb-1">Lead Source:</label>
+                        <button
+                          onClick={() => { setSourceDropdownOpen(!sourceDropdownOpen); setSourceSearch(''); }}
+                          className="text-sm border-2 border-gray-300 rounded-lg px-3 py-1.5 bg-white min-w-[220px] text-left flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate">
+                            {sourceFilter.length === 0
+                              ? 'All Sources'
+                              : `${sourceFilter.length} selected`}
+                          </span>
+                          <ChevronDown className="h-3 w-3 shrink-0" />
+                        </button>
+                        {sourceDropdownOpen && (() => {
+                          const filtered = unassignedBreakdown.available_sources.filter((s) =>
+                            s.toLowerCase().includes(sourceSearch.toLowerCase())
+                          );
+                          const selectedInFiltered = filtered.filter((s) => sourceFilter.includes(s));
+                          return (
+                            <div className="absolute z-50 mt-1 w-80 bg-white border-2 border-gray-300 rounded-lg shadow-lg">
+                              <div className="p-2 border-b">
+                                <input
+                                  type="text"
+                                  placeholder="Search lead sources"
+                                  value={sourceSearch}
+                                  onChange={(e) => setSourceSearch(e.target.value)}
+                                  className="w-full text-sm border-2 border-gray-300 rounded-lg px-3 py-2 bg-white outline-none focus:border-gray-400"
+                                  autoFocus
+                                />
+                              </div>
+                              <div className="flex items-center justify-between px-3 py-2 border-b">
+                                <button
+                                  className="text-sm font-medium hover:underline"
+                                  onClick={() => {
+                                    const next = [...new Set([...sourceFilter, ...filtered])];
+                                    setSourceFilter(next);
+                                    fetchUnassignedBreakdown(next.length > 0 ? next : undefined, stageFilter || undefined);
+                                  }}
+                                >
+                                  Select all matching ({filtered.length})
+                                </button>
+                                <button
+                                  className="text-sm text-red-400 hover:text-red-600 hover:underline"
+                                  onClick={() => {
+                                    const next = sourceFilter.filter((s) => !filtered.includes(s));
+                                    setSourceFilter(next);
+                                    fetchUnassignedBreakdown(next.length > 0 ? next : undefined, stageFilter || undefined);
+                                  }}
+                                >
+                                  Clear matching ({selectedInFiltered.length})
+                                </button>
+                              </div>
+                              <div className="max-h-64 overflow-y-auto py-1">
+                                {filtered.map((s) => (
+                                  <label
+                                    key={s}
+                                    className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={sourceFilter.includes(s)}
+                                      onChange={() => toggleSourceOption(s)}
+                                      className="h-4 w-4 rounded border-2 border-gray-300"
+                                    />
+                                    <span>{s}</span>
+                                  </label>
+                                ))}
+                                {filtered.length === 0 && (
+                                  <div className="px-3 py-3 text-sm text-gray-400 text-center">No matching sources</div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Single-select Lead Status */}
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Lead Status:</label>
+                        <select
+                          value={stageFilter}
+                          onChange={(e) => handleStageFilterChange(e.target.value)}
+                          className="text-sm border-2 border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+                        >
+                          <option value="">All Statuses</option>
+                          {unassignedBreakdown.available_stages.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {(sourceFilter.length > 0 || stageFilter) && (
+                        <div className="self-end">
+                          <button
+                            onClick={() => { setSourceFilter([]); setStageFilter(''); fetchUnassignedBreakdown(); }}
+                            className="text-xs text-red-500 hover:text-red-700 underline py-1.5"
+                          >
+                            Clear all filters
+                          </button>
+                        </div>
+                      )}
+
+                      <span className="text-xs text-gray-500 self-end ml-auto py-1.5">
+                        Filtered total: <strong>{unassignedBreakdown.total}</strong>
+                      </span>
+                    </div>
+
+                  </div>
+                )}
+
+                {breakdownLoading ? (
+                  <div className="text-sm text-gray-500 py-2">Loading breakdown...</div>
+                ) : unassignedBreakdown ? (
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-white">
+                        <tr className="border-b">
+                          <th className="text-left py-1.5 font-medium text-gray-500">
+                            {breakdownTab === 'source' ? 'Lead Source' : 'Lead Status'}
+                          </th>
+                          <th className="text-right py-1.5 font-medium text-gray-500">Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(breakdownTab === 'source'
+                          ? unassignedBreakdown.by_source
+                          : unassignedBreakdown.by_status
+                        ).map((item, idx) => (
+                          <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-1.5">
+                              {breakdownTab === 'source'
+                                ? (item as any).lead_source
+                                : (item as any).lead_stage}
+                            </td>
+                            <td className="text-right py-1.5 font-medium">{item.count}</td>
+                          </tr>
+                        ))}
+                        {(breakdownTab === 'source'
+                          ? unassignedBreakdown.by_source
+                          : unassignedBreakdown.by_status
+                        ).length === 0 && (
+                          <tr>
+                            <td colSpan={2} className="py-3 text-center text-gray-400">No results</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </CardContent>
         </Card>
 
