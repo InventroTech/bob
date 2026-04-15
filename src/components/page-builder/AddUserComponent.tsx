@@ -30,6 +30,7 @@ interface User {
   leadGroup?: string;
   dailyTarget?: string | number;
   dailyLimit?: string | number;
+  managerEmail?: string;
 }
 
 interface UserCoreSettingsSummary {
@@ -55,6 +56,7 @@ interface RowEditState {
   leadGroup: string;
   dailyTarget: string;
   dailyLimit: string;
+  managerEmail: string;
 }
 
 const AddUserComponent: React.FC = () => {
@@ -72,6 +74,7 @@ const AddUserComponent: React.FC = () => {
     leadGroup: '',
     dailyTarget: '',
     dailyLimit: '',
+    managerEmail: '',
   });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
@@ -157,6 +160,7 @@ const AddUserComponent: React.FC = () => {
         role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined),
         department: user.department ?? user.department_name ?? undefined,
         lead_group_name: user.lead_group_name ?? undefined,
+        managerEmail: user.user_parent_email ?? undefined,
       }));
 
       setUsers(transformedUsers);
@@ -245,6 +249,7 @@ const AddUserComponent: React.FC = () => {
           leadGroup: groupFromKv || usr.lead_group_name || '—',
           dailyTarget: config?.daily_target ?? '—',
           dailyLimit: config?.daily_limit ?? '—',
+          managerEmail: usr.managerEmail || '—',
         };
       }),
     [users, coreSettingsMap, availableLeadGroups]
@@ -325,6 +330,7 @@ const AddUserComponent: React.FC = () => {
       if (formData.leadGroup?.trim()) payload.lead_group_name = formData.leadGroup.trim();
       if (formData.dailyTarget !== '') payload.daily_target = Number(formData.dailyTarget);
       if (formData.dailyLimit !== '') payload.daily_limit = Number(formData.dailyLimit);
+      if (formData.managerEmail?.trim()) payload.manager_email = formData.managerEmail.trim();
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -366,6 +372,7 @@ const AddUserComponent: React.FC = () => {
         leadGroup: '',
         dailyTarget: '',
         dailyLimit: '',
+        managerEmail: '',
       });
       setSelectedQueueType('lead');
       setSelectedRoleId('');
@@ -460,6 +467,7 @@ const AddUserComponent: React.FC = () => {
       leadGroup: usr.leadGroup && usr.leadGroup !== '—' ? usr.leadGroup : '',
       dailyTarget: usr.dailyTarget && usr.dailyTarget !== '—' ? String(usr.dailyTarget) : '',
       dailyLimit: usr.dailyLimit && usr.dailyLimit !== '—' ? String(usr.dailyLimit) : '',
+      managerEmail: usr.managerEmail && usr.managerEmail !== '—' ? usr.managerEmail : '',
     });
   };
 
@@ -507,6 +515,7 @@ const AddUserComponent: React.FC = () => {
       if (editingRow.leadGroup.trim()) payload.lead_group_name = editingRow.leadGroup.trim();
       if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
       if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
+      payload.manager_email = editingRow.managerEmail.trim() || null;
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -634,6 +643,18 @@ const AddUserComponent: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-2">
+              <Label htmlFor="managerEmail">Manager Email (optional)</Label>
+              <Input
+                id="managerEmail"
+                name="managerEmail"
+                type="email"
+                placeholder="manager@example.com"
+                value={formData.managerEmail}
+                onChange={handleChange}
+                className="h-11"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="leadGroup">Lead Group</Label>
               <select
@@ -779,6 +800,7 @@ const AddUserComponent: React.FC = () => {
                     <TableHead className="text-white font-medium">Group</TableHead>
                     <TableHead className="text-white font-medium">Daily Target</TableHead>
                     <TableHead className="text-white font-medium">Daily Limit</TableHead>
+                    <TableHead className="text-white font-medium">Manager Email</TableHead>
                     <TableHead className="text-white font-medium">Created at</TableHead>
                     <TableHead className="text-white font-medium text-right"></TableHead>
                   </TableRow>
@@ -837,6 +859,17 @@ const AddUserComponent: React.FC = () => {
                               onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, dailyLimit: e.target.value }) : prev)}
                             />
                           ) : user.dailyLimit}
+                        </TableCell>
+                        <TableCell>
+                          {editingRowKey === getRowKey(user) && editingRow ? (
+                            <Input
+                              className="h-9"
+                              type="email"
+                              placeholder="manager@example.com"
+                              value={editingRow.managerEmail}
+                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, managerEmail: e.target.value }) : prev)}
+                            />
+                          ) : user.managerEmail}
                         </TableCell>
                         <TableCell>
                           {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
