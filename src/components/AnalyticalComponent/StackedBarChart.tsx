@@ -33,7 +33,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
   // Transform backend data format to Chart.js format
-  const transformBackendData = (backendData: any[]) => {
+  const transformBackendData = (backendData: unknown[]) => {
     if (!Array.isArray(backendData) || backendData.length === 0) {
       return createDemoData();
     }
@@ -116,7 +116,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
   };
 
   // Separate function for transforming demo data to ensure consistent behavior
-  const transformBackendDataForDemo = (backendData: any[], datasetsConfig: any[]) => {
+  const transformBackendDataForDemo = (backendData: unknown[], datasetsConfig: unknown[]) => {
     const labels = backendData.map(item => item.x);
 
     // Create datasets using the configured datasets
@@ -152,26 +152,34 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({ config }) => {
     let start: string;
     switch (filter) {
       case 'last3days':
+      {
         const threeDaysAgo = new Date(today);
         threeDaysAgo.setDate(today.getDate() - 2); // Changed from -3 to -2
         start = threeDaysAgo.toISOString().split('T')[0];
+      }
         break;
       case 'last7days':
+      {
         const sevenDaysAgo = new Date(today);
         sevenDaysAgo.setDate(today.getDate() - 6); // Changed from -7 to -6
         start = sevenDaysAgo.toISOString().split('T')[0];
+      }
         break;
       case 'last30days':
+      {
         const thirtyDaysAgo = new Date(today);
         thirtyDaysAgo.setDate(today.getDate() - 29); // Changed from -30 to -29
         start = thirtyDaysAgo.toISOString().split('T')[0];
+      }
         break;
       default:
+      {
         const sevenDays = new Date(today);
         sevenDays.setDate(today.getDate() - 6); // Changed from -7 to -6
         start = sevenDays.toISOString().split('T')[0];
     }
     
+      }
     return { start, end };
   };
 

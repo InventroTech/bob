@@ -18,7 +18,7 @@ import {
 /**
  * Request interceptor to add authentication token and tenant slug
  */
-export const setupRequestInterceptor = (instance: any) => {
+export const setupRequestInterceptor = (instance: unknown) => {
   instance.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
       // Prefer spoof token (if present) over the Supabase session token.
@@ -59,7 +59,7 @@ export const setupRequestInterceptor = (instance: any) => {
 /**
  * Response interceptor for error handling
  */
-export const setupResponseInterceptor = (instance: any) => {
+export const setupResponseInterceptor = (instance: unknown) => {
   instance.interceptors.response.use(
     (response: AxiosResponse) => {
       // Return full response object (includes status, headers, data, etc.)
@@ -83,11 +83,11 @@ export const setupResponseInterceptor = (instance: any) => {
       }
 
       const { status, statusText, data } = error.response;
-      const errorMessage = (data as any)?.error || (data as any)?.message || statusText || 'An error occurred';
+      const errorMessage = (data as unknown)?.error || (data as unknown)?.message || statusText || 'An error occurred';
 
       // Map HTTP status codes to custom error classes
       switch (status) {
-        case 401:
+        case 401: {
           // Attempt to refresh token and retry request once
           const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
           
@@ -126,6 +126,7 @@ export const setupResponseInterceptor = (instance: any) => {
           // Already retried once, fail with authentication error
           console.log('[Interceptor] Request already retried - authentication failed');
           return Promise.reject(new AuthenticationError(errorMessage, status, data));
+        }
           
         case 403:
           return Promise.reject(new AuthorizationError(errorMessage, status, data));

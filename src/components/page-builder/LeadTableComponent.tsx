@@ -180,14 +180,14 @@ type PlaceholderAdapter = {
 };
 
 // Safely walk nested objects using dot-delimited paths (e.g. user_metadata.assigned_to)
-const getNestedValue = (source: any, path: string): any => {
+const getNestedValue = (source: unknown, path: string): unknown => {
   if (!source || !path) return undefined;
 
   return path
     .split('.')
     .map(segment => segment.trim())
     .filter(Boolean)
-    .reduce((current: any, key) => {
+    .reduce((current: unknown, key) => {
       if (current === undefined || current === null) {
         return undefined;
       }
@@ -210,18 +210,21 @@ const applyPlaceholderTemplate = (
 };
 
 // Transform backend record to table row based on optional column config
-const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
+const transformLeadData = (lead: unknown, config?: LeadTableProps['config']) => {
+  const leadData = lead as Record<string, unknown>;
+  
   // If configuration is provided, use it to transform data
   if (config?.columns) {
-    const transformedLead: any = { ...lead };
+    const transformedLead: Record<string, unknown> = { ...leadData };
     
     // Apply transformations for configured columns
     config.columns.forEach(col => {
-      const value = lead.data?.[col.key] !== undefined ? lead.data?.[col.key] : lead[col.key];
+      const nestedData = (leadData.data as Record<string, unknown>) || {};
+      const value = nestedData[col.key] !== undefined ? nestedData[col.key] : leadData[col.key];
       
       // Use custom transform if provided
       if (col.transform) {
-        transformedLead[col.key] = col.transform(value, lead);
+        transformedLead[col.key] = col.transform(value, leadData);
       } else {
         // Apply default transformations based on field type
         switch (col.type) {
@@ -239,28 +242,30 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     });
     
     // Always include user_profile_link for Praja ID clickability
-    transformedLead.user_profile_link = lead.data?.user_profile_link || lead.user_profile_link || '#';
+    const nestedData = (leadData.data as Record<string, unknown>) || {};
+    transformedLead.user_profile_link = (nestedData.user_profile_link as string) || (leadData.user_profile_link as string) || '#';
     
     // Always include whatsapp_link for phone number clickability
-    transformedLead.whatsapp_link = lead.data?.whatsapp_link || lead.whatsapp_link || '';
+    transformedLead.whatsapp_link = (nestedData.whatsapp_link as string) || (leadData.whatsapp_link as string) || '';
     
     // Always include poster field from records JSONB data
-    transformedLead.poster = lead.data?.poster || lead.poster || null;
+    transformedLead.poster = (nestedData.poster as unknown) || (leadData.poster as unknown) || null;
     
     return transformedLead;
   }
   
   // Fallback: minimal transformation for default columns only
+  const nestedData = (leadData.data as Record<string, unknown>) || {};
   return {
-    ...lead,
-    lead_stage: lead.data?.lead_stage || lead.data?.lead_status || lead.lead_stage || 'in_queue',
-    name: lead.data?.name || 'N/A', // name is now in data column
-    praja_id: lead.data?.praja_id || lead.data?.user_id || lead.id || 'N/A',
-    affiliated_party: lead.data?.affiliated_party || 'N/A',
-    phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
-    whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
-    user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
-    poster: lead.data?.poster || lead.poster || null, // Add poster field from records JSONB data
+    ...leadData,
+    lead_stage: (nestedData.lead_stage as string) || (nestedData.lead_status as string) || (leadData.lead_stage as string) || 'in_queue',
+    name: (nestedData.name as string) || 'N/A', // name is now in data column
+    praja_id: (nestedData.praja_id as string) || (nestedData.user_id as string) || (leadData.id as string) || 'N/A',
+    affiliated_party: (nestedData.affiliated_party as string) || 'N/A',
+    phone_number: (nestedData.phone_number as string) || (nestedData.phone_no as string) || (leadData.phone as string) || 'N/A',
+    whatsapp_link: (nestedData.whatsapp_link as string) || (leadData.whatsapp_link as string) || '',
+    user_profile_link: (nestedData.user_profile_link as string) || (leadData.user_profile_link as string) || '#',
+    poster: (nestedData.poster as unknown) || (leadData.poster as unknown) || null, // Add poster field from records JSONB data
   };
 };
 
@@ -283,7 +288,7 @@ interface LeadTableProps {
       label: string;
       type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
       editable?: boolean;
-      transform?: (value: any, row: any) => any;
+      transform?: (value: unknown, row: unknown) => unknown;
       width?: string;
       openCard?: boolean | string;
       actionApiEndpoint?: string;
@@ -381,13 +386,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const { toast } = useToast();
   /** In Page Builder we disable row-click modal so editing isn't interrupted; modal opens on row click only on the live page. */
   const isInPageBuilder = typeof pageId !== 'undefined';
-  const [data, setData] = useState<any[]>([]);
-  const [filteredData, setFilteredData] = useState<any[]>([]);
+  const [data, setData] = useState<unknown[]>([]);
+  const [filteredData, setFilteredData] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [selectedLead, setSelectedLead] = useState<unknown>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [selectedRecord, setSelectedRecord] = useState<unknown>(null);
   const [isRecordDetailModalOpen, setIsRecordDetailModalOpen] = useState(false);
   const [cartOptions, setCartOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [cartOptionsLoading, setCartOptionsLoading] = useState(false);
@@ -420,18 +425,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     const loadCarts = async () => {
       try {
         setCartOptionsLoading(true);
-        const res = await apiClient.get<any>('/crm-records/records/?entity_type=inventory_cart&page_size=100');
-        const list: any[] = res.data?.results ?? (res.data as any)?.data ?? [];
+        const res = await apiClient.get<unknown>('/crm-records/records/?entity_type=inventory_cart&page_size=100');
+        const resData = res.data as Record<string, unknown>;
+        const list: unknown[] = (resData.results as unknown[]) ?? (resData.data as unknown[]) ?? [];
         const options = list
-          .map((r: any) => {
-            const id = r.id;
-            const d = r.data || {};
-            const status = d.status || 'DRAFT';
-            const invoice = d.invoice_number;
+          .map((r: unknown) => {
+            const rData = r as Record<string, unknown>;
+            const id = rData.id;
+            const d = (rData.data as Record<string, unknown>) || {};
+            const status = (d.status as string) || 'DRAFT';
+            const invoice = d.invoice_number as string;
             const labelParts = [`Cart #${id}`, `(${status})`];
             if (invoice) labelParts.push(`Invoice: ${invoice}`);
             return {
-              id,
+              id: String(id) as unknown as number,
               label: labelParts.join(' '),
             };
           })
@@ -458,13 +465,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   }, [isRecordDetailModalOpen, config?.entityType, effectiveDetailMode]);
 
   // Memoize onLeadUpdate callback for modal to prevent infinite re-render loop
-  const handleModalLeadUpdate = useCallback((updatedLead: any) => {
+  const handleModalLeadUpdate = useCallback((updatedLead: unknown) => {
     if (updatedLead) {
+      const updatedLeadData = updatedLead as Record<string, unknown>;
       setData(prevData => 
-        prevData.map(lead => lead.id === updatedLead.id ? updatedLead : lead)
+        prevData.map(lead => {
+          const leadData = lead as Record<string, unknown>;
+          return leadData.id === updatedLeadData.id ? updatedLead : lead;
+        })
       );
       setFilteredData(prevData => 
-        prevData.map(lead => lead.id === updatedLead.id ? updatedLead : lead)
+        prevData.map(lead => {
+          const leadData = lead as Record<string, unknown>;
+          return leadData.id === updatedLeadData.id ? updatedLead : lead;
+        })
       );
       setSelectedLead(updatedLead);
     }
@@ -545,8 +559,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         return;
       }
       try {
-        const membership = await membershipService.getMyMembership();
-        const id = (membership as any)?.tenant_membership_id;
+        const membership = await membershipService.getMyMembership() as unknown;
+        const membershipData = membership as Record<string, unknown>;
+        const id = membershipData.tenant_membership_id;
         if (!cancelled && id != null) {
           setCurrentMembershipId(String(id));
         }
@@ -625,7 +640,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const removeAssignedToForGM = useCallback(
     (
       params: URLSearchParams,
-      opts?: { effectiveFilters: FilterConfig[]; filterStateValues: Record<string, any> }
+      opts?: { effectiveFilters: FilterConfig[]; filterStateValues: Record<string, unknown> }
     ) => {
       if (!isGM || !params.has('assigned_to')) return params;
       if (opts?.effectiveFilters && opts?.filterStateValues) {
@@ -707,11 +722,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
             : `/${filter.optionsApiUrl}`;
         const res = await apiClient.get<unknown>(url);
         const raw = res.data;
-        const arr = Array.isArray(raw) ? raw : (raw as any)?.results ?? (raw as any)?.data ?? [];
+        const rawData = raw as Record<string, unknown>;
+        const arr = Array.isArray(raw) ? (raw as unknown[]) : ((rawData.results as unknown[]) ?? (rawData.data as unknown[]) ?? []);
         const displayKey = filter.optionsDisplayKey.trim();
         const valueKey = filter.optionsValueKey.trim();
-        let options: FilterOption[] = (arr as any[])
-          .map((item: any) => ({
+        let options: FilterOption[] = (arr as unknown[])
+          .map((item: unknown) => ({
             label: String(item?.[displayKey] ?? ''),
             value: String(item?.[valueKey] ?? ''),
           }))
@@ -800,9 +816,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   }, [location.pathname, navigate]);
 
   // Parse URL parameters and restore filter state for deep links/bookmarks
-  const parseURLFilters = useCallback((filters: FilterConfig[]): Record<string, any> => {
+  const parseURLFilters = useCallback((filters: FilterConfig[]): Record<string, unknown> => {
     const urlParams = new URLSearchParams(location.search);
-    const filterValues: Record<string, any> = {};
+    const filterValues: Record<string, unknown> = {};
 
     filters.forEach(filter => {
       const accessor = filter.accessor || filter.key;
@@ -810,13 +826,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
       if (paramValue !== null) {
         switch (filter.type) {
-          case 'select':
+          case 'select': {
             // Handle multiple values (separate parameters with same name)
             const allValues = urlParams.getAll(accessor);
             if (allValues.length > 0) {
               filterValues[filter.key] = allValues;
             }
             break;
+          }
           case 'date_gte':
           case 'date_lte':
           case 'text':
@@ -826,7 +843,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
             filterValues[filter.key] = paramValue;
             break;
           case 'date_range':
-          case 'date_time_range':
+          case 'date_time_range': {
             // Date range / date time range: start and end from __gte and __lte
             const startValue = urlParams.get(`${accessor}__gte`);
             const endValue = urlParams.get(`${accessor}__lte`);
@@ -837,6 +854,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
               };
             }
             break;
+          }
         }
       }
     });
@@ -891,7 +909,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   });
 
   // Action button click: open card and/or call API (defined before renderCell which uses it)
-  const handleActionClick = useCallback(async (row: any, col: Column) => {
+  const handleActionClick = useCallback(async (row: unknown, col: Column) => {
+    const rowData = row as Record<string, unknown>;
     const openCard = col.openCard === true || col.openCard === 'true';
     if (openCard) {
       setSelectedLead(row);
@@ -907,7 +926,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
             headers: col.actionApiHeaders,
             payload: col.actionApiPayload,
           },
-          row,
+          rowData,
           baseUrl,
           {
             'Content-Type': 'application/json',
@@ -919,36 +938,47 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         const res = await fetch(url, { method, headers, body });
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         toast({ title: 'Success', description: 'Action completed' });
-      } catch (err: any) {
-        toast({ title: 'Error', description: err?.message || 'Action failed', variant: 'destructive' });
+      } catch (err: unknown) {
+        const errData = err as Record<string, unknown>;
+        toast({ title: 'Error', description: (errData.message as string) || 'Action failed', variant: 'destructive' });
       }
     }
   }, [session?.access_token, toast]);
 
   // Status change button click: PATCH record with new status (for items table)
-  const handleStatusButtonClick = useCallback(async (row: any, newStatus: string) => {
-    if (!effectiveApiEndpoint || !row?.id) return;
+  const handleStatusButtonClick = useCallback(async (row: unknown, newStatus: string) => {
+    const rowData = row as Record<string, unknown>;
+    if (!effectiveApiEndpoint || !rowData?.id) return;
     const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
-    const url = `${base}/${row.id}/`;
-    const existingData = (row.data as Record<string, unknown>) || {};
+    const url = `${base}/${String(rowData.id)}/`;
+    const existingData = ((rowData.data as Record<string, unknown>) || {}) as Record<string, unknown>;
     try {
       const response = await apiClient.patch(url, { data: { ...existingData, status: newStatus } });
-      const updated = response.data;
+      const updated = response.data as Record<string, unknown>;
+      const updatedData = updated.data as Record<string, unknown> || { status: newStatus };
       setData((prev) =>
-        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, status: newStatus } } : r))
+        prev.map((r: unknown) => {
+          const rData = r as Record<string, unknown>;
+          return rData.id === rowData.id ? { ...rData, ...updated, data: updatedData } : r;
+        })
       );
       setFilteredData((prev) =>
-        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, status: newStatus } } : r))
+        prev.map((r: unknown) => {
+          const rData = r as Record<string, unknown>;
+          return rData.id === rowData.id ? { ...rData, ...updated, data: updatedData } : r;
+        })
       );
       toast({ title: 'Status updated', description: `Status set to ${newStatus}` });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err?.message || 'Failed to update status', variant: 'destructive' });
+    } catch (err: unknown) {
+      const errData = err as Record<string, unknown>;
+      toast({ title: 'Error', description: (errData.message as string) || 'Failed to update status', variant: 'destructive' });
     }
   }, [effectiveApiEndpoint, toast]);
 
   // Custom cell renderer - completely generic
-  const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
-    let value = row[column.accessor];
+  const renderCell = useCallback((row: unknown, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
+    const rowData = row as Record<string, unknown>;
+    let value = rowData[column.accessor];
     
     // Handle case where value is an object - extract the actual value
     if (typeof value === 'object' && value !== null) {
@@ -1047,7 +1077,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       // Default link rendering
       return (
         <a
-          href={value}
+          href={String(value)}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
@@ -1067,11 +1097,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     
     // Special handling for name column - show avatar, name, and email
     if (column.accessor === 'name' || column.header.toLowerCase().includes('name')) {
+      const displayPic = rowData.display_pic_url as string | undefined;
+      const name = rowData.name as string | undefined;
+      const emailId = rowData.email_id as string | undefined;
+      const email = rowData.email as string | undefined;
+      const address = rowData.address as string | undefined;
       return (
         <ShortProfileCard
-          image={row.display_pic_url || row.image}
-          name={row.name || displayValue}
-          address={row.email_id || row.email || row.address || ''}
+          image={displayPic || (rowData.image as string)}
+          name={name || displayValue}
+          address={emailId || email || address || ''}
         />
       );
     }
@@ -1127,10 +1162,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     
     if (isPhoneColumn) {
       // Check if whatsapp link exists
-      if (row.whatsapp_link && row.whatsapp_link !== 'N/A' && row.whatsapp_link !== '' && row.whatsapp_link !== '#') {
+      const whatsappLink = rowData.whatsapp_link as string | undefined;
+      if (whatsappLink && whatsappLink !== 'N/A' && whatsappLink !== '' && whatsappLink !== '#') {
         return (
           <a
-            href={row.whatsapp_link}
+            href={whatsappLink}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors cursor-pointer"
@@ -1166,35 +1202,41 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
     
     // Special handling for columns with configured linkField
-    if (column.linkField && row[column.linkField] && row[column.linkField] !== '#' && row[column.linkField] !== 'N/A') {
-      return (
-        <a
-          href={row[column.linkField]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <User className="h-3 w-3" />
-          <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
-        </a>
-      );
+    if (column.linkField) {
+      const linkValue = rowData[column.linkField] as string | undefined;
+      if (linkValue && linkValue !== '#' && linkValue !== 'N/A') {
+        return (
+          <a
+            href={linkValue}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <User className="h-3 w-3" />
+            <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
+          </a>
+        );
+      }
     }
     
     // Fallback: Special handling for Praja ID - make it clickable if profile link exists
-    if (column.accessor === 'praja_id' && row.user_profile_link && row.user_profile_link !== '#' && row.user_profile_link !== 'N/A') {
-      return (
-        <a
-          href={row.user_profile_link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <User className="h-3 w-3" />
-          <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
-        </a>
-      );
+    if (column.accessor === 'praja_id') {
+      const userProfileLink = rowData.user_profile_link as string | undefined;
+      if (userProfileLink && userProfileLink !== '#' && userProfileLink !== 'N/A') {
+        return (
+          <a
+            href={userProfileLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <User className="h-3 w-3" />
+            <span className="text-sm">{truncateText(displayValue, columnIndex)}</span>
+          </a>
+        );
+      }
     }
     
     // Default text rendering
@@ -1239,7 +1281,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     if (filterOptions.lead_statuses.length > 0) {
       return filterOptions.lead_statuses;
     }
-    const statuses = [...new Set(data.map(lead => lead.data?.lead_status).filter(Boolean))];
+    const statuses = [...new Set(data.map(lead => {
+      const leadData = lead as Record<string, unknown>;
+      const nestedData = leadData.data as Record<string, unknown>;
+      return nestedData?.lead_status;
+    }).filter(Boolean))];
     return statuses;
   };
 
@@ -1252,7 +1298,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     if (filterOptions.sources.length > 0) {
       return filterOptions.sources;
     }
-    const sources = [...new Set(data.map(lead => lead.data?.lead_source || lead.data?.source).filter(Boolean))];
+    const sources = [...new Set(data.map(lead => {
+      const leadData = lead as Record<string, unknown>;
+      const nestedData = leadData.data as Record<string, unknown>;
+      return (nestedData?.lead_source as string) || (nestedData?.source as string);
+    }).filter(Boolean))];
     return sources;
   };
 
@@ -1368,7 +1418,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       }
 
       // Transform the data
-      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+      const transformedData = leads.map((lead: unknown) => transformLeadData(lead, config));
 
       // Backend handles search filtering - no client-side filtering needed
       setFilteredData(transformedData);
@@ -1385,8 +1435,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           previousPageLink: pageMeta.previous_page_link || null
         });
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      const errorData = error as Record<string, unknown>;
+      if (errorData.name === 'AbortError') {
         return;
       }
       console.error('Error applying filters:', error);
@@ -1472,7 +1523,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       const leads = responseData.data || responseData.results || [];
       const pageMeta = responseData.page_meta;
 
-      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+      const transformedData = leads.map((lead: unknown) => transformLeadData(lead, config));
 
       setData(transformedData);
       setFilteredData(transformedData);
@@ -1589,7 +1640,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
 
   // Row click: behavior depends on detailMode (lead card vs record detail vs none)
-  const handleRowClick = useCallback((row: any) => {
+  const handleRowClick = useCallback((row: unknown) => {
     if (effectiveDetailMode === 'none') return;
     if (effectiveDetailMode === 'lead_card') {
       setSelectedLead(row);
@@ -1611,7 +1662,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         const leads = responseData.data || responseData.results || [];
         const pageMeta = responseData.page_meta;
 
-        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+        const transformedData = leads.map((lead: unknown) => transformLeadData(lead, config));
 
         setData(transformedData);
         setFilteredData(transformedData);
@@ -1644,7 +1695,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         const leads = responseData.data || responseData.results || [];
         const pageMeta = responseData.page_meta;
 
-        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+        const transformedData = leads.map((lead: unknown) => transformLeadData(lead, config));
 
         setData(transformedData);
         setFilteredData(transformedData);
@@ -1763,7 +1814,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       }
 
       // Transform the data
-      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+      const transformedData = leads.map((lead: unknown) => transformLeadData(lead, config));
 
       setData(transformedData);
       setFilteredData(transformedData);
@@ -1786,10 +1837,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
   };
 
-  const handleLeadUpdate = (updatedLead: any) => {
-    const updatedData = data.map(lead => 
-      lead.id === updatedLead.id ? updatedLead : lead
-    );
+  const handleLeadUpdate = (updatedLead: unknown) => {
+    const updatedLeadData = updatedLead as Record<string, unknown>;
+    const updatedData = data.map(lead => {
+      const leadData = lead as Record<string, unknown>;
+      return leadData.id === updatedLeadData.id ? updatedLead : lead;
+    });
     setData(updatedData);
     
     if (filtersApplied) {
@@ -1892,7 +1945,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         }
 
         // Transform the data
-        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+        const transformedData = leads.map((lead: unknown) => transformLeadData(lead, config));
 
         setData(transformedData);
         setFilteredData(transformedData);
@@ -1909,7 +1962,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         }
 
         // Extract unique sources for filter
-        const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.lead_source || lead.source).filter(Boolean))];
+        const uniqueSources = [...new Set(transformedData.map((lead: unknown) => {
+          const leadData = lead as Record<string, unknown>;
+          return (leadData.lead_source as string) || (leadData.source as string);
+        }).filter(Boolean))];
         setFilterOptions(prev => ({
           ...prev,
           sources: uniqueSources as string[]
@@ -2150,59 +2206,70 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0" hideCloseButton>
           <DialogHeader className="sr-only">
             <DialogTitle>
-              {selectedLead?.name || (selectedLead as any)?.data?.name || 'Lead Details'}
+              {(() => {
+                const selectedData = selectedLead as Record<string, unknown>;
+                const dataField = selectedData?.data as Record<string, unknown>;
+                return (selectedData?.name as string) || (dataField?.name as string) || 'Lead Details';
+              })()}
             </DialogTitle>
             <DialogDescription>
               View and manage lead information
             </DialogDescription>
           </DialogHeader>
           {selectedLead && (() => {
-            const transformLeadForCard = (lead: any) => {
-              const originalLead = data.find(l => 
-                l.id === lead.id || 
-                l.id === lead.user_id ||
-                (lead.praja_id && (l.data?.praja_id === lead.praja_id || l.data?.user_id === lead.praja_id))
-              ) || lead;
-              const leadData = originalLead.data || {};
+            const transformLeadForCard = (lead: unknown) => {
+              const leadRecord = lead as Record<string, unknown>;
+              const originalLead = data.find(l => {
+                const lRecord = l as Record<string, unknown>;
+                const lData = (lRecord.data as Record<string, unknown>) || {};
+                const leadData = (leadRecord.data as Record<string, unknown>) || {};
+                return (lRecord.id === leadRecord.id) || 
+                       (lRecord.id === leadRecord.user_id) ||
+                       (leadRecord.praja_id && ((lData.praja_id === leadRecord.praja_id) || (lData.user_id === leadRecord.praja_id)));
+              }) || lead;
+              const originalLeadRecord = originalLead as Record<string, unknown>;
+              const leadData = (originalLeadRecord.data as Record<string, unknown>) || {};
+              const castLead = (val: unknown, fallback = ''): string => String(val || fallback);
+              const castNum = (val: unknown, fallback = 0): number => typeof val === 'number' ? val : Number(val) || fallback;
               return {
-                id: lead.id || originalLead.id,
-                created_at: lead.created_at || originalLead.created_at,
-                name: lead.name || leadData.name || 'N/A',
-                email: lead.email || leadData.email || '',
-                phone: lead.phone_number || leadData.phone_number || leadData.phone_no || leadData.phone || '',
-                phone_no: lead.phone_number || leadData.phone_number || leadData.phone_no || leadData.phone || '',
-                phone_number: lead.phone_number || leadData.phone_number || leadData.phone_no || leadData.phone || '',
-                company: lead.company || leadData.company || '',
-                position: lead.position || leadData.position || '',
-                source: lead.source || leadData.lead_source || leadData.source || '',
-                lead_source: leadData.lead_source || lead.source || '',
-                status: lead.status || lead.lead_stage || leadData.lead_stage || leadData.lead_status || 'New',
-                notes: lead.notes || leadData.notes || leadData.latest_remarks || '',
-                budget: lead.budget || leadData.budget || 0,
-                location: lead.location || leadData.location || leadData.state || '',
-                tags: lead.tags || leadData.tags || [],
-                display_pic_url: lead.display_pic_url || leadData.display_pic_url || null,
-                linkedin_profile: lead.linkedin_profile || leadData.linkedin_profile || '',
-                website: lead.website || leadData.website || '',
-                next_follow_up: lead.next_follow_up || leadData.next_follow_up || leadData.next_call_at || '',
-                lead_stage: lead.lead_stage || leadData.lead_stage || leadData.lead_status || 'New',
-                praja_id: lead.praja_id || leadData.praja_id || leadData.user_id || '',
-                affiliated_party: lead.affiliated_party || leadData.affiliated_party || '',
-                rm_dashboard: lead.rm_dashboard || leadData.rm_dashboard || '',
-                user_profile_link: lead.user_profile_link || leadData.user_profile_link || '',
-                whatsapp_link: lead.whatsapp_link || leadData.whatsapp_link || '',
-                package_to_pitch: lead.package_to_pitch || leadData.package_to_pitch || '',
-                premium_poster_count: lead.premium_poster_count || leadData.premium_poster_count || 0,
-                last_active_date: lead.last_active_date || leadData.last_active_date || '',
-                last_active_date_time: lead.last_active_date_time || leadData.last_active_date_time || '',
-                latest_remarks: lead.latest_remarks || leadData.latest_remarks || '',
-                tasks: lead.tasks || leadData.tasks || [],
+                id: castLead(leadRecord.id || originalLeadRecord.id),
+                created_at: castLead(leadRecord.created_at || originalLeadRecord.created_at),
+                name: castLead(leadRecord.name || leadData.name || 'N/A'),
+                email: castLead(leadRecord.email || leadData.email),
+                phone: castLead(leadRecord.phone_number || leadData.phone_number || leadData.phone_no || leadData.phone),
+                phone_no: castLead(leadRecord.phone_number || leadData.phone_number || leadData.phone_no || leadData.phone),
+                phone_number: castLead(leadRecord.phone_number || leadData.phone_number || leadData.phone_no || leadData.phone),
+                company: castLead(leadRecord.company || leadData.company),
+                position: castLead(leadRecord.position || leadData.position),
+                source: castLead(leadRecord.source || leadData.lead_source || leadData.source),
+                lead_source: castLead(leadData.lead_source || leadRecord.source),
+                status: castLead(leadRecord.status || leadRecord.lead_stage || leadData.lead_stage || leadData.lead_status || 'New'),
+                notes: castLead(leadRecord.notes || leadData.notes || leadData.latest_remarks),
+                budget: castNum(leadRecord.budget || leadData.budget),
+                location: castLead(leadRecord.location || leadData.location || leadData.state),
+                tags: ((leadRecord.tags as unknown[]) || (leadData.tags as unknown[]) || []),
+                display_pic_url: (leadRecord.display_pic_url || leadData.display_pic_url || null),
+                linkedin_profile: castLead(leadRecord.linkedin_profile || leadData.linkedin_profile),
+                website: castLead(leadRecord.website || leadData.website),
+                next_follow_up: castLead(leadRecord.next_follow_up || leadData.next_follow_up || leadData.next_call_at),
+                lead_stage: castLead(leadRecord.lead_stage || leadData.lead_stage || leadData.lead_status || 'New'),
+                praja_id: castLead(leadRecord.praja_id || leadData.praja_id || leadData.user_id),
+                affiliated_party: castLead(leadRecord.affiliated_party || leadData.affiliated_party),
+                rm_dashboard: (leadRecord.rm_dashboard || leadData.rm_dashboard || ''),
+                user_profile_link: castLead(leadRecord.user_profile_link || leadData.user_profile_link),
+                whatsapp_link: castLead(leadRecord.whatsapp_link || leadData.whatsapp_link),
+                package_to_pitch: castLead(leadRecord.package_to_pitch || leadData.package_to_pitch),
+                premium_poster_count: castNum(leadRecord.premium_poster_count || leadData.premium_poster_count),
+                last_active_date: castLead(leadRecord.last_active_date || leadData.last_active_date),
+                last_active_date_time: castLead(leadRecord.last_active_date_time || leadData.last_active_date_time),
+                latest_remarks: castLead(leadRecord.latest_remarks || leadData.latest_remarks),
+                tasks: ((leadRecord.tasks as unknown[]) || (leadData.tasks as unknown[]) || []),
                 data: {
                   ...leadData,
-                  name: leadData.name || lead.name || 'N/A',
-                  phone_number: leadData.phone_number || lead.phone_number || '',
-                  lead_stage: leadData.lead_stage || lead.lead_stage || 'New',
-                  praja_id: leadData.praja_id || lead.praja_id || '',
+                  name: castLead(leadData.name || leadRecord.name || 'N/A'),
+                  phone_number: castLead(leadData.phone_number || leadRecord.phone_number),
+                  lead_stage: castLead(leadData.lead_stage || leadRecord.lead_stage || 'New'),
+                  praja_id: castLead(leadData.praja_id || leadRecord.praja_id),
                 },
               };
             };
@@ -2218,7 +2285,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
                       ...config,
                       statusDataApiEndpoint: undefined,
                     }}
-                    initialLead={transformedLead}
+                    initialLead={transformedLead as unknown as any} // eslint-disable-line @typescript-eslint/no-explicit-any
                     isInModal={true}
                     hideActionBar
                     onLeadUpdate={handleModalLeadUpdate}
@@ -2229,8 +2296,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
                       if (action !== "Call Back Later") {
                         const normalizedId = leadId != null ? Number(leadId) : NaN;
                         if (!Number.isNaN(normalizedId)) {
-                          setData(prevData => prevData.filter(lead => Number(lead.id) !== normalizedId));
-                          setFilteredData(prevData => prevData.filter(lead => Number(lead.id) !== normalizedId));
+                          setData(prevData => prevData.filter(lead => {
+                            const leadData = lead as Record<string, unknown>;
+                            return Number(leadData.id) !== normalizedId;
+                          }));
+                          setFilteredData(prevData => prevData.filter(lead => {
+                            const leadData = lead as Record<string, unknown>;
+                            return Number(leadData.id) !== normalizedId;
+                          }));
                         }
                       }
                       // Always close the modal
@@ -2375,28 +2448,38 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
             ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
                 const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
                 const url = `${base}/${recordId}/`;
-                const currentFromSelected = selectedRecord && selectedRecord.id === recordId ? selectedRecord : null;
-                const currentFromList = currentFromSelected == null ? data.find((r: any) => r.id === recordId) : null;
+                const selectedRecordData = selectedRecord as Record<string, unknown>;
+                const currentFromSelected = selectedRecord && selectedRecordData.id === recordId ? selectedRecord : null;
+                const currentFromList = currentFromSelected == null ? data.find((r: unknown) => {
+                  const rData = r as Record<string, unknown>;
+                  return rData.id === recordId;
+                }) : null;
+                const currentFromListData = currentFromList as Record<string, unknown>;
                 const existingData =
-                  (currentFromSelected?.data as Record<string, unknown> | undefined) ||
-                  (currentFromList?.data as Record<string, unknown> | undefined) ||
+                  (currentFromSelected ? (currentFromSelected as Record<string, unknown>).data as Record<string, unknown> | undefined : undefined) ||
+                  (currentFromListData?.data as Record<string, unknown> | undefined) ||
                   {};
                 const fullData = patch.data != null ? { ...existingData, ...patch.data } : existingData;
                 const body = patch.data != null ? { ...patch, data: fullData } : patch;
                 const response = await apiClient.patch(url, body);
                 const updated = response.data;
-                setSelectedRecord((prev: any) =>
-                  prev?.id === recordId ? { ...prev, ...updated, data: updated?.data ?? fullData } : prev,
+                setSelectedRecord((prev: unknown) =>
+                  (() => {
+                    const prevData = prev as Record<string, unknown>;
+                    return prevData?.id === recordId ? { ...prevData, ...updated, data: updated?.data ?? fullData } : prev;
+                  })(),
                 );
                 setData((prev) =>
-                  prev.map((r: any) =>
-                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
-                  ),
+                  prev.map((r: unknown) => {
+                    const rData = r as Record<string, unknown>;
+                    return rData.id === recordId ? { ...rData, ...updated, data: updated?.data ?? fullData } : r;
+                  }),
                 );
                 setFilteredData((prev) =>
-                  prev.map((r: any) =>
-                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
-                  ),
+                  prev.map((r: unknown) => {
+                    const rData = r as Record<string, unknown>;
+                    return rData.id === recordId ? { ...rData, ...updated, data: updated?.data ?? fullData } : r;
+                  }),
                 );
               }
             : undefined}
@@ -2405,8 +2488,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           }}
           showDeleteRequestButton={config?.showDeleteRequestButton}
           onDeleted={async (recordId: number) => {
-            setData((prev) => prev.filter((r: any) => r.id !== recordId));
-            setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setData((prev) => prev.filter((r: unknown) => {
+              const rData = r as Record<string, unknown>;
+              return rData.id !== recordId;
+            }));
+            setFilteredData((prev) => prev.filter((r: unknown) => {
+              const rData = r as Record<string, unknown>;
+              return rData.id !== recordId;
+            }));
             setSelectedRecord(null);
             setIsRecordDetailModalOpen(false);
             try {
@@ -2443,16 +2532,19 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
               const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
               const url = `${base}/${recordId}/`;
 
-              // Ensure we never accidentally overwrite the whole JSONB with a partial object.
-              // Merge incoming patch.data with the current record.data before sending to the API.
-              const currentFromSelected = selectedRecord && selectedRecord.id === recordId ? selectedRecord : null;
+              const selectedRecordData = selectedRecord as Record<string, unknown>;
+              const currentFromSelected = selectedRecord && selectedRecordData.id === recordId ? selectedRecord : null;
               const currentFromList =
                 currentFromSelected == null
-                  ? data.find((r: any) => r.id === recordId)
+                  ? data.find((r: unknown) => {
+                      const rData = r as Record<string, unknown>;
+                      return rData.id === recordId;
+                    })
                   : null;
+              const currentFromListData = currentFromList as Record<string, unknown>;
               const existingData =
-                (currentFromSelected?.data as Record<string, unknown> | undefined) ||
-                (currentFromList?.data as Record<string, unknown> | undefined) ||
+                (currentFromSelected ? (currentFromSelected as Record<string, unknown>).data as Record<string, unknown> | undefined : undefined) ||
+                (currentFromListData?.data as Record<string, unknown> | undefined) ||
                 {};
 
               const fullData =
@@ -2466,43 +2558,52 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
               const response = await apiClient.patch(url, body);
               const updated = response.data;
 
-              setSelectedRecord((prev: any) =>
-                prev?.id === recordId
+              setSelectedRecord((prev: unknown) => {
+                const prevData = prev as Record<string, unknown>;
+                return prevData?.id === recordId
                   ? {
-                      ...prev,
+                      ...prevData,
                       ...updated,
                       data: updated?.data ?? fullData,
                     }
-                  : prev,
-              );
+                  : prev;
+              });
               setData((prev) =>
-                prev.map((r: any) =>
-                  r.id === recordId
+                prev.map((r: unknown) => {
+                  const rData = r as Record<string, unknown>;
+                  return rData.id === recordId
                     ? {
-                        ...r,
+                        ...rData,
                         ...updated,
                         data: updated?.data ?? fullData,
                       }
-                    : r,
-                ),
+                    : r;
+                }),
               );
               setFilteredData((prev) =>
-                prev.map((r: any) =>
-                  r.id === recordId
+                prev.map((r: unknown) => {
+                  const rData = r as Record<string, unknown>;
+                  return rData.id === recordId
                     ? {
-                        ...r,
+                        ...rData,
                         ...updated,
                         data: updated?.data ?? fullData,
                       }
-                    : r,
-                ),
+                    : r;
+                }),
               );
             }
           : undefined}
         onDeleted={async (recordId: number) => {
           // Optimistically remove from current client-side data
-          setData((prev) => prev.filter((r: any) => r.id !== recordId));
-          setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
+          setData((prev) => prev.filter((r: unknown) => {
+            const rData = r as Record<string, unknown>;
+            return rData.id !== recordId;
+          }));
+          setFilteredData((prev) => prev.filter((r: unknown) => {
+            const rData = r as Record<string, unknown>;
+            return rData.id !== recordId;
+          }));
           setSelectedRecord(null);
           setIsRecordDetailModalOpen(false);
           // Re-fetch from server so pagination / counts stay correct

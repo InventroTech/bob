@@ -8,7 +8,7 @@ interface RecordsTableProps {
    * Fully generic config forwarded to LeadTableComponent.
    * Set apiEndpoint, columns, filters, entityType, etc. from PageBuilder.
    */
-  config?: any;
+  config?: unknown;
 }
 
 /**

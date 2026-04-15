@@ -111,7 +111,7 @@ const EDITABLE_FIELDS_FOR_REQUESTER: string[] = [
 interface RecordDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  record: any | null;
+  record: unknown | null;
   entityLabel?: string;
   entityType?: RecordDetailEntityType;
   /** Keys inside record.data that are editable (overrides default by entityType). */
@@ -169,7 +169,7 @@ const DETAIL_ROW_FULL_WIDTH_KEYS = new Set([
  * - For inventory_cart, ensure cart-level editable fields (status, invoice_number, payment_terms, comments)
  *   always appear even if missing in data so PM can populate them.
  */
-function buildDisplayRows(record: any, entityType?: string): Array<{ key: string; value: unknown; inData: boolean }> {
+function buildDisplayRows(record: unknown, entityType?: string): Array<{ key: string; value: unknown; inData: boolean }> {
   if (!record || typeof record !== 'object') return [];
 
   const rows: Array<{ key: string; value: unknown; inData: boolean }> = [];
@@ -203,7 +203,7 @@ function buildDisplayRows(record: any, entityType?: string): Array<{ key: string
       if (!existingDataKeys.has(key)) {
         const value =
           record.data && typeof record.data === 'object'
-            ? (record.data as any)[key] ?? ''
+            ? (record.data as unknown)[key] ?? ''
             : '';
         rows.push({ key, value, inData: true });
       }
@@ -227,9 +227,9 @@ function formatValue(value: unknown): string {
   }
   if (Array.isArray(value)) {
     // Special-case comments history arrays: show only the last comment text.
-    const first = value[0] as any;
+    const first = value[0] as unknown;
     if (first && typeof first === 'object' && 'comment' in first) {
-      const last = value[value.length - 1] as any;
+      const last = value[value.length - 1] as unknown;
       return last?.comment != null ? String(last.comment) : '';
     }
     return value.join(', ');
@@ -240,12 +240,12 @@ function formatValue(value: unknown): string {
 function normalizeCommentsHistory(value: unknown): Array<{ name: string; role: string; comment: string }> {
   if (value == null) return [];
   if (Array.isArray(value)) {
-    return (value as any[])
+    return (value as unknown[])
       .map((v) => {
         if (!v || typeof v !== 'object') return null;
-        const name = typeof (v as any).name === 'string' ? (v as any).name : '';
-        const role = typeof (v as any).role === 'string' ? (v as any).role : '';
-        const comment = typeof (v as any).comment === 'string' ? (v as any).comment : '';
+        const name = typeof (v as unknown).name === 'string' ? (v as unknown).name : '';
+        const role = typeof (v as unknown).role === 'string' ? (v as unknown).role : '';
+        const comment = typeof (v as unknown).comment === 'string' ? (v as unknown).comment : '';
         if (!comment.trim()) return null;
         return { name, role, comment };
       })
@@ -451,7 +451,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   /** Only the assigned PM can update status on an inventory request; requester can edit other fields when draft. */
   const canEditStatusForRequest = isInventoryRequest && canEdit && !!user && isAssignee;
 
-  const [cartRequests, setCartRequests] = useState<any[]>([]);
+  const [cartRequests, setCartRequests] = useState<unknown[]>([]);
   const [cartRequestsLoading, setCartRequestsLoading] = useState(false);
   const [cartRequestsError, setCartRequestsError] = useState<string | null>(null);
   const [cartRequestsVersion, setCartRequestsVersion] = useState(0);
@@ -505,7 +505,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         setVendorsLoading(true);
         const list = await crmRecordsApi.listRecords({ entity_type: 'unmannd_vendor', page_size: 500 });
         const options = list
-          .map((r: any) => {
+          .map((r: unknown) => {
             const id = r.id ?? r.data?.id;
             const name = (r.data?.vendor_name ?? r.vendor_name ?? r.data?.name ?? '').trim();
             return id != null && name ? { id: Number(id), name } : null;
@@ -542,7 +542,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       setNewVendorName('');
       setNewVendorLink('');
       toast({ title: 'Vendor added' });
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Failed to add vendor',
         description: e?.message || 'Could not add vendor.',
@@ -565,10 +565,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     const load = async () => {
       try {
         setModalCartOptionsLoading(true);
-        const res = await apiClient.get<any>('/crm-records/records/?entity_type=inventory_cart&page_size=100');
-        const list: any[] = res.data?.results ?? (res.data as any)?.data ?? [];
+        const res = await apiClient.get<unknown>('/crm-records/records/?entity_type=inventory_cart&page_size=100');
+        const list: unknown[] = res.data?.results ?? (res.data as unknown)?.data ?? [];
         const options = list
-          .map((r: any) => {
+          .map((r: unknown) => {
             const id = r.id;
             const d = r.data || {};
             const status = d.status || 'DRAFT';
@@ -577,7 +577,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             if (invoice) labelParts.push(`Invoice: ${invoice}`);
             return { id, label: labelParts.join(' ') };
           })
-          .filter((o: any) => o && o.id != null);
+          .filter((o: unknown) => o && o.id != null);
         if (!cancelled) setModalCartOptions(options);
       } catch {
         if (!cancelled) setModalCartOptions([]);
@@ -604,12 +604,12 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         const url = `/crm-records/records/?entity_type=inventory_request&cart_id=${encodeURIComponent(
           String(record.id),
         )}&page_size=100`;
-        const res = await apiClient.get<any>(url);
-        const list: any[] = res.data?.results ?? (res.data as any)?.data ?? [];
+        const res = await apiClient.get<unknown>(url);
+        const list: unknown[] = res.data?.results ?? (res.data as unknown)?.data ?? [];
         if (!cancelled) {
           setCartRequests(list);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!cancelled) {
           setCartRequests([]);
           setCartRequestsError(e?.message || 'Failed to load requests in this cart.');
@@ -657,7 +657,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         description: `All requests in this cart updated to ${applyTargetStatus}.`,
       });
       setCartRequestsVersion((v) => v + 1);
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Apply failed',
         description: e?.message || 'Could not apply to requests in cart.',
@@ -683,7 +683,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       const raw =
         pending?.[attribute] !== undefined
           ? pending?.[attribute]
-          : (record?.data as any)?.[attribute];
+          : (record?.data as unknown)?.[attribute];
 
       const threshold = cond.value;
 
@@ -745,7 +745,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         await apiClient.patch(`/crm-records/records/${req.id}/`, { data: nextData });
         toast({ title: 'Removed from cart', description: `Request #${req.id} is no longer in this cart.` });
         setCartRequestsVersion((v) => v + 1);
-      } catch (e: any) {
+      } catch (e: unknown) {
         toast({
           title: 'Remove failed',
           description: e?.message || 'Could not remove request from cart.',
@@ -781,7 +781,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       } else {
         onOpenChange(false);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Delete failed',
         description: e?.message || 'Could not delete cart.',
@@ -798,10 +798,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     try {
       let dataPatch: Record<string, unknown> = { [key]: value };
       if (key === 'comments') {
-        const existingRaw = (record?.data as any)?.comments;
+        const existingRaw = (record?.data as unknown)?.comments;
         const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
         if (Array.isArray(existingRaw)) {
-          existingHistory.push(...(existingRaw as any));
+          existingHistory.push(...(existingRaw as unknown));
         } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
           existingHistory.push({ name: '', role: '', comment: existingRaw.trim() });
         }
@@ -828,7 +828,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         return next;
       });
       toast({ title: 'Saved', description: `${key} updated.` });
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Update failed',
         description: e?.message || 'Could not save.',
@@ -878,7 +878,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       } else {
         onOpenChange(false);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Delete failed',
         description: e?.message || 'Could not delete request.',
@@ -906,10 +906,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       // Include stage comment history before submitting to RM.
       const commentText = typeof pending.comments === 'string' ? pending.comments.trim() : '';
       if (commentText) {
-        const existingRaw = (record?.data as any)?.comments;
+        const existingRaw = (record?.data as unknown)?.comments;
         const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
         if (Array.isArray(existingRaw)) {
-          existingHistory.push(...(existingRaw as any));
+          existingHistory.push(...(existingRaw as unknown));
         } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
           existingHistory.push({ name: '', role: '', comment: existingRaw.trim() });
         }
@@ -932,7 +932,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
       });
       onRecordUpdated?.(record.id);
       onOpenChange(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Submission failed',
         description: e?.message || 'Could not submit request to RM.',
@@ -950,7 +950,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
     try {
       setAddingToCart(true);
-      const createRes = await apiClient.post<any>('/crm-records/records/', {
+      const createRes = await apiClient.post<unknown>('/crm-records/records/', {
         entity_type: 'inventory_cart',
         data: {
           status: 'DRAFT',
@@ -976,7 +976,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         title: 'Added to new cart',
         description: `Request linked to new cart #${cartId}.`,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Add to cart failed',
         description: e?.message || 'Could not create cart or add request.',
@@ -1019,7 +1019,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         title: 'Added to cart',
         description: `Request linked to cart #${cartId}.`,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Add to cart failed',
         description: e?.message || 'Could not add request to cart.',
@@ -1044,7 +1044,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           const existingRaw = existingData.comments;
           const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
           if (Array.isArray(existingRaw)) {
-            existingHistory.push(...(existingRaw as any));
+            existingHistory.push(...(existingRaw as unknown));
           } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
             existingHistory.push({ name: '', role: '', comment: existingRaw.trim() });
           }
@@ -1067,7 +1067,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         toast({ title: 'Status updated', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
-      } catch (e: any) {
+      } catch (e: unknown) {
         toast({
           title: 'Update failed',
           description: e?.message || 'Could not update status.',

@@ -22,7 +22,7 @@ const ProfilePage = () => {
       // Navigate to auth page
       navigate('/auth');
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error logging out:', error);
       setError(error.message || 'Failed to log out');
     } finally {

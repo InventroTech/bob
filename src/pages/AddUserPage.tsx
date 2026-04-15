@@ -78,7 +78,7 @@ const AddUserPage = () => {
       try {
         const rolesData = await membershipService.getRoles();
         setRoles(rolesData);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error fetching roles:', error);
         toast.error(`Failed to fetch roles: ${error.message}`);
         setRoles([]);
@@ -136,7 +136,7 @@ const AddUserPage = () => {
       }
 
       // Transform the data to match expected format
-      const transformedUsers: User[] = usersData.map((user: any, index: number) => ({
+      const transformedUsers: User[] = usersData.map((user: unknown, index: number) => ({
         uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
         membershipId: user.id ? String(user.id) : undefined,
         supabaseUserId: user.user_id ? String(user.user_id) : undefined,
@@ -154,7 +154,7 @@ const AddUserPage = () => {
       if (transformedUsers.length === 0) {
         toast.info('No users found. The list is empty.');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching users:', error);
       toast.error(`Failed to fetch users: ${error.message}`);
       setUsers([]);
@@ -198,7 +198,7 @@ const AddUserPage = () => {
         console.error('Error refreshing roles list:', refreshError);
         // Don't show error toast for refresh failure, role was already created
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error adding role:', error);
       toast.error(`Error adding role: ${error.message || 'Failed to create role'}`);
     }
@@ -258,7 +258,7 @@ const AddUserPage = () => {
       // Refresh the users list
       await fetchUsers();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error adding user:", error);
       toast.error(`Error adding user: ${error.message}`);
     }
@@ -316,7 +316,7 @@ const AddUserPage = () => {
       // Refresh the users list after successful deletion
       await fetchUsers();
       toast.success('User deleted successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting user:', error);
       toast.error(error.message || 'Failed to delete user');
     }
@@ -352,7 +352,7 @@ const AddUserPage = () => {
       dispatchSpoofChanged();
 
       toast.success(`Now spoofing as ${label}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error starting spoof session:', error);
       const message = error?.response?.data?.error || error.message || 'Failed to start spoof session';
       toast.error(message);

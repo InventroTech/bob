@@ -44,7 +44,7 @@ export const routingRulesService = {
       }
       
       return [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching routing rules:', error);
       throw error;
     }
@@ -74,7 +74,7 @@ export const routingRulesService = {
       }
       
       throw new Error('Unexpected response format from upsert routing rule endpoint');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error upserting routing rule:', error);
       throw error;
     }
@@ -88,7 +88,7 @@ export const routingRulesService = {
   async delete(id: number): Promise<void> {
     try {
       await apiClient.delete(`/user-settings/routing-rules/${id}/`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting routing rule:', error);
       throw error;
     }

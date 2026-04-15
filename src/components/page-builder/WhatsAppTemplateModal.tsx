@@ -19,7 +19,7 @@ interface WhatsAppTemplate {
   text?: string;
   message?: string;
   content?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface WhatsAppTemplateModalProps {

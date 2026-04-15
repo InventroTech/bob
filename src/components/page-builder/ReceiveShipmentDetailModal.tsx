@@ -15,7 +15,7 @@ import { apiClient } from '@/lib/api';
 interface ReceiveShipmentDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  record: any | null;
+  record: unknown | null;
   onSuccess?: () => void;
 }
 
@@ -61,7 +61,7 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
       });
       onSuccess?.();
       onOpenChange(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Failed',
         description: e?.message ?? 'Could not add to inventory.',
@@ -87,7 +87,7 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
       });
       onSuccess?.();
       onOpenChange(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Failed',
         description: e?.message ?? 'Could not roll back to PM.',

@@ -115,7 +115,7 @@ export const membershipService = {
       }
       
       return [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching roles:', error);
       throw error;
     }
@@ -150,7 +150,7 @@ export const membershipService = {
         }
       }
       return roles.length > 0 ? roles[0] : null;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.warn('Failed to fetch public role via membership API:', error?.message || error);
       return null;
     }
@@ -212,7 +212,7 @@ export const membershipService = {
       return transformedUsers.sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching users:', error);
       throw error;
     }
@@ -255,7 +255,7 @@ export const membershipService = {
       // This allows the UI to continue even if response format is unexpected
       console.warn('Unexpected response format from create role endpoint, using fallback');
       return { id: '', name };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating role:', error);
       throw error;
     }
@@ -360,7 +360,7 @@ export const membershipService = {
       });
 
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[membershipService] getMyMembership: ❌ Error fetching membership', {
         error: error.message,
         status: error.response?.status,

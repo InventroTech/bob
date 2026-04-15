@@ -1,5 +1,6 @@
 import React from 'react';
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface FormComponentProps {}
 
 export const FormComponent: React.FC<FormComponentProps> = () => {

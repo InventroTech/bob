@@ -40,7 +40,7 @@ const SignupPage = () => {
         return;
       }
       setMessage('Check your email for the confirmation link.');
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err?.error_description || err?.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);

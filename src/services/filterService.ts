@@ -121,7 +121,7 @@ export class FilterService {
    * Generate query parameters from filter values
    */
   // Build URLSearchParams including default params and per-filter lookups
-  generateQueryParams(filterValues: Record<string, any>): URLSearchParams {
+  generateQueryParams(filterValues: Record<string, unknown>): URLSearchParams {
     const params = new URLSearchParams();
 
     // Add default parameters
@@ -173,7 +173,7 @@ export class FilterService {
     params: URLSearchParams,
     accessor: string,
     filter: FilterConfig,
-    value: any
+    value: unknown
   ): void {
     // Use custom lookup if provided, otherwise determine from filter type
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
@@ -257,7 +257,7 @@ export class FilterService {
    * Add select filter parameter (supports multiple values)
    */
   // Append select values; arrays use multiple parameters for proper backend handling
-  private addSelectParam(params: URLSearchParams, accessor: string, value: any, lookup: string = 'in'): void {
+  private addSelectParam(params: URLSearchParams, accessor: string, value: unknown, lookup: string = 'in'): void {
     if (Array.isArray(value)) {
       if (value.length > 0) {
         // For IN lookup, join with commas, as requested by user
@@ -305,7 +305,7 @@ export class FilterService {
    * Add date parameter with specified lookup
    */
   // Support date_gte/date_lte/date_range; values serialized as ISO strings
-  private addDateParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: any): void {
+  private addDateParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: unknown): void {
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
 
     if ((filter.type === 'date_range' || filter.type === 'date_time_range') && value && typeof value === 'object') {
@@ -332,7 +332,7 @@ export class FilterService {
    * Add number parameter with specified lookup
    */
   // Support numeric bounds (gte/lte/gt/lt)
-  private addNumberParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: any): void {
+  private addNumberParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: unknown): void {
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
 
     if (this.isValidNumber(value)) {
@@ -348,7 +348,7 @@ export class FilterService {
    * Add generic parameter with specified lookup
    */
   // Fallback handling for explicit lookups like exact, startswith, in, etc.
-  private addGenericParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: any): void {
+  private addGenericParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: unknown): void {
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
 
     if (Array.isArray(value) && value.length > 0) {
@@ -373,7 +373,7 @@ export class FilterService {
    * Add default parameter (fallback)
    */
   // Final fallback for unknown types; sensible icontains/in behavior
-  private addDefaultParam(params: URLSearchParams, accessor: string, value: any, lookup: string = 'icontains'): void {
+  private addDefaultParam(params: URLSearchParams, accessor: string, value: unknown, lookup: string = 'icontains'): void {
     if (Array.isArray(value) && value.length > 0) {
       if (lookup === 'in' || lookup === '') {
         params.append(accessor, value.join(','));
@@ -392,7 +392,7 @@ export class FilterService {
   /**
    * Check if a value is empty
    */
-  private isEmpty(value: any): boolean {
+  private isEmpty(value: unknown): boolean {
     if (value === null || value === undefined) return true;
     if (typeof value === 'string') return value.trim() === '';
     if (Array.isArray(value)) return value.length === 0;
@@ -403,7 +403,7 @@ export class FilterService {
   /**
    * Check if a value is a valid date
    */
-  private isValidDate(value: any): boolean {
+  private isValidDate(value: unknown): boolean {
     if (!value) return false;
     const date = value instanceof Date ? value : new Date(value);
     return !isNaN(date.getTime());
@@ -412,7 +412,7 @@ export class FilterService {
   /**
    * Check if a value is a valid number
    */
-  private isValidNumber(value: any): boolean {
+  private isValidNumber(value: unknown): boolean {
     if (typeof value === 'number') return !isNaN(value);
     if (typeof value === 'string') return !isNaN(Number(value)) && value.trim() !== '';
     return false;
@@ -421,7 +421,7 @@ export class FilterService {
   /**
    * Get a human-readable description of active filters
    */
-  getFilterDescription(filterValues: Record<string, any>): string {
+  getFilterDescription(filterValues: Record<string, unknown>): string {
     const activeFilters: string[] = [];
 
     this.filters.forEach(filter => {
@@ -440,7 +440,7 @@ export class FilterService {
   /**
    * Get description for a single filter value
    */
-  private getFilterValueDescription(filter: FilterConfig, value: any): string | null {
+  private getFilterValueDescription(filter: FilterConfig, value: unknown): string | null {
     switch (filter.type) {
       case 'select':
         if (Array.isArray(value)) {
@@ -459,11 +459,15 @@ export class FilterService {
         return `${filter.label}: "${value}"`;
 
       case 'date_gte':
+      {
         const startDate = value instanceof Date ? value : new Date(value);
+      }
         return `${filter.label} from ${startDate.toLocaleDateString()}`;
 
       case 'date_lte':
+      {
         const endDate = value instanceof Date ? value : new Date(value);
+      }
         return `${filter.label} to ${endDate.toLocaleDateString()}`;
 
       case 'date_range':

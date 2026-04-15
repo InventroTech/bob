@@ -158,7 +158,7 @@ export const TicketBarGraphComponent: React.FC<TicketBarGraphProps> = ({ config 
                   borderRadius: '8px',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}
-                formatter={(value: any, name: string) => [
+                formatter={(value: unknown, name: string) => [
                   value, 
                   name === 'resolved' ? 'Resolved' : 'Unresolved'
                 ]}

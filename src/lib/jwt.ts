@@ -13,7 +13,7 @@ export interface JWTClaims {
   user_data?: JWTUserData;
   email?: string;
   sub?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**

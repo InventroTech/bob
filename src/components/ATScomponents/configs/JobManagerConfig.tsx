@@ -38,7 +38,7 @@ export interface JobManagerComponentConfig {
 
 interface JobManagerConfigProps {
   config: JobManagerComponentConfig;
-  onConfigChange: (key: string, value: any) => void;
+  onConfigChange: (key: string, value: unknown) => void;
 }
 
 export const JobManagerConfigComponent: React.FC<JobManagerConfigProps> = ({

@@ -32,7 +32,7 @@ const ProfileSettings = () => {
       } else {
         toast.error("Database setup script failed. Check console and run SQL manually.");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error(`Error during setup: ${error.message}`);
     } finally {
       setIsSettingUp(false);

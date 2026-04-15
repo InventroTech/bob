@@ -237,7 +237,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   };
 
   // Data mapping helper - Parse backend response format
-  const mapApiDataToJob = (apiData: any): Job => {
+  const mapApiDataToJob = (apiData: unknown): Job => {
     // Backend returns: { id, entity_type, name, data: {...} }
     const jobData = apiData.data || apiData;
     
@@ -258,7 +258,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
     
     if (jobData.formQuestions && Array.isArray(jobData.formQuestions)) {
       // Use full form structure if available (with types and options)
-      formQuestions = jobData.formQuestions.map((q: any) => ({
+      formQuestions = jobData.formQuestions.map((q: unknown) => ({
         id: q.id || `q_${Date.now()}_${Math.random()}`,
         type: q.type || 'text',
         title: q.title || '',
@@ -340,7 +340,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
   };
 
   // Map Job to API format for POST requests (Backend format)
-  const mapJobToApiFormat = (job: Job): any => {
+  const mapJobToApiFormat = (job: Job): unknown => {
     // Convert form questions to the backend format (for backward compatibility)
     const questions: Record<string, string> = {};
     job.form.questions.forEach((question, index) => {
@@ -1351,7 +1351,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                     <Label htmlFor="jobType" className="text-sm font-medium text-gray-700">Job Type</Label>
                     <Select
                       value={newJobData.type}
-                      onValueChange={(value: any) => setNewJobData(prev => ({ ...prev, type: value }))}
+                      onValueChange={(value: unknown) => setNewJobData(prev => ({ ...prev, type: value }))}
                     >
                       <SelectTrigger className="mt-2 border-gray-300">
                         <SelectValue placeholder="Select type" />
@@ -1777,7 +1777,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
                 <Label htmlFor="editJobType" className="text-sm font-medium text-gray-700">Job Type</Label>
                 <Select
                   value={editJobData.type}
-                  onValueChange={(value: any) => setEditJobData(prev => ({ ...prev, type: value }))}
+                  onValueChange={(value: unknown) => setEditJobData(prev => ({ ...prev, type: value }))}
                 >
                   <SelectTrigger className="mt-2 border-gray-300">
                     <SelectValue placeholder="Select type" />

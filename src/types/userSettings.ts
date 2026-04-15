@@ -4,7 +4,7 @@ export interface UserSettings {
   tenant_id: string;
   user_id: string;
   key: string;
-  value: any; // JSON value
+  value: unknown; // JSON value
   daily_target?: number; // Daily target column
   created_at: string;
   updated_at: string;
@@ -13,13 +13,13 @@ export interface UserSettings {
 export interface UserSettingsCreate {
   user_id: string;
   key: string;
-  value: any;
+  value: unknown;
   daily_target?: number; // Daily target column
 }
 
 export interface UserSettingsUpdate {
   key?: string;
-  value?: any;
+  value?: unknown;
   daily_target?: number; // Daily target column
 }
 
@@ -87,7 +87,7 @@ export interface RoutingRule {
   user_id: string | null;
   queue_type: QueueType;
   is_active: boolean;
-  conditions: any;
+  conditions: unknown;
   name?: string | null;
   description?: string | null;
   created_at: string;
@@ -98,7 +98,7 @@ export interface RoutingRuleUpsertPayload {
   user_id: string;
   queue_type: QueueType;
   is_active?: boolean;
-  conditions?: any;
+  conditions?: unknown;
   name?: string;
   description?: string;
 }

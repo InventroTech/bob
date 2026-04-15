@@ -1,8 +1,8 @@
 // Simple caching for Lottie animation JSON using in-memory Map and CacheStorage
 
-const memoryCache = new Map<string, any>();
+const memoryCache = new Map<string, unknown>();
 
-async function getFromCacheStorage(url: string): Promise<any | null> {
+async function getFromCacheStorage(url: string): Promise<unknown | null> {
   try {
     if (typeof caches === "undefined") return null;
     const cache = await caches.open("lottie-cache-v1");
@@ -26,7 +26,7 @@ async function putInCacheStorage(url: string, response: Response): Promise<void>
   }
 }
 
-async function fetchJson(url: string): Promise<{ data: any | null; response: Response | null }> {
+async function fetchJson(url: string): Promise<{ data: unknown | null; response: Response | null }> {
   try {
     const response = await fetch(url, {
       mode: "cors",
@@ -40,7 +40,7 @@ async function fetchJson(url: string): Promise<{ data: any | null; response: Res
   }
 }
 
-export async function fetchLottieAnimation(urls: string[]): Promise<any | null> {
+export async function fetchLottieAnimation(urls: string[]): Promise<unknown | null> {
   // Try memory cache by any matching URL first
   for (const u of urls) {
     if (memoryCache.has(u)) {
@@ -72,8 +72,8 @@ export async function fetchLottieAnimation(urls: string[]): Promise<any | null> 
 
 export function requestIdle(fn: () => void, timeout = 1500): void {
   // Use requestIdleCallback if available; otherwise fallback to setTimeout
-  // @ts-ignore - TS may not know about requestIdleCallback in DOM lib settings
-  const ric: ((cb: any, opts?: any) => number) | undefined = (globalThis as any).requestIdleCallback;
+  // @ts-expect-error - TS may not know about requestIdleCallback in DOM lib settings
+  const ric: ((cb: unknown, opts?: unknown) => number) | undefined = (globalThis as unknown).requestIdleCallback;
   if (typeof ric === "function") {
     ric(fn, { timeout });
   } else {

@@ -87,12 +87,12 @@ export const DataCardComponent: React.FC<DataCardComponentProps> = ({ config }) 
         const cardData = Array.isArray(data) ? data : (data.cards || []);
         
         // Validate and transform the data
-        const validatedCards = cardData.map((card: any) => ({
+        const validatedCards = cardData.map((card: unknown) => ({
           id: card.id || 0,
           title: card.title || 'Untitled',
           number: typeof card.number === 'number' ? card.number : 0,
           description: card.description || '',
-          pieData: Array.isArray(card.pieData) ? card.pieData.map((pie: any) => ({
+          pieData: Array.isArray(card.pieData) ? card.pieData.map((pie: unknown) => ({
             id: pie.id || 0,
             value: typeof pie.value === 'number' ? pie.value : 0,
             label: pie.label || 'Unknown'

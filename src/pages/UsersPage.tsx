@@ -24,7 +24,7 @@ const UsersPage = () => {
       try {
         const usersData = await membershipService.getUsers();
         setUsers(usersData);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error fetching users:', error);
         toast.error(`Failed to fetch users: ${error.message || 'An unexpected error occurred'}`);
         setUsers([]);

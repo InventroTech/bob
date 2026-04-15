@@ -48,7 +48,7 @@ const MyPages = () => {
 
       // --- NEW FRONTEND SORTING LOGIC ---
       // First sort by display_order (ascending). If they match, sort by updated_at (newest first).
-      const sortedPagesData = [...(rawPagesData || [])].sort((a: any, b: any) => {
+      const sortedPagesData = [...(rawPagesData || [])].sort((a: unknown, b: unknown) => {
         // Use 9999 as a fallback so items without an order drop to the bottom safely
         const orderA = a.display_order ?? 9999; 
         const orderB = b.display_order ?? 9999;
@@ -65,7 +65,7 @@ const MyPages = () => {
 
       // Group pages by role name using our newly sorted array
       const grouped: Record<string, PageRecord[]> = {};
-      sortedPagesData.forEach((page: any) => {
+      sortedPagesData.forEach((page: unknown) => {
         // Fallback to page.role if the API returns that instead of page.role_id
         const roleValue = page.role_id || page.role; 
         const roleName = rolesLookup[roleValue] || 'Unassigned';
@@ -80,7 +80,7 @@ const MyPages = () => {
       });
 
       setPagesByRole(grouped);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading pages:', err);
       setError(err.message || 'Failed to load pages.');
       toast.error(`Error loading pages: ${err.message}`);
@@ -101,7 +101,7 @@ const MyPages = () => {
       await pageService.deletePage(pageId);
       toast.success('Page deleted.');
       fetchPagesAndRoles(); // Refresh the page list
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting page:', err);
       toast.error('Failed to delete page.');
     }

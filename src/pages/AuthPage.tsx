@@ -24,7 +24,7 @@ const AuthPage = () => {
     try {
       const response = await supabase.auth.signInWithPassword({ email, password });
       if (response.error) throw response.error;
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err?.error_description || err?.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);

@@ -7,8 +7,8 @@ interface TableComponentProps {
 }
 
 export const TableComponent: React.FC<TableComponentProps> = ({ tableId }) => {
-  const [columns, setColumns] = useState<any[]>([]);
-  const [rows, setRows] = useState<any[]>([]);
+  const [columns, setColumns] = useState<unknown[]>([]);
+  const [rows, setRows] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {

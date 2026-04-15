@@ -46,7 +46,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
     try {
       const templatesList = await whatsappTemplateService.getAll(apiEndpoint);
       setTemplates(templatesList);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching templates:', error);
       toast.error(`Failed to load templates: ${error.message || 'Unknown error'}`);
     } finally {
@@ -110,7 +110,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
       setDescription('');
       setEditingId(null);
       await fetchTemplates();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`Error ${editingId ? 'updating' : 'creating'} WhatsApp template:`, error);
       toast.error(`Failed to ${editingId ? 'update' : 'create'} template: ${error.message || 'Unknown error'}`);
     } finally {
@@ -129,7 +129,7 @@ export const WhatsAppTemplateComponent: React.FC<WhatsAppTemplateComponentProps>
       // Refresh templates
       await fetchTemplates();
       setDeleteId(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting WhatsApp template:', error);
       toast.error(`Failed to delete template: ${error.message || 'Unknown error'}`);
     }

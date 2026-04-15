@@ -7,7 +7,7 @@ import { componentMap } from '@/pages/PageBuilder';
 import { fetchPageConfig } from '@/lib/spoof';
 
 // Module-level cache to prevent duplicate page fetches across component remounts
-const pageCache = new Map<string, { data: any; timestamp: number }>();
+const pageCache = new Map<string, { data: unknown; timestamp: number }>();
 const PAGE_CACHE_TTL = 5000; // 5 seconds
 
 interface CustomAppOutletContext {
@@ -20,7 +20,7 @@ const CustomAppPage: React.FC = () => {
   const { tenantId: contextTenantId } = useOutletContext<CustomAppOutletContext>();
   const tenantId = contextTenantId ?? (typeof window !== 'undefined' ? localStorage.getItem('tenant_id') : null);
   
-  const [page, setPage] = useState<{ name: string; config: any } | null>(null);
+  const [page, setPage] = useState<{ name: string; config: unknown } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchingRef = useRef<string | null>(null); // Track which pageId is currently being fetched
@@ -94,7 +94,7 @@ const CustomAppPage: React.FC = () => {
           pageCache.set(cacheKey, { data: pageData, timestamp: now });
         }
         setLoading(false);
-      } catch (err: any) {
+      } catch (err: unknown) {
         fetchingRef.current = null;
         if (!isMounted) return;
         if (err.name === 'AbortError' || err.message?.includes('aborted')) return;
@@ -128,7 +128,7 @@ const CustomAppPage: React.FC = () => {
     
     // Then check if there's a header component in the config
     if (Array.isArray(page.config)) {
-      const headerComponent = page.config.find((comp: any) => comp.type === 'header');
+      const headerComponent = page.config.find((comp: unknown) => comp.type === 'header');
       if (headerComponent?.config?.title) {
         return headerComponent.config.title;
       }
@@ -158,7 +158,7 @@ const CustomAppPage: React.FC = () => {
       <div className="w-full">
         <div>
           {Array.isArray(page.config)
-            ? (page.config as any[]).map((component) => {
+            ? (page.config as unknown[]).map((component) => {
                 const Renderer = componentMap[component.type];
                 if (!Renderer) return null;
                 // Skip header components if they exist in the config (we show it as fixed header above)

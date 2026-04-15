@@ -1,6 +1,6 @@
 import React from 'react'
 
-const Requirements = ({attributes}: {attributes: any}) => {
+const Requirements = ({attributes}: {attributes: unknown}) => {
   return (
     <div className='flex flex-col gap-2'>
       <h3>Requirements</h3>

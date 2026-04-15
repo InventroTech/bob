@@ -4,7 +4,7 @@ import InfoCards from './infoCard'
 import TaskCard from './taskCard'
 import Notes from './notes'
 
-const LeadCardTemplate = ({attributes}: {attributes: any}) => {
+const LeadCardTemplate = ({attributes}: {attributes: unknown}) => {
   return (
     <div className='flex flex-col gap-2 w-[70%] p-4' >
     <div className='full-box  m-auto  top-12 left-12 rounded-sm p-2 flex  bg-gray-100 text-black w-full'>

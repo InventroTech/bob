@@ -61,7 +61,7 @@ export const authService = {
       );
 
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Extract error details from response if available
       const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to link user UID';
       const errorCode = error.response?.data?.code;
@@ -79,7 +79,7 @@ export const authService = {
       return {
         success: false,
         error: error.message || 'Failed to link user UID',
-      } as any;
+      } as unknown;
     }
   },
 };
@@ -93,7 +93,7 @@ export const linkUserUidLegacy = async (
   email: string,
   token: string,
   tenantSlug: string = 'bibhab-thepyro-ai'
-): Promise<{ success: boolean; data?: any; error?: string }> => {
+): Promise<{ success: boolean; data?: unknown; error?: string }> => {
   try {
     const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
     const apiUrl = `${baseUrl}/accounts/link-user-uid/`;
@@ -121,7 +121,7 @@ export const linkUserUidLegacy = async (
       success: true,
       data: responseData,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       success: false,
       error: error.message || 'Network error occurred',

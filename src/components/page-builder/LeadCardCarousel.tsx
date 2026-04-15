@@ -67,8 +67,8 @@ interface LeadTask {
   status?: string;
   due_date?: string;
   dueDate?: string;
-  rawStatus?: any;
-  [key: string]: any;
+  rawStatus?: unknown;
+  [key: string]: unknown;
 }
 
 interface LeadData {
@@ -108,7 +108,7 @@ interface LeadData {
   data?: {
     notes?: string;
     tasks?: LeadTask[] | LeadTask | string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -147,7 +147,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const [hasCheckedForLeads, setHasCheckedForLeads] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [inspirationalMessage, setInspirationalMessage] = useState<string>('');
-  const [animationData, setAnimationData] = useState<any>(null);
+  const [animationData, setAnimationData] = useState<unknown>(null);
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
 
@@ -187,7 +187,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const isInitialized = useRef(false);
   // Store latest handlers in ref so useImperativeHandle always calls current versions
   const handlersRef = useRef<{
-    handleActionButton: (action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later", extra?: any) => Promise<any>;
+    handleActionButton: (action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later", extra?: unknown) => Promise<unknown>;
     handleNotInterestedClick: () => void;
     handleOpenCallBackDialog: () => void;
   } | null>(null);
@@ -199,7 +199,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
   // Normalize API lead response to LeadData shape (for fresh fetch when card opened from table)
-  const normalizeApiLeadToLeadData = (apiLead: any): LeadData => {
+  const normalizeApiLeadToLeadData = (apiLead: unknown): LeadData => {
     const d = apiLead?.data || {};
     return {
       id: apiLead.id,
@@ -424,7 +424,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         } else {
           setDailyTarget(null);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
           setDailyTarget(null);
         } else {
@@ -550,12 +550,12 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
   const primaryPhone = useMemo(() => {
-    return currentLead?.phone_no || currentLead?.phone || (currentLead as any)?.phone_number || currentLead?.data?.phone_number;
+    return currentLead?.phone_no || currentLead?.phone || (currentLead as unknown)?.phone_number || currentLead?.data?.phone_number;
   }, [currentLead]);
 
   const leadTasks = useMemo(() => {
     const source =
-      (currentLead as any)?.tasks ??
+      (currentLead as unknown)?.tasks ??
       currentLead?.data?.tasks;
 
     if (!source) return [];
@@ -606,7 +606,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       }
 
       // Convert dict format to array: {"Task Name": "Status", ...}
-      return Object.entries(source as Record<string, any>).map(([key, value]) => {
+      return Object.entries(source as Record<string, unknown>).map(([key, value]) => {
         let normalizedStatus: string | undefined;
         if (value === null || value === undefined || value === "Null") {
           normalizedStatus = undefined;
@@ -792,9 +792,9 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                 >
                   {step.label}
                 </p>
-                {step.label.toLowerCase().includes('layout feedback') && ((currentLead as any)?.data?.reject_reason) && (
+                {step.label.toLowerCase().includes('layout feedback') && ((currentLead as unknown)?.data?.reject_reason) && (
                   <span className="text-sm text-red-600 font-medium">
-                    ({((currentLead as any)?.data?.reject_reason)})
+                    ({((currentLead as unknown)?.data?.reject_reason)})
                   </span>
                 )}
               </div>
@@ -924,7 +924,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       isInitialized.current = true;
       await fetchLeadStats();
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching lead:", error);
       
       // Handle 404 as "no leads available" instead of error
@@ -974,7 +974,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   // Reusable helper to post CRM events
   const sendLeadEvent = async (
     eventName: string,
-    payload: Record<string, any>,
+    payload: Record<string, unknown>,
     options: { successTitle?: string; successDescription?: string } = {}
   ): Promise<boolean> => {
     if (!currentLead?.id) {
@@ -994,7 +994,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       try {
         await crmLeadsApi.sendLeadEvent(eventName, recordId, payload);
         console.log('[sendLeadEvent] API call successful');
-      } catch (apiError: any) {
+      } catch (apiError: unknown) {
         console.error('[sendLeadEvent] API call failed:', apiError);
         throw apiError; // Re-throw to be caught by outer catch
       }
@@ -1007,7 +1007,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         });
       }
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error sending event:", error);
       toast({ title: "Error", description: error.message || "Failed to send event", variant: "destructive" });
       return false;
@@ -1038,7 +1038,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     const { event, success } = eventMap[action];
 
     const actingUserId = authUser?.id || currentLead.praja_id;
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       notes: lead.notes || "",
       remarks: currentLead.latest_remarks,
       lead_id: currentLead.id,
@@ -1197,7 +1197,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
           // Keep leadStartTime unchanged
         }));
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error refreshing lead:", error);
     } finally {
       setUpdating(false);

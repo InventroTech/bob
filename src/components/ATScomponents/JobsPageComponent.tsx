@@ -321,10 +321,10 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeUploadResponse, setResumeUploadResponse] = useState<any>(null);
+  const [resumeUploadResponse, setResumeUploadResponse] = useState<unknown>(null);
 
   // Configuration with defaults
   const {
@@ -346,7 +346,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   } = config;
 
   // Data mapping helper
-  const mapApiDataToJob = (apiData: any): Job => {
+  const mapApiDataToJob = (apiData: unknown): Job => {
     console.log('    📥 Raw API data:', apiData);
     
     // Backend returns: { id, entity_type, name, data: {...} }
@@ -367,11 +367,11 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     } = dataMapping;
 
     // Extract form questions - prefer full form structure, fallback to simple questions
-    let formQuestions: any[] = [];
+    let formQuestions: unknown[] = [];
     
     if (jobData.formQuestions && Array.isArray(jobData.formQuestions)) {
       // Use full form structure if available (with types and options)
-      formQuestions = jobData.formQuestions.map((q: any) => ({
+      formQuestions = jobData.formQuestions.map((q: unknown) => ({
         id: q.id || `q_${Date.now()}_${Math.random()}`,
         type: q.type || 'text',
         title: q.title || '',
@@ -666,7 +666,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   };
 
   // Handle form input changes
-  const handleInputChange = (questionId: string, value: any) => {
+  const handleInputChange = (questionId: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       [questionId]: value
@@ -725,7 +725,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
   // Background function to upload resume and submit application
   const processResumeAndSubmitInBackground = async (
-    formDataSnapshot: Record<string, any>,
+    formDataSnapshot: Record<string, unknown>,
     selectedJobSnapshot: Job,
     resumeFileSnapshot: File
   ) => {
@@ -734,7 +734,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       
       // Step 1: Upload resume
       let resumeUrl = '';
-      let scanAnalysis: any = null;
+      let scanAnalysis: unknown = null;
       
       // Construct upload URL
       let uploadUrl = fileUploadEndpoint;
@@ -923,7 +923,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   };
 
   // Render form field based on question type
-  const renderFormField = (question: any) => {
+  const renderFormField = (question: unknown) => {
     const value = formData[question.id] || '';
 
     switch (question.type) {
@@ -956,9 +956,11 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         );
 
       case 'select':
+      {
         const selectOptions = question.options && question.options.length > 0 
           ? question.options 
           : ['Option 1', 'Option 2', 'Option 3'];
+      }
         return (
           <select
             id={question.id}
@@ -977,9 +979,11 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         );
 
       case 'radio':
+      {
         const radioOptions = question.options && question.options.length > 0 
           ? question.options 
           : ['Option 1', 'Option 2', 'Option 3'];
+      }
         return (
           <div className="space-y-2">
             {radioOptions.map((option: string, index: number) => (
@@ -1000,10 +1004,12 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         );
 
       case 'checkbox':
+      {
         const checkboxValues = Array.isArray(value) ? value : (value ? [value] : []);
         const checkboxOptions = question.options && question.options.length > 0 
           ? question.options 
           : ['Option 1', 'Option 2', 'Option 3'];
+      }
         return (
           <div className="space-y-2">
             {checkboxOptions.map((option: string, index: number) => (

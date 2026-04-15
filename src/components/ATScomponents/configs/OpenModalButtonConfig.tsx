@@ -10,7 +10,7 @@ import { OpenModalButtonConfig } from '../OpenModalButton';
 
 interface OpenModalButtonConfigProps {
   config: OpenModalButtonConfig;
-  onConfigChange: (key: string, value: any) => void;
+  onConfigChange: (key: string, value: unknown) => void;
 }
 
 // Job interface (simplified)
@@ -24,7 +24,7 @@ interface Job {
   status: string;
   deadline?: string;
   form: {
-    questions: any[];
+    questions: unknown[];
   };
   applicationsCount?: number;
 }

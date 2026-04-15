@@ -229,20 +229,20 @@ interface TicketTableProps {
 
 interface PrajaTableProps {
   columns: Column[];
-  data: any[];
+  data: unknown[];
   title: string;
   showFilters?: boolean;
-  onRowClick?: (row: any) => void;
+  onRowClick?: (row: unknown) => void;
 }
 
 export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => {
-  const [data, setData] = useState<any[]>([]);
-  const [filteredData, setFilteredData] = useState<any[]>([]);
+  const [data, setData] = useState<unknown[]>([]);
+  const [filteredData, setFilteredData] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false); // Separate loading state for table only
   const [searchLoading, setSearchLoading] = useState(false); // Loading state specifically for search
   const [rateLimited, setRateLimited] = useState(false); // Rate limiting indicator
-  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+  const [selectedTicket, setSelectedTicket] = useState<unknown>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [resolutionStatusFilter, setResolutionStatusFilter] = useState<string[]>([]);
@@ -267,7 +267,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
   /** Base data for client-side search (initial load or filter result). Search runs across all fields on this. */
-  const baseDataRef = useRef<any[]>([]);
+  const baseDataRef = useRef<unknown[]>([]);
   const [pagination, setPagination] = useState<{
     totalCount: number;
     numberOfPages: number;
@@ -315,7 +315,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   );
 
   /** Client-side search: match term against ALL ticket fields (table columns + any other field in the row) */
-  const matchRowBySearchTerm = useCallback((row: any, term: string, _columns: Column[]): boolean => {
+  const matchRowBySearchTerm = useCallback((row: unknown, term: string, _columns: Column[]): boolean => {
     if (!term || !term.trim()) return true;
     const lower = term.trim().toLowerCase();
     // Search every field in the row so "all" fields are included
@@ -324,7 +324,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       if (val == null) continue;
       if (typeof val === 'object' && val !== null && !Array.isArray(val)) continue; // skip nested objects
       if (Array.isArray(val)) {
-        if (val.some((v: any) => v != null && String(v).toLowerCase().includes(lower))) return true;
+        if (val.some((v: unknown) => v != null && String(v).toLowerCase().includes(lower))) return true;
         continue;
       }
       if (String(val).toLowerCase().includes(lower)) return true;
@@ -576,10 +576,10 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length ?? responseData.results?.length ?? (Array.isArray(responseData) ? responseData.length : '?')}`);
       
       // Handle different response formats (array or single object)
-      let tickets: any[] = [];
+      let tickets: unknown[] = [];
       let pageMeta = null;
       
-      const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+      const ensureArray = (val: unknown): unknown[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
       
       if (responseData.results !== undefined) {
         tickets = ensureArray(responseData.results);
@@ -594,7 +594,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       }
 
       // Transform the data with the new attributes
-      const transformedData = tickets.map((ticket: any) => ({
+      const transformedData = tickets.map((ticket: unknown) => ({
         ...ticket,
         // Format created_at with relative time
         created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
@@ -743,9 +743,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
             if (response.ok) {
               const responseData = await response.json();
-              const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+              const ensureArray = (val: unknown): unknown[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
               
-              let tickets: any[] = [];
+              let tickets: unknown[] = [];
               let pageMeta = null;
               
               if (responseData.results !== undefined) {
@@ -758,7 +758,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 tickets = responseData;
               }
 
-              const transformedData = tickets.map((ticket: any) => ({
+              const transformedData = tickets.map((ticket: unknown) => ({
                 ...ticket,
                 created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
                 cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
@@ -789,7 +789,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 });
               }
             }
-          } catch (error: any) {
+          } catch (error: unknown) {
             if (error.name === 'AbortError') return;
             console.error('Error resetting search:', error);
             baseDataRef.current = data;
@@ -830,8 +830,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
           if (abortController.signal.aborted) return;
 
-          const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
-          const transformTicket = (ticket: any) => ({
+          const ensureArray = (val: unknown): unknown[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+          const transformTicket = (ticket: unknown) => ({
             ...ticket,
             created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
             cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
@@ -849,7 +849,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
           if (response.ok) {
             const responseData = await response.json();
-            let tickets: any[] = [];
+            let tickets: unknown[] = [];
             if (responseData.results !== undefined) tickets = ensureArray(responseData.results);
             else if (responseData.data !== undefined) tickets = ensureArray(responseData.data);
             else if (Array.isArray(responseData)) tickets = responseData;
@@ -872,11 +872,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           } else {
             throw new Error(`Search failed: ${response.status}`);
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (error.name === 'AbortError') return;
           console.error('Error fetching tickets for search:', error);
           const base = baseDataRef.current.length > 0 ? baseDataRef.current : data;
-          const next = base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
+          const next = base.filter((row: unknown) => matchRowBySearchTerm(row, term, tableColumns));
           setFilteredData(next);
         } finally {
           if (!abortController.signal.aborted) {
@@ -903,13 +903,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
 
   // Memoized row click handler
-  const handleRowClick = useCallback((row: any) => {
+  const handleRowClick = useCallback((row: unknown) => {
     setSelectedTicket(row);
     setIsTicketModalOpen(true);
   }, []);
 
   // Action button click: open card and/or call API
-  const handleActionClick = useCallback(async (row: any, col: Column) => {
+  const handleActionClick = useCallback(async (row: unknown, col: Column) => {
     const openCard = col.openCard === true || col.openCard === 'true';
     if (openCard) {
       setSelectedTicket(row);
@@ -937,7 +937,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const res = await fetch(url, { method, headers, body });
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         toast.success('Action completed');
-      } catch (err: any) {
+      } catch (err: unknown) {
         toast.error(err?.message || 'Action failed');
       }
     }
@@ -1166,8 +1166,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
       const responseData = await response.json();
       
-      const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
-      let tickets: any[] = [];
+      const ensureArray = (val: unknown): unknown[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
+      let tickets: unknown[] = [];
       let pageMeta = null;
       
       if (responseData.data !== undefined) {
@@ -1219,7 +1219,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   };
 
 
-  const handleTicketUpdate = (updatedTicket: any) => {
+  const handleTicketUpdate = (updatedTicket: unknown) => {
     // Update the local data with the updated ticket
     const updatedData = data.map(ticket => 
       ticket.id === updatedTicket.id ? updatedTicket : ticket
@@ -1769,7 +1769,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((row: any, rowIndex: number) => (
+                  filteredData.map((row: unknown, rowIndex: number) => (
                     <tr 
                       key={rowIndex} 
                       className={`border-b border-gray-200 hover:bg-gray-50 bg-white ${

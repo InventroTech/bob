@@ -14,10 +14,10 @@ export type CrmRecord = {
   [k: string]: unknown;
 };
 
-function coerceListPayload(payload: unknown): any[] {
+function coerceListPayload(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
   if (payload && typeof payload === 'object') {
-    const p: any = payload;
+    const p: unknown = payload;
     if (Array.isArray(p.results)) return p.results;
     if (Array.isArray(p.data)) return p.data;
   }

@@ -55,7 +55,7 @@ export interface CustomTableProps {
   /**
    * Table data rows
    */
-  data: any[];
+  data: unknown[];
   
   /**
    * Loading state
@@ -70,12 +70,12 @@ export interface CustomTableProps {
   /**
    * Row click handler
    */
-  onRowClick?: (row: any) => void;
+  onRowClick?: (row: unknown) => void;
   
   /**
    * Custom cell renderer
    */
-  renderCell?: (row: any, column: CustomTableColumn, columnIndex: number) => React.ReactNode;
+  renderCell?: (row: unknown, column: CustomTableColumn, columnIndex: number) => React.ReactNode;
   
   /**
    * Table header background color
@@ -120,7 +120,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   className,
   tableClassName,
 }) => {
-  const defaultRenderCell = (row: any, column: CustomTableColumn, columnIndex: number) => {
+  const defaultRenderCell = (row: unknown, column: CustomTableColumn, columnIndex: number) => {
     const value = row[column.accessor];
     
     if (column.type === 'link' && column.linkField && row[column.linkField]) {
@@ -185,7 +185,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
               </td>
             </tr>
           ) : (
-            data.map((row: any, rowIdx: number) => (
+            data.map((row: unknown, rowIdx: number) => (
               <tr
                 key={rowIdx}
                 onClick={() => onRowClick?.(row)}

@@ -58,7 +58,7 @@ export interface ApplicantTableConfig {
   }>;
   
   // Advanced Configuration
-  customFields?: Record<string, any>;
+  customFields?: Record<string, unknown>;
   filterOptions?: {
     statusOptions?: Array<{ value: string; label: string; color?: string }>;
     experienceOptions?: Array<{ value: string; label: string }>;
@@ -85,7 +85,7 @@ export interface ApplicantTableConfig {
 
 interface ApplicantTableConfigComponentProps {
   config: ApplicantTableConfig;
-  onConfigChange: (key: keyof ApplicantTableConfig, value: any) => void;
+  onConfigChange: (key: keyof ApplicantTableConfig, value: unknown) => void;
 }
 
 export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigComponentProps> = ({
@@ -115,7 +115,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
   }, [config.columns]);
 
   // Debounced update to parent config
-  const updateColumns = (newColumns: any[]) => {
+  const updateColumns = (newColumns: unknown[]) => {
     setLocalColumns(newColumns);
     
     // Clear existing timeout
@@ -543,7 +543,7 @@ export const ApplicantTableConfigComponent: React.FC<ApplicantTableConfigCompone
                       value={column.type}
                       onValueChange={(value) => {
                         const newColumns = [...localColumns];
-                        newColumns[index] = { ...column, type: value as any };
+                        newColumns[index] = { ...column, type: value as unknown };
                         updateColumns(newColumns);
                       }}
                     >

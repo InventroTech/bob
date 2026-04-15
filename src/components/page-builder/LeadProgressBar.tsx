@@ -105,7 +105,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
           setDailyTarget(0);
           return;
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         // If LEAD_TYPE_ASSIGNMENT record not found (404), set to 0
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
           setDailyTarget(0);

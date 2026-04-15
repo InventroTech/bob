@@ -29,7 +29,7 @@ export const userSettingsApi = {
     try {
       const response = await apiClient.post('/user-settings/settings/', data);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Failed to create/update user setting: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
   },
@@ -39,7 +39,7 @@ export const userSettingsApi = {
     try {
       const response = await apiClient.get(`/user-settings/settings/${userId}/${key}/`);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Failed to fetch user setting: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
   },
@@ -49,7 +49,7 @@ export const userSettingsApi = {
     try {
       const response = await apiClient.put(`/user-settings/settings/${userId}/${key}/`, data);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Failed to update user setting: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
   },
@@ -58,7 +58,7 @@ export const userSettingsApi = {
   async delete(userId: string, key: string): Promise<void> {
     try {
       await apiClient.delete(`/user-settings/settings/${userId}/${key}/`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Failed to delete user setting: ${error.response?.statusText || error.message}`);
     }
   },
@@ -75,7 +75,7 @@ export const leadTypeAssignmentApi = {
       
       // The endpoint returns an array of assignments with TenantMembership IDs
       if (Array.isArray(assignmentsData)) {
-        return assignmentsData.map((assignment: any) => ({
+        return assignmentsData.map((assignment: unknown) => ({
           user_id: String(assignment.user_id || assignment.tenant_membership_id), // Use TenantMembership ID
           user_name: assignment.user_name || 'Unknown',
           user_email: assignment.user_email || '',
@@ -90,7 +90,7 @@ export const leadTypeAssignmentApi = {
       }
       
       return [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error.response?.status === 403) {
 
         throw new Error('Access denied: insufficient permissions to access lead type assignments');
@@ -136,7 +136,7 @@ export const leadTypeAssignmentApi = {
         daily_limit: result.daily_limit,
         created: result.created || false
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error in assign:', error);
       throw error;
     }
@@ -152,7 +152,7 @@ export const leadTypeAssignmentApi = {
         user_id: result.user_id || userId,
         lead_types: result.lead_types || []
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If 404, user has no lead types assigned
       if (error.response?.status === 404) {
         return {
@@ -181,7 +181,7 @@ export const leadTypeAssignmentApi = {
       
       // Fallback: return empty array if format is unexpected
       return [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching available lead types:', error);
       // Return empty array on error
       return [];
@@ -198,7 +198,7 @@ export const leadTypeAssignmentApi = {
         return responseData.lead_sources;
       }
       return [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching available lead sources:', error);
       return [];
     }
@@ -214,7 +214,7 @@ export const leadTypeAssignmentApi = {
         return responseData.lead_statuses;
       }
       return [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching available lead statuses:', error);
       return [];
     }
@@ -228,7 +228,7 @@ export const routingRulesApi = {
     try {
       const response = await apiClient.get('/user-settings/routing-rules/');
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Failed to fetch routing rules: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
   },
@@ -238,7 +238,7 @@ export const routingRulesApi = {
     try {
       const response = await apiClient.post('/user-settings/routing-rules/', payload);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Failed to save routing rule: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
   },
@@ -247,7 +247,7 @@ export const routingRulesApi = {
   async delete(id: number): Promise<void> {
     try {
       await apiClient.delete(`/user-settings/routing-rules/${id}/`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Failed to delete routing rule: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
   },

@@ -48,9 +48,9 @@ interface Column {
 
 interface PrajaTableProps {
   columns: Column[];
-  data: any[];
+  data: unknown[];
   title?: string;
-  onRowClick?: (row: any) => void;
+  onRowClick?: (row: unknown) => void;
   disablePagination?: boolean;
   loading?: boolean;
 }
@@ -154,7 +154,7 @@ const PrajaTableComponent: React.FC<PrajaTableProps> = ({columns, data, title, o
     return statusData ? statusData.color : 'bg-gray-500';
   };    
 
-  const renderCell = (col: Column, row: any) => {
+  const renderCell = (col: Column, row: unknown) => {
     if (col.type === 'chip') {
       if (col.accessor === 'resolution_status' || col.accessor === 'subscription_status') {
         return (

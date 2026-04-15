@@ -56,7 +56,7 @@ export const EditableTable: React.FC<EditableTableProps> = ({ columns, onColumnE
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  const handleDragEnd = (event: any) => {
+  const handleDragEnd = (event: unknown) => {
     const { active, over } = event;
     if (active.id !== over.id) {
       const oldIndex = columns.findIndex(c => c.id === active.id);

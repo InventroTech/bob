@@ -7,7 +7,7 @@ import { componentMap } from '@/pages/PageBuilder';
 
 interface PageData {
   name: string;
-  config: any[];
+  config: unknown[];
   role?: string | null;
 }
 
@@ -73,7 +73,7 @@ const PublicTenantPage: React.FC = () => {
           setError('Page not found or not accessible');
           toast.error('Page not found or not accessible');
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         setError(err.message);
         toast.error('An error occurred');
       } finally {
@@ -143,7 +143,7 @@ const PublicTenantPage: React.FC = () => {
       {/* Render Components */}
       <div className="max-w-7xl mx-auto px-6 py-8">
         {Array.isArray(page.config)
-          ? page.config.map((component: any) => {
+          ? page.config.map((component: unknown) => {
               const Renderer = componentMap[component.type];
               return Renderer ? (
                 <Renderer key={component.id} {...component.props} config={component.config} />

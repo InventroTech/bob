@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { FilterConfig, FilterOption } from '../component-config/DynamicFilterConfig';
 
 export interface FilterValue {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface FilterState {
@@ -12,7 +12,7 @@ export interface FilterState {
 
 export interface UseFiltersReturn {
   filterState: FilterState;
-  setFilterValue: (key: string, value: any) => void;
+  setFilterValue: (key: string, value: unknown) => void;
   setFilterValues: (values: FilterValue) => void;
   clearFilters: () => void;
   applyFilters: () => void;
@@ -32,7 +32,7 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
     applied: false,
   });
 
-  const setFilterValue = useCallback((key: string, value: any) => {
+  const setFilterValue = useCallback((key: string, value: unknown) => {
     setFilterState(prev => ({
       ...prev,
       values: {

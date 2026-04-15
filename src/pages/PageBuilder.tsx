@@ -208,7 +208,7 @@ interface ComponentConfig {
   description?: string;
   refreshInterval?: number;
   showFilters?: boolean;
-  customFields?: Record<string, any>;
+  customFields?: Record<string, unknown>;
   filters?: FilterConfig[];
   filterOptions?: {
     pageSize?: number;
@@ -269,13 +269,13 @@ interface ComponentConfig {
 export interface CanvasComponentData {
   id: string;
   type: string;
-  props: Record<string, any>;
+  props: Record<string, unknown>;
   config: ComponentConfig;
 }
 
 // Map component types to actual components
 // Maps builder palette identifiers to actual React components rendered on the canvas
-export const componentMap: Record<string, React.FC<any>> = {
+export const componentMap: Record<string, React.FC<unknown>> = {
   container: ContainerComponent,
   split: SplitViewComponent,
   form: FormComponent,
@@ -423,8 +423,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     refreshInterval: initialConfig.refreshInterval || 0,
     showFilters: initialConfig.showFilters || false,
     searchFields: initialConfig.searchFields || '',
-    entityType: (initialConfig as any).entityType || '',
-    detailMode: (initialConfig as any).detailMode || 'auto',
+    entityType: (initialConfig as unknown).entityType || '',
+    detailMode: (initialConfig as unknown).detailMode || 'auto',
     // OpenModalButton fields
     buttonTitle: initialConfig.buttonTitle || 'Apply Now',
     buttonColor: initialConfig.buttonColor || 'default',
@@ -464,27 +464,27 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showTable: initialConfig.showTable !== false,
     showDiagram: initialConfig.showDiagram !== false,
     // InventoryRequestForm (empty by default so user can set from config)
-    initialStatus: (initialConfig as any).initialStatus ?? (initialConfig as any).defaultStatus ?? '',
-    defaultStatus: (initialConfig as any).defaultStatus ?? '',
-    urgencyOptions: (initialConfig as any).urgencyOptions ?? undefined,
+    initialStatus: (initialConfig as unknown).initialStatus ?? (initialConfig as unknown).defaultStatus ?? '',
+    defaultStatus: (initialConfig as unknown).defaultStatus ?? '',
+    urgencyOptions: (initialConfig as unknown).urgencyOptions ?? undefined,
     // Records table: items table + status buttons
-    tableType: (initialConfig as any).tableType || 'default',
-    statusButtons: (initialConfig as any).statusButtons ?? [],
-    modalFieldConfig: (initialConfig as any).modalFieldConfig ?? [],
-    recordDetailModalType: (initialConfig as any).recordDetailModalType ?? 'default',
-    formModalFields: (initialConfig as any).formModalFields ?? [],
-    formModalTitle: (initialConfig as any).formModalTitle ?? '',
-    formModalDescription: (initialConfig as any).formModalDescription ?? '',
-    paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
-    showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
-    showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
-    showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
-    modalFlags: (initialConfig as any).modalFlags ?? [],
+    tableType: (initialConfig as unknown).tableType || 'default',
+    statusButtons: (initialConfig as unknown).statusButtons ?? [],
+    modalFieldConfig: (initialConfig as unknown).modalFieldConfig ?? [],
+    recordDetailModalType: (initialConfig as unknown).recordDetailModalType ?? 'default',
+    formModalFields: (initialConfig as unknown).formModalFields ?? [],
+    formModalTitle: (initialConfig as unknown).formModalTitle ?? '',
+    formModalDescription: (initialConfig as unknown).formModalDescription ?? '',
+    paymentModalConfig: (initialConfig as unknown).paymentModalConfig ?? undefined,
+    showFormModalSaveButton: (initialConfig as unknown).showFormModalSaveButton ?? undefined,
+    showFinalPriceSection: (initialConfig as unknown).showFinalPriceSection ?? undefined,
+    showDeleteRequestButton: (initialConfig as unknown).showDeleteRequestButton ?? false,
+    modalFlags: (initialConfig as unknown).modalFlags ?? [],
   });
 
   // Separate state for routing rules filter fields to prevent re-renders
-  const [localFilterFields, setLocalFilterFields] = useState<any[]>(
-    (initialConfig as any).filterFields || []
+  const [localFilterFields, setLocalFilterFields] = useState<unknown[]>(
+    (initialConfig as unknown).filterFields || []
   );
 
   // Separate state for columns
@@ -667,7 +667,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
   const handleFilterOptionsSourceChange = useCallback((index: number, source: 'manual' | 'api') => {
     const newFilters = [...localFilters];
-    const current = (newFilters[index] || {}) as any;
+    const current = (newFilters[index] || {}) as unknown;
     if (source === 'api') {
       newFilters[index] = {
         ...current,
@@ -675,7 +675,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         optionsDisplayKey: 'name',
         optionsValueKey: 'id',
         options: [],
-      } as any;
+      } as unknown;
     } else {
       newFilters[index] = {
         ...current,
@@ -683,7 +683,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         optionsDisplayKey: '',
         optionsValueKey: '',
         options: (current.options?.length ? current.options : [{ label: '', value: '' }]) as FilterConfig['options'],
-      } as any;
+      } as unknown;
     }
     setLocalFilters(newFilters);
     debouncedUpdateWithDelay({ filters: newFilters });
@@ -719,7 +719,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'dataCard':
         return (
           <DataCardConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -750,7 +750,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'inventoryTable':
         return (
           <TableConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
@@ -771,7 +771,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'ticketCarousel':
         return (
           <TicketCarouselConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -779,7 +779,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'leadCarousel':
         return (
           <LeadCardCarouselConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -787,7 +787,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'barGraph':
         return (
           <BasicChartConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -796,7 +796,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'stackedBarChart':
         return (
           <AdvancedChartConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             localDatasets={localDatasets}
             numDatasets={numDatasets}
             handleInputChange={handleInputChange}
@@ -808,7 +808,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'openModalButton':
         return (
           <OpenModalButtonConfigComponent
-            config={localConfig as any}
+            config={localConfig as unknown}
             onConfigChange={handleInputChange}
           />
         );
@@ -816,7 +816,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'jobManager':
         return (
           <JobManagerConfigComponent
-            config={localConfig as any}
+            config={localConfig as unknown}
             onConfigChange={handleInputChange}
           />
         );
@@ -824,7 +824,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'jobsPage':
         return (
           <JobsPageConfigComponent
-            config={localConfig as any}
+            config={localConfig as unknown}
             onConfigChange={handleInputChange}
           />
         );
@@ -832,18 +832,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'applicantTable':
         return (
           <ApplicantTableConfigComponent
-            config={localConfig as any}
-            onConfigChange={(key: any, value: any) => handleInputChange(key, value)}
+            config={localConfig as unknown}
+            onConfigChange={(key: unknown, value: unknown) => handleInputChange(key, value)}
           />
         );
       case 'dynamicScoring':
         return (
           <DynamicScoringConfig
-            config={localConfig as any}
+            config={localConfig as unknown}
             onConfigChange={(newConfig) => {
               // Update all config fields
               Object.entries(newConfig).forEach(([key, value]) => {
-                handleInputChange(key as any, value);
+                handleInputChange(key as unknown, value);
               });
             }}
           />
@@ -852,7 +852,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'fileUpload':
         return (
           <FileUploadPageConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -860,7 +860,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'leadAssignment':
         return (
           <LeadAssignmentConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -868,7 +868,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'callAttemptMatrix':
         return (
           <CallAttemptMatrixConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -876,7 +876,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'leadProgressBar':
         return (
           <LeadProgressBarConfig
-            config={localConfig as any}
+            config={localConfig as unknown}
             onConfigChange={(newConfig) => {
               Object.entries(newConfig).forEach(([key, value]) => {
                 handleInputChange(key as keyof LocalConfigType, value);
@@ -895,7 +895,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             onDescriptionChange={(description) => handleInputChange('description', description)}
             onFilterFieldsChange={(fields) => {
               setLocalFilterFields(fields);
-              debouncedUpdateWithDelay({ filterFields: fields } as any);
+              debouncedUpdateWithDelay({ filterFields: fields } as unknown);
             }}
           />
         );
@@ -903,7 +903,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'whatsappTemplate':
         return (
           <WhatsAppTemplateConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={(field: string, value: string | number | boolean) => {
               handleInputChange(field as keyof LocalConfigType, value);
             }}
@@ -913,7 +913,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'teamDashboard':
         return (
           <TeamDashboardConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -921,7 +921,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'operationsPrograms':
         return (
           <OperationsProgramsConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -929,7 +929,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'userHierarchy':
         return (
           <UserHierarchyConfig
-            localConfig={localConfig as any}
+            localConfig={localConfig as unknown}
             handleInputChange={handleInputChange}
           />
         );
@@ -1056,7 +1056,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 const AVAILABLE_ICONS = [...CUSTOM_ICON_NAMES, ...Object.keys(icons)];
 
 // 👇 Add customIcons to the props
-const DynamicIcon = ({ name, className, customIcons = [] }: { name: string; className?: string; customIcons?: any[] }) => {
+const DynamicIcon = ({ name, className, customIcons = [] }: { name: string; className?: string; customIcons?: unknown[] }) => {
   
   // 1. Check if it's an uploaded custom icon
   const uploadedIcon = customIcons.find(icon => icon.name === name);
@@ -1068,7 +1068,7 @@ const DynamicIcon = ({ name, className, customIcons = [] }: { name: string; clas
   }
 
   // Look up the component in the full icons map
-  const IconComponent = (icons as any)[name];
+  const IconComponent = (icons as unknown)[name];
   const CustomIcon = CustomIcons[name];
 
   if (CustomIcon) return <CustomIcon className={className} />;
@@ -1209,7 +1209,7 @@ useEffect(() => {
           console.log("API Response:", response);
 
           // Standardize the data object (handle nesting if it exists)
-          const data = (response as any).data || response;
+          const data = (response as unknown).data || response;
 
           if (data) {
             setPageName(data.name || 'Untitled Page');
@@ -1221,7 +1221,7 @@ useEffect(() => {
             // Fix for Role: ensure it matches the ID in your dropdown
             if (data.role) setSelectedRole(data.role);
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           toast.error(`Error loading page: ${error.message}`);
         }
       }
@@ -1356,7 +1356,7 @@ useEffect(() => {
         // Add the new component to the canvas state
         setCanvasComponents((prev) => [...prev, newComponent]);
       } else {
-        
+        // No valid drop target
       }
     } 
     // ADD THIS SECTION to handle drops onto existing components
@@ -1393,7 +1393,7 @@ useEffect(() => {
       }
     }
     else {
-      
+      // No active component or invalid drop operation
     }
   };
 
@@ -1429,7 +1429,7 @@ useEffect(() => {
     try {
       // 1. Build the payload matching your Python backend Serializer
       // Ensure every field is present so the backend doesn't overwrite them with defaults
-      const pageData: any = {
+      const pageData: unknown = {
         name: pageName.trim(),
         config: canvasComponents, 
         role: selectedRole || null,
@@ -1448,7 +1448,7 @@ useEffect(() => {
         const response = await pageService.createPage(pageData);
         
         // Handle nested response data if necessary
-        const newPage = (response as any).data || response;
+        const newPage = (response as unknown).data || response;
         
         toast.success("Page created successfully!");
         
@@ -1457,7 +1457,7 @@ useEffect(() => {
         }
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Save error:", error);
       toast.error(`Error saving page: ${error.message || 'Failed to save via API'}`);
     } finally {

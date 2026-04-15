@@ -249,7 +249,7 @@ const ProtectedAppRoute: React.FC = () => {
                 denyAccess('API fallback failed - No membership found');
                 return;
               }
-            } catch (apiError: any) {
+            } catch (apiError: unknown) {
               denyAccess(`API fallback error: ${apiError.message} (status: ${apiError.response?.status})`);
               return;
             }

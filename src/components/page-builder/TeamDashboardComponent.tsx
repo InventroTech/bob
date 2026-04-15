@@ -116,7 +116,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
       setMembers(mem);
       setEvents(ev);
       setYesterdayOverview(yesterdayOv);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e.message || 'Failed to load team analytics');
       console.error('Error fetching team analytics:', e);
     } finally {
@@ -285,7 +285,7 @@ const TeamDashboardComponent: React.FC<TeamDashboardComponentProps> = ({ config 
         max: roundedMaxTime,
         ticks: {
           stepSize: timeStepSize,
-          callback: function (value: any) {
+          callback: function (value: unknown) {
             const totalSeconds = Math.round(value);
             const mins = Math.floor(totalSeconds / 60);
             const secs = totalSeconds % 60;

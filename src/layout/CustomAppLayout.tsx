@@ -29,7 +29,7 @@ import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, Analyt
     "lead score": <LeadScoreIcon />,
   };
 
-const DynamicSidebarIcon = ({ iconName, customIcons = [] }: { iconName: string, customIcons?: any[] }) => {
+const DynamicSidebarIcon = ({ iconName, customIcons = [] }: { iconName: string, customIcons?: unknown[] }) => {
   
   // 1. Check if it's an uploaded custom icon from the database
   const uploadedIcon = customIcons.find(icon => icon.name.toLowerCase() === iconName.toLowerCase());
@@ -56,7 +56,7 @@ const DynamicSidebarIcon = ({ iconName, customIcons = [] }: { iconName: string, 
   if (CustomMapIcon) return <div className="h-4 w-4 flex items-center justify-center">{CustomMapIcon}</div>;
 
   // 4. Check if it's a standard Lucide icon name from the library
-  const LucideIcon = (icons as any)[iconName];
+  const LucideIcon = (icons as unknown)[iconName];
   if (LucideIcon) return <LucideIcon className="h-4 w-4" />;
 
   // 5. Final Fallback

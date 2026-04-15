@@ -6,7 +6,7 @@ export interface PageRecord {
   updated_at?: string;
   role?: string | null;
   display_order?: number;
-  config?: any;          // The JSON data for your drag-and-drop components
+  config?: unknown;          // The JSON data for your drag-and-drop components
   icon_name?: string;    // The icon chosen in the builder
   header_title?: string; // The title shown in the app
   tenant_id?: string;
@@ -29,10 +29,10 @@ export const pageService = {
       
       if (Array.isArray(responseData)) return responseData;
       if (responseData && typeof responseData === 'object') {
-        if ('results' in responseData && Array.isArray((responseData as any).results))
-          return (responseData as any).results;
-        if ('data' in responseData && Array.isArray((responseData as any).data))
-          return (responseData as any).data;
+        if ('results' in responseData && Array.isArray((responseData as unknown).results))
+          return (responseData as unknown).results;
+        if ('data' in responseData && Array.isArray((responseData as unknown).data))
+          return (responseData as unknown).data;
       }
       return [];
     } catch (error) {
@@ -56,14 +56,14 @@ export const pageService = {
 
       const responseData = response.data;
 
-      const items: any[] =
+      const items: unknown[] =
         Array.isArray(responseData)
           ? responseData
           : responseData && typeof responseData === 'object'
-          ? Array.isArray((responseData as any).results)
-            ? (responseData as any).results
-            : Array.isArray((responseData as any).data)
-            ? (responseData as any).data
+          ? Array.isArray((responseData as unknown).results)
+            ? (responseData as unknown).results
+            : Array.isArray((responseData as unknown).data)
+            ? (responseData as unknown).data
             : []
           : [];
 

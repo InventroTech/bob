@@ -87,13 +87,13 @@ export const LeadProgressBarConfig: React.FC<LeadProgressBarConfigProps> = ({
     // 2. User has explicitly changed it
     if (!hadOriginalColorNow && !userChangedColor.current && localConfig.progressBarColor === '#000000') {
       // Don't include progressBarColor if it wasn't original and user hasn't changed it
-      delete (configToSend as any).progressBarColor;
+      delete (configToSend as unknown).progressBarColor;
     }
     
     onConfigChange(configToSend);
   }, [localConfig, onConfigChange]);
 
-  const handleChange = (field: string, value: any) => {
+  const handleChange = (field: string, value: unknown) => {
     // Track if user is changing the color
     if (field === 'progressBarColor') {
       userChangedColor.current = true;

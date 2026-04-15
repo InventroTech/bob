@@ -39,7 +39,7 @@ export const PostLoginTenantSetup = () => {
         }
         setStatus('Redirecting...');
         window.location.replace('/');
-      } catch (e: any) {
+      } catch (e: unknown) {
         setStatus(`Error: ${e?.response?.data?.error || e?.message || 'Setup failed'}`);
       }
     })();

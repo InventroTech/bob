@@ -37,7 +37,7 @@ export const FileUploadPageComponent: React.FC<FileUploadPageComponentProps> = (
     tenantSlug
   } = config;
 
-  const handleUploadSuccess = (response: any) => {
+  const handleUploadSuccess = (response: unknown) => {
     console.log('File upload successful:', response);
     // You can add additional logic here, such as:
     // - Refreshing data in other components

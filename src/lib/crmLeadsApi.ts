@@ -16,7 +16,7 @@ export const crmLeadsApi = {
   /**
    * Fetch the current assigned lead for the authenticated user
    */
-  async getCurrentLead(): Promise<any | null> {
+  async getCurrentLead(): Promise<unknown | null> {
     try {
       const response = await apiClient.get('/crm-records/leads/current/');
       const leadData = response.data;
@@ -44,7 +44,7 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 404 means no lead assigned
       if (error.response?.status === 404) {
         return null;
@@ -57,7 +57,7 @@ export const crmLeadsApi = {
   /**
    * Fetch the next available lead
    */
-  async getNextLead(endpoint?: string): Promise<any | null> {
+  async getNextLead(endpoint?: string): Promise<unknown | null> {
     try {
       // Use configured endpoint or fallback to default
       const apiEndpoint = endpoint || '/api/leads';
@@ -88,7 +88,7 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 404 means no leads available
       if (error.response?.status === 404) {
         return null;
@@ -101,7 +101,7 @@ export const crmLeadsApi = {
   /**
    * Fetch lead statistics
    */
-  async getLeadStats(statusEndpoint?: string): Promise<any> {
+  async getLeadStats(statusEndpoint?: string): Promise<unknown> {
     try {
       // Map old endpoint to new one for backward compatibility
       let endpoint = statusEndpoint || '/crm-records/leads/stats/';
@@ -134,7 +134,7 @@ export const crmLeadsApi = {
   async sendLeadEvent(
     eventName: string,
     recordId: number,
-    payload: Record<string, any>
+    payload: Record<string, unknown>
   ): Promise<boolean> {
     try {
       const body = {
@@ -147,7 +147,7 @@ export const crmLeadsApi = {
       const response = await apiClient.post('/crm-records/records/events/', body);
       console.log('[crmLeadsApi] Event request successful:', response.status, response.data);
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[crmLeadsApi] Event request failed', {
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -162,7 +162,7 @@ export const crmLeadsApi = {
   /**
    * Fetch a specific lead/record by ID
    */
-  async getLeadById(recordId: number): Promise<any | null> {
+  async getLeadById(recordId: number): Promise<unknown | null> {
     try {
       const response = await apiClient.get(`/crm-records/records/${recordId}/`);
       const leadData = response.data;
@@ -181,7 +181,7 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error.response?.status === 404) {
         return null;
       }

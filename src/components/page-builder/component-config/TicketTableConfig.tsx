@@ -170,7 +170,7 @@ export const TicketTableConfig: React.FC<TicketTableConfigProps> = ({
                 <Label htmlFor={`type-${index}`} className="text-xs">Type</Label>
                 <Select
                   value={column.type}
-                  onValueChange={(value) => handleColumnFieldChange(index, 'type', value as any)}
+                  onValueChange={(value) => handleColumnFieldChange(index, 'type', value as unknown)}
                 >
                   <SelectTrigger className="text-sm">
                     <SelectValue />

@@ -94,7 +94,7 @@ export async function fetchPageConfig(
   pageId: string,
   tenantId: string,
   token: string
-): Promise<{ name: string; config: any } | null> {
+): Promise<{ name: string; config: unknown } | null> {
   // Preferred: backend Pages API via pageService.
   try {
     const page = await pageService.getPageById(pageId, tenantId);

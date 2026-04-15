@@ -75,7 +75,7 @@ export interface Application {
   noticePeriod?: string;
   resumeUrl?: string;
   coverLetter?: string;
-  responses: Record<string, any>;
+  responses: Record<string, unknown>;
   rating?: number;
   notes?: string;
   interviewDate?: string;
@@ -187,7 +187,7 @@ export interface ApplicantTableConfig {
   }>;
   
   // Advanced Configuration
-  customFields?: Record<string, any>;
+  customFields?: Record<string, unknown>;
   filterOptions?: {
     statusOptions?: Array<{ value: string; label: string; color?: string }>;
     experienceOptions?: Array<{ value: string; label: string }>;
@@ -398,12 +398,15 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
 
   // Data mapping helper
-  const mapApiDataToApplication = (apiData: any): Application => {
+  const mapApiDataToApplication = (apiData: unknown): Application => {
     console.log('    📥 Raw applicant data:', apiData);
+    
+    // Cast to object for property access
+    const data = apiData as Record<string, unknown>;
     
     // Backend returns: { id, entity_type, name, data: {...}, created_at, updated_at }
     // Extract nested data object
-    const nestedData = apiData.data || {};
+    const nestedData = (data.data as Record<string, unknown>) || {};
     console.log('    📦 Applicant nested data:', nestedData);
     
     const {
@@ -416,26 +419,26 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     } = dataMapping;
 
     // Get job title from jobs list if available
-    const jobId = String(nestedData.jobId || apiData.jobId || '');
+    const jobId = String((nestedData.jobId as string) || (data.jobId as string) || '');
     const job = jobs.find(j => j.id === jobId);
 
     // Extract stage from nestedData or default to 'Initial'
-    const stage: ApplicantStage = nestedData.stage || apiData.stage || 'Initial';
+    const stage: ApplicantStage = ((nestedData.stage as string) || (data.stage as string) || 'Initial') as ApplicantStage;
 
     // Store full data structure including openairesponse
-    const fullData = {
-      name: nestedData.name || apiData.name,
-      email: nestedData.email || apiData.email,
-      phone: nestedData.phone || apiData.phone,
-      jobId: nestedData.jobId || apiData.jobId,
-      salary: nestedData.salary,
-      skills: nestedData.skills,
-      answers: nestedData.answers || {},
+    const fullData: Record<string, unknown> = {
+      name: (nestedData.name as string) || (data.name as string),
+      email: (nestedData.email as string) || (data.email as string),
+      phone: (nestedData.phone as string) || (data.phone as string),
+      jobId: (nestedData.jobId as string) || (data.jobId as string),
+      salary: (nestedData.salary as string) || '',
+      skills: (nestedData.skills as string) || '',
+      answers: (nestedData.answers as Record<string, unknown>) || {},
       criteria: nestedData.criteria,
       location: nestedData.location,
       resumeUrl: nestedData.resumeUrl,
       department: nestedData.department,
-      submittedAt: nestedData.submittedAt || apiData.created_at,
+      submittedAt: (nestedData.submittedAt as string) || (data.created_at as string),
       openairesponse: (() => {
         if (nestedData.openairesponse) {
           if (typeof nestedData.openairesponse === 'string') {
@@ -454,7 +457,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     };
 
     // Extract skills, experience, and college from OpenAI response
-    const openaiResponse = fullData.openairesponse;
+    const openaiResponse = fullData.openairesponse as Record<string, unknown> | null;
     let skillsStr = '';
     let experienceStr = '';
     let collegeStr = '';
@@ -469,8 +472,8 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
 
       // Extract experience (from experience array)
       if (openaiResponse.experience && Array.isArray(openaiResponse.experience) && openaiResponse.experience.length > 0) {
-        const exp = openaiResponse.experience[0];
-        experienceStr = exp.position || exp.company || exp.duration || '';
+        const exp = openaiResponse.experience[0] as Record<string, unknown>;
+        experienceStr = (exp.position as string) || (exp.company as string) || (exp.duration as string) || '';
         if (exp.company && exp.position) {
           experienceStr = `${exp.position} at ${exp.company}`;
         }
@@ -480,10 +483,10 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
 
       // Extract college (from education array)
       if (openaiResponse.education && Array.isArray(openaiResponse.education) && openaiResponse.education.length > 0) {
-        const edu = openaiResponse.education[0];
-        collegeStr = edu.college || edu.institution || '';
+        const edu = openaiResponse.education[0] as Record<string, unknown>;
+        collegeStr = (edu.college as string) || (edu.institution as string) || '';
         if (edu.degree) {
-          collegeStr = collegeStr ? `${edu.degree} from ${collegeStr}` : edu.degree;
+          collegeStr = collegeStr ? `${edu.degree} from ${collegeStr}` : (edu.degree as string);
         }
       } else if (typeof openaiResponse.education === 'string') {
         collegeStr = openaiResponse.education;
@@ -491,26 +494,26 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     }
 
     return {
-      id: apiData[idField] || apiData.id || '',
+      id: (data[idField] as string) || (data.id as string) || '',
       jobId: jobId,
-      jobTitle: job?.title || nestedData.jobTitle || apiData.jobTitle || `Job ${jobId}` || 'Unknown Position',
-      applicantName: nestedData[nameField] || nestedData.name || apiData.name || 'Anonymous',
-      applicantEmail: nestedData[emailField] || nestedData.email || apiData.email || '',
-      applicantPhone: nestedData[phoneField] || nestedData.phone || apiData.phone || '',
-      status: nestedData[statusField] || nestedData.status || apiData.status || 'pending',
+      jobTitle: job?.title || (nestedData.jobTitle as string) || (data.jobTitle as string) || `Job ${jobId}` || 'Unknown Position',
+      applicantName: (nestedData[nameField] as string) || (nestedData.name as string) || (data.name as string) || 'Anonymous',
+      applicantEmail: (nestedData[emailField] as string) || (nestedData.email as string) || (data.email as string) || '',
+      applicantPhone: (nestedData[phoneField] as string) || (nestedData.phone as string) || (data.phone as string) || '',
+      status: (((nestedData[statusField] as string) || (nestedData.status as string) || (data.status as string) || 'pending') as Application['status']),
       stage: stage,
-      submittedAt: nestedData[dateField] || nestedData.submittedAt || apiData.created_at || new Date().toISOString(),
-      experience: experienceStr || nestedData.experience || apiData.experience || '',
-      location: nestedData.location || apiData.location || '',
-      expectedSalary: nestedData.salary || nestedData.expectedSalary || apiData.salary || '',
-      noticePeriod: nestedData.noticePeriod || apiData.notice_period || '',
-      resumeUrl: nestedData.resumeUrl || apiData.resume_url || '',
-      coverLetter: nestedData.coverLetter || apiData.cover_letter || '',
-      responses: nestedData.answers || nestedData.responses || apiData.responses || {},
-      rating: nestedData.rating || apiData.rating || 0,
-      notes: nestedData.notes || apiData.notes || '',
-      interviewDate: nestedData.interviewDate || apiData.interview_date || '',
-      source: nestedData.source || apiData.source || 'Direct',
+      submittedAt: (nestedData[dateField] as string) || (nestedData.submittedAt as string) || (data.created_at as string) || new Date().toISOString(),
+      experience: experienceStr || (nestedData.experience as string) || (data.experience as string) || '',
+      location: (nestedData.location as string) || (data.location as string) || '',
+      expectedSalary: (nestedData.salary as string) || (nestedData.expectedSalary as string) || (data.salary as string) || '',
+      noticePeriod: (nestedData.noticePeriod as string) || (data.notice_period as string) || '',
+      resumeUrl: (nestedData.resumeUrl as string) || (data.resume_url as string) || '',
+      coverLetter: (nestedData.coverLetter as string) || (data.cover_letter as string) || '',
+      responses: (nestedData.answers as Record<string, unknown>) || (nestedData.responses as Record<string, unknown>) || (data.responses as Record<string, unknown>) || {},
+      rating: (nestedData.rating as number) || (data.rating as number) || 0,
+      notes: (nestedData.notes as string) || (data.notes as string) || '',
+      interviewDate: (nestedData.interviewDate as string) || (data.interview_date as string) || '',
+      source: (nestedData.source as string) || (data.source as string) || 'Direct',
       skills: skillsStr,
       college: collegeStr,
       fullData: fullData // Store full data structure
@@ -721,12 +724,12 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
     // Sort
     if (sortable) {
       filtered.sort((a, b) => {
-        let aVal: any = a[sortField as keyof Application];
-        let bVal: any = b[sortField as keyof Application];
+        let aVal: unknown = a[sortField as keyof Application];
+        let bVal: unknown = b[sortField as keyof Application];
         
         if (sortField === 'submittedAt') {
-          aVal = new Date(aVal).getTime();
-          bVal = new Date(bVal).getTime();
+          aVal = new Date(String(aVal)).getTime();
+          bVal = new Date(String(bVal)).getTime();
         }
         
         if (sortField === 'rating') {
@@ -736,7 +739,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         
         if (typeof aVal === 'string') {
           aVal = aVal.toLowerCase();
-          bVal = bVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
         }
         
         if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
@@ -872,7 +875,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         }
 
         // Prepare payload - include record_id if available (for backend compatibility)
-        const payload: any = {
+        const payload: Record<string, unknown> = {
           entity_type: 'Applicant', // Required by backend
           stage: newStage,
           data: {
@@ -1002,12 +1005,13 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
   };
 
   // Helper function to render cell content based on column type
-  const renderCellContent = (column: any, application: Application) => {
-    const fieldValue = application[column.accessor || column.key as keyof Application];
+  const renderCellContent = (column: unknown, application: Application) => {
+    const col = column as Record<string, unknown>;
+    const fieldValue = application[(col.accessor as string) || (col.key as string) as keyof Application];
     
-    switch (column.type) {
+    switch (col.type) {
       case 'text':
-        if (column.key === 'applicantName') {
+        if (col.key === 'applicantName') {
           return (
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
@@ -1022,7 +1026,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             </div>
           );
         }
-        if (column.key === 'skills') {
+        if (col.key === 'skills') {
           if (!application.skills) {
             return <span className="text-sm text-gray-400">Not specified</span>;
           }
@@ -1042,14 +1046,14 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             </div>
           );
         }
-        if (column.key === 'experience') {
+        if (col.key === 'experience') {
           return (
             <span className="text-sm text-gray-900">
               {application.experience || 'Not specified'}
             </span>
           );
         }
-        if (column.key === 'college') {
+        if (col.key === 'college') {
           return (
             <span className="text-sm text-gray-900">
               {application.college || 'Not specified'}
@@ -1084,7 +1088,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           </div>
         ) : <span className="text-sm text-gray-400">Not provided</span>;
         
-      case 'skills':
+      case 'skills': {
         if (!application.skills) {
           return <span className="text-sm text-gray-400">Not specified</span>;
         }
@@ -1103,17 +1107,19 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             ))}
           </div>
         );
+      }
         
-      case 'stage':
+      case 'stage': {
         const currentStage = application.stage || 'Initial';
         return (
           <Badge className={`${getStageColor(currentStage)} flex items-center gap-1 w-fit`}>
             {currentStage}
           </Badge>
         );
+      }
         
-      case 'date':
-        if (column.format === 'relative-time') {
+      case 'date': {
+        if (col.format === 'relative-time') {
           // Use relative time format
           const date = new Date(fieldValue as string);
           const now = new Date();
@@ -1128,12 +1134,14 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             {formatDate(fieldValue as string)}
           </div>
         );
+      }
         
-      case 'number':
-        if (column.format === 'currency') {
+      case 'number': {
+        if (col.format === 'currency') {
           return <span className="text-sm text-gray-900">${fieldValue}</span>;
         }
         return <span className="text-sm text-gray-900">{fieldValue}</span>;
+      }
         
       case 'badge':
         return <Badge variant="outline">{fieldValue}</Badge>;
@@ -1681,17 +1689,20 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                             <div>
                               <h4 className="font-medium text-gray-900 mb-3">Education</h4>
                               <div className="space-y-3">
-                                {selectedApplication.fullData.openairesponse.education.map((edu: any, idx: number) => (
-                                  <div key={idx} className="border-l-2 border-blue-200 pl-4">
-                                    <div className="font-medium text-gray-900">{edu.degree}</div>
-                                    <div className="text-sm text-gray-600">{edu.college}</div>
-                                    {(edu.start_year || edu.end_year) && (
-                                      <div className="text-xs text-gray-500">
-                                        {edu.start_year} {edu.end_year ? `- ${edu.end_year}` : ''}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
+                                {selectedApplication.fullData.openairesponse.education.map((edu: unknown, idx: number) => {
+                                  const eduData = edu as Record<string, unknown>;
+                                  return (
+                                    <div key={idx} className="border-l-2 border-blue-200 pl-4">
+                                      <div className="font-medium text-gray-900">{eduData.degree}</div>
+                                      <div className="text-sm text-gray-600">{eduData.college}</div>
+                                      {(eduData.start_year || eduData.end_year) && (
+                                        <div className="text-xs text-gray-500">
+                                          {eduData.start_year} {eduData.end_year ? `- ${eduData.end_year}` : ''}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -1701,16 +1712,19 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                             <div>
                               <h4 className="font-medium text-gray-900 mb-3">Experience</h4>
                               <div className="space-y-4">
-                                {selectedApplication.fullData.openairesponse.experience.map((exp: any, idx: number) => (
-                                  <div key={idx} className="border border-gray-200 rounded-lg p-4">
-                                    <div className="font-medium text-gray-900">{exp.position}</div>
-                                    <div className="text-sm text-gray-600">{exp.company}</div>
-                                    <div className="text-xs text-gray-500 mb-2">{exp.duration}</div>
-                                    {exp.description && (
-                                      <div className="text-sm text-gray-700 mt-2">{exp.description}</div>
-                                    )}
-                                  </div>
-                                ))}
+                                {selectedApplication.fullData.openairesponse.experience.map((exp: unknown, idx: number) => {
+                                  const expData = exp as Record<string, unknown>;
+                                  return (
+                                    <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                      <div className="font-medium text-gray-900">{expData.position}</div>
+                                      <div className="text-sm text-gray-600">{expData.company}</div>
+                                      <div className="text-xs text-gray-500 mb-2">{expData.duration}</div>
+                                      {expData.description && (
+                                        <div className="text-sm text-gray-700 mt-2">{expData.description}</div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -1720,23 +1734,27 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
                             <div>
                               <h4 className="font-medium text-gray-900 mb-3">Projects</h4>
                               <div className="space-y-4">
-                                {selectedApplication.fullData.openairesponse.projects.map((project: any, idx: number) => (
-                                  <div key={idx} className="border border-gray-200 rounded-lg p-4">
-                                    <div className="font-medium text-gray-900 mb-2">{project.name}</div>
-                                    {project.description && (
-                                      <div className="text-sm text-gray-700 mb-2">{project.description}</div>
-                                    )}
-                                    {project.tech_stack && project.tech_stack.length > 0 && (
-                                      <div className="flex flex-wrap gap-2 mt-2">
-                                        {project.tech_stack.map((tech: string, techIdx: number) => (
-                                          <Badge key={techIdx} variant="outline" className="text-xs">
-                                            {tech}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
+                                {selectedApplication.fullData.openairesponse.projects.map((project: unknown, idx: number) => {
+                                  const projData = project as Record<string, unknown>;
+                                  const techStack = (projData.tech_stack as string[]) || [];
+                                  return (
+                                    <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                                      <div className="font-medium text-gray-900 mb-2">{projData.name}</div>
+                                      {projData.description && (
+                                        <div className="text-sm text-gray-700 mb-2">{projData.description}</div>
+                                      )}
+                                      {techStack && techStack.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                          {techStack.map((tech: string, techIdx: number) => (
+                                            <Badge key={techIdx} variant="outline" className="text-xs">
+                                              {tech}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}

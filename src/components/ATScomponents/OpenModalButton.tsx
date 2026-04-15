@@ -49,7 +49,7 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
   const { session } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [currentForm, setCurrentForm] = useState<DynamicFormData | null>(null);
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
 
@@ -76,7 +76,7 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
       if (savedJobs) {
         try {
           const jobs = JSON.parse(savedJobs);
-          const job = jobs.find((j: any) => j.id === selectedJobId);
+          const job = jobs.find((j: unknown) => j.id === selectedJobId);
           if (job) {
             setCurrentForm(job.form);
             setCurrentJob(job);
@@ -126,7 +126,7 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
   const formToUse = currentForm || defaultForm;
 
   // Handle form input changes
-  const handleInputChange = (questionId: string, value: any) => {
+  const handleInputChange = (questionId: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       [questionId]: value
@@ -269,7 +269,7 @@ export const OpenModalButton: React.FC<OpenModalButtonProps> = ({
   };
 
   // Render form field based on question type
-  const renderFormField = (question: any) => {
+  const renderFormField = (question: unknown) => {
     const value = formData[question.id] || '';
 
     switch (question.type) {

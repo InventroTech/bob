@@ -21,7 +21,7 @@ import type { RoutingFilterField, RoutingRulesConfigData } from '@/component-con
 const QUEUE_TYPES: QueueType[] = ['ticket', 'lead'];
 
 // Helper to format conditions in a user-readable way
-const formatConditionsReadable = (conditions: Record<string, any> | null | undefined): React.ReactNode => {
+const formatConditionsReadable = (conditions: Record<string, unknown> | null | undefined): React.ReactNode => {
   if (!conditions) return <span className="text-gray-500 italic">No conditions</span>;
   
   // Handle filters array format: { filters: [{ field, op, value }] }
@@ -32,7 +32,7 @@ const formatConditionsReadable = (conditions: Record<string, any> | null | undef
     
     return (
       <div className="space-y-1">
-        {conditions.filters.map((filter: any, idx: number) => {
+        {conditions.filters.map((filter: unknown, idx: number) => {
           const field = filter.field || 'unknown';
           const op = filter.op || '=';
           const value = filter.value;
@@ -219,7 +219,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       if (activeUsers.length === 0) {
         toast.info('No users found. The list is empty.');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching users:', error);
       toast.error(`Failed to fetch users: ${error.message}`);
       setUsers([]);
@@ -234,7 +234,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
         setLoading(true);
         const data = await routingRulesService.getAll();
         setRules(data);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('[RoutingRules] Failed to fetch rules', error);
         toast.error(error?.message || 'Failed to fetch routing rules');
       } finally {
@@ -249,7 +249,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
   }, [user, tenantId]);
 
   const buildConditions = () => {
-    const filters: any[] = [];
+    const filters: unknown[] = [];
 
     filterFields.forEach((field) => {
       const value = getFieldValue(field.key).trim();
@@ -315,7 +315,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       setFormQueueType('ticket');
 
       toast.success('Routing rule saved');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[RoutingRules] Failed to save rule', error);
       toast.error(error?.message || 'Failed to save routing rule');
     } finally {
@@ -331,7 +331,7 @@ const RoutingRulesComponent: React.FC<RoutingRulesComponentProps> = ({ config })
       await routingRulesService.delete(id);
       setRules((prev) => prev.filter((r) => r.id !== id));
       toast.success('Routing rule deleted');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[RoutingRules] Failed to delete rule', error);
       toast.error(error?.message || 'Failed to delete routing rule');
     }

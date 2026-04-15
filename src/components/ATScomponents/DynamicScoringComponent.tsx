@@ -272,7 +272,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         }
 
         // Convert backend rules to frontend format
-        const formattedRules: ScoringRule[] = rulesList.map((rule: any) => {
+        const formattedRules: ScoringRule[] = rulesList.map((rule: unknown) => {
           // Find display name for attribute
           const fullAttr = rule.attribute || rule.attr;
           let displayAttr = fullAttr;
@@ -486,7 +486,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
               rulesList = responseData.data;
             }
 
-            const formattedRules: ScoringRule[] = rulesList.map((r: any) => {
+            const formattedRules: ScoringRule[] = rulesList.map((r: unknown) => {
               const fullAttr = r.attribute || r.attr;
               let displayAttr = fullAttr;
               if (fullAttr.startsWith('data.')) {

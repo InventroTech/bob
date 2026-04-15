@@ -74,7 +74,7 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
     
     // Check for abort-related error codes
     if (hint.originalException && typeof hint.originalException === 'object') {
-      const originalError = hint.originalException as any;
+      const originalError = hint.originalException as unknown;
       if (
         originalError.code === 'ERR_CANCELED' || 
         originalError.name === 'AbortError' || 
@@ -208,7 +208,7 @@ export function initSentry(config: SentryConfig): void {
   });
 
   // Inside the initSentry function, after Sentry.init({...})
-(window as any).Sentry = Sentry;
+(window as unknown).Sentry = Sentry;
 
   // Log initialization (only in development)
   if (environment === 'development') {

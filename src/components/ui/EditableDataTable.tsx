@@ -13,21 +13,21 @@ export interface EditableDataTableColumn {
 
 export interface EditableDataTableRow {
   id: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
 }
 
 export interface EditableDataTableProps {
   columns: EditableDataTableColumn[];
   rows: EditableDataTableRow[];
-  onRowEdit: (rowId: string, data: Record<string, any>) => void;
+  onRowEdit: (rowId: string, data: Record<string, unknown>) => void;
   onRowDelete: (rowId: string) => void;
-  onRowAdd: (data: Record<string, any>) => void;
+  onRowAdd: (data: Record<string, unknown>) => void;
 }
 
 export const EditableDataTable: React.FC<EditableDataTableProps> = ({ columns, rows, onRowEdit, onRowDelete, onRowAdd }) => {
   const [editRowId, setEditRowId] = useState<string | null>(null);
-  const [editRowData, setEditRowData] = useState<Record<string, any>>({});
-  const [addRowData, setAddRowData] = useState<Record<string, any>>({});
+  const [editRowData, setEditRowData] = useState<Record<string, unknown>>({});
+  const [addRowData, setAddRowData] = useState<Record<string, unknown>>({});
   const [showAddRow, setShowAddRow] = useState(false);
   const [deleteRowId, setDeleteRowId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');

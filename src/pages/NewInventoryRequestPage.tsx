@@ -62,7 +62,7 @@ const NewInventoryRequestPage: React.FC = () => {
 
       toast.success('Inventory request created.');
       navigate('/inventory/requests');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to create inventory request', err);
       toast.error(err?.message || 'Failed to create inventory request.');
     } finally {

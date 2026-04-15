@@ -21,7 +21,7 @@ interface FileUploadComponentProps {
   hideUploadButton?: boolean; // Hide the upload button (for auto-upload on form submit)
   onFileSelected?: (file: File | null) => void; // Callback when file is selected
   className?: string;
-  onUploadSuccess?: (response: any) => void;
+  onUploadSuccess?: (response: unknown) => void;
   onUploadError?: (error: Error) => void;
 }
 

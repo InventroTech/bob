@@ -38,7 +38,7 @@ export const TemporaryLogoutComponent: React.FC<TemporaryLogoutProps> = ({ confi
         window.location.href = '/auth';
       }, 1000);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('TemporaryLogoutComponent: Logout error:', error);
       toast.error('Failed to logout. Please try again.');
     } finally {

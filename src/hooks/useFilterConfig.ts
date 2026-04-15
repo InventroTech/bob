@@ -14,12 +14,12 @@ export interface ComponentConfig {
     showSummary?: boolean;
     compact?: boolean;
   };
-  [key: string]: any; // For other component properties
+  [key: string]: unknown; // For other component properties
 }
 
 export interface PageConfig {
   components: ComponentConfig[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface UseFilterConfigReturn {
@@ -27,7 +27,7 @@ export interface UseFilterConfigReturn {
   saving: boolean;
   error: string | null;
   componentConfigs: ComponentConfig[];
-  updateComponentFilters: (componentId: string, filters: FilterConfig[], filterOptions?: any) => Promise<void>;
+  updateComponentFilters: (componentId: string, filters: FilterConfig[], filterOptions?: unknown) => Promise<void>;
   savePageConfig: (pageId: string, config: PageConfig) => Promise<boolean>;
   loadPageConfig: (pageId: string) => Promise<PageConfig | null>;
   validateFilterConfig: (filters: FilterConfig[]) => { isValid: boolean; errors: string[] };
@@ -68,7 +68,7 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
       const pageConfig: PageConfig = data?.config || { components: [] };
       setComponentConfigs(pageConfig.components || []);
       return pageConfig;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading page config:', err);
       setError(err.message);
       toast.error('Failed to load page configuration');
@@ -93,7 +93,7 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
       const { error: updateError } = await supabase
         .from('pages')
         .update({
-          config: config as any,
+          config: config as unknown,
           updated_at: new Date().toISOString()
         })
         .eq('id', targetPageId)
@@ -106,7 +106,7 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
       setComponentConfigs(config.components || []);
       toast.success('Page configuration saved successfully');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving page config:', err);
       setError(err.message);
       toast.error('Failed to save page configuration');
@@ -121,7 +121,7 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
   const updateComponentFilters = useCallback(async (
     componentId: string,
     filters: FilterConfig[],
-    filterOptions?: any
+    filterOptions?: unknown
   ): Promise<void> => {
     if (!pageId) {
       setError('No page ID available');

@@ -8,7 +8,7 @@ export class ApiError extends Error {
     message: string,
     public status?: number,
     public statusText?: string,
-    public data?: any
+    public data?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -25,7 +25,7 @@ export class NetworkError extends Error {
 }
 
 export class AuthenticationError extends ApiError {
-  constructor(message: string = 'Authentication failed', status?: number, data?: any) {
+  constructor(message: string = 'Authentication failed', status?: number, data?: unknown) {
     super(message, status, 'Unauthorized', data);
     this.name = 'AuthenticationError';
     Object.setPrototypeOf(this, AuthenticationError.prototype);
@@ -33,7 +33,7 @@ export class AuthenticationError extends ApiError {
 }
 
 export class AuthorizationError extends ApiError {
-  constructor(message: string = 'Access denied', status?: number, data?: any) {
+  constructor(message: string = 'Access denied', status?: number, data?: unknown) {
     super(message, status, 'Forbidden', data);
     this.name = 'AuthorizationError';
     Object.setPrototypeOf(this, AuthorizationError.prototype);
@@ -41,7 +41,7 @@ export class AuthorizationError extends ApiError {
 }
 
 export class NotFoundError extends ApiError {
-  constructor(message: string = 'Resource not found', data?: any) {
+  constructor(message: string = 'Resource not found', data?: unknown) {
     super(message, 404, 'Not Found', data);
     this.name = 'NotFoundError';
     Object.setPrototypeOf(this, NotFoundError.prototype);
@@ -49,7 +49,7 @@ export class NotFoundError extends ApiError {
 }
 
 export class ValidationError extends ApiError {
-  constructor(message: string = 'Validation failed', data?: any) {
+  constructor(message: string = 'Validation failed', data?: unknown) {
     super(message, 400, 'Bad Request', data);
     this.name = 'ValidationError';
     Object.setPrototypeOf(this, ValidationError.prototype);

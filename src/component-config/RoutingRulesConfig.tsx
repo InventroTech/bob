@@ -302,7 +302,7 @@ export const RoutingRulesConfig: React.FC<RoutingRulesConfigProps> = ({
     updateFilterFields(newFields);
   }, [updateFilterFields]);
 
-  const handleFieldChange = useCallback((index: number, field: keyof RoutingFilterField, value: any) => {
+  const handleFieldChange = useCallback((index: number, field: keyof RoutingFilterField, value: unknown) => {
     const newFields = [...latestFilterFieldsRef.current];
     newFields[index] = { ...newFields[index], [field]: value };
     updateFilterFields(newFields);

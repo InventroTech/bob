@@ -45,7 +45,7 @@ export interface JobsPageComponentConfig {
 
 interface JobsPageConfigProps {
   config: JobsPageComponentConfig;
-  onConfigChange: (key: string, value: any) => void;
+  onConfigChange: (key: string, value: unknown) => void;
 }
 
 export const JobsPageConfigComponent: React.FC<JobsPageConfigProps> = ({

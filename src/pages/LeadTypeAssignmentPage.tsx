@@ -129,7 +129,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
         if (data.length === 0) {
           toast.info('No users found. The list is empty.');
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error fetching lead type data:', error);
         console.error('Error details:', {
           message: error.message,
@@ -328,7 +328,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       }));
 
       toast.success('Lead type assignment saved successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving lead type assignment:', error);
       // If it's a 403 error, show a more helpful message
       if (error.response?.status === 403) {
@@ -401,7 +401,7 @@ const LeadTypeAssignmentPage = ({ className = '', showHeader = true, config }: L
       }));
 
       toast.success('All lead type assignments removed successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error removing lead type assignments:', error);
       // If it's a 403 error, show a more helpful message
       if (error.response?.status === 403) {

@@ -22,7 +22,7 @@ export interface FileUploadConfig {
   multiple?: boolean;
 
   // Callbacks
-  onUploadSuccess?: (response: any) => void;
+  onUploadSuccess?: (response: unknown) => void;
   onUploadError?: (error: Error) => void;
 }
 

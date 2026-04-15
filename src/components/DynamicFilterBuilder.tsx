@@ -14,8 +14,8 @@ import { format } from 'date-fns';
 
 export interface FilterContextInjected {
   filterState: FilterState;
-  setFilterValue: (key: string, value: any) => void;
-  setFilterValues: (values: Record<string, any>) => void;
+  setFilterValue: (key: string, value: unknown) => void;
+  setFilterValues: (values: Record<string, unknown>) => void;
   clearFilters: () => void;
   applyFilters: () => void;
   resetFilters: () => void;
@@ -60,7 +60,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
 
   const activeFiltersCount = getActiveFiltersCount();
 
-  const handleFilterChange = (key: string, value: any) => {
+  const handleFilterChange = (key: string, value: unknown) => {
     setFilterValue(key, value);
   };
 

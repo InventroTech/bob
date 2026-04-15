@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 interface DropdownProps {
   title: string;
-  menu: any[];
+  menu: unknown[];
   selected: string;
   onSelect: (value: string) => void;
 }
@@ -12,7 +12,7 @@ const Dropdown: React.FC<DropdownProps> = ({ title, menu, selected, onSelect }) 
 
   const toggleDropdown = () => setIsOpen(!isOpen);
 
-  const handleSelect = (status: any) => {
+  const handleSelect = (status: unknown) => {
     onSelect(status); // Call parent
     setIsOpen(false);
   };

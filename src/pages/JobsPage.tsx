@@ -424,7 +424,7 @@ export const JobsPage: React.FC = () => {
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load jobs (demo data + localStorage jobs)
@@ -480,7 +480,7 @@ export const JobsPage: React.FC = () => {
   };
 
   // Handle form input changes
-  const handleInputChange = (questionId: string, value: any) => {
+  const handleInputChange = (questionId: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       [questionId]: value
@@ -541,7 +541,7 @@ export const JobsPage: React.FC = () => {
   };
 
   // Render form field based on question type
-  const renderFormField = (question: any) => {
+  const renderFormField = (question: unknown) => {
     const value = formData[question.id] || '';
 
     switch (question.type) {

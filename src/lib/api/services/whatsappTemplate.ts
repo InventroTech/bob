@@ -104,7 +104,7 @@ export const whatsappTemplateService = {
       }
       
       return [];
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching WhatsApp templates:', error);
       throw error;
     }
@@ -130,7 +130,7 @@ export const whatsappTemplateService = {
       // Use apiClient which handles auth and tenant automatically via interceptors
       const response = await apiClient.post<WhatsAppTemplate>(apiEndpoint, payload);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating WhatsApp template:', error);
       throw error;
     }
@@ -155,7 +155,7 @@ export const whatsappTemplateService = {
       // Use apiClient which handles auth and tenant automatically via interceptors
       const response = await apiClient.put<WhatsAppTemplate>(apiEndpoint, payload);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating WhatsApp template:', error);
       throw error;
     }
@@ -174,7 +174,7 @@ export const whatsappTemplateService = {
       
       // Use apiClient which handles auth and tenant automatically via interceptors
       await apiClient.delete(apiEndpoint);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting WhatsApp template:', error);
       throw error;
     }

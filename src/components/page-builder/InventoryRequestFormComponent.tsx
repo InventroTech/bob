@@ -156,10 +156,10 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       const res = await apiClient.get<{ data?: { vendor_name?: string; id?: number }[]; results?: { data?: { vendor_name?: string; id?: number } }[] }>(
         `${RECORDS_URL}?entity_type=unmannd_vendor&page_size=500`
       );
-      const raw = res.data?.data ?? (res.data as any)?.results ?? [];
+      const raw = res.data?.data ?? (res.data as unknown)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const options: VendorOption[] = list
-        .map((r: any) => {
+        .map((r: unknown) => {
           const id = r.id ?? r.data?.id;
           const name = (r.data?.vendor_name ?? r.vendor_name ?? r.data?.name ?? '').trim();
           return id != null && name ? { id: Number(id), name } : null;
@@ -183,13 +183,13 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     }
     try {
       setItemNameSuggestionsLoading(true);
-      const res = await apiClient.get<any>(
+      const res = await apiClient.get<unknown>(
         `${RECORDS_URL}?entity_type=unmannd_product&page_size=12&search=${encodeURIComponent(q)}`
       );
-      const raw = res.data?.data ?? (res.data as any)?.results ?? [];
+      const raw = res.data?.data ?? (res.data as unknown)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const mapped = list
-        .map((r: any) => {
+        .map((r: unknown) => {
           const id = r.id ?? r.data?.id;
           const data = r.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
           const name =
@@ -241,12 +241,12 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       productData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
     }
 
-    const searchRes = await apiClient.get<any>(
+    const searchRes = await apiClient.get<unknown>(
       `${RECORDS_URL}?entity_type=unmannd_product&page_size=20&search=${encodeURIComponent(productName)}`
     );
-    const raw = searchRes.data?.data ?? (searchRes.data as any)?.results ?? [];
+    const raw = searchRes.data?.data ?? (searchRes.data as unknown)?.results ?? [];
     const list = Array.isArray(raw) ? raw : [];
-    const existing = list.find((r: any) => {
+    const existing = list.find((r: unknown) => {
       const d = r?.data && typeof r.data === 'object' ? (r.data as Record<string, unknown>) : {};
       const n = normalizeProductName(
         String(d.normalized_name ?? d.name ?? d.item_name_freeform ?? r?.name ?? '')
@@ -320,7 +320,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
       setDepartment(membership.department ?? '');
       setMyRoleName(membership.role_name ?? membership.role_key ?? '');
-      const membershipAny = membership as any;
+      const membershipAny = membership as unknown;
       const membershipName = String(membershipAny.name ?? membershipAny.full_name ?? '').trim();
       if (!cancelled && membershipName) {
         setRequesterNameFromMembership(membershipName);
@@ -336,7 +336,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       // Resolve current user's membership name from authz_tenantmembership list
       // and manager membership id (if parent membership exists).
       try {
-        const resp = await apiClient.get<any>('/membership/users/');
+        const resp = await apiClient.get<unknown>('/membership/users/');
         const respData = resp.data;
         let users: MembershipUser[] = [];
 
@@ -642,21 +642,21 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                     updateItem(item.id, 'item_name_freeform', s.name);
                                     const d = s.data || {};
 
-                                    const vendor = String((d.default_vendor ?? d.vendor ?? '') as any).trim();
+                                    const vendor = String((d.default_vendor ?? d.vendor ?? '') as unknown).trim();
                                     if (vendor) updateItem(item.id, 'vendor', vendor);
 
                                     const costRaw = d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
                                     const costNum = costRaw === '' || costRaw == null ? '' : Number(costRaw);
                                     if (costNum !== '' && Number.isFinite(costNum)) updateItem(item.id, 'estimated_cost', costNum);
-                                    const suggestedCurrency = String((d.price_currency ?? d.currency ?? 'INR') as any).trim().toUpperCase();
+                                    const suggestedCurrency = String((d.price_currency ?? d.currency ?? 'INR') as unknown).trim().toUpperCase();
                                     if (suggestedCurrency === 'USD' || suggestedCurrency === 'INR') {
                                       updateItem(item.id, 'price_currency', suggestedCurrency as 'INR' | 'USD');
                                     }
 
-                                    const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
+                                    const productLink = String((d.product_link ?? d.link ?? '') as unknown).trim();
                                     if (productLink) updateItem(item.id, 'product_link', productLink);
 
-                                    const additionalLink = String((d.additional_link ?? d.vendor_site_link ?? '') as any).trim();
+                                    const additionalLink = String((d.additional_link ?? d.vendor_site_link ?? '') as unknown).trim();
                                     if (additionalLink) updateItem(item.id, 'additional_link', additionalLink);
 
                                     if (typeof d.including_gst === 'boolean') updateItem(item.id, 'including_gst', d.including_gst);

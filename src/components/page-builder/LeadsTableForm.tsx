@@ -122,7 +122,7 @@ export const LeadFormComponent = () => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       }, 100);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Template download error:', error);
       setMessage('Error creating template. Please try again or contact support.');
     }
@@ -399,7 +399,7 @@ export const LeadFormComponent = () => {
                 
                 setCsvFile(null);
                 setUploadProgress('');
-              } catch (error: any) {
+              } catch (error: unknown) {
                 console.error('Processing error:', error);
                 setMessage(error.message);
               }
@@ -409,7 +409,7 @@ export const LeadFormComponent = () => {
               setMessage(`Error parsing CSV: ${error.message}\\n\\nTips:\\n1. Make sure your CSV is properly formatted\\n2. Download the template for reference\\n3. Check for special characters or incorrect quotes`);
             }
           });
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Processing error:', error);
           setMessage(error.message);
         } finally {
@@ -425,7 +425,7 @@ export const LeadFormComponent = () => {
       // Start reading the file
       reader.readAsText(csvFile);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('File handling error:', error);
       setMessage(`Error handling file: ${error.message}`);
       setLoading(false);
@@ -480,7 +480,7 @@ export const LeadFormComponent = () => {
           status: ''
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Unexpected error:', error);
       setMessage(`Unexpected error: ${error.message}`);
     }

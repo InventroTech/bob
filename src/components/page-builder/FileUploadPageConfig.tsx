@@ -23,7 +23,7 @@ interface FileUploadPageConfigProps {
     multiple?: boolean;
     tenantSlug?: string;
   };
-  handleInputChange: (field: string, value: any) => void;
+  handleInputChange: (field: string, value: unknown) => void;
 }
 
 export const FileUploadPageConfig: React.FC<FileUploadPageConfigProps> = ({

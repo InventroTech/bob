@@ -26,7 +26,7 @@ const columns: Column[] = [
 ];
 
 export const LeadRecomendationTable: React.FC = () => {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<unknown[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);

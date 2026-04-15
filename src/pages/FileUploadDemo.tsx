@@ -106,7 +106,7 @@ const FileUploadDemo: React.FC = () => {
 {`import { FileUploadComponent } from '@/components/ATScomponents/FileUploadComponent';
 
 function MyComponent() {
-  const handleUploadSuccess = (response: any) => {
+  const handleUploadSuccess = (response: unknown) => {
     console.log('Upload successful:', response);
     // Handle the uploaded file(s)
   };

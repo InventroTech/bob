@@ -100,7 +100,7 @@ const OTHER_REASONS_OPTIONS = [
   "User photo/Protocal Size Issue",
 ];
 
-const parseOtherReasons = (otherReasons: any): string[] => {
+const parseOtherReasons = (otherReasons: unknown): string[] => {
   if (!otherReasons) return [];
   if (Array.isArray(otherReasons)) return otherReasons;
   if (typeof otherReasons === "string") {
@@ -186,8 +186,8 @@ interface TicketCarouselProps {
     apiPrefix?: 'supabase' | 'renderer';
     title?: string;
   };
-  initialTicket?: any;
-  onUpdate?: (updatedTicket: any) => void;
+  initialTicket?: unknown;
+  onUpdate?: (updatedTicket: unknown) => void;
 }
 
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({
@@ -211,7 +211,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   };
 
   //persisting the state to the session storage
-  const persistState = (state: any) => {
+  const persistState = (state: unknown) => {
     try {
       sessionStorage.setItem("ticketCarouselState", JSON.stringify(state));
     } catch (error) {
@@ -270,7 +270,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   const initialState = getInitialState();
 
-  const [currentTicket, setCurrentTicket] = useState<any>(initialState.currentTicket);
+  const [currentTicket, setCurrentTicket] = useState<unknown>(initialState.currentTicket);
   const [showPendingCard, setShowPendingCard] = useState(initialState.showPendingCard);
   const [ticketStats, setTicketStats] = useState<TicketStats>({
     total: 0,
@@ -390,7 +390,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   };
 
   // Helper function to set ticket from API response
-  const setTicketFromResponse = (nextTicket: any) => {
+  const setTicketFromResponse = (nextTicket: unknown) => {
     setCurrentTicket(nextTicket);
     setTicket({
       resolutionStatus: nextTicket.resolution_status === "Resolved"
@@ -490,7 +490,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching next ticket:", error);
       toast.error(error.message || "Failed to fetch next ticket");
       setShowPendingCard(true);
@@ -623,7 +623,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       // Use renderer URL for save and continue
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       let apiUrl = `${baseUrl}/support-ticket/save-and-continue/`;
-      let payload: any = {
+      let payload: unknown = {
         ticketId: currentTicket?.id,
         resolutionStatus,
         callStatus,
@@ -670,7 +670,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       // After successful API call, fetch next ticket
       await fetchNextTicket(currentTicket?.id);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error in handleActionButton:", error);
       toast.error(error.message || "Failed to process action");
     } finally {
@@ -755,7 +755,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         toast.info("No tickets available.");
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching first ticket:", error);
       toast.error(error.message || "Failed to fetch ticket");
       setShowPendingCard(true);

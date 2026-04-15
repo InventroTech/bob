@@ -16,7 +16,7 @@ export interface ActionApiConfig {
  * Replace placeholders in a string with row values.
  * Supports {id} and {propertyName} for any row property.
  */
-function replacePlaceholders(template: string, row: Record<string, any>, idKey = 'id'): string {
+function replacePlaceholders(template: string, row: Record<string, unknown>, idKey = 'id'): string {
   let result = template;
   const rowId = row[idKey] ?? row.id ?? row.lead_id ?? row.ticket_id ?? '';
   result = result.replace(/\{id\}/g, String(rowId));
@@ -29,7 +29,7 @@ function replacePlaceholders(template: string, row: Record<string, any>, idKey =
  */
 export function buildActionApiRequest(
   config: ActionApiConfig,
-  row: Record<string, any>,
+  row: Record<string, unknown>,
   baseUrl: string,
   defaultHeaders: Record<string, string>,
   idKey: 'id' | 'lead_id' | 'ticket_id' = 'id'
@@ -65,7 +65,7 @@ export function buildActionApiRequest(
         const payloadStr = replacePlaceholders(config.payload, row, idKey);
         let parsed = JSON.parse(payloadStr) as Record<string, unknown>;
         // Replace any "__ROW__" value in the parsed object with the full row
-        const replaceRowRef = (obj: any): any => {
+        const replaceRowRef = (obj: unknown): unknown => {
           if (obj === '__ROW__') return row;
           if (Array.isArray(obj)) return obj.map(replaceRowRef);
           if (obj && typeof obj === 'object') {

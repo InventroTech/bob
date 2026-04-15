@@ -68,7 +68,7 @@ const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: Ca
         const apiEndpoint = config?.apiEndpoint || '/crm-records/call-attempt-matrix/';
         const response = await apiClient.get(apiEndpoint);
         setMatrices(response.data || []);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error fetching call attempt matrix data:', error);
         toast.error(`Failed to fetch data: ${error.message || 'Unknown error'}`);
       } finally {
@@ -133,7 +133,7 @@ const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: Ca
         toast.success('Call attempt matrix created successfully');
         setNewRow(null);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving call attempt matrix:', error);
       toast.error(`Failed to save: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     } finally {
@@ -153,7 +153,7 @@ const CallAttemptMatrixPage = ({ className = '', showHeader = true, config }: Ca
       await apiClient.delete(`${apiEndpoint}${id}/`);
       setMatrices(prev => prev.filter(item => item.id !== id));
       toast.success('Call attempt matrix deleted successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting call attempt matrix:', error);
       toast.error(`Failed to delete: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     } finally {

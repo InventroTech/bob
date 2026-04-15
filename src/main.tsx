@@ -14,7 +14,7 @@ import { SentryErrorBoundary } from './components/ErrorBoundary';
 
 // Global error handler to catch and suppress AbortErrors
 // This must be set up BEFORE Sentry initialization
-const isAbortError = (error: any): boolean => {
+const isAbortError = (error: unknown): boolean => {
   if (!error) return false;
   
   return (

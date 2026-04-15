@@ -118,7 +118,7 @@ const LEAD_INDUSTRIES = [
   "Other"
 ];
 
-const parseTags = (tags: any): string[] => {
+const parseTags = (tags: string | string[] | null | undefined): string[] => {
   if (!tags) return [];
   if (Array.isArray(tags)) return tags;
   if (typeof tags === "string") {
@@ -216,8 +216,8 @@ interface LeadCardProps {
     whatsappTemplatesApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
   };
-  initialLead?: any;
-  onUpdate?: (updatedLead: any) => void;
+  initialLead?: Lead; 
+  onUpdate?: (updatedLead: Lead) => void;
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -241,7 +241,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   };
 
   // Persisting the state to the session storage
-  const persistState = (state: any) => {
+  const persistState = (state: unknown) => {
     try {
       sessionStorage.setItem("leadCardState", JSON.stringify(state));
     } catch (error) {
@@ -290,7 +290,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
 
   const initialState = getInitialState();
 
-  const [currentLead, setCurrentLead] = useState<any>(initialState.currentLead);
+  const [currentLead, setCurrentLead] = useState<Lead | null>(initialState.currentLead);
   const [showPendingCard, setShowPendingCard] = useState(initialState.showPendingCard);
   const [leadStats, setLeadStats] = useState({
     total: 0,
@@ -320,7 +320,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     currentLead?.linkedin_profile || currentLead?.website
   );
   const profilePicAlt = currentLead
-    ? `${(currentLead as any)?.data?.name || currentLead.name || "Lead"} profile`
+    ? `${(currentLead as unknown)?.data?.name || currentLead.name || "Lead"} profile`
     : "Lead profile";
 
   useEffect(() => {
@@ -454,7 +454,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   };
 
   // Helper function to set lead from API response
-  const setLeadFromResponse = (nextLead: any) => {
+  const setLeadFromResponse = (nextLead: unknown) => {
     setCurrentLead(nextLead);
     setLead({
       leadStatus: nextLead.status || "New",
@@ -538,7 +538,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         toast.info("No more leads available. Click 'Get First Lead' to continue.");
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching next lead:", error);
       toast.error(error.message || "Failed to fetch next lead");
       setShowPendingCard(true);
@@ -690,7 +690,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       // After successful API call, fetch next lead
       await fetchNextLead(currentLead?.id);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error in handleActionButton:", error);
       toast.error(error.message || "Failed to process action");
     } finally {
@@ -770,7 +770,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         toast.info("No leads available.");
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching first lead:", error);
       toast.error(error.message || "Failed to fetch lead");
       setShowPendingCard(true);
@@ -973,7 +973,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                     </div>
                     <div className="flex flex-col w-full gap-2">
                       <div>
-                        <p className="font-medium text-lg">{(currentLead as any)?.data?.name || currentLead?.name || "N/A"}</p>
+                        <p className="font-medium text-lg">{(currentLead as unknown)?.data?.name || currentLead?.name || "N/A"}</p>
                         <p className="text-xs text-muted-foreground pt-2">
                           ID: {currentLead?.praja_id || "N/A"}
                         </p>
@@ -1202,7 +1202,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   )}
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg">{(currentLead as any)?.data?.name || currentLead?.name || "Lead Profile"}</h3>
+                  <h3 className="font-semibold text-lg">{(currentLead as unknown)?.data?.name || currentLead?.name || "Lead Profile"}</h3>
                   <p className="text-sm text-muted-foreground">Company: {currentLead?.company || "N/A"}</p>
                 </div>
               </div>
@@ -1220,7 +1220,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
               <iframe
                 src={iframeSrc || undefined}
                 className="w-full h-full border-0 rounded-md"
-                title={`${(currentLead as any)?.data?.name || currentLead?.name || "Lead"} Profile`}
+                title={`${(currentLead as unknown)?.data?.name || currentLead?.name || "Lead"} Profile`}
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
               />
             </div>

@@ -37,7 +37,7 @@ export type FormModalFieldConfig = {
 interface InventoryFormEditModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  record: any | null;
+  record: unknown | null;
   entityType?: string;
   /** Field config: key (data key), label (text to show), enabled (editable vs read-only). */
   formModalFields: FormModalFieldConfig[];
@@ -86,9 +86,9 @@ function formatDisplayValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (Array.isArray(value)) {
-    const first = value[0] as any;
+    const first = value[0] as unknown;
     if (first && typeof first === 'object' && 'comment' in first) {
-      const last = value[value.length - 1] as any;
+      const last = value[value.length - 1] as unknown;
       return last?.comment != null ? String(last.comment) : '';
     }
     return value.join(', ');
@@ -198,11 +198,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const fetchVendors = useCallback(async () => {
     try {
       setVendorsLoading(true);
-      const res = await apiClient.get<any>(`${RECORDS_URL}?entity_type=unmannd_vendor&page_size=500`);
-      const raw = res.data?.data ?? (res.data as any)?.results ?? [];
+      const res = await apiClient.get<unknown>(`${RECORDS_URL}?entity_type=unmannd_vendor&page_size=500`);
+      const raw = res.data?.data ?? (res.data as unknown)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const options = list
-        .map((r: any) => {
+        .map((r: unknown) => {
           const id = r.id ?? r.data?.id;
           const name = (r.data?.vendor_name ?? r.vendor_name ?? r.data?.name ?? '').trim();
           return id != null && name ? { id: Number(id), name } : null;
@@ -239,7 +239,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setNewVendorName('');
       setNewVendorLink('');
       toast({ title: 'Vendor added' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: 'Failed to add vendor',
         description: err?.message || 'Could not save vendor.',
@@ -304,7 +304,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
   /** Get quantity from form or record for price calculation. */
   const getQuantity = useCallback(() => {
-    const q = formData.quantity ?? formData.quantity_required ?? (record?.data as any)?.quantity ?? (record?.data as any)?.quantity_required;
+    const q = formData.quantity ?? formData.quantity_required ?? (record?.data as unknown)?.quantity ?? (record?.data as unknown)?.quantity_required;
     const n = Number(q);
     return Number.isFinite(n) && n > 0 ? n : 1;
   }, [formData.quantity, formData.quantity_required, record?.data]);
@@ -332,7 +332,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       if (!cond?.attribute || !cond.attribute.trim()) return true;
       const attribute = cond.attribute.trim();
       const raw =
-        (formData as any)?.[attribute] !== undefined ? (formData as any)[attribute] : (record?.data as any)?.[attribute];
+        (formData as unknown)?.[attribute] !== undefined ? (formData as unknown)[attribute] : (record?.data as unknown)?.[attribute];
       const threshold = cond.value;
 
       const numRaw = Number(raw);
@@ -394,11 +394,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides, status: btn.statusValue };
 
         // Stage comment history: append `{name, role, comment}` into `data.comments`.
-        if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
-          const existingRaw = (record?.data as any)?.comments;
+        if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as unknown))) {
+          const existingRaw = (record?.data as unknown)?.comments;
           let history: Array<{ name: string; role: string; comment: string }> = [];
           if (Array.isArray(existingRaw)) {
-            history = existingRaw as any;
+            history = existingRaw as unknown;
           } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
             history = [{ name: '', role: '', comment: existingRaw.trim() }];
           }
@@ -421,8 +421,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           dataToSend[key] = flagValues[key] === true;
           });
         if (entityType === 'inventory_item') {
-          const alloc = dataToSend.allocated_quantity ?? (record?.data as any)?.allocated_quantity;
-          const avail = dataToSend.available_quantity ?? (record?.data as any)?.available_quantity;
+          const alloc = dataToSend.allocated_quantity ?? (record?.data as unknown)?.allocated_quantity;
+          const avail = dataToSend.available_quantity ?? (record?.data as unknown)?.available_quantity;
           if (typeof alloc === 'number' && typeof avail === 'number') {
             dataToSend.total_quantity = alloc + avail;
           }
@@ -431,7 +431,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         toast({ title: 'Saved', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
-      } catch (e: any) {
+      } catch (e: unknown) {
         toast({
           title: 'Update failed',
           description: e?.message || 'Could not save.',
@@ -451,11 +451,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
       const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides };
 
-      if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
-        const existingRaw = (record?.data as any)?.comments;
+      if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as unknown))) {
+        const existingRaw = (record?.data as unknown)?.comments;
         let history: Array<{ name: string; role: string; comment: string }> = [];
         if (Array.isArray(existingRaw)) {
-          history = existingRaw as any;
+          history = existingRaw as unknown;
         } else if (typeof existingRaw === 'string' && existingRaw.trim()) {
           history = [{ name: '', role: '', comment: existingRaw.trim() }];
         }
@@ -475,8 +475,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           dataToSend[key] = flagValues[key] === true;
         });
       if (entityType === 'inventory_item') {
-        const alloc = dataToSend.allocated_quantity ?? (record?.data as any)?.allocated_quantity;
-        const avail = dataToSend.available_quantity ?? (record?.data as any)?.available_quantity;
+        const alloc = dataToSend.allocated_quantity ?? (record?.data as unknown)?.allocated_quantity;
+        const avail = dataToSend.available_quantity ?? (record?.data as unknown)?.available_quantity;
         if (typeof alloc === 'number' && typeof avail === 'number') {
           dataToSend.total_quantity = alloc + avail;
         }
@@ -485,7 +485,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       toast({ title: 'Saved', description: 'All changes saved.' });
       onRecordUpdated?.(record.id);
       onOpenChange(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Update failed',
         description: e?.message || 'Could not save.',
@@ -510,7 +510,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       } else {
         onOpenChange(false);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
         title: 'Delete failed',
         description: e?.message || 'Could not delete request.',
@@ -611,9 +611,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     </a>
                   ) : field.key === 'comments' ? (
                     (() => {
-                      const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as any).comments : undefined) as unknown;
+                      const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as unknown).comments : undefined) as unknown;
                       const history: Array<{ name: string; role: string; comment: string }> = Array.isArray(existingRaw)
-                        ? (existingRaw as any).filter((x: any) => x && typeof x === 'object' && typeof x.comment === 'string')
+                        ? (existingRaw as unknown).filter((x: unknown) => x && typeof x === 'object' && typeof x.comment === 'string')
                         : typeof existingRaw === 'string' && existingRaw.trim()
                           ? [{ name: '', role: '', comment: existingRaw.trim() }]
                           : [];

@@ -40,7 +40,7 @@ const AuthCallbackPage = () => {
           );
 
           if (result.success === false || result.error) {
-            const errorCode = (result as any).code;
+            const errorCode = (result as unknown).code;
             const errorMessage = result.error || '';
             
             // Expected errors don't block login
@@ -114,7 +114,7 @@ const AuthCallbackPage = () => {
           });
 
           if (result.success === false && result.error) {
-            const errorCode = (result as any).code;
+            const errorCode = (result as unknown).code;
             const errorMessage = result.error || '';
             
             // Expected errors don't block login and don't show toast
