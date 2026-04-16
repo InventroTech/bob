@@ -30,6 +30,7 @@ interface User {
   leadGroup?: string;
   dailyTarget?: string | number;
   dailyLimit?: string | number;
+  user_parent_id?: number | null;
   managerEmail?: string;
 }
 
@@ -160,7 +161,7 @@ const AddUserComponent: React.FC = () => {
         role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined),
         department: user.department ?? user.department_name ?? undefined,
         lead_group_name: user.lead_group_name ?? undefined,
-        managerEmail: user.user_parent_email ?? undefined,
+        user_parent_id: user.user_parent_id ?? null,
       }));
 
       setUsers(transformedUsers);
@@ -244,12 +245,15 @@ const AddUserComponent: React.FC = () => {
       users.map((usr) => {
         const config = coreSettingsMap[(usr.email || '').toLowerCase()];
         const groupFromKv = availableLeadGroups.find((g) => g.id === config?.group_id)?.name;
+        const parentUser = usr.user_parent_id
+          ? users.find((u) => u.tenant_membership_id === usr.user_parent_id)
+          : null;
         return {
           ...usr,
           leadGroup: groupFromKv || usr.lead_group_name || '—',
           dailyTarget: config?.daily_target ?? '—',
           dailyLimit: config?.daily_limit ?? '—',
-          managerEmail: usr.managerEmail || '—',
+          managerEmail: parentUser?.email || '—',
         };
       }),
     [users, coreSettingsMap, availableLeadGroups]
@@ -330,7 +334,6 @@ const AddUserComponent: React.FC = () => {
       if (formData.leadGroup?.trim()) payload.lead_group_name = formData.leadGroup.trim();
       if (formData.dailyTarget !== '') payload.daily_target = Number(formData.dailyTarget);
       if (formData.dailyLimit !== '') payload.daily_limit = Number(formData.dailyLimit);
-      if (formData.managerEmail?.trim()) payload.manager_email = formData.managerEmail.trim();
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -358,6 +361,32 @@ const AddUserComponent: React.FC = () => {
 
       const responseData = await response.json();
       console.log('User creation response:', responseData);
+
+      // Set manager hierarchy if manager email was provided
+      const createdMembershipId = responseData.id ? Number(responseData.id) : undefined;
+      if (formData.managerEmail?.trim() && createdMembershipId) {
+        const managerUser = users.find(
+          (u) => (u.email || '').toLowerCase() === formData.managerEmail.trim().toLowerCase()
+        );
+        if (managerUser?.tenant_membership_id) {
+          try {
+            const hierarchyUrl = `${baseUrl}/membership/users/hierarchy/`;
+            await fetch(hierarchyUrl, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'X-Tenant-Slug': 'bibhab-thepyro-ai',
+              },
+              body: JSON.stringify({
+                assignments: [{ membership_id: createdMembershipId, parent_membership_id: managerUser.tenant_membership_id }],
+              }),
+            });
+          } catch {
+            toast.error('User created but failed to set manager hierarchy');
+          }
+        }
+      }
 
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
@@ -515,7 +544,6 @@ const AddUserComponent: React.FC = () => {
       if (editingRow.leadGroup.trim()) payload.lead_group_name = editingRow.leadGroup.trim();
       if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
       if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
-      payload.manager_email = editingRow.managerEmail.trim() || null;
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -538,6 +566,33 @@ const AddUserComponent: React.FC = () => {
                 .join(' | ')
             : '');
         throw new Error(backendMessage || `HTTP error! status: ${response.status}`);
+      }
+
+      // Update manager hierarchy via the hierarchy endpoint
+      const editedUser = users.find(
+        (u) => (u.email || '').toLowerCase() === editingRow.originalEmail.toLowerCase()
+      );
+      if (editedUser?.tenant_membership_id) {
+        const managerUser = editingRow.managerEmail.trim()
+          ? users.find((u) => (u.email || '').toLowerCase() === editingRow.managerEmail.trim().toLowerCase())
+          : null;
+        const parentMembershipId = managerUser?.tenant_membership_id ?? null;
+        try {
+          const hierarchyUrl = `${baseUrl}/membership/users/hierarchy/`;
+          await fetch(hierarchyUrl, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'X-Tenant-Slug': 'bibhab-thepyro-ai',
+            },
+            body: JSON.stringify({
+              assignments: [{ membership_id: editedUser.tenant_membership_id, parent_membership_id: parentMembershipId }],
+            }),
+          });
+        } catch {
+          toast.error('User updated but failed to update manager hierarchy');
+        }
       }
 
       toast.success('User updated successfully!');
