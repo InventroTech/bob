@@ -269,7 +269,7 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 min-h-0 flex flex-col">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">{title}</h2>
         <CustomButton
@@ -285,13 +285,14 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
       </p>
 
       {showDiagram && (
-        <Card>
+        <Card className="flex min-h-0 flex-1 flex-col">
           <CardHeader>
-            {/* <CardTitle className="text-base">Visualization</CardTitle> */}
+            <CardTitle className="text-base">Visualization</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="h-[400px] w-full rounded-lg border border-gray-300 bg-gray-100">
+          <CardContent className="flex min-h-0 flex-1 flex-col p-6 pt-0">
+            <div className="h-[min(72vh,880px)] min-h-[360px] w-full min-w-0 flex-1 rounded-lg border border-gray-300 bg-muted/30 overflow-hidden">
               <ReactFlow
+                className="h-full w-full"
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
@@ -299,17 +300,22 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 fitView
-                minZoom={0.2}
+                minZoom={0.08}
                 maxZoom={1.5}
-                connectionMode="loose"
                 nodesConnectable
                 elementsSelectable
+                zoomOnScroll={false}
+                panOnScroll
+                panOnScrollSpeed={0.75}
+                zoomOnPinch
+                panOnDrag
               >
                 <Background />
                 <Controls />
-                <MiniMap />
-                <Panel position="top-center" className="text-xs text-muted-foreground text-center max-w-md">
-                  Drag from bottom of manager to top of report to assign. Select an edge and press Delete to remove.
+                <MiniMap className="!bg-background/90 !border-border" maskColor="rgba(0,0,0,0.1)" />
+                <Panel position="top-center" className="text-xs text-muted-foreground text-center max-w-md px-2">
+                  Drag handles to connect. Scroll on the chart to pan; ⌘ or Ctrl + scroll to zoom. Delete
+                  removes a selected line.
                 </Panel>
               </ReactFlow>
             </div>
