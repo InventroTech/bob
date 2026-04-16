@@ -196,10 +196,11 @@ const TeamDashboardPage: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const memberChartHeight = Math.max(320, members.length * 40);
+
   // Prepare sorted members for trial activation chart
-  const sortedMembersForTrial = members
-    .sort((a, b) => b.trials_activated - a.trials_activated)
-    .slice(0, 7);
+  const sortedMembersForTrial = [...members]
+    .sort((a, b) => b.trials_activated - a.trials_activated);
 
   // Prepare Trail Activation chart data - stacked progress bar
   const trailActivationData = {
@@ -271,9 +272,8 @@ const TeamDashboardPage: React.FC = () => {
   // Prepare Average Time Spent chart data
   // Use each member's individual average_time_spent_seconds, not the team-wide average
   // Note: average_time_spent_seconds is in seconds (not milliseconds)
-  const sortedMembersForTime = members
-    .sort((a, b) => b.total_events - a.total_events)
-    .slice(0, 7);
+  const sortedMembersForTime = [...members]
+    .sort((a, b) => b.total_events - a.total_events);
   
   const timeData = sortedMembersForTime.map(m => m.average_time_spent_seconds || 0);
   
@@ -358,9 +358,8 @@ const TeamDashboardPage: React.FC = () => {
 
   // Prepare Call Breakdown stacked bar chart data
   // Stacked bar showing: calls made, not connected, calls connected, trial activated, call back, not interested
-  const sortedMembers = members
-    .sort((a, b) => b.total_events - a.total_events)
-    .slice(0, 7);
+  const sortedMembers = [...members]
+    .sort((a, b) => b.total_events - a.total_events);
 
   const memberLabels = sortedMembers.map(m => m.email || m.user_id.substring(0, 8) + '...');
 
@@ -500,7 +499,7 @@ const TeamDashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6 min-h-screen overflow-y-auto">
       {/* Header with Date Picker */}
       <div className="flex items-center justify-between mb-6">
         <h5>Team Dashboard</h5>
@@ -786,7 +785,7 @@ const TeamDashboardPage: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-80">
+            <div style={{ height: `${memberChartHeight}px` }}>
               <Bar data={trailActivationData} options={trailActivationOptions} />
             </div>
           </CardContent>
@@ -813,7 +812,7 @@ const TeamDashboardPage: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-80">
+            <div style={{ height: `${memberChartHeight}px` }}>
               <Bar data={averageTimeData} options={averageTimeOptions} />
             </div>
           </CardContent>
@@ -859,7 +858,7 @@ const TeamDashboardPage: React.FC = () => {
           </div>
 
           {/* Stacked Bar Chart */}
-          <div className="h-96 w-full min-w-0">
+          <div className="w-full min-w-0" style={{ height: `${memberChartHeight}px` }}>
             <Bar data={callBreakdownData} options={callBreakdownOptions} />
           </div>
         </CardContent>
