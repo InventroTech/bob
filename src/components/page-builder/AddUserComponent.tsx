@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Trash2, UserPlus, Pencil, Check, X } from 'lucide-react';
+import { Trash2, UserPlus, Pencil, Check, X, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
@@ -30,6 +30,8 @@ interface User {
   leadGroup?: string;
   dailyTarget?: string | number;
   dailyLimit?: string | number;
+  user_parent_id?: number | null;
+  managerEmail?: string;
 }
 
 interface UserCoreSettingsSummary {
@@ -55,6 +57,7 @@ interface RowEditState {
   leadGroup: string;
   dailyTarget: string;
   dailyLimit: string;
+  managerEmail: string;
 }
 
 const AddUserComponent: React.FC = () => {
@@ -72,6 +75,7 @@ const AddUserComponent: React.FC = () => {
     leadGroup: '',
     dailyTarget: '',
     dailyLimit: '',
+    managerEmail: '',
   });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
@@ -83,6 +87,26 @@ const AddUserComponent: React.FC = () => {
   const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<RowEditState | null>(null);
   const [isUpdatingRow, setIsUpdatingRow] = useState(false);
+  const [managerSearch, setManagerSearch] = useState('');
+  const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const [editManagerSearch, setEditManagerSearch] = useState('');
+  const [showEditManagerDropdown, setShowEditManagerDropdown] = useState(false);
+  const managerDropdownRef = useRef<HTMLDivElement>(null);
+  const editManagerDropdownRef = useRef<HTMLDivElement>(null);
+
+  const closeManagerDropdowns = useCallback((e: MouseEvent) => {
+    if (managerDropdownRef.current && !managerDropdownRef.current.contains(e.target as Node)) {
+      setShowManagerDropdown(false);
+    }
+    if (editManagerDropdownRef.current && !editManagerDropdownRef.current.contains(e.target as Node)) {
+      setShowEditManagerDropdown(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('mousedown', closeManagerDropdowns);
+    return () => document.removeEventListener('mousedown', closeManagerDropdowns);
+  }, [closeManagerDropdowns]);
 
   useEffect(() => {
     const fetchRoles = async () => {
@@ -157,6 +181,7 @@ const AddUserComponent: React.FC = () => {
         role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined),
         department: user.department ?? user.department_name ?? undefined,
         lead_group_name: user.lead_group_name ?? undefined,
+        user_parent_id: user.user_parent_id ?? null,
       }));
 
       setUsers(transformedUsers);
@@ -240,11 +265,15 @@ const AddUserComponent: React.FC = () => {
       users.map((usr) => {
         const config = coreSettingsMap[(usr.email || '').toLowerCase()];
         const groupFromKv = availableLeadGroups.find((g) => g.id === config?.group_id)?.name;
+        const parentUser = usr.user_parent_id
+          ? users.find((u) => u.tenant_membership_id === usr.user_parent_id)
+          : null;
         return {
           ...usr,
           leadGroup: groupFromKv || usr.lead_group_name || '—',
           dailyTarget: config?.daily_target ?? '—',
           dailyLimit: config?.daily_limit ?? '—',
+          managerEmail: parentUser?.email || '—',
         };
       }),
     [users, coreSettingsMap, availableLeadGroups]
@@ -353,6 +382,32 @@ const AddUserComponent: React.FC = () => {
       const responseData = await response.json();
       console.log('User creation response:', responseData);
 
+      // Set manager hierarchy if manager email was provided
+      const createdMembershipId = responseData.id ? Number(responseData.id) : undefined;
+      if (formData.managerEmail?.trim() && createdMembershipId) {
+        const managerUser = users.find(
+          (u) => (u.email || '').toLowerCase() === formData.managerEmail.trim().toLowerCase()
+        );
+        if (managerUser?.tenant_membership_id) {
+          try {
+            const hierarchyUrl = `${baseUrl}/membership/users/hierarchy/`;
+            await fetch(hierarchyUrl, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'X-Tenant-Slug': 'bibhab-thepyro-ai',
+              },
+              body: JSON.stringify({
+                assignments: [{ membership_id: createdMembershipId, parent_membership_id: managerUser.tenant_membership_id }],
+              }),
+            });
+          } catch {
+            toast.error('User created but failed to set manager hierarchy');
+          }
+        }
+      }
+
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
       const selectedLeadGroup = formData.leadGroup;
@@ -366,6 +421,7 @@ const AddUserComponent: React.FC = () => {
         leadGroup: '',
         dailyTarget: '',
         dailyLimit: '',
+        managerEmail: '',
       });
       setSelectedQueueType('lead');
       setSelectedRoleId('');
@@ -460,12 +516,15 @@ const AddUserComponent: React.FC = () => {
       leadGroup: usr.leadGroup && usr.leadGroup !== '—' ? usr.leadGroup : '',
       dailyTarget: usr.dailyTarget && usr.dailyTarget !== '—' ? String(usr.dailyTarget) : '',
       dailyLimit: usr.dailyLimit && usr.dailyLimit !== '—' ? String(usr.dailyLimit) : '',
+      managerEmail: usr.managerEmail && usr.managerEmail !== '—' ? usr.managerEmail : '',
     });
   };
 
   const handleCancelRowEdit = () => {
     setEditingRowKey(null);
     setEditingRow(null);
+    setEditManagerSearch('');
+    setShowEditManagerDropdown(false);
   };
 
   const handleSaveRowEdit = async () => {
@@ -529,6 +588,33 @@ const AddUserComponent: React.FC = () => {
                 .join(' | ')
             : '');
         throw new Error(backendMessage || `HTTP error! status: ${response.status}`);
+      }
+
+      // Update manager hierarchy via the hierarchy endpoint
+      const editedUser = users.find(
+        (u) => (u.email || '').toLowerCase() === editingRow.originalEmail.toLowerCase()
+      );
+      if (editedUser?.tenant_membership_id) {
+        const managerUser = editingRow.managerEmail.trim()
+          ? users.find((u) => (u.email || '').toLowerCase() === editingRow.managerEmail.trim().toLowerCase())
+          : null;
+        const parentMembershipId = managerUser?.tenant_membership_id ?? null;
+        try {
+          const hierarchyUrl = `${baseUrl}/membership/users/hierarchy/`;
+          await fetch(hierarchyUrl, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'X-Tenant-Slug': 'bibhab-thepyro-ai',
+            },
+            body: JSON.stringify({
+              assignments: [{ membership_id: editedUser.tenant_membership_id, parent_membership_id: parentMembershipId }],
+            }),
+          });
+        } catch {
+          toast.error('User updated but failed to update manager hierarchy');
+        }
       }
 
       toast.success('User updated successfully!');
@@ -634,6 +720,80 @@ const AddUserComponent: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-2">
+              <Label htmlFor="managerEmail">Manager Email (optional)</Label>
+              <div className="relative" ref={managerDropdownRef}>
+                <div className="flex gap-1">
+                  <div className="relative flex-1">
+                    <Input
+                      id="managerEmail"
+                      placeholder="Search by name or email..."
+                      value={showManagerDropdown ? managerSearch : formData.managerEmail}
+                      onChange={(e) => {
+                        setManagerSearch(e.target.value);
+                        setShowManagerDropdown(true);
+                      }}
+                      onFocus={() => {
+                        setManagerSearch('');
+                        setShowManagerDropdown(true);
+                      }}
+                      className="h-11 pr-9"
+                      autoComplete="off"
+                    />
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {formData.managerEmail && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 border-gray-300 text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, managerEmail: '' }));
+                        setManagerSearch('');
+                        setShowManagerDropdown(false);
+                      }}
+                      title="Clear manager"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {showManagerDropdown && (
+                  <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                    {users
+                      .filter((u) => {
+                        if (!managerSearch.trim()) return true;
+                        const q = managerSearch.toLowerCase();
+                        return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                      })
+                      .map((u) => (
+                        <button
+                          key={u.uid}
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, managerEmail: u.email }));
+                            setManagerSearch('');
+                            setShowManagerDropdown(false);
+                          }}
+                        >
+                          <span className="font-medium truncate">{u.name}</span>
+                          <span className="text-gray-500 truncate text-xs">{u.email}</span>
+                        </button>
+                      ))}
+                    {users.filter((u) => {
+                      if (!managerSearch.trim()) return true;
+                      const q = managerSearch.toLowerCase();
+                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                    }).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-400">No users found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="leadGroup">Lead Group</Label>
               <select
@@ -779,6 +939,7 @@ const AddUserComponent: React.FC = () => {
                     <TableHead className="text-white font-medium">Group</TableHead>
                     <TableHead className="text-white font-medium">Daily Target</TableHead>
                     <TableHead className="text-white font-medium">Daily Limit</TableHead>
+                    <TableHead className="text-white font-medium">Manager Email</TableHead>
                     <TableHead className="text-white font-medium">Created at</TableHead>
                     <TableHead className="text-white font-medium text-right"></TableHead>
                   </TableRow>
@@ -837,6 +998,82 @@ const AddUserComponent: React.FC = () => {
                               onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, dailyLimit: e.target.value }) : prev)}
                             />
                           ) : user.dailyLimit}
+                        </TableCell>
+                        <TableCell>
+                          {editingRowKey === getRowKey(user) && editingRow ? (
+                            <div className="relative" ref={editManagerDropdownRef}>
+                              <div className="flex gap-1">
+                                <div className="relative flex-1">
+                                  <Input
+                                    className="h-9 pr-8 text-sm"
+                                    placeholder="Search manager..."
+                                    value={showEditManagerDropdown ? editManagerSearch : editingRow.managerEmail}
+                                    onChange={(e) => {
+                                      setEditManagerSearch(e.target.value);
+                                      setShowEditManagerDropdown(true);
+                                    }}
+                                    onFocus={() => {
+                                      setEditManagerSearch('');
+                                      setShowEditManagerDropdown(true);
+                                    }}
+                                    autoComplete="off"
+                                  />
+                                  <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                </div>
+                                {editingRow.managerEmail && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-9 w-9 shrink-0 border-gray-200 text-gray-500 hover:text-gray-700"
+                                    onClick={() => {
+                                      setEditingRow((prev) => prev ? ({ ...prev, managerEmail: '' }) : prev);
+                                      setEditManagerSearch('');
+                                      setShowEditManagerDropdown(false);
+                                    }}
+                                    title="Clear manager"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                              {showEditManagerDropdown && (
+                                <div className="absolute z-50 mt-1 w-64 max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                                  {users
+                                    .filter((u) => {
+                                      if (u.email === user.email) return false;
+                                      if (!editManagerSearch.trim()) return true;
+                                      const q = editManagerSearch.toLowerCase();
+                                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                    })
+                                    .map((u) => (
+                                      <button
+                                        key={u.uid}
+                                        type="button"
+                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                          setEditingRow((prev) => prev ? ({ ...prev, managerEmail: u.email }) : prev);
+                                          setEditManagerSearch('');
+                                          setShowEditManagerDropdown(false);
+                                        }}
+                                      >
+                                        <span className="font-medium truncate">{u.name}</span>
+                                        <span className="text-gray-400 truncate">{u.email}</span>
+                                      </button>
+                                    ))}
+                                  {users.filter((u) => {
+                                    if (u.email === user.email) return false;
+                                    if (!editManagerSearch.trim()) return true;
+                                    const q = editManagerSearch.toLowerCase();
+                                    return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                  }).length === 0 && (
+                                    <div className="px-3 py-1.5 text-xs text-gray-400">No users found</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : user.managerEmail}
                         </TableCell>
                         <TableCell>
                           {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
