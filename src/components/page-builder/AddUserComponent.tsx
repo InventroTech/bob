@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Trash2, UserPlus, Pencil, Check, X } from 'lucide-react';
+import { Trash2, UserPlus, Pencil, Check, X, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
@@ -87,6 +87,26 @@ const AddUserComponent: React.FC = () => {
   const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<RowEditState | null>(null);
   const [isUpdatingRow, setIsUpdatingRow] = useState(false);
+  const [managerSearch, setManagerSearch] = useState('');
+  const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const [editManagerSearch, setEditManagerSearch] = useState('');
+  const [showEditManagerDropdown, setShowEditManagerDropdown] = useState(false);
+  const managerDropdownRef = useRef<HTMLDivElement>(null);
+  const editManagerDropdownRef = useRef<HTMLDivElement>(null);
+
+  const closeManagerDropdowns = useCallback((e: MouseEvent) => {
+    if (managerDropdownRef.current && !managerDropdownRef.current.contains(e.target as Node)) {
+      setShowManagerDropdown(false);
+    }
+    if (editManagerDropdownRef.current && !editManagerDropdownRef.current.contains(e.target as Node)) {
+      setShowEditManagerDropdown(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('mousedown', closeManagerDropdowns);
+    return () => document.removeEventListener('mousedown', closeManagerDropdowns);
+  }, [closeManagerDropdowns]);
 
   useEffect(() => {
     const fetchRoles = async () => {
@@ -503,6 +523,8 @@ const AddUserComponent: React.FC = () => {
   const handleCancelRowEdit = () => {
     setEditingRowKey(null);
     setEditingRow(null);
+    setEditManagerSearch('');
+    setShowEditManagerDropdown(false);
   };
 
   const handleSaveRowEdit = async () => {
@@ -700,15 +722,77 @@ const AddUserComponent: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="space-y-2">
               <Label htmlFor="managerEmail">Manager Email (optional)</Label>
-              <Input
-                id="managerEmail"
-                name="managerEmail"
-                type="email"
-                placeholder="manager@example.com"
-                value={formData.managerEmail}
-                onChange={handleChange}
-                className="h-11"
-              />
+              <div className="relative" ref={managerDropdownRef}>
+                <div className="flex gap-1">
+                  <div className="relative flex-1">
+                    <Input
+                      id="managerEmail"
+                      placeholder="Search by name or email..."
+                      value={showManagerDropdown ? managerSearch : formData.managerEmail}
+                      onChange={(e) => {
+                        setManagerSearch(e.target.value);
+                        setShowManagerDropdown(true);
+                      }}
+                      onFocus={() => {
+                        setManagerSearch('');
+                        setShowManagerDropdown(true);
+                      }}
+                      className="h-11 pr-9"
+                      autoComplete="off"
+                    />
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {formData.managerEmail && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 border-gray-300 text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, managerEmail: '' }));
+                        setManagerSearch('');
+                        setShowManagerDropdown(false);
+                      }}
+                      title="Clear manager"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {showManagerDropdown && (
+                  <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                    {users
+                      .filter((u) => {
+                        if (!managerSearch.trim()) return true;
+                        const q = managerSearch.toLowerCase();
+                        return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                      })
+                      .map((u) => (
+                        <button
+                          key={u.uid}
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, managerEmail: u.email }));
+                            setManagerSearch('');
+                            setShowManagerDropdown(false);
+                          }}
+                        >
+                          <span className="font-medium truncate">{u.name}</span>
+                          <span className="text-gray-500 truncate text-xs">{u.email}</span>
+                        </button>
+                      ))}
+                    {users.filter((u) => {
+                      if (!managerSearch.trim()) return true;
+                      const q = managerSearch.toLowerCase();
+                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                    }).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-400">No users found</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="leadGroup">Lead Group</Label>
@@ -917,13 +1001,78 @@ const AddUserComponent: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           {editingRowKey === getRowKey(user) && editingRow ? (
-                            <Input
-                              className="h-9"
-                              type="email"
-                              placeholder="manager@example.com"
-                              value={editingRow.managerEmail}
-                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, managerEmail: e.target.value }) : prev)}
-                            />
+                            <div className="relative" ref={editManagerDropdownRef}>
+                              <div className="flex gap-1">
+                                <div className="relative flex-1">
+                                  <Input
+                                    className="h-9 pr-8 text-sm"
+                                    placeholder="Search manager..."
+                                    value={showEditManagerDropdown ? editManagerSearch : editingRow.managerEmail}
+                                    onChange={(e) => {
+                                      setEditManagerSearch(e.target.value);
+                                      setShowEditManagerDropdown(true);
+                                    }}
+                                    onFocus={() => {
+                                      setEditManagerSearch('');
+                                      setShowEditManagerDropdown(true);
+                                    }}
+                                    autoComplete="off"
+                                  />
+                                  <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                </div>
+                                {editingRow.managerEmail && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-9 w-9 shrink-0 border-gray-200 text-gray-500 hover:text-gray-700"
+                                    onClick={() => {
+                                      setEditingRow((prev) => prev ? ({ ...prev, managerEmail: '' }) : prev);
+                                      setEditManagerSearch('');
+                                      setShowEditManagerDropdown(false);
+                                    }}
+                                    title="Clear manager"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                              {showEditManagerDropdown && (
+                                <div className="absolute z-50 mt-1 w-64 max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                                  {users
+                                    .filter((u) => {
+                                      if (u.email === user.email) return false;
+                                      if (!editManagerSearch.trim()) return true;
+                                      const q = editManagerSearch.toLowerCase();
+                                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                    })
+                                    .map((u) => (
+                                      <button
+                                        key={u.uid}
+                                        type="button"
+                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                          setEditingRow((prev) => prev ? ({ ...prev, managerEmail: u.email }) : prev);
+                                          setEditManagerSearch('');
+                                          setShowEditManagerDropdown(false);
+                                        }}
+                                      >
+                                        <span className="font-medium truncate">{u.name}</span>
+                                        <span className="text-gray-400 truncate">{u.email}</span>
+                                      </button>
+                                    ))}
+                                  {users.filter((u) => {
+                                    if (u.email === user.email) return false;
+                                    if (!editManagerSearch.trim()) return true;
+                                    const q = editManagerSearch.toLowerCase();
+                                    return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                  }).length === 0 && (
+                                    <div className="px-3 py-1.5 text-xs text-gray-400">No users found</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           ) : user.managerEmail}
                         </TableCell>
                         <TableCell>
