@@ -1119,8 +1119,9 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       column.type !== 'chip' &&
       column.type !== 'link';
     const inlineDraft = inlineCellDrafts[inlineCellKey];
-    const inlineValue = inlineDraft ?? (value == null || value === 'N/A' ? '' : String(value));
-    const inlineChanged = inlineDraft !== undefined && inlineDraft !== (value == null || value === 'N/A' ? '' : String(value));
+    const normalizedInlineBaseValue = value === 'N/A' ? '' : String(value);
+    const inlineValue = inlineDraft ?? normalizedInlineBaseValue;
+    const inlineChanged = inlineDraft !== undefined && inlineDraft !== normalizedInlineBaseValue;
     const inlineSaving = inlineSavingCell === inlineCellKey;
     if (isInlineEditable) {
       if (column.accessor === 'urgency_level') {
