@@ -21,6 +21,8 @@ export interface CustomTableColumn {
    * Field to use as link (for link type)
    */
   linkField?: string;
+  /** Whether this column is editable inline in table (used by custom renderers). */
+  editableInTable?: boolean;
   
   /**
    * For action type: open detail card (lead/ticket) on click

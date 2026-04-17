@@ -261,6 +261,7 @@ interface ComponentConfig {
   // InventoryRequestForm specific fields
   entityType?: string;
   initialStatus?: string;
+  initialStatusText?: string;
   defaultStatus?: string;
   urgencyOptions?: Array<{ label: string; value: string }>;
 }
@@ -321,6 +322,7 @@ interface ColumnConfig {
   label: string;
   type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
   linkField?: string;
+  editableInTable?: boolean;
   openCard?: boolean | string;
   actionApiEndpoint?: string;
   actionApiMethod?: string;
@@ -391,11 +393,25 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showDiagram?: boolean;
     // InventoryRequestForm specific fields
     initialStatus?: string;
+    initialStatusText?: string;
     defaultStatus?: string;
     urgencyOptions?: Array<{ label: string; value: string }>;
     // Records table (leadTable / inventoryTable): items table mode
     tableType?: 'default' | 'itemsTable';
-    statusButtons?: Array<{ label: string; statusValue: string }>;
+    statusButtons?: Array<{
+      label: string;
+      statusValue: string;
+      statusText?: string;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+      openWarningModal?: boolean;
+      warningModalConfig?: {
+        title?: string;
+        description?: string;
+        confirmationText?: string;
+        formType?: 'payment_confirmation';
+        paymentMethods?: string[];
+      };
+    }>;
     /** Per-field config for record detail modal: which data keys are editable (key + editable toggle). */
     modalFieldConfig?: Array<{ key: string; editable: boolean }>;
     /** 'default' | 'form_edit' — form_edit = inventory-form-style modal with action buttons. */
@@ -465,6 +481,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showDiagram: initialConfig.showDiagram !== false,
     // InventoryRequestForm (empty by default so user can set from config)
     initialStatus: (initialConfig as any).initialStatus ?? (initialConfig as any).defaultStatus ?? '',
+    initialStatusText: (initialConfig as any).initialStatusText ?? '',
     defaultStatus: (initialConfig as any).defaultStatus ?? '',
     urgencyOptions: (initialConfig as any).urgencyOptions ?? undefined,
     // Records table: items table + status buttons
@@ -970,6 +987,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Status for new requests. Leave empty to use default (DRAFT).
+              </p>
+            </div>
+
+            <div>
+              <Label>Initial status text</Label>
+              <Input
+                value={localConfig.initialStatusText ?? ''}
+                onChange={(e) => handleInputChange('initialStatusText', e.target.value)}
+                placeholder="e.g. Team admin review pending"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Friendly status label saved as <code className="bg-muted px-1 rounded">data.status_text</code> on create.
               </p>
             </div>
 

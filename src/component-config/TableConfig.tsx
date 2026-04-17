@@ -29,6 +29,27 @@ export type ModalFlagConfig = {
   };
 };
 
+export type StatusActionButtonConfig = {
+  label: string;
+  statusValue: string;
+  statusText?: string;
+  /** Optional visibility rule; if omitted, button always shows. */
+  conditional?: {
+    attribute: string;
+    operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq';
+    value: string | number;
+  };
+  /** If true, clicking this status button opens a confirmation modal before save. */
+  openWarningModal?: boolean;
+  warningModalConfig?: {
+    title?: string;
+    description?: string;
+    confirmationText?: string;
+    formType?: 'payment_confirmation';
+    paymentMethods?: string[];
+  };
+};
+
 export interface ColumnConfig {
   key: string;
   label: string;
@@ -36,6 +57,8 @@ export interface ColumnConfig {
   linkField?: string; // Field to use as link for this column
   /** If true, this field is editable in the record detail modal (save icon to update). */
   editable?: boolean;
+  /** If true, this field can be edited inline directly in the table cell. */
+  editableInTable?: boolean;
   /** For action type: open detail card (lead/ticket) on click */
   openCard?: boolean | string;
   /** For action type: API endpoint to call when action button is clicked */
@@ -57,8 +80,8 @@ interface TableConfigProps {
     detailMode?: string;
     /** 'default' | 'itemsTable' — when itemsTable, first column is normal text and status buttons column can be shown */
     tableType?: 'default' | 'itemsTable';
-    /** For itemsTable: buttons that set record data.status on click. */
-    statusButtons?: Array<{ label: string; statusValue: string }>;
+    /** For itemsTable/form modal: buttons that set record data.status on click (optional conditional visibility). */
+    statusButtons?: StatusActionButtonConfig[];
     /** Per-field config for record detail modal: which data keys to show and whether each is editable. */
     modalFieldConfig?: Array<{ key: string; editable: boolean }>;
     /** 'default' = record detail modal; 'form_edit' = inventory-form-style modal with action buttons. */
@@ -84,7 +107,7 @@ interface TableConfigProps {
   numColumns: number;
   localFilters: FilterConfig[];
   numFilters: number;
-  handleInputChange: (field: string, value: string | number | boolean | Array<{ label: string; statusValue: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | PaymentModalConfig | ModalFlagConfig[]) => void;
+  handleInputChange: (field: string, value: string | number | boolean | StatusActionButtonConfig[] | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | PaymentModalConfig | ModalFlagConfig[]) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string | boolean) => void;
   handleColumnDelete?: (index: number) => void;
@@ -180,47 +203,348 @@ export const TableConfig: React.FC<TableConfigProps> = ({
         <div className="space-y-2">
           <Label>Status action buttons</Label>
           <p className="text-xs text-gray-500">
-            Each button updates the record&apos;s <code className="bg-muted px-1 rounded">data.status</code> when clicked. Add buttons below.
+            Each button updates <code className="bg-muted px-1 rounded">data.status</code>. Optional condition: show only when attribute matches.
           </p>
           {(localConfig.statusButtons || []).map((btn, idx) => (
-            <div key={idx} className="flex gap-2 items-center p-2 border rounded-md bg-muted/30">
-              <Input
-                placeholder="Button label"
-                value={btn.label}
-                onChange={(e) => {
-                  const next = [...(localConfig.statusButtons || [])];
-                  next[idx] = { ...next[idx], label: e.target.value };
-                  handleInputChange('statusButtons', next);
-                }}
-              />
-              <Input
-                placeholder="Status value"
-                value={btn.statusValue}
-                onChange={(e) => {
-                  const next = [...(localConfig.statusButtons || [])];
-                  next[idx] = { ...next[idx], statusValue: e.target.value };
-                  handleInputChange('statusButtons', next);
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  const next = (localConfig.statusButtons || []).filter((_, i) => i !== idx);
-                  handleInputChange('statusButtons', next);
-                }}
-                className="text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+            <div key={idx} className="space-y-3 p-3 border rounded-md bg-muted/30">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                <div className="md:col-span-4 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Label</Label>
+                  <Input
+                    placeholder="Button label"
+                    value={btn.label}
+                    onChange={(e) => {
+                      const next = [...(localConfig.statusButtons || [])];
+                      next[idx] = { ...next[idx], label: e.target.value };
+                      handleInputChange('statusButtons', next);
+                    }}
+                  />
+                </div>
+                <div className="md:col-span-4 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Status value</Label>
+                  <Input
+                    placeholder="Status value"
+                    value={btn.statusValue}
+                    onChange={(e) => {
+                      const next = [...(localConfig.statusButtons || [])];
+                      next[idx] = { ...next[idx], statusValue: e.target.value };
+                      handleInputChange('statusButtons', next);
+                    }}
+                  />
+                </div>
+                <div className="md:col-span-4 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Status text</Label>
+                  <Input
+                    placeholder="Shown to requestor"
+                    value={btn.statusText || ''}
+                    onChange={(e) => {
+                      const next = [...(localConfig.statusButtons || [])];
+                      next[idx] = { ...next[idx], statusText: e.target.value };
+                      handleInputChange('statusButtons', next);
+                    }}
+                  />
+                </div>
+                <div className="md:col-span-12 flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const next = (localConfig.statusButtons || []).filter((_, i) => i !== idx);
+                      handleInputChange('statusButtons', next);
+                    }}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border-t border-border/60 pt-3 space-y-3">
+                <p className="text-xs text-muted-foreground font-medium">Show when</p>
+                {/* Line 1: condition on/off + attribute */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  <div className="md:col-span-3 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Condition</Label>
+                    <Select
+                      value={btn.conditional ? 'on' : 'off'}
+                      onValueChange={(v) => {
+                        const next = [...(localConfig.statusButtons || [])];
+                        const prev = next[idx];
+                        if (v === 'off') {
+                          next[idx] = { ...prev, conditional: undefined };
+                        } else {
+                          next[idx] = {
+                            ...prev,
+                            conditional: {
+                              attribute: prev.conditional?.attribute || 'status',
+                              operator: prev.conditional?.operator || 'eq',
+                              value: prev.conditional?.value ?? '',
+                            },
+                          };
+                        }
+                        handleInputChange('statusButtons', next);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="off">Off</SelectItem>
+                        <SelectItem value="on">On</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-9 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Show when attribute</Label>
+                    <Input
+                      placeholder="e.g. status"
+                      value={btn.conditional?.attribute || ''}
+                      disabled={!btn.conditional}
+                      onChange={(e) => {
+                        const next = [...(localConfig.statusButtons || [])];
+                        const prev = next[idx];
+                        next[idx] = {
+                          ...prev,
+                          conditional: {
+                            attribute: e.target.value,
+                            operator: prev.conditional?.operator || 'eq',
+                            value: prev.conditional?.value ?? '',
+                          },
+                        };
+                        handleInputChange('statusButtons', next);
+                      }}
+                    />
+                  </div>
+                </div>
+                {/* Line 2: operator + value */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  <div className="md:col-span-4 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Operator</Label>
+                    <Select
+                      value={btn.conditional?.operator || 'eq'}
+                      disabled={!btn.conditional}
+                      onValueChange={(value: 'gt' | 'lt' | 'gte' | 'lte' | 'eq') => {
+                        const next = [...(localConfig.statusButtons || [])];
+                        const prev = next[idx];
+                        next[idx] = {
+                          ...prev,
+                          conditional: {
+                            attribute: prev.conditional?.attribute || '',
+                            operator: value,
+                            value: prev.conditional?.value ?? '',
+                          },
+                        };
+                        handleInputChange('statusButtons', next);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="eq">=</SelectItem>
+                        <SelectItem value="gt">&gt;</SelectItem>
+                        <SelectItem value="gte">&gt;=</SelectItem>
+                        <SelectItem value="lt">&lt;</SelectItem>
+                        <SelectItem value="lte">&lt;=</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-8 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Value</Label>
+                    <Input
+                      placeholder="e.g. ON_HOLD"
+                      value={String(btn.conditional?.value ?? '')}
+                      disabled={!btn.conditional}
+                      onChange={(e) => {
+                        const next = [...(localConfig.statusButtons || [])];
+                        const prev = next[idx];
+                        next[idx] = {
+                          ...prev,
+                          conditional: {
+                            attribute: prev.conditional?.attribute || '',
+                            operator: prev.conditional?.operator || 'eq',
+                            value: e.target.value,
+                          },
+                        };
+                        handleInputChange('statusButtons', next);
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border/60 pt-3 space-y-3">
+                <p className="text-xs text-muted-foreground font-medium">Warning modal (optional)</p>
+                <div className="rounded-md border border-border/60 bg-background/70 p-3 space-y-3">
+                  <div className="flex items-center gap-2">
+                      <Switch
+                        id={`warning-modal-${idx}`}
+                        checked={btn.openWarningModal === true}
+                        onCheckedChange={(checked) => {
+                          const next = [...(localConfig.statusButtons || [])];
+                          const prev = next[idx];
+                          next[idx] = checked
+                            ? {
+                                ...prev,
+                                openWarningModal: true,
+                                warningModalConfig: {
+                                  formType: prev.warningModalConfig?.formType || 'payment_confirmation',
+                                  title: prev.warningModalConfig?.title || `Confirm ${prev.label || 'action'}`,
+                                  description:
+                                    prev.warningModalConfig?.description ||
+                                    'Please confirm payment details before updating status.',
+                                  confirmationText:
+                                    prev.warningModalConfig?.confirmationText ||
+                                    'I confirm this payment status update.',
+                                  paymentMethods:
+                                    prev.warningModalConfig?.paymentMethods?.length
+                                      ? prev.warningModalConfig.paymentMethods
+                                      : ['NEFT', 'UPI', 'WIRE_TRANSFER', 'COMPANY_CARD', 'OTHER'],
+                                },
+                              }
+                            : { ...prev, openWarningModal: false };
+                          handleInputChange('statusButtons', next);
+                        }}
+                      />
+                      <Label htmlFor={`warning-modal-${idx}`} className="text-sm font-normal cursor-pointer">
+                        Open warning modal
+                      </Label>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Modal type</Label>
+                    <Select
+                      value={btn.warningModalConfig?.formType || 'payment_confirmation'}
+                      disabled={btn.openWarningModal !== true}
+                      onValueChange={(value: 'payment_confirmation') => {
+                        const next = [...(localConfig.statusButtons || [])];
+                        const prev = next[idx];
+                        next[idx] = {
+                          ...prev,
+                          openWarningModal: true,
+                          warningModalConfig: {
+                            ...(prev.warningModalConfig || {}),
+                            formType: value,
+                          },
+                        };
+                        handleInputChange('statusButtons', next);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select modal type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="payment_confirmation">Payment confirmation</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Modal title</Label>
+                      <Input
+                        placeholder="Confirm payment"
+                        value={btn.warningModalConfig?.title || ''}
+                        disabled={btn.openWarningModal !== true}
+                        onChange={(e) => {
+                          const next = [...(localConfig.statusButtons || [])];
+                          const prev = next[idx];
+                          next[idx] = {
+                            ...prev,
+                            openWarningModal: true,
+                            warningModalConfig: {
+                              ...(prev.warningModalConfig || {}),
+                              formType: prev.warningModalConfig?.formType || 'payment_confirmation',
+                              title: e.target.value,
+                            },
+                          };
+                          handleInputChange('statusButtons', next);
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Confirmation text</Label>
+                      <Input
+                        placeholder="I confirm this payment status update."
+                        value={btn.warningModalConfig?.confirmationText || ''}
+                        disabled={btn.openWarningModal !== true}
+                        onChange={(e) => {
+                          const next = [...(localConfig.statusButtons || [])];
+                          const prev = next[idx];
+                          next[idx] = {
+                            ...prev,
+                            openWarningModal: true,
+                            warningModalConfig: {
+                              ...(prev.warningModalConfig || {}),
+                              formType: prev.warningModalConfig?.formType || 'payment_confirmation',
+                              confirmationText: e.target.value,
+                            },
+                          };
+                          handleInputChange('statusButtons', next);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Modal description</Label>
+                    <Input
+                      placeholder="Please confirm payment details before updating status."
+                      value={btn.warningModalConfig?.description || ''}
+                      disabled={btn.openWarningModal !== true}
+                      onChange={(e) => {
+                        const next = [...(localConfig.statusButtons || [])];
+                        const prev = next[idx];
+                        next[idx] = {
+                          ...prev,
+                          openWarningModal: true,
+                          warningModalConfig: {
+                            ...(prev.warningModalConfig || {}),
+                            formType: prev.warningModalConfig?.formType || 'payment_confirmation',
+                            description: e.target.value,
+                          },
+                        };
+                        handleInputChange('statusButtons', next);
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Payment methods (comma separated)</Label>
+                    <Input
+                      placeholder="NEFT, UPI, WIRE_TRANSFER, COMPANY_CARD, OTHER"
+                      value={(btn.warningModalConfig?.paymentMethods || []).join(', ')}
+                      disabled={btn.openWarningModal !== true}
+                      onChange={(e) => {
+                        const next = [...(localConfig.statusButtons || [])];
+                        const prev = next[idx];
+                        const methods = e.target.value
+                          .split(',')
+                          .map((v) => v.trim())
+                          .filter(Boolean);
+                        next[idx] = {
+                          ...prev,
+                          openWarningModal: true,
+                          warningModalConfig: {
+                            ...(prev.warningModalConfig || {}),
+                            formType: prev.warningModalConfig?.formType || 'payment_confirmation',
+                            paymentMethods: methods,
+                          },
+                        };
+                        handleInputChange('statusButtons', next);
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           ))}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => handleInputChange('statusButtons', [...(localConfig.statusButtons || []), { label: 'New', statusValue: 'NEW' }])}
+            onClick={() => handleInputChange('statusButtons', [...(localConfig.statusButtons || []), { label: 'New', statusValue: 'NEW', statusText: 'New' }])}
           >
             Add status button
           </Button>
@@ -737,6 +1061,16 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                     />
                     <Label htmlFor={`editable-${index}`} className="text-sm font-normal cursor-pointer">
                       Editable in record detail modal (show save icon to update)
+                    </Label>
+                  </div>
+                  <div className="col-span-2 flex items-center gap-2">
+                    <Switch
+                      id={`editable-in-table-${index}`}
+                      checked={column.editableInTable === true}
+                      onCheckedChange={(checked) => handleColumnFieldChange(index, 'editableInTable', !!checked)}
+                    />
+                    <Label htmlFor={`editable-in-table-${index}`} className="text-sm font-normal cursor-pointer">
+                      Editable in table (inline)
                     </Label>
                   </div>
                   {(column.type === 'text' || column.key === 'user_id' || 
