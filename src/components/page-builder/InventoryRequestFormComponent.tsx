@@ -36,6 +36,8 @@ interface InventoryRequestFormConfig {
   entityType?: string;
   /** Initial status for new records (e.g. DRAFT, PENDING_PM). */
   initialStatus?: string;
+  /** Friendly initial status label stored as data.status_text. */
+  initialStatusText?: string;
   /** @deprecated Use initialStatus */
   defaultStatus?: string;
   /** Options shown in the Priority / Urgency picker. Saved as `urgency_level`. */
@@ -58,6 +60,18 @@ const normalizeProductName = (name: string): string =>
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
+
+const normalizeVendorName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+const toVendorStorageName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
 
 interface FormItem {
   id: string;
@@ -87,14 +101,21 @@ const newEmptyItem = (): FormItem => ({
   comments: '',
 });
 
+const REQUIRED_ITEM_FIELDS: Array<{ key: keyof FormItem; label: string }> = [
+  { key: 'item_name_freeform', label: 'Item name' },
+  { key: 'quantity_required', label: 'Quantity' },
+  { key: 'estimated_cost', label: 'Estimated cost' },
+  { key: 'vendor', label: 'Vendor' },
+  { key: 'product_link', label: 'Product link' },
+  { key: 'urgency_level', label: 'Priority / Urgency' },
+];
+
 interface InventoryRequestFormProps {
   config?: InventoryRequestFormConfig;
 }
 
 const DEFAULT_URGENCY_OPTIONS = [
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
+  { value: 'STANDARD', label: 'Standard' },
   { value: 'CRITICAL', label: 'Critical' },
 ];
 
@@ -108,6 +129,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const entityType = config?.entityType ?? 'inventory_request';
   const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'DRAFT';
+  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
   // If `urgencyOptions` exists in config (even empty), treat it as an override.
   const urgencyOptions =
     config?.urgencyOptions !== undefined ? config.urgencyOptions : DEFAULT_URGENCY_OPTIONS;
@@ -227,7 +249,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     const productName = String(item.item_name_freeform ?? '').trim();
     if (!productName) return;
     const normalizedName = normalizeProductName(productName);
-    const productVendor = String(item.vendor ?? '').trim();
+    const productVendor = toVendorStorageName(String(item.vendor ?? '').trim());
 
     const productData: Record<string, unknown> = {
       name: productName,
@@ -418,8 +440,13 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   };
 
   const saveNewVendor = async () => {
-    const name = (newVendorName ?? '').trim();
+    const name = toVendorStorageName((newVendorName ?? '').trim());
     if (!name) {
+      toast.error('Enter vendor name.');
+      return;
+    }
+    const normalizedName = normalizeVendorName(name);
+    if (!normalizedName) {
       toast.error('Enter vendor name.');
       return;
     }
@@ -427,6 +454,35 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     if (!itemId) return;
     try {
       setSavingNewVendor(true);
+
+      // Fast local check against already loaded vendors (case-insensitive, whitespace-normalized).
+      const existingLocal = vendors.find((v) => normalizeVendorName(v.name) === normalizedName);
+      if (existingLocal) {
+        updateItem(itemId, 'vendor', existingLocal.name);
+        toast.info(`Vendor "${existingLocal.name}" already exists. Selected existing vendor.`);
+        cancelAddVendor();
+        return;
+      }
+
+      // Server-side duplicate check to prevent race conditions / stale local vendor list.
+      const searchRes = await apiClient.get<any>(
+        `${RECORDS_URL}?entity_type=unmannd_vendor&page_size=30&search=${encodeURIComponent(name)}`
+      );
+      const raw = searchRes.data?.data ?? (searchRes.data as any)?.results ?? [];
+      const list = Array.isArray(raw) ? raw : [];
+      const existingServer = list.find((r: any) => {
+        const vendorName = String(r?.data?.vendor_name ?? r?.vendor_name ?? '').trim();
+        return normalizeVendorName(vendorName) === normalizedName;
+      });
+      if (existingServer) {
+        const resolvedName = toVendorStorageName(String(existingServer?.data?.vendor_name ?? existingServer?.vendor_name ?? name).trim());
+        updateItem(itemId, 'vendor', resolvedName || name);
+        toast.info(`Vendor "${resolvedName || name}" already exists. Selected existing vendor.`);
+        cancelAddVendor();
+        await fetchVendors();
+        return;
+      }
+
       await apiClient.post(RECORDS_URL, {
         entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
@@ -453,13 +509,58 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       return;
     }
 
-    const validItems = items.filter(
-      (i) => (i.item_name_freeform ?? '').trim() !== '' && i.quantity_required !== '' && Number(i.quantity_required) > 0
-    );
-    if (validItems.length === 0) {
-      toast.error('Add at least one item with name and quantity.');
+    const hasAtLeastOneNamedItem = items.some((i) => (i.item_name_freeform ?? '').trim() !== '');
+    if (!hasAtLeastOneNamedItem) {
+      toast.error('Add at least one item.');
       return;
     }
+
+    const isMissingRequired = (item: FormItem, field: keyof FormItem): boolean => {
+      if (field === 'quantity_required') {
+        return item.quantity_required === '' || Number(item.quantity_required) <= 0;
+      }
+      if (field === 'estimated_cost') {
+        return item.estimated_cost === '' || Number(item.estimated_cost) <= 0;
+      }
+      const value = item[field];
+      return value == null || String(value).trim() === '';
+    };
+
+    const firstInvalid = items.find((item) => {
+      // Ignore completely empty rows created via "Add item" button.
+      const hasAnyInput =
+        (item.item_name_freeform ?? '').trim() !== '' ||
+        item.quantity_required !== '' ||
+        (item.vendor ?? '').trim() !== '' ||
+        (item.estimated_cost ?? '') !== '' ||
+        (item.urgency_level ?? '').trim() !== '' ||
+        (item.product_link ?? '').trim() !== '' ||
+        (item.additional_link ?? '').trim() !== '' ||
+        (item.comments ?? '').trim() !== '';
+      if (!hasAnyInput) return false;
+      return REQUIRED_ITEM_FIELDS.some((f) => isMissingRequired(item, f.key));
+    });
+
+    if (firstInvalid) {
+      const missing = REQUIRED_ITEM_FIELDS
+        .filter((f) => isMissingRequired(firstInvalid, f.key))
+        .map((f) => f.label);
+      toast.error(`Please fill mandatory fields: ${missing.join(', ')}`);
+      return;
+    }
+
+    const validItems = items.filter((item) => {
+      const hasAnyInput =
+        (item.item_name_freeform ?? '').trim() !== '' ||
+        item.quantity_required !== '' ||
+        (item.vendor ?? '').trim() !== '' ||
+        (item.estimated_cost ?? '') !== '' ||
+        (item.urgency_level ?? '').trim() !== '' ||
+        (item.product_link ?? '').trim() !== '' ||
+        (item.additional_link ?? '').trim() !== '' ||
+        (item.comments ?? '').trim() !== '';
+      return hasAnyInput;
+    });
 
     const requesterId = user.id;
 
@@ -471,12 +572,16 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
         const payloadData: Record<string, unknown> = {
           status: initialStatus,
+          status_text: initialStatusText,
+          // Requestor tracking fields: initialized empty; filled later by ops/procurement flows.
+          tracking_link: null,
+          eta: null,
           request_date: requestDate,
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
           urgency_level: (item.urgency_level ?? '').trim() || '',
-          vendor: (item.vendor ?? '').trim() || '',
+          vendor: toVendorStorageName((item.vendor ?? '').trim()) || '',
           item_name_freeform: (item.item_name_freeform ?? '').trim(),
           quantity_required: typeof item.quantity_required === 'number' ? item.quantity_required : Number(item.quantity_required) || 0,
           product_link: (item.product_link ?? '').trim() || '',
@@ -642,7 +747,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                     updateItem(item.id, 'item_name_freeform', s.name);
                                     const d = s.data || {};
 
-                                    const vendor = String((d.default_vendor ?? d.vendor ?? '') as any).trim();
+                                    const vendor = toVendorStorageName(String((d.default_vendor ?? d.vendor ?? '') as any).trim());
                                     if (vendor) updateItem(item.id, 'vendor', vendor);
 
                                     const costRaw = d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
@@ -692,7 +797,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium">Estimated cost</Label>
+                      <Label className="text-xs font-medium">Estimated cost *</Label>
                       <div className="flex items-center gap-2">
                         <Input
                           type="text"
@@ -741,7 +846,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                       <span className="text-xs font-medium">Including GST</span>
                     </label>
                     <div className="space-y-1.5 flex-1 min-w-[180px]">
-                      <Label className="text-xs font-medium">Vendor</Label>
+                      <Label className="text-xs font-medium">Vendor *</Label>
                       <div className="flex items-center gap-2">
                         <div className="relative w-full">
                             <Input
@@ -761,7 +866,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                               }}
                               onChange={(e) => {
                                 const v = e.target.value;
-                                updateItem(item.id, 'vendor', v);
+                                updateItem(item.id, 'vendor', toVendorStorageName(v));
                                 setFocusedVendorId(item.id);
                                 setVendorQuery(v);
                                 setVendorSuggestionsOpen(true);
@@ -825,7 +930,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     </div>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Product link</Label>
+                    <Label className="text-xs font-medium">Product link *</Label>
                     <Input
                       type="url"
                       placeholder="https://..."
@@ -845,7 +950,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Priority / Urgency</Label>
+                    <Label className="text-xs font-medium">Priority / Urgency *</Label>
                     <div className="flex flex-wrap gap-2" role="group" aria-label="Priority level">
                       {normalizedUrgencyOptions.map((o) => (
                         <Button
