@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -7,10 +6,11 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Trash2, UserPlus } from 'lucide-react';
+import { Trash2, UserPlus, Pencil, Check, X, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
+import { leadTypeAssignmentApi, groupsApi } from '@/lib/userSettingsApi';
 
 interface Role {
   id: string;
@@ -18,6 +18,7 @@ interface Role {
 }
 
 interface User {
+  tenant_membership_id?: number;
   uid: string;
   name: string;
   email: string;
@@ -25,18 +26,38 @@ interface User {
   created_at: string;
   role?: Role;
   department?: string;
+  lead_group_name?: string;
+  leadGroup?: string;
+  dailyTarget?: string | number;
+  dailyLimit?: string | number;
+  user_parent_id?: number | null;
+  managerEmail?: string;
 }
 
-interface DatabaseUser {
-  uid: string;
+interface UserCoreSettingsSummary {
+  group_id?: number;
+  daily_target?: number;
+  daily_limit?: number;
+}
+
+interface LeadGroupOption {
+  id: number;
+  name: string;
+  queue_type?: string;
+  group_data?: Record<string, any>;
+}
+
+interface RowEditState {
+  originalEmail: string;
+  originalRoleId: string;
   name: string;
   email: string;
-  role_id: string;
-  created_at: string;
-  roles: {
-    id: string;
-    name: string;
-  } | null;
+  department: string;
+  roleId: string;
+  leadGroup: string;
+  dailyTarget: string;
+  dailyLimit: string;
+  managerEmail: string;
 }
 
 const AddUserComponent: React.FC = () => {
@@ -47,9 +68,45 @@ const AddUserComponent: React.FC = () => {
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleKey, setNewRoleKey] = useState('');
-  const [formData, setFormData] = useState({ name: '', email: '', department: '' });
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    department: '',
+    leadGroup: '',
+    dailyTarget: '',
+    dailyLimit: '',
+    managerEmail: '',
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
+  const [coreSettingsMap, setCoreSettingsMap] = useState<Record<string, UserCoreSettingsSummary>>({});
+  const [availableLeadGroups, setAvailableLeadGroups] = useState<LeadGroupOption[]>([]);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [selectedQueueType, setSelectedQueueType] = useState<'lead' | 'ticket'>('lead');
+  const [queueTypes, setQueueTypes] = useState<string[]>([]);
+  const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
+  const [editingRow, setEditingRow] = useState<RowEditState | null>(null);
+  const [isUpdatingRow, setIsUpdatingRow] = useState(false);
+  const [managerSearch, setManagerSearch] = useState('');
+  const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const [editManagerSearch, setEditManagerSearch] = useState('');
+  const [showEditManagerDropdown, setShowEditManagerDropdown] = useState(false);
+  const managerDropdownRef = useRef<HTMLDivElement>(null);
+  const editManagerDropdownRef = useRef<HTMLDivElement>(null);
+
+  const closeManagerDropdowns = useCallback((e: MouseEvent) => {
+    if (managerDropdownRef.current && !managerDropdownRef.current.contains(e.target as Node)) {
+      setShowManagerDropdown(false);
+    }
+    if (editManagerDropdownRef.current && !editManagerDropdownRef.current.contains(e.target as Node)) {
+      setShowEditManagerDropdown(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('mousedown', closeManagerDropdowns);
+    return () => document.removeEventListener('mousedown', closeManagerDropdowns);
+  }, [closeManagerDropdowns]);
 
   useEffect(() => {
     const fetchRoles = async () => {
@@ -115,13 +172,16 @@ const AddUserComponent: React.FC = () => {
 
       // Transform the data to match expected format
       const transformedUsers: User[] = usersData.map((user: any, index: number) => ({
+        tenant_membership_id: typeof user.id === 'number' ? user.id : Number(user.id) || undefined,
         uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
         name: user.name || user.full_name || 'Unnamed User',
         email: user.email || 'No Email',
         role_id: user.role_id || user.role?.id || '',
         created_at: user.created_at || user.date_joined || new Date().toISOString(),
         role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined),
-        department: user.department ?? user.department_name ?? undefined
+        department: user.department ?? user.department_name ?? undefined,
+        lead_group_name: user.lead_group_name ?? undefined,
+        user_parent_id: user.user_parent_id ?? null,
       }));
 
       setUsers(transformedUsers);
@@ -138,9 +198,86 @@ const AddUserComponent: React.FC = () => {
     }
   };
 
+  const fetchCoreSettings = async () => {
+    try {
+      const mapped: Record<string, UserCoreSettingsSummary> = {};
+      const usersWithMembershipId = users.filter((u) => !!u.tenant_membership_id);
+      const rows = await Promise.all(
+        usersWithMembershipId.map(async (u) => ({
+          emailKey: (u.email || '').toLowerCase(),
+          kv: await leadTypeAssignmentApi.getUserCoreKVSettings(String(u.tenant_membership_id)),
+        }))
+      );
+      rows.forEach(({ emailKey, kv }) => {
+        const groupRow = kv.find((r) => r.key === 'GROUP');
+        const targetRow = kv.find((r) => r.key === 'DAILY_TARGET');
+        const limitRow = kv.find((r) => r.key === 'DAILY_LIMIT');
+        mapped[emailKey] = {
+          group_id: typeof groupRow?.value === 'number' ? groupRow.value : undefined,
+          daily_target: typeof targetRow?.value === 'number' ? targetRow.value : undefined,
+          daily_limit: typeof limitRow?.value === 'number' ? limitRow.value : undefined,
+        };
+      });
+      setCoreSettingsMap(mapped);
+    } catch {
+      setCoreSettingsMap({});
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
   }, [tenantId]);
+
+  useEffect(() => {
+    if (users.length > 0) {
+      fetchCoreSettings();
+    } else {
+      setCoreSettingsMap({});
+    }
+  }, [users]);
+
+  useEffect(() => {
+    const fetchLeadGroupsAndQueueTypes = async () => {
+      try {
+        const [groups, queueTypesData] = await Promise.all([
+          groupsApi.getAll(),
+          leadTypeAssignmentApi.getAvailableQueueTypes(),
+        ]);
+        setAvailableLeadGroups(
+          groups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            queue_type: typeof group.group_data?.queue_type === 'string' ? group.group_data.queue_type : undefined,
+            group_data: group.group_data ?? {},
+          }))
+        );
+        setQueueTypes(queueTypesData);
+      } catch {
+        setAvailableLeadGroups([]);
+        setQueueTypes([]);
+      }
+    };
+    fetchLeadGroupsAndQueueTypes();
+  }, [tenantId]);
+
+  const usersWithSettings = useMemo(
+    () =>
+      users.map((usr) => {
+        const config = coreSettingsMap[(usr.email || '').toLowerCase()];
+        const groupFromKv = availableLeadGroups.find((g) => g.id === config?.group_id)?.name;
+        const parentUser = usr.user_parent_id
+          ? users.find((u) => u.tenant_membership_id === usr.user_parent_id)
+          : null;
+        return {
+          ...usr,
+          leadGroup: groupFromKv || usr.lead_group_name || '—',
+          dailyTarget: config?.daily_target ?? '—',
+          dailyLimit: config?.daily_limit ?? '—',
+          managerEmail: parentUser?.email || '—',
+        };
+      }),
+    [users, coreSettingsMap, availableLeadGroups]
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -184,7 +321,16 @@ const AddUserComponent: React.FC = () => {
       toast.error('All fields are required');
       return;
     }
+
+    const normalizedEmail = formData.email.trim().toLowerCase();
+    const existingUser = users.find((u) => (u.email || '').toLowerCase() === normalizedEmail);
+    if (existingUser) {
+      toast.error('A user with this email already exists. Use Edit for updates or choose a different email.');
+      return;
+    }
+
     try{
+      setIsCreatingUser(true);
       const token = session?.access_token;
 
       if (!token) {
@@ -192,19 +338,22 @@ const AddUserComponent: React.FC = () => {
         return;
       }
 
-      // Use renderer URL for user creation
+      // Use renderer URL for user creation/update
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/accounts/users/legacy/create/`;
+      const apiUrl = `${baseUrl}/accounts/users/create/`;
       
       console.log('Creating user via:', apiUrl);
       console.log('Payload:', { name: formData.name, email: formData.email, role_id: selectedRoleId });
 
-      const payload: Record<string, string> = {
+      const payload: Record<string, string | number> = {
         name: formData.name,
         email: formData.email,
-        role_id: selectedRoleId
+        role_id: selectedRoleId,
       };
       if (formData.department?.trim()) payload.department = formData.department.trim();
+      if (formData.leadGroup?.trim()) payload.lead_group_name = formData.leadGroup.trim();
+      if (formData.dailyTarget !== '') payload.daily_target = Number(formData.dailyTarget);
+      if (formData.dailyLimit !== '') payload.daily_limit = Number(formData.dailyLimit);
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -219,23 +368,78 @@ const AddUserComponent: React.FC = () => {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('Error response:', errorData);
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        const backendMessage =
+          errorData?.message ||
+          errorData?.detail ||
+          (typeof errorData === 'object'
+            ? Object.entries(errorData)
+                .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+                .join(' | ')
+            : '');
+        throw new Error(backendMessage || `HTTP error! status: ${response.status}`);
       }
 
       const responseData = await response.json();
       console.log('User creation response:', responseData);
 
+      // Set manager hierarchy if manager email was provided
+      const createdMembershipId = responseData.id ? Number(responseData.id) : undefined;
+      if (formData.managerEmail?.trim() && createdMembershipId) {
+        const managerUser = users.find(
+          (u) => (u.email || '').toLowerCase() === formData.managerEmail.trim().toLowerCase()
+        );
+        if (managerUser?.tenant_membership_id) {
+          try {
+            const hierarchyUrl = `${baseUrl}/membership/users/hierarchy/`;
+            await fetch(hierarchyUrl, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'X-Tenant-Slug': 'bibhab-thepyro-ai',
+              },
+              body: JSON.stringify({
+                assignments: [{ membership_id: createdMembershipId, parent_membership_id: managerUser.tenant_membership_id }],
+              }),
+            });
+          } catch {
+            toast.error('User created but failed to set manager hierarchy');
+          }
+        }
+      }
+
       toast.success('User added successfully! They will be able to log in once they set up their account.');
 
-      setFormData({ name: '', email: '', department: '' });
+      const selectedLeadGroup = formData.leadGroup;
+      const selectedDailyTarget = formData.dailyTarget;
+      const selectedDailyLimit = formData.dailyLimit;
+
+      setFormData({
+        name: '',
+        email: '',
+        department: '',
+        leadGroup: '',
+        dailyTarget: '',
+        dailyLimit: '',
+        managerEmail: '',
+      });
+      setSelectedQueueType('lead');
       setSelectedRoleId('');
 
       // Refresh the users list
       await fetchUsers();
+      await fetchCoreSettings();
+
+      // Group and user-level limits are now saved by backend create/update endpoint.
+      if (selectedLeadGroup || selectedDailyTarget || selectedDailyLimit) {
+        await fetchCoreSettings();
+      }
 
     } catch (error: any) {
       console.error("Error adding user:", error);
       toast.error(`Error adding user: ${error.message}`);
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -290,6 +494,7 @@ const AddUserComponent: React.FC = () => {
 
       // Refresh the users list after successful deletion
       await fetchUsers();
+      await fetchCoreSettings();
       toast.success('User deleted successfully');
     } catch (error: any) {
       console.error('Error deleting user:', error);
@@ -297,20 +502,147 @@ const AddUserComponent: React.FC = () => {
     }
   };
 
+  const getRowKey = (usr: User) => `${usr.uid}-${usr.email}-${usr.role_id}`;
+
+  const handleEditUser = (usr: User) => {
+    setEditingRowKey(getRowKey(usr));
+    setEditingRow({
+      originalEmail: usr.email || '',
+      originalRoleId: usr.role_id || '',
+      name: usr.name || '',
+      email: usr.email || '',
+      department: usr.department || '',
+      roleId: usr.role_id || '',
+      leadGroup: usr.leadGroup && usr.leadGroup !== '—' ? usr.leadGroup : '',
+      dailyTarget: usr.dailyTarget && usr.dailyTarget !== '—' ? String(usr.dailyTarget) : '',
+      dailyLimit: usr.dailyLimit && usr.dailyLimit !== '—' ? String(usr.dailyLimit) : '',
+      managerEmail: usr.managerEmail && usr.managerEmail !== '—' ? usr.managerEmail : '',
+    });
+  };
+
+  const handleCancelRowEdit = () => {
+    setEditingRowKey(null);
+    setEditingRow(null);
+    setEditManagerSearch('');
+    setShowEditManagerDropdown(false);
+  };
+
+  const handleSaveRowEdit = async () => {
+    if (!editingRow) return;
+    if (!editingRow.name.trim() || !editingRow.email.trim() || !editingRow.roleId) {
+      toast.error('Name, Email and Role are required');
+      return;
+    }
+
+    const normalizedEmail = editingRow.email.trim().toLowerCase();
+    const conflictUser = users.find(
+      (u) =>
+        (u.email || '').toLowerCase() === normalizedEmail &&
+        (u.email || '').toLowerCase() !== editingRow.originalEmail.toLowerCase()
+    );
+    if (conflictUser) {
+      toast.error('A user with this email already exists.');
+      return;
+    }
+
+    try {
+      setIsUpdatingRow(true);
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+
+      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+      const apiUrl = `${baseUrl}/accounts/users/update/`;
+      const payload: Record<string, string | number> = {
+        name: editingRow.name.trim(),
+        email: editingRow.email.trim(),
+        role_id: editingRow.roleId,
+        original_email: editingRow.originalEmail,
+        original_role_id: editingRow.originalRoleId,
+      };
+      if (editingRow.department.trim()) payload.department = editingRow.department.trim();
+      if (editingRow.leadGroup.trim()) payload.lead_group_name = editingRow.leadGroup.trim();
+      if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
+      if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-Slug': 'bibhab-thepyro-ai',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const backendMessage =
+          errorData?.message ||
+          errorData?.detail ||
+          (typeof errorData === 'object'
+            ? Object.entries(errorData)
+                .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+                .join(' | ')
+            : '');
+        throw new Error(backendMessage || `HTTP error! status: ${response.status}`);
+      }
+
+      // Update manager hierarchy via the hierarchy endpoint
+      const editedUser = users.find(
+        (u) => (u.email || '').toLowerCase() === editingRow.originalEmail.toLowerCase()
+      );
+      if (editedUser?.tenant_membership_id) {
+        const managerUser = editingRow.managerEmail.trim()
+          ? users.find((u) => (u.email || '').toLowerCase() === editingRow.managerEmail.trim().toLowerCase())
+          : null;
+        const parentMembershipId = managerUser?.tenant_membership_id ?? null;
+        try {
+          const hierarchyUrl = `${baseUrl}/membership/users/hierarchy/`;
+          await fetch(hierarchyUrl, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'X-Tenant-Slug': 'bibhab-thepyro-ai',
+            },
+            body: JSON.stringify({
+              assignments: [{ membership_id: editedUser.tenant_membership_id, parent_membership_id: parentMembershipId }],
+            }),
+          });
+        } catch {
+          toast.error('User updated but failed to update manager hierarchy');
+        }
+      }
+
+      toast.success('User updated successfully!');
+      handleCancelRowEdit();
+      await fetchUsers();
+      await fetchCoreSettings();
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      toast.error(`Error updating user: ${error.message}`);
+    } finally {
+      setIsUpdatingRow(false);
+    }
+  };
+
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <h5 className="flex items-center gap-2">
-          <UserPlus className="h-5 w-5" />
+    <Card className="w-full border border-gray-200 shadow-sm rounded-2xl">
+      <CardHeader className="pb-3">
+        <h5 className="flex items-center gap-2 text-2xl font-semibold leading-none">
+          <UserPlus className="h-5 w-5 text-gray-700" />
           User Management
         </h5>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8">
         {/* Add User Form */}
-        <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
-          <h5>Add New User</h5>
+        <div className="space-y-5 border border-gray-200 rounded-xl p-5 md:p-6">
+          <h5 className="text-2xl font-semibold leading-none">Add New User</h5>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
               <Input
@@ -319,6 +651,7 @@ const AddUserComponent: React.FC = () => {
                 placeholder="Enter full name"
                 value={formData.name}
                 onChange={handleChange}
+                className="h-11"
               />
             </div>
 
@@ -330,51 +663,206 @@ const AddUserComponent: React.FC = () => {
                 placeholder="user@example.com"
                 value={formData.email}
                 onChange={handleChange}
+                className="h-11"
               />
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="space-y-2">
               <Label htmlFor="department">Department (optional)</Label>
               <Input
                 id="department"
                 name="department"
-                placeholder="e.g. Engineering, Sales"
+                placeholder="e.g, engineering, sales"
                 value={formData.department}
                 onChange={handleChange}
+                className="h-11"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Select Role</Label>
+              <select
+                id="role"
+                className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                value={selectedRoleId}
+                onChange={(e) => setSelectedRoleId(e.target.value)}
+              >
+                <option value="">--select role--</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="queueType">Queue Type</Label>
+              <select
+                id="queueType"
+                className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                value={selectedQueueType}
+                onChange={(e) => {
+                  const nextType = e.target.value === 'ticket' ? 'ticket' : 'lead';
+                  setSelectedQueueType(nextType);
+                  if (nextType === 'ticket') {
+                    setFormData((prev) => ({ ...prev, dailyTarget: '', dailyLimit: '' }));
+                  }
+                }}
+              >
+                {(queueTypes.length ? queueTypes : ['lead', 'ticket']).map((qt) => (
+                  <option key={qt} value={qt === 'ticket' ? 'ticket' : 'lead'}>
+                    {qt === 'ticket' ? 'Support Tickets' : 'Leads'}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="role">Select Role</Label>
-            <select
-              id="role"
-              className="w-full border rounded px-3 py-2"
-              value={selectedRoleId}
-              onChange={(e) => setSelectedRoleId(e.target.value)}
-            >
-              <option value="">-- Select Role --</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-2">
+              <Label htmlFor="managerEmail">Manager Email (optional)</Label>
+              <div className="relative" ref={managerDropdownRef}>
+                <div className="flex gap-1">
+                  <div className="relative flex-1">
+                    <Input
+                      id="managerEmail"
+                      placeholder="Search by name or email..."
+                      value={showManagerDropdown ? managerSearch : formData.managerEmail}
+                      onChange={(e) => {
+                        setManagerSearch(e.target.value);
+                        setShowManagerDropdown(true);
+                      }}
+                      onFocus={() => {
+                        setManagerSearch('');
+                        setShowManagerDropdown(true);
+                      }}
+                      className="h-11 pr-9"
+                      autoComplete="off"
+                    />
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {formData.managerEmail && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 border-gray-300 text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, managerEmail: '' }));
+                        setManagerSearch('');
+                        setShowManagerDropdown(false);
+                      }}
+                      title="Clear manager"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {showManagerDropdown && (
+                  <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                    {users
+                      .filter((u) => {
+                        if (!managerSearch.trim()) return true;
+                        const q = managerSearch.toLowerCase();
+                        return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                      })
+                      .map((u) => (
+                        <button
+                          key={u.uid}
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, managerEmail: u.email }));
+                            setManagerSearch('');
+                            setShowManagerDropdown(false);
+                          }}
+                        >
+                          <span className="font-medium truncate">{u.name}</span>
+                          <span className="text-gray-500 truncate text-xs">{u.email}</span>
+                        </button>
+                      ))}
+                    {users.filter((u) => {
+                      if (!managerSearch.trim()) return true;
+                      const q = managerSearch.toLowerCase();
+                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                    }).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-400">No users found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="leadGroup">Lead Group</Label>
+              <select
+                id="leadGroup"
+                className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                value={formData.leadGroup}
+                onChange={(e) => {
+                  const selectedName = e.target.value;
+                  const selectedGroup = availableLeadGroups.find((group) => group.name === selectedName);
+                  setFormData((prev) => ({ ...prev, leadGroup: selectedName }));
+                  if (selectedGroup?.queue_type === 'ticket') {
+                    setSelectedQueueType('ticket');
+                    setFormData((prev) => ({ ...prev, dailyTarget: '', dailyLimit: '' }));
+                  }
+                }}
+              >
+                <option value="">Select Group</option>
+                {availableLeadGroups
+                  .map((group) => (
+                    <option key={group.name} value={group.name}>
+                      {group.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            {selectedQueueType !== 'ticket' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="dailyTarget">Daily Target</Label>
+                  <Input
+                    id="dailyTarget"
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="h-11"
+                    value={formData.dailyTarget}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, dailyTarget: e.target.value }))}
+                    placeholder="Enter daily target"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dailyLimit">Daily Limit</Label>
+                  <Input
+                    id="dailyLimit"
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="h-11"
+                    value={formData.dailyLimit}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, dailyLimit: e.target.value }))}
+                    placeholder="Enter daily limit"
+                  />
+                </div>
+              </>
+            )}
           </div>
-
           {/* Action Buttons */}
           <div className="flex gap-2">
             <Button 
-              className="flex-1 bg-black text-white hover:bg-black border-none" 
+              className="flex-1 h-11 bg-black text-white hover:bg-black border-none rounded-md disabled:bg-gray-400 disabled:text-white disabled:opacity-100" 
               onClick={handleAddUser}
-              disabled={!selectedRoleId}
+              disabled={!selectedRoleId || isCreatingUser}
             >
-              Add User
+              {isCreatingUser ? 'Adding...' : 'Add User'}
             </Button>
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1 text-black border-gray-300 hover:bg-white hover:text-black"
+              className="flex-1 h-11 text-black border-gray-300 hover:bg-white hover:text-black rounded-md"
               onClick={() => setShowRoleFields(!showRoleFields)}
               disabled={!!selectedRoleId}
             >
@@ -431,7 +919,7 @@ const AddUserComponent: React.FC = () => {
 
         {/* Users List */}
         <div className="space-y-4">
-          <h5>Users</h5>
+          <h5 className="text-2xl font-semibold">Users</h5>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
@@ -441,39 +929,202 @@ const AddUserComponent: React.FC = () => {
               No users found
             </div>
           ) : (
-            <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
+            <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-black hover:!bg-black text-white hover:text-white border-b border-gray-200">
+                  <TableRow className="bg-black hover:!bg-black text-white hover:text-white">
                     <TableHead className="text-white font-medium">Name</TableHead>
                     <TableHead className="text-white font-medium">Email</TableHead>
-                    <TableHead className="text-white font-medium">Department</TableHead>
                     <TableHead className="text-white font-medium">Role</TableHead>
-                    <TableHead className="text-white font-medium">Created At</TableHead>
-                    <TableHead className="text-white font-medium text-right">Actions</TableHead>
+                    <TableHead className="text-white font-medium">Group</TableHead>
+                    <TableHead className="text-white font-medium">Daily Target</TableHead>
+                    <TableHead className="text-white font-medium">Daily Limit</TableHead>
+                    <TableHead className="text-white font-medium">Manager Email</TableHead>
+                    <TableHead className="text-white font-medium">Created at</TableHead>
+                    <TableHead className="text-white font-medium text-right"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users
+                  {usersWithSettings
                     .filter(user => user.name && user.email) // Only show users with name and email
                     .map((user, index) => (
                       <TableRow key={`${user.uid}-${index}`}>
-                        <TableCell className="text-body-medium">{user.name}</TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.department || '—'}</TableCell>
-                        <TableCell>{user.role?.name || 'No Role'}</TableCell>
+                        <TableCell className="text-body-medium">
+                          {user.name}
+                        </TableCell>
+                        <TableCell>
+                          {user.email}
+                        </TableCell>
+                        <TableCell>
+                          {user.role?.name || 'No Role'}
+                        </TableCell>
+                        <TableCell>
+                          {editingRowKey === getRowKey(user) && editingRow ? (
+                            <select
+                              className="h-9 w-full border rounded-md px-2 text-sm bg-white"
+                              value={editingRow.leadGroup}
+                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, leadGroup: e.target.value }) : prev)}
+                            >
+                              <option value="">Select Group</option>
+                              {availableLeadGroups
+                                .map((group) => (
+                                  <option key={group.name} value={group.name}>
+                                    {group.name}
+                                  </option>
+                                ))}
+                            </select>
+                          ) : user.leadGroup}
+                        </TableCell>
+                        <TableCell>
+                          {editingRowKey === getRowKey(user) && editingRow ? (
+                            <Input
+                              className="h-9"
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={editingRow.dailyTarget}
+                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, dailyTarget: e.target.value }) : prev)}
+                            />
+                          ) : user.dailyTarget}
+                        </TableCell>
+                        <TableCell>
+                          {editingRowKey === getRowKey(user) && editingRow ? (
+                            <Input
+                              className="h-9"
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={editingRow.dailyLimit}
+                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, dailyLimit: e.target.value }) : prev)}
+                            />
+                          ) : user.dailyLimit}
+                        </TableCell>
+                        <TableCell>
+                          {editingRowKey === getRowKey(user) && editingRow ? (
+                            <div className="relative" ref={editManagerDropdownRef}>
+                              <div className="flex gap-1">
+                                <div className="relative flex-1">
+                                  <Input
+                                    className="h-9 pr-8 text-sm"
+                                    placeholder="Search manager..."
+                                    value={showEditManagerDropdown ? editManagerSearch : editingRow.managerEmail}
+                                    onChange={(e) => {
+                                      setEditManagerSearch(e.target.value);
+                                      setShowEditManagerDropdown(true);
+                                    }}
+                                    onFocus={() => {
+                                      setEditManagerSearch('');
+                                      setShowEditManagerDropdown(true);
+                                    }}
+                                    autoComplete="off"
+                                  />
+                                  <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                </div>
+                                {editingRow.managerEmail && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-9 w-9 shrink-0 border-gray-200 text-gray-500 hover:text-gray-700"
+                                    onClick={() => {
+                                      setEditingRow((prev) => prev ? ({ ...prev, managerEmail: '' }) : prev);
+                                      setEditManagerSearch('');
+                                      setShowEditManagerDropdown(false);
+                                    }}
+                                    title="Clear manager"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                              {showEditManagerDropdown && (
+                                <div className="absolute z-50 mt-1 w-64 max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                                  {users
+                                    .filter((u) => {
+                                      if (u.email === user.email) return false;
+                                      if (!editManagerSearch.trim()) return true;
+                                      const q = editManagerSearch.toLowerCase();
+                                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                    })
+                                    .map((u) => (
+                                      <button
+                                        key={u.uid}
+                                        type="button"
+                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                          setEditingRow((prev) => prev ? ({ ...prev, managerEmail: u.email }) : prev);
+                                          setEditManagerSearch('');
+                                          setShowEditManagerDropdown(false);
+                                        }}
+                                      >
+                                        <span className="font-medium truncate">{u.name}</span>
+                                        <span className="text-gray-400 truncate">{u.email}</span>
+                                      </button>
+                                    ))}
+                                  {users.filter((u) => {
+                                    if (u.email === user.email) return false;
+                                    if (!editManagerSearch.trim()) return true;
+                                    const q = editManagerSearch.toLowerCase();
+                                    return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                  }).length === 0 && (
+                                    <div className="px-3 py-1.5 text-xs text-gray-400">No users found</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : user.managerEmail}
+                        </TableCell>
                         <TableCell>
                           {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
                         </TableCell>
                         <TableCell className="text-right">
+                          <div className="inline-flex items-center justify-end gap-2">
+                          {editingRowKey === getRowKey(user) ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+                                onClick={handleSaveRowEdit}
+                                disabled={isUpdatingRow}
+                                title="Save changes"
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                                onClick={handleCancelRowEdit}
+                                disabled={isUpdatingRow}
+                                title="Cancel editing"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                              onClick={() => handleEditUser(user)}
+                              title="Edit row"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="icon"
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            className="h-8 w-8 border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700"
                             onClick={() => handleDeleteUser(user.email, user.uid)}
+                            title="Delete user"
+                            disabled={editingRowKey === getRowKey(user)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

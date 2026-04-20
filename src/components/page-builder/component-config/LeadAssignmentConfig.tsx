@@ -21,7 +21,7 @@ export const LeadAssignmentConfig: React.FC<LeadAssignmentConfigProps> = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Lead Assignment Configuration</CardTitle>
+        <CardTitle>Lead Groups Configuration</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">

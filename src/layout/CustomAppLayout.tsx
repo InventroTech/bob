@@ -25,6 +25,7 @@ import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, Analyt
 type CustomIconRow = { name: string; svg_content: string };
 
 const navigationIconMap: Record<string, JSX.Element> = {
+    "lead groups": <Users className="h-4 w-4" />,
     "lead assignment": <Users className="h-4 w-4" />,
     "user hierarchy": <Users className="h-4 w-4" />,
     "analytics": <AnalyticsIcon />,

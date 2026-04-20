@@ -23,7 +23,7 @@ import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConf
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
-import { apiClient } from '@/lib/api';
+import { apiClient, membershipService } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
@@ -34,15 +34,30 @@ import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 interface Column {
   header: string;
   accessor: string;
-  type: 'text' | 'chip' | 'link' | 'action' | 'status_buttons';
+  type: 'text' | 'chip' | 'link' | 'action' | 'status_buttons' | 'date' | 'number';
   linkField?: string;
+  /** If true, cell is editable inline in table for records endpoints. */
+  editableInTable?: boolean;
   openCard?: boolean | string;
   actionApiEndpoint?: string;
   actionApiMethod?: string;
   actionApiHeaders?: string;
   actionApiPayload?: string;
-  /** For type status_buttons: buttons that set record data.status to statusValue */
-  statusButtons?: Array<{ label: string; statusValue: string }>;
+  /** For type status_buttons: buttons that set record data.status to statusValue (optional conditional visibility). */
+  statusButtons?: Array<{
+    label: string;
+    statusValue: string;
+    statusText?: string;
+    conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    openWarningModal?: boolean;
+    warningModalConfig?: {
+      title?: string;
+      description?: string;
+      confirmationText?: string;
+      formType?: 'payment_confirmation';
+      paymentMethods?: string[];
+    };
+  }>;
 }
 
 // Status color mapping - matching design colors
@@ -96,6 +111,17 @@ const getStatusColor = (status: string, statusColors?: Record<string, string>) =
       return 'bg-gray-50 text-gray-700 border-gray-200';
   }
 };
+
+const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'CRITICAL', label: 'Critical' },
+];
+
+const toVendorStorageName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
 
 // Convert raw email/id into a user-friendly display name
 const getDisplayName = (email: string | null): string => {
@@ -283,7 +309,9 @@ interface LeadTableProps {
       key: string;
       label: string;
       type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+      linkField?: string;
       editable?: boolean;
+      editableInTable?: boolean;
       transform?: (value: any, row: any) => any;
       width?: string;
       openCard?: boolean | string;
@@ -319,8 +347,21 @@ interface LeadTableProps {
 
     /** Table type: default (first column can be profile card) or itemsTable (first column normal text, supports status buttons). */
     tableType?: 'default' | 'itemsTable';
-    /** When tableType is itemsTable: list of buttons that update record status on click. */
-    statusButtons?: Array<{ label: string; statusValue: string }>;
+    /** When tableType is itemsTable: list of buttons that update record status on click (optional conditional visibility). */
+    statusButtons?: Array<{
+      label: string;
+      statusValue: string;
+      statusText?: string;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+      openWarningModal?: boolean;
+      warningModalConfig?: {
+        title?: string;
+        description?: string;
+        confirmationText?: string;
+        formType?: 'payment_confirmation';
+        paymentMethods?: string[];
+      };
+    }>;
     /** Per-field config for record detail modal: which data keys are editable (key + editable toggle). */
     modalFieldConfig?: Array<{ key: string; editable: boolean }>;
     /** 'default' = record detail modal; 'form_edit' = form-style modal with action buttons. */
@@ -338,6 +379,8 @@ interface LeadTableProps {
     showFormModalSaveButton?: boolean;
     /** Form-style modal: show the extra “Final price” computed block. Default true when omitted. */
     showFinalPriceSection?: boolean;
+    /** Default modal: show requestor-side "Delete request" action. Default false. */
+    showDeleteRequestButton?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;
@@ -503,6 +546,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const activeUserId = spoofUserId ?? activeUser?.id ?? null;
   const activeUserMetadata = activeUser?.user_metadata ?? null;
   const activeAppMetadata = activeUser?.app_metadata ?? null;
+  const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
   
   // Check if user is GM (General Manager) - GM should see all leads
   const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
@@ -527,7 +571,37 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       });
     }
 
+    if (currentMembershipId) {
+      adapters.push({
+        tokens: ['pyro_user_id', 'current_membership_id', 'current_membership', 'current_user_membership_id'],
+        resolve: () => currentMembershipId,
+      });
+    }
+
     return adapters;
+  }, [activeUserId, currentMembershipId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMembership = async () => {
+      if (!activeUserId) {
+        setCurrentMembershipId(null);
+        return;
+      }
+      try {
+        const membership = await membershipService.getMyMembership();
+        const id = (membership as any)?.tenant_membership_id;
+        if (!cancelled && id != null) {
+          setCurrentMembershipId(String(id));
+        }
+      } catch {
+        if (!cancelled) setCurrentMembershipId(null);
+      }
+    };
+    loadMembership();
+    return () => {
+      cancelled = true;
+    };
   }, [activeUserId]);
 
   // Resolve placeholder tokens to user/session claim values right before fetch time
@@ -859,6 +933,68 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     lead_statuses: config?.statusOptions || [],
     sources: []
   });
+  const [inlineCellDrafts, setInlineCellDrafts] = useState<Record<string, string>>({});
+  const [inlineSavingCell, setInlineSavingCell] = useState<string | null>(null);
+
+  const canInlineEditRows = useMemo(() => {
+    return Boolean(
+      !isInPageBuilder &&
+      effectiveApiEndpoint &&
+      (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
+    );
+  }, [isInPageBuilder, effectiveApiEndpoint]);
+
+  const getInlineCellKey = useCallback((rowId: unknown, accessor: string) => `${String(rowId)}:${accessor}`, []);
+
+  const handleInlineCellSave = useCallback(async (row: any, column: Column, rawValue: string) => {
+    if (!canInlineEditRows || !row?.id || !effectiveApiEndpoint) return;
+    const cellKey = getInlineCellKey(row.id, column.accessor);
+    try {
+      setInlineSavingCell(cellKey);
+      let parsedValue =
+        column.type === 'number'
+          ? (rawValue.trim() === '' ? '' : Number(rawValue))
+          : rawValue;
+      if ((column.accessor === 'vendor' || column.accessor === 'vendor_name') && typeof parsedValue === 'string') {
+        parsedValue = toVendorStorageName(parsedValue);
+      }
+      if (column.type === 'number' && parsedValue !== '' && !Number.isFinite(parsedValue as number)) {
+        toast({ title: 'Invalid number', description: 'Enter a valid numeric value.', variant: 'destructive' });
+        return;
+      }
+      const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+      const url = `${base}/${row.id}/`;
+      const existingData = (row.data as Record<string, unknown>) || {};
+      const nextData: Record<string, unknown> = { ...existingData, [column.accessor]: parsedValue };
+      const response = await apiClient.patch(url, { data: nextData });
+      const updated = response.data;
+      const updateRow = (r: any) =>
+        r.id === row.id
+          ? {
+              ...r,
+              ...updated,
+              [column.accessor]: nextData[column.accessor],
+              data: updated?.data ?? nextData,
+            }
+          : r;
+      setData((prev) => prev.map(updateRow));
+      setFilteredData((prev) => prev.map(updateRow));
+      setInlineCellDrafts((prev) => {
+        const next = { ...prev };
+        delete next[cellKey];
+        return next;
+      });
+      toast({ title: 'Saved', description: `${column.header} updated.` });
+    } catch (e: any) {
+      toast({
+        title: 'Update failed',
+        description: e?.message || 'Could not update this field.',
+        variant: 'destructive',
+      });
+    } finally {
+      setInlineSavingCell((cur) => (cur === cellKey ? null : cur));
+    }
+  }, [canInlineEditRows, effectiveApiEndpoint, getInlineCellKey, toast]);
 
   // Action button click: open card and/or call API (defined before renderCell which uses it)
   const handleActionClick = useCallback(async (row: any, col: Column) => {
@@ -976,6 +1112,70 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       return text;
     };
     
+    const inlineCellKey = getInlineCellKey(row?.id, column.accessor);
+    const isInlineEditable =
+      canInlineEditRows &&
+      column.editableInTable === true &&
+      row?.id != null &&
+      column.type !== 'action' &&
+      column.type !== 'status_buttons' &&
+      column.type !== 'chip' &&
+      column.type !== 'link';
+    const inlineDraft = inlineCellDrafts[inlineCellKey];
+    const normalizedInlineBaseValue = value === 'N/A' ? '' : String(value);
+    const inlineValue = inlineDraft ?? normalizedInlineBaseValue;
+    const inlineChanged = inlineDraft !== undefined && inlineDraft !== normalizedInlineBaseValue;
+    const inlineSaving = inlineSavingCell === inlineCellKey;
+    if (isInlineEditable) {
+      if (column.accessor === 'urgency_level') {
+        const selected = String(value ?? '').toUpperCase();
+        return (
+          <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+            {URGENCY_BUTTON_OPTIONS.map((opt) => (
+              <Button
+                key={opt.value}
+                type="button"
+                size="sm"
+                variant={selected === opt.value ? 'default' : 'outline'}
+                className="rounded-full h-8"
+                disabled={inlineSaving}
+                onClick={() => handleInlineCellSave(row, column as Column, opt.value)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        );
+      }
+      return (
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <Input
+            className="h-8 min-w-[140px]"
+            type={column.type === 'number' ? 'number' : 'text'}
+            value={inlineValue}
+            onChange={(e) => setInlineCellDrafts((prev) => ({ ...prev, [inlineCellKey]: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && inlineChanged && !inlineSaving) {
+                e.preventDefault();
+                handleInlineCellSave(row, column as Column, inlineValue);
+              }
+            }}
+            disabled={inlineSaving}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant={inlineChanged ? 'default' : 'outline'}
+            disabled={!inlineChanged || inlineSaving}
+            onClick={() => handleInlineCellSave(row, column as Column, inlineValue)}
+            className="h-8 px-2"
+          >
+            {inlineSaving ? '…' : 'Save'}
+          </Button>
+        </div>
+      );
+    }
+
     // Render link type columns
     if (column.type === 'link') {
       if (!displayValue || displayValue === '#' || displayValue === 'N/A') {
@@ -1176,7 +1376,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, handleActionClick, handleStatusButtonClick]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
@@ -1194,6 +1394,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       header: col.label,
       accessor: col.key,
       type: (col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text') as Column['type'],
+      linkField: col.linkField,
+      editableInTable: col.editableInTable,
       openCard: col.openCard,
       actionApiEndpoint: col.actionApiEndpoint,
       actionApiMethod: col.actionApiMethod,
@@ -2040,6 +2242,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
               accessor: col.accessor,
               type: col.type,
               linkField: col.linkField,
+              editableInTable: col.editableInTable,
               openCard: col.openCard,
               actionApiEndpoint: col.actionApiEndpoint,
               actionApiMethod: col.actionApiMethod,
@@ -2373,6 +2576,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           onRecordUpdated={async (recordId: number) => {
             try { await fetchFilteredData(); } catch (e) { console.error('Error refreshing table after form modal update', e); }
           }}
+          showDeleteRequestButton={config?.showDeleteRequestButton}
+          onDeleted={async (recordId: number) => {
+            setData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setSelectedRecord(null);
+            setIsRecordDetailModalOpen(false);
+            try {
+              await fetchFilteredData();
+            } catch (e) {
+              console.error('Error refreshing table after delete:', e);
+            }
+          }}
         />
       )}
 
@@ -2395,6 +2610,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
         modalFlags={config?.modalFlags}
         showFinalPriceSection={config?.showFinalPriceSection}
+        showDeleteRequestButton={config?.showDeleteRequestButton}
         onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
           ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
               const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');

@@ -18,12 +18,19 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
+import { cn } from '@/lib/utils';
+import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 
 const RECORDS_URL = '/crm-records/records/';
 const ADD_VENDOR_VALUE = '__add_vendor__';
+const toVendorStorageName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
 
 export type FormModalFieldConfig = {
   key: string;
@@ -41,7 +48,20 @@ interface InventoryFormEditModalProps {
   /** Field config: key (data key), label (text to show), enabled (editable vs read-only). */
   formModalFields: FormModalFieldConfig[];
   /** Action buttons: label + status value. Click updates record with form data + this status. */
-  actionButtons?: Array<{ label: string; statusValue: string }>;
+  actionButtons?: Array<{
+    label: string;
+    statusValue: string;
+    statusText?: string;
+    conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    openWarningModal?: boolean;
+    warningModalConfig?: {
+      title?: string;
+      description?: string;
+      confirmationText?: string;
+      formType?: 'payment_confirmation';
+      paymentMethods?: string[];
+    };
+  }>;
   onUpdate?: (recordId: number, patch: { data?: Record<string, unknown> }) => Promise<void>;
   onRecordUpdated?: (recordId: number) => void;
   cartOptions?: Array<{ id: number; label: string }>;
@@ -69,6 +89,10 @@ interface InventoryFormEditModalProps {
    * Default: true (when omitted).
    */
   showFinalPriceSection?: boolean;
+  /** Requestor-only: show "Delete request" for inventory_request (any status). Default false. */
+  showDeleteRequestButton?: boolean;
+  /** Called after a successful delete (e.g. refresh table). */
+  onDeleted?: (recordId: number) => void;
 }
 
 function looksLikeUrl(value: string): boolean {
@@ -100,6 +124,10 @@ function formatPriceFieldDisplay(value: unknown): string {
 
 /** Keys that we render as textarea (multi-line). */
 const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_freeform', 'project_purpose']);
+const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'CRITICAL', label: 'Critical' },
+];
 
 /** Keys that are typically numbers. */
 const NUMBER_KEYS = new Set([
@@ -124,18 +152,22 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   paymentButtonConfig,
   modalFlags,
   showFinalPriceSection,
+  showDeleteRequestButton,
+  onDeleted,
 }) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [applyingStatusValue, setApplyingStatusValue] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [vendors, setVendors] = useState<Array<{ id: number; name: string }>>([]);
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [isAddVendorModalOpen, setIsAddVendorModalOpen] = useState(false);
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
+  const [pendingWarningAction, setPendingWarningAction] = useState<StatusActionWithWarningConfig | null>(null);
   const [finalPriceValue, setFinalPriceValue] = useState<string>('');
   const [finalPriceIsTotal, setFinalPriceIsTotal] = useState<boolean>(false);
   /** Live-formatted strings for price form fields while typing (cleared on blur). */
@@ -148,6 +180,17 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
   const statusOptions = entityType ? (ALLOWED_STATUSES[entityType] ?? []) : [];
   const isInventoryRequest = entityType === 'inventory_request';
+  const requesterId = record?.data?.requester_id;
+  const isRequester =
+    isInventoryRequest &&
+    !!user &&
+    requesterId != null &&
+    String(requesterId) === String(user.id);
+  const canShowDeleteRequestButton =
+    showDeleteRequestButton === true &&
+    isInventoryRequest &&
+    isRequester &&
+    !paymentButtonConfig;
   const canUpdate = Boolean(onUpdate && record?.id != null);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
@@ -179,7 +222,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const fetchVendors = useCallback(async () => {
     try {
       setVendorsLoading(true);
-      const res = await apiClient.get<any>(`${RECORDS_URL}?entity_type=vendor&page_size=500`);
+      const res = await apiClient.get<any>(`${RECORDS_URL}?entity_type=unmannd_vendor&page_size=500`);
       const raw = res.data?.data ?? (res.data as any)?.results ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const options = list
@@ -203,7 +246,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   }, [open, fetchVendors, formModalFields]);
 
   const saveNewVendor = useCallback(async () => {
-    const name = (newVendorName ?? '').trim();
+    const name = toVendorStorageName((newVendorName ?? '').trim());
     if (!name) {
       toast({ title: 'Enter vendor name', variant: 'destructive' });
       return;
@@ -211,7 +254,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     try {
       setSavingNewVendor(true);
       await apiClient.post(RECORDS_URL, {
-        entity_type: 'vendor',
+        entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
       });
       await fetchVendors();
@@ -366,13 +409,78 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     [formData, record?.data]
   );
 
+  const actionButtonConditionMatches = useCallback(
+    (btn: {
+      label: string;
+      statusValue: string;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    }) => {
+      const cond = btn.conditional;
+      if (!cond?.attribute || !cond.attribute.trim()) return true;
+      const attribute = cond.attribute.trim();
+      const raw =
+        (formData as any)?.[attribute] !== undefined ? (formData as any)[attribute] : (record?.data as any)?.[attribute];
+      const threshold = cond.value;
+
+      const numRaw = Number(raw);
+      const numThreshold = Number(threshold);
+      if (Number.isFinite(numRaw) && Number.isFinite(numThreshold)) {
+        switch (cond.operator) {
+          case 'gt':
+            return numRaw > numThreshold;
+          case 'gte':
+            return numRaw >= numThreshold;
+          case 'lt':
+            return numRaw < numThreshold;
+          case 'lte':
+            return numRaw <= numThreshold;
+          case 'eq':
+            return numRaw === numThreshold;
+          default:
+            return false;
+        }
+      }
+
+      const strRaw = raw == null ? '' : String(raw);
+      const strVal = threshold == null ? '' : String(threshold);
+      const cmp = strRaw.localeCompare(strVal, undefined, { numeric: true });
+      const rawLower = strRaw.trim().toLowerCase();
+      const valLower = strVal.trim().toLowerCase();
+
+      switch (cond.operator) {
+        case 'gt':
+          return cmp > 0;
+        case 'gte':
+          return cmp >= 0;
+        case 'lt':
+          return cmp < 0;
+        case 'lte':
+          return cmp <= 0;
+        case 'eq':
+          return rawLower === valLower;
+        default:
+          return false;
+      }
+    },
+    [formData, record?.data]
+  );
+
   const handleActionClick = useCallback(
-    async (btn: { label: string; statusValue: string }) => {
+    async (btn: { label: string; statusValue: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(btn.statusValue);
         const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
-        const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides, status: btn.statusValue };
+        const dataToSend: Record<string, unknown> = {
+          ...formData,
+          ...priceOverrides,
+          status: btn.statusValue,
+          status_text: (btn.statusText ?? btn.label ?? btn.statusValue).trim(),
+          ...(extraData || {}),
+        };
+      if (typeof dataToSend.vendor === 'string') {
+        dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
+      }
 
         // Stage comment history: append `{name, role, comment}` into `data.comments`.
         if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
@@ -431,6 +539,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setSaving(true);
       const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
       const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides };
+      if (typeof dataToSend.vendor === 'string') {
+        dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
+      }
 
       if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
         const existingRaw = (record?.data as any)?.comments;
@@ -477,6 +588,31 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     }
   }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
 
+  const handleDeleteRequest = useCallback(async () => {
+    if (!canShowDeleteRequestButton || !record?.id) return;
+    if (!window.confirm('Are you sure you want to delete this request? This cannot be undone.')) {
+      return;
+    }
+    try {
+      setDeleting(true);
+      await apiClient.delete(`/crm-records/records/${record.id}/`);
+      toast({ title: 'Request deleted', description: 'The inventory request has been deleted.' });
+      if (onDeleted) {
+        onDeleted(record.id);
+      } else {
+        onOpenChange(false);
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Delete failed',
+        description: e?.message || 'Could not delete request.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }, [canShowDeleteRequestButton, record?.id, onDeleted, onOpenChange, toast]);
+
   if (!record) return null;
 
   /** For payment modal: evaluate condition on record.data[attribute] vs value; return true if conditional button should show. */
@@ -511,7 +647,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const usePaymentButtons = paymentButtonConfig?.conditionalButton && paymentButtonConfig?.defaultButton;
   const effectiveActionButtons = usePaymentButtons
     ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
-    : actionButtons;
+    : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
@@ -520,7 +656,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] flex flex-col max-w-lg">
+      <DialogContent className="max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full">
         <DialogHeader>
           <DialogTitle>{formModalTitle ?? 'Edit record'}</DialogTitle>
           <DialogDescription>
@@ -533,7 +669,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           {formModalFields.length === 0 ? (
             <p className="text-sm text-muted-foreground">No fields configured. Add fields in table config.</p>
           ) : (
-            formModalFields.map((field) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
+            {formModalFields.map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const isEnabled = field.enabled && canUpdate;
@@ -542,11 +679,16 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const isCartId = field.key === 'cart_id' && isInventoryRequest && cartOptions && cartOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
+              const isUrgency = field.key === 'urgency_level';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
               const isNumber = NUMBER_KEYS.has(field.key) && field.key !== 'cart_id';
+              const spanFullWidth = TEXTAREA_KEYS.has(field.key);
 
               return (
-                <div key={field.key} className="space-y-1.5">
+                <div
+                  key={field.key}
+                  className={cn('space-y-1.5 min-w-0', spanFullWidth && 'md:col-span-2 xl:col-span-3')}
+                >
                   <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     {field.label || field.key.replace(/_/g, ' ')}
                   </Label>
@@ -606,7 +748,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       );
                     })()
                   ) : isVendor ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full min-w-0">
+                      <div className="min-w-0 flex-1">
                       <Select
                         value={displayStr || undefined}
                         onValueChange={(v) => {
@@ -614,11 +757,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                             setIsAddVendorModalOpen(true);
                             return;
                           }
-                          setField(field.key, v ?? '');
+                          setField(field.key, toVendorStorageName(v ?? ''));
                         }}
                         disabled={!isEnabled}
                       >
-                        <SelectTrigger className="h-9 text-sm rounded-md">
+                        <SelectTrigger className="h-9 w-full min-w-0 text-sm rounded-md">
                           <SelectValue placeholder="Select or add vendor" />
                         </SelectTrigger>
                         <SelectContent>
@@ -635,6 +778,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                           )}
                         </SelectContent>
                       </Select>
+                      </div>
                       <Button
                         type="button"
                         size="sm"
@@ -695,6 +839,22 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         <SelectItem value="false">No</SelectItem>
                       </SelectContent>
                     </Select>
+                  ) : isUrgency ? (
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
+                      {URGENCY_BUTTON_OPTIONS.map((opt) => (
+                        <Button
+                          key={opt.value}
+                          type="button"
+                          variant={String(displayStr || '').toUpperCase() === opt.value ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setField(field.key, opt.value)}
+                          disabled={!isEnabled}
+                          className="rounded-full h-8"
+                        >
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
                   ) : isTextarea ? (
                     <Textarea
                       className="min-h-[80px] text-sm rounded-md"
@@ -771,12 +931,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   )}
                 </div>
               );
-            })
+            })}
+            </div>
           )}
 
           {/* Final price (form-style modal only; not shown for Inventory Payment modal — use modal fields for total_price/unit_price there) */}
           {!paymentButtonConfig && effectiveShowFinalPrice && (
-            <div className="space-y-3 pt-2 border-t border-border/60">
+            <div className="space-y-3 pt-2 border-t border-border/60 max-w-none">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Final price
               </Label>
@@ -821,56 +982,83 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             </div>
           )}
         </div>
-        <DialogFooter className="border-t pt-4 gap-2 flex-wrap">
-          {hasActionButtons && (
-            <div className="flex flex-wrap gap-2">
-              {(modalFlags ?? [])
-                .filter((f) => (f.key ?? '').trim() && (f.label ?? '').trim())
-                .filter((f) => flagConditionMatches(f))
-                .map((f) => {
-                const key = f.key.trim();
-                return (
-                  <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background">
-                    <Checkbox
-                      checked={flagValues[key] === true}
-                      onCheckedChange={(checked) => setFlagValues((prev) => ({ ...prev, [key]: checked === true }))}
-                      disabled={!!applyingStatusValue}
-                    />
-                    <span className="text-xs text-muted-foreground">{f.label}</span>
-                  </label>
-                );
-              })}
-              {effectiveActionButtons!.map((btn) => (
-                <Button
-                  key={btn.statusValue}
-                  type="button"
-                  variant="outline"
-                  size="default"
-                  className="gap-2 h-9 rounded-md"
-                  disabled={!!applyingStatusValue}
-                  onClick={() => handleActionClick(btn)}
-                >
-                  {applyingStatusValue === btn.statusValue ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  ) : null}
-                  {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
-                </Button>
-              ))}
-            </div>
-          )}
-          {canUpdate && hasEditableField && effectiveShowSaveButton && (
-            <Button
-              type="button"
-              variant="default"
-              size="default"
-              className="gap-2 h-9 rounded-md"
-              disabled={saving}
-              onClick={handleSaveAll}
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          )}
+        <DialogFooter className="border-t pt-4 gap-3 flex-wrap flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2 items-center">
+            {canShowDeleteRequestButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 h-9 rounded-md"
+                disabled={deleting || applyingStatusValue != null || saving}
+                onClick={handleDeleteRequest}
+              >
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                )}
+                {deleting ? 'Deleting…' : 'Delete request'}
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2 items-center justify-end">
+            {hasActionButtons && (
+              <>
+                {(modalFlags ?? [])
+                  .filter((f) => (f.key ?? '').trim() && (f.label ?? '').trim())
+                  .filter((f) => flagConditionMatches(f))
+                  .map((f) => {
+                  const key = f.key.trim();
+                  return (
+                    <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background">
+                      <Checkbox
+                        checked={flagValues[key] === true}
+                        onCheckedChange={(checked) => setFlagValues((prev) => ({ ...prev, [key]: checked === true }))}
+                        disabled={!!applyingStatusValue}
+                      />
+                      <span className="text-xs text-muted-foreground">{f.label}</span>
+                    </label>
+                  );
+                })}
+                {effectiveActionButtons!.map((btn) => (
+                  <Button
+                    key={btn.statusValue}
+                    type="button"
+                    variant="outline"
+                    size="default"
+                    className="gap-2 h-9 rounded-md"
+                    disabled={!!applyingStatusValue}
+                    onClick={() => {
+                      if ((btn as any).openWarningModal) {
+                        setPendingWarningAction(btn as StatusActionWithWarningConfig);
+                        return;
+                      }
+                      handleActionClick(btn);
+                    }}
+                  >
+                    {applyingStatusValue === btn.statusValue ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : null}
+                    {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
+                  </Button>
+                ))}
+              </>
+            )}
+            {canUpdate && hasEditableField && effectiveShowSaveButton && (
+              <Button
+                type="button"
+                variant="default"
+                size="default"
+                className="gap-2 h-9 rounded-md"
+                disabled={saving || applyingStatusValue != null}
+                onClick={handleSaveAll}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
 
@@ -918,6 +1106,21 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <StatusActionWarningModal
+        open={pendingWarningAction != null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPendingWarningAction(null);
+        }}
+        actionButton={pendingWarningAction}
+        actorName={myName}
+        submitting={applyingStatusValue != null}
+        onSubmit={async (payload) => {
+          if (!pendingWarningAction) return;
+          await handleActionClick(pendingWarningAction, payload);
+          setPendingWarningAction(null);
+        }}
+      />
     </Dialog>
   );
 };

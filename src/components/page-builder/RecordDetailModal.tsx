@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient, membershipService } from '@/lib/api';
+import { crmRecordsApi } from '@/lib/crmRecordsApi';
 import { useAuth } from '@/hooks/useAuth';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { convertGMTtoIST } from '@/lib/timeUtils';
@@ -39,6 +40,8 @@ import {
   formatPriceForInput,
   PRICE_FIELD_KEYS,
 } from '@/lib/currencyFormat';
+import { cn } from '@/lib/utils';
+import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -123,7 +126,20 @@ interface RecordDetailModalProps {
   /** Called after a record is updated by an action (e.g. Proceed to PM) so the parent can refresh the table. */
   onRecordUpdated?: (recordId: number) => void;
   /** Optional action buttons that set record data.status on click. */
-  actionButtons?: Array<{ label: string; statusValue: string }>;
+  actionButtons?: Array<{
+    label: string;
+    statusValue: string;
+    statusText?: string;
+    conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    openWarningModal?: boolean;
+    warningModalConfig?: {
+      title?: string;
+      description?: string;
+      confirmationText?: string;
+      formType?: 'payment_confirmation';
+      paymentMethods?: string[];
+    };
+  }>;
   /** Optional checkbox flags shown beside action buttons; each can be conditional. */
   modalFlags?: Array<{
     label: string;
@@ -137,6 +153,8 @@ interface RecordDetailModalProps {
    * Default: true when omitted.
    */
   showFinalPriceSection?: boolean;
+  /** Whether requestor can see the "Delete request" button (any status). Default: false. */
+  showDeleteRequestButton?: boolean;
 }
 
 /** Data keys hidden in default record when Final price section is off (matches form modal behavior). */
@@ -148,6 +166,24 @@ const FINAL_PRICE_HIDDEN_ROW_KEYS = new Set([
   'including_gst',
 ]);
 const ADD_VENDOR_VALUE = '__add_vendor__';
+const toVendorStorageName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+
+/** Detail rows that span both columns (long text, comments). */
+const DETAIL_ROW_FULL_WIDTH_KEYS = new Set([
+  'comments',
+  'notes',
+  'description',
+  'item_name_freeform',
+  'project_purpose',
+]);
+const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'CRITICAL', label: 'Critical' },
+];
 
 /**
  * Build display rows from API-shaped record only:
@@ -378,6 +414,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   actionButtons,
   modalFlags,
   showFinalPriceSection,
+  showDeleteRequestButton,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
@@ -414,6 +451,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     String(assignedToId) === String(user.id);
 
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
+  const canShowDeleteRequestButton = showDeleteRequestButton === true;
 
   /** Rows to show: hide system fields for all users, and PM-only fields for requestors. */
   const visibleRows = displayRows.filter((r) => {
@@ -454,6 +492,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
+  const [pendingWarningAction, setPendingWarningAction] = useState<StatusActionWithWarningConfig | null>(null);
 
   useEffect(() => {
     setPriceInputDraft({});
@@ -488,9 +527,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     const load = async () => {
       try {
         setVendorsLoading(true);
-        const res = await apiClient.get<any>('/crm-records/records/?entity_type=vendor&page_size=500');
-        const raw = res.data?.data ?? (res.data as any)?.results ?? [];
-        const list = Array.isArray(raw) ? raw : [];
+        const list = await crmRecordsApi.listRecords({ entity_type: 'unmannd_vendor', page_size: 500 });
         const options = list
           .map((r: any) => {
             const id = r.id ?? r.data?.id;
@@ -512,15 +549,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   }, [open, visibleRows, editableSet]);
 
   const saveNewVendor = useCallback(async () => {
-    const name = (newVendorName ?? '').trim();
+    const name = toVendorStorageName((newVendorName ?? '').trim());
     if (!name) {
       toast({ title: 'Enter vendor name', variant: 'destructive' });
       return;
     }
     try {
       setSavingNewVendor(true);
-      await apiClient.post('/crm-records/records/', {
-        entity_type: 'vendor',
+      await crmRecordsApi.createRecord({
+        entity_type: 'unmannd_vendor',
         data: { vendor_name: name, ...(newVendorLink.trim() ? { vendor_site_link: newVendorLink.trim() } : {}) },
       });
       setPending((p) => ({ ...p, vendor: name }));
@@ -724,6 +761,64 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     [pending, record?.data]
   );
 
+  const actionButtonConditionMatches = useCallback(
+    (btn: {
+      label: string;
+      statusValue: string;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    }) => {
+      const cond = btn.conditional;
+      if (!cond?.attribute || !cond.attribute.trim()) return true;
+      const attribute = cond.attribute.trim();
+      const raw =
+        pending?.[attribute] !== undefined
+          ? pending?.[attribute]
+          : (record?.data as any)?.[attribute];
+      const threshold = cond.value;
+
+      const numRaw = Number(raw);
+      const numThreshold = Number(threshold);
+      if (Number.isFinite(numRaw) && Number.isFinite(numThreshold)) {
+        switch (cond.operator) {
+          case 'gt':
+            return numRaw > numThreshold;
+          case 'gte':
+            return numRaw >= numThreshold;
+          case 'lt':
+            return numRaw < numThreshold;
+          case 'lte':
+            return numRaw <= numThreshold;
+          case 'eq':
+            return numRaw === numThreshold;
+          default:
+            return false;
+        }
+      }
+
+      const strRaw = raw == null ? '' : String(raw);
+      const strVal = threshold == null ? '' : String(threshold);
+      const cmp = strRaw.localeCompare(strVal, undefined, { numeric: true });
+      const rawLower = strRaw.trim().toLowerCase();
+      const valLower = strVal.trim().toLowerCase();
+
+      switch (cond.operator) {
+        case 'gt':
+          return cmp > 0;
+        case 'gte':
+          return cmp >= 0;
+        case 'lt':
+          return cmp < 0;
+        case 'lte':
+          return cmp <= 0;
+        case 'eq':
+          return rawLower === valLower;
+        default:
+          return false;
+      }
+    },
+    [pending, record?.data]
+  );
+
   const handleRemoveRequestFromCart = useCallback(
     async (req: { id: number; data?: Record<string, unknown> }) => {
       try {
@@ -784,6 +879,9 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     setSaving(key);
     try {
       let dataPatch: Record<string, unknown> = { [key]: value };
+      if ((key === 'vendor' || key === 'vendor_name') && typeof value === 'string') {
+        dataPatch[key] = toVendorStorageName(value);
+      }
       if (key === 'comments') {
         const existingRaw = (record?.data as any)?.comments;
         const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
@@ -847,21 +945,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   const handleSaveClick = useCallback((key: string, value: unknown) => {
     if (!editableSet.has(key)) return;
-    const toSave = pending[key] !== undefined ? pending[key] : value;
+      const toSave =
+        (key === 'vendor' || key === 'vendor_name') && typeof (pending[key] !== undefined ? pending[key] : value) === 'string'
+          ? toVendorStorageName(String(pending[key] !== undefined ? pending[key] : value))
+          : (pending[key] !== undefined ? pending[key] : value);
     handleSave(key, toSave);
   }, [editableSet, pending, handleSave]);
 
   const handleDelete = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
-    const currentStatus = record?.data?.status;
-    if (currentStatus && currentStatus !== 'DRAFT') {
-      toast({
-        title: 'Cannot delete',
-        description: 'Only draft requests can be deleted.',
-        variant: 'destructive',
-      });
-      return;
-    }
     if (!window.confirm('Are you sure you want to delete this request? This cannot be undone.')) {
       return;
     }
@@ -883,7 +975,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     } finally {
       setDeleting(false);
     }
-  }, [isInventoryRequest, isRequester, record?.id, record?.data?.status, onOpenChange, onDeleted, toast]);
+  }, [isInventoryRequest, isRequester, record?.id, onOpenChange, onDeleted, toast]);
 
   const handleProceedToRm = useCallback(async () => {
     if (!isInventoryRequest || !isRequester || !record?.id) return;
@@ -1028,12 +1120,17 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   /** Apply status and save configured flag checkboxes as true/false. */
   const handleActionButtonClick = useCallback(
-    async (btn: { label: string; statusValue: string }) => {
+    async (btn: { label: string; statusValue: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(btn.statusValue);
         const existingData = (record.data as Record<string, unknown>) || {};
-        const payload: Record<string, unknown> = { ...existingData, status: btn.statusValue };
+        const payload: Record<string, unknown> = {
+          ...existingData,
+          status: btn.statusValue,
+          status_text: (btn.statusText ?? btn.label ?? btn.statusValue).trim(),
+          ...(extraData || {}),
+        };
 
         // Stage comments history: append a new `{name, role, comment}` object into `data.comments[]`
         if (Object.prototype.hasOwnProperty.call(existingData, 'comments') || typeof pending?.comments !== 'undefined') {
@@ -1078,7 +1175,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-6xl sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30 shrink-0">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-semibold tracking-tight">
@@ -1104,7 +1201,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
               <p className="text-sm text-muted-foreground">No data to display.</p>
             </div>
           ) : (
-            <dl className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {visibleRows.map(({ key, value, inData }) => {
                 const isEditable =
                   key === 'status' && isInventoryRequest
@@ -1113,11 +1210,15 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                 const displayValue = pending[key] !== undefined ? pending[key] : value;
                 const isSaving = saving === key;
                 const label = humanizeLabel(key);
+                const rowFullWidth = DETAIL_ROW_FULL_WIDTH_KEYS.has(key);
 
                 return (
                   <div
                     key={key}
-                    className="rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:border-border"
+                    className={cn(
+                      'rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:border-border min-w-0',
+                      rowFullWidth && 'lg:col-span-2 xl:col-span-3',
+                    )}
                   >
                     <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                       {label}
@@ -1137,7 +1238,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 onValueChange={(val) => handleEditableChange(key, value, val)}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full max-w-md min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1161,7 +1262,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 }}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full max-w-md min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select cart" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1175,7 +1276,8 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               </Select>
                             );
                           })() : key === 'vendor' || key === 'vendor_name' ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 w-full min-w-0">
+                              <div className="min-w-0 flex-1">
                               <Select
                                 value={String(displayValue ?? '').trim() || undefined}
                                 onValueChange={(val) => {
@@ -1187,7 +1289,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 }}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="max-w-[260px] h-9 text-sm rounded-md">
+                                <SelectTrigger className="w-full min-w-0 h-9 text-sm rounded-md">
                                   <SelectValue placeholder="Select vendor" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1205,6 +1307,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                   )}
                                 </SelectContent>
                               </Select>
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
@@ -1234,7 +1337,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                             <Input
                               type="text"
                               inputMode="decimal"
-                              className="max-w-[280px] h-9 text-sm rounded-md font-mono tabular-nums"
+                              className="w-full max-w-md min-w-0 h-9 text-sm rounded-md font-mono tabular-nums"
                               value={
                                 priceInputDraft[key] ??
                                 formatPriceForInput(pending[key] !== undefined ? pending[key] : value)
@@ -1257,16 +1360,32 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               <div className="w-full space-y-2">
                                 {renderDisplayValue('comments', value)}
                                 <Textarea
-                                  className="max-w-[520px] min-h-[80px] text-sm rounded-md"
+                                  className="w-full min-h-[80px] text-sm rounded-md"
                                   value={pending[key] !== undefined ? String(pending[key]) : ''}
                                   onChange={(e) => handleEditableChange(key, value, e.target.value)}
                                   disabled={isSaving}
                                   placeholder="Add a new comment..."
                                 />
                               </div>
+                            ) : key === 'urgency_level' ? (
+                              <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
+                                {URGENCY_BUTTON_OPTIONS.map((opt) => (
+                                  <Button
+                                    key={opt.value}
+                                    type="button"
+                                    variant={String(displayValue ?? '').toUpperCase() === opt.value ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => handleEditableChange(key, value, opt.value)}
+                                    disabled={isSaving}
+                                    className="rounded-full h-8"
+                                  >
+                                    {opt.label}
+                                  </Button>
+                                ))}
+                              </div>
                             ) : (
                               <Input
-                                className="max-w-[280px] h-9 text-sm rounded-md"
+                                className="w-full max-w-md min-w-0 h-9 text-sm rounded-md"
                                 value={pending[key] !== undefined ? String(pending[key]) : formatValue(value)}
                                 onChange={(e) => handleEditableChange(key, value, e.target.value)}
                                 disabled={isSaving}
@@ -1307,7 +1426,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   </div>
                 );
               })}
-            </dl>
+            </div>
           )}
           {isInventoryCart && (
             <section className="mt-6 rounded-xl border border-border/60 bg-card overflow-hidden">
@@ -1441,7 +1560,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   </label>
                 );
               })}
-              {actionButtons.map((btn) => (
+              {actionButtons.filter((btn) => actionButtonConditionMatches(btn)).map((btn) => (
                   <Button
                     key={btn.statusValue}
                     type="button"
@@ -1449,7 +1568,13 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                     size="default"
                     className="gap-2 h-9 rounded-md"
                     disabled={!!applyingStatusValue}
-                    onClick={() => handleActionButtonClick(btn)}
+                    onClick={() => {
+                      if (btn.openWarningModal) {
+                        setPendingWarningAction(btn as StatusActionWithWarningConfig);
+                        return;
+                      }
+                      handleActionButtonClick(btn);
+                    }}
                   >
                     {applyingStatusValue === btn.statusValue ? (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -1461,22 +1586,27 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           </DialogFooter>
         )}
         {isInventoryRequest && isRequester && (
-          <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row justify-between sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              size="default"
-              className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 order-2 sm:order-1"
-              disabled={deleting || proceeding || record?.data?.status !== 'DRAFT'}
-              onClick={handleDelete}
-            >
-              {deleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Trash2 className="h-4 w-4" aria-hidden />
-              )}
-              {deleting ? 'Deleting…' : 'Delete request'}
-            </Button>
+          <DialogFooter className={cn(
+            "px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row",
+            canShowDeleteRequestButton ? "justify-between sm:justify-between" : "justify-end sm:justify-end",
+          )}>
+            {canShowDeleteRequestButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 order-2 sm:order-1"
+                disabled={deleting || proceeding}
+                onClick={handleDelete}
+              >
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                )}
+                {deleting ? 'Deleting…' : 'Delete request'}
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="default"
@@ -1621,6 +1751,21 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <StatusActionWarningModal
+        open={pendingWarningAction != null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPendingWarningAction(null);
+        }}
+        actionButton={pendingWarningAction}
+        actorName={myName}
+        submitting={applyingStatusValue != null}
+        onSubmit={async (payload) => {
+          if (!pendingWarningAction) return;
+          await handleActionButtonClick(pendingWarningAction, payload);
+          setPendingWarningAction(null);
+        }}
+      />
     </Dialog>
   );
 };
