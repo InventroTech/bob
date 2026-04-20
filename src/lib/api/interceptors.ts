@@ -21,18 +21,13 @@ import {
 export const setupRequestInterceptor = (instance: any) => {
   instance.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
-      // Prefer spoof token (if present) over the Supabase session token.
+      // Attach current Supabase access token
       try {
-        const spoofToken = window.localStorage.getItem('pyro_spoof_jwt');
-        if (spoofToken) {
-          config.headers.Authorization = `Bearer ${spoofToken}`;
-        } else {
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-          if (session?.access_token) {
-            config.headers.Authorization = `Bearer ${session.access_token}`;
-          }
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          config.headers.Authorization = `Bearer ${session.access_token}`;
         }
       } catch (error) {
         console.warn('Failed to get auth token for request:', error);
@@ -102,6 +97,7 @@ export const setupResponseInterceptor = (instance: any) => {
               
               if (refreshError) {
                 console.error('[Interceptor] Session refresh failed:', refreshError);
+                await supabase.auth.signOut();
                 return Promise.reject(new AuthenticationError(errorMessage, status, data));
               }
               
@@ -115,10 +111,12 @@ export const setupResponseInterceptor = (instance: any) => {
                 return instance(originalRequest);
               } else {
                 console.warn('[Interceptor] Session refresh returned no token');
+                await supabase.auth.signOut();
                 return Promise.reject(new AuthenticationError(errorMessage, status, data));
               }
             } catch (refreshError) {
               console.error('[Interceptor] Error during token refresh:', refreshError);
+              await supabase.auth.signOut();
               return Promise.reject(new AuthenticationError(errorMessage, status, data));
             }
           }

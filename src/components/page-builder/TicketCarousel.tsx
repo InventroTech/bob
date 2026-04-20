@@ -42,6 +42,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsCard";
+import { getTenantSlug } from "@/lib/api/config";
+import { apiClient } from "@/lib/api";
 
 
 interface Ticket {
@@ -197,6 +199,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 }) => {
   const { user, session } = useAuth();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const effectiveTenantSlug = tenantSlug || getTenantSlug();
 
   const isInitialized = React.useRef(false);
 
@@ -320,29 +323,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     try {
       if (!session) return;
 
-      // Use renderer URL with analytics endpoint
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/analytics/get-ticket-status/`;
-      
-      console.log('Fetching ticket stats from:', apiUrl);
-      
-      const response = await fetch(apiUrl, {
-        method: "GET",
+      const response = await apiClient.get("/analytics/get-ticket-status/", {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
+          "X-Tenant-Slug": effectiveTenantSlug,
         },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log('Ticket stats response:', data);
+      const data = response.data;
       
       // Map the new backend structure to our TicketStats interface
       const stats: TicketStats = {
@@ -417,42 +403,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the next ticket
   const fetchNextTicket = async (currentTicketId: number) => {
     try {
-      // Use renderer URL for get next ticket
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const nextTicketUrl = `${baseUrl}/support-ticket/get-next-ticket/`;
-      
-      console.log('Fetching next ticket from:', nextTicketUrl);
-      
-      const token = session?.access_token;
-
-      if (!token) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
-      const nextTicketResponse = await fetch(nextTicketUrl, {
-        method: "GET",
+      const response = await apiClient.get("/support-ticket/get-next-ticket/", {
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
+          "X-Tenant-Slug": effectiveTenantSlug,
         },
       });
-
-      if (!nextTicketResponse.ok) {
-        if (nextTicketResponse.status === 404) {
-          setShowPendingCard(true);
-          setCurrentTicket(null);
-          resetTicketState();
-          isInitialized.current = false;
-          clearPersistedState();
-          await fetchTicketStats();
-          toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
-          return;
-        }
-        throw new Error(`HTTP error! status: ${nextTicketResponse.status}`);
-      }
-
-      const ticketData = await nextTicketResponse.json();
+      const ticketData = response.data;
 
       if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
         setShowPendingCard(true);
@@ -491,6 +451,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
     } catch (error: any) {
+      if (error?.response?.status === 404) {
+        setShowPendingCard(true);
+        setCurrentTicket(null);
+        resetTicketState();
+        isInitialized.current = false;
+        clearPersistedState();
+        await fetchTicketStats();
+        toast.info("No more tickets available. Click 'Get First Ticket' to continue.");
+        return;
+      }
       console.error("Error fetching next ticket:", error);
       toast.error(error.message || "Failed to fetch next ticket");
       setShowPendingCard(true);
@@ -505,33 +475,17 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //taking a break
   const handleTakeBreak = async () => {
     try {
-      // Use renderer URL for take break
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/support-ticket/take-break/`;
-      
-      console.log('Taking break from:', apiUrl);
-      
-      const token = session?.access_token;
-
-      if (!token) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
-      const response = await fetch(apiUrl, {
-        method: "POST",
+      await apiClient.post("/support-ticket/take-break/", {
+        ticketId: currentTicket?.id,
+      }, {
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
+          "X-Tenant-Slug": effectiveTenantSlug,
         },
-        body: JSON.stringify({
-          ticketId: currentTicket?.id
-        })
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       // Navigate to pending card
       setShowPendingCard(true);
@@ -621,8 +575,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }));
 
       // Use renderer URL for save and continue
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      let apiUrl = `${baseUrl}/support-ticket/save-and-continue/`;
+      let endpoint = "/support-ticket/save-and-continue/";
       let payload: any = {
         ticketId: currentTicket?.id,
         resolutionStatus,
@@ -637,7 +590,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       // If Not Connected, use original Supabase not-connected endpoint and adjust payload
       if (action === "Not Connected") {
-        apiUrl = `${import.meta.env.VITE_RENDER_API_URL}/support-ticket/update-call-status/`;
+        endpoint = "/support-ticket/update-call-status/";
         payload = {
           ticketId: currentTicket?.id,
           callStatus,
@@ -647,25 +600,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         };
       }
 
-      console.log('Processing action from:', apiUrl);
-
-      const token = session?.access_token;
-      if (!token) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
-      const response = await fetch(apiUrl, {
-        method: "POST",
+      await apiClient.post(endpoint, payload, {
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          "X-Tenant-Slug": effectiveTenantSlug,
         },
-        body: JSON.stringify(payload)
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       // After successful API call, fetch next ticket
       await fetchNextTicket(currentTicket?.id);
@@ -682,42 +625,19 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const fetchFirstTicket = async () => {
     try {
       setLoading(true);
-      // Use renderer URL for get first ticket
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/support-ticket/get-next-ticket/?assign=false`;
-      
-      console.log('Fetching first ticket from:', apiUrl);
-      
-      const token = session?.access_token;
-
-      if (!token) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
-      const response = await fetch(apiUrl, {
-        method: "GET",
+      const response = await apiClient.get("/support-ticket/get-next-ticket/", {
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Tenant-Slug": tenantSlug || "bibhab-thepyro-ai",
+          "X-Tenant-Slug": effectiveTenantSlug,
+        },
+        params: {
+          assign: "false",
         },
       });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          setShowPendingCard(true);
-          setCurrentTicket(null);
-          resetTicketState();
-          isInitialized.current = false;
-          clearPersistedState();
-          await fetchTicketStats();
-          toast.info("No tickets available at the moment.");
-          return;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const ticketData = await response.json();
+      const ticketData = response.data;
 
       if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
         setShowPendingCard(true);
@@ -756,6 +676,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
     } catch (error: any) {
+      if (error?.response?.status === 404) {
+        setShowPendingCard(true);
+        setCurrentTicket(null);
+        resetTicketState();
+        isInitialized.current = false;
+        clearPersistedState();
+        await fetchTicketStats();
+        toast.info("No tickets available at the moment.");
+        return;
+      }
       console.error("Error fetching first ticket:", error);
       toast.error(error.message || "Failed to fetch ticket");
       setShowPendingCard(true);
