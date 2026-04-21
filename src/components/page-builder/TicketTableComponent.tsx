@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { PrajaTable } from '../ui/prajaTable';
 import ShortProfileCard from '../ui/ShortProfileCard';
@@ -22,7 +21,6 @@ import { format } from 'date-fns';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { convertGMTtoIST } from '@/lib/timeUtils';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
-import { getTenantSlug } from '@/lib/api/config';
 
 // Use renderer API for ticket search
 const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
@@ -247,8 +245,6 @@ interface PrajaTableProps {
 }
 
 export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => {
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const effectiveTenantSlug = tenantSlug || getTenantSlug();
   const [data, setData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -373,7 +369,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': effectiveTenantSlug,
           'Content-Type': 'application/json'
         }
       });
@@ -428,7 +423,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': effectiveTenantSlug,
           'Content-Type': 'application/json'
         }
       });
@@ -580,8 +574,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': effectiveTenantSlug
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
         },
         signal: abortController.signal
       });
@@ -765,8 +758,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': authToken ? `Bearer ${authToken}` : '',
-                'X-Tenant-Slug': effectiveTenantSlug
+                'Authorization': authToken ? `Bearer ${authToken}` : ''
               },
               signal: abortController.signal
             });
@@ -854,8 +846,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': authToken ? `Bearer ${authToken}` : '',
-              'X-Tenant-Slug': effectiveTenantSlug
+              'Authorization': authToken ? `Bearer ${authToken}` : ''
             },
             signal: abortController.signal
           });
@@ -961,8 +952,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           baseUrl,
           {
             'Content-Type': 'application/json',
-            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
-            'X-Tenant-Slug': effectiveTenantSlug,
+            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : ''
           },
           'ticket_id'
         );
@@ -986,8 +976,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': effectiveTenantSlug
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
           }
         });
 
@@ -1056,8 +1045,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': effectiveTenantSlug
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
           }
         });
 
@@ -1195,8 +1183,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': effectiveTenantSlug
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
         }
       });
 
@@ -1297,11 +1284,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           'Content-Type': 'application/json',
           'Authorization': authToken ? `Bearer ${authToken}` : ''
         };
-
-        // Add X-Tenant-Slug header only for renderer API calls
-        if (apiPrefix === 'renderer') {
-          headers['X-Tenant-Slug'] = effectiveTenantSlug;
-        }
 
         const response = await fetch(apiUrl, {
           method: 'GET',
@@ -1409,7 +1391,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     return () => {
       abortController.abort();
     };
-  }, [session?.access_token, config?.apiEndpoint, apiPrefix, effectiveTenantSlug]);
+  }, [session?.access_token, config?.apiEndpoint, apiPrefix]);
 
   // Fetch filter options and assignees when component mounts
   useEffect(() => {

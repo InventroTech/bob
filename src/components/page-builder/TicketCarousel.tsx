@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -42,7 +41,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsCard";
-import { getTenantSlug } from "@/lib/api/config";
 import { apiClient } from "@/lib/api";
 
 
@@ -198,8 +196,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   onUpdate,
 }) => {
   const { user, session } = useAuth();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
-  const effectiveTenantSlug = tenantSlug || getTenantSlug();
 
   const isInitialized = React.useRef(false);
 
@@ -324,9 +320,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       if (!session) return;
 
       const response = await apiClient.get("/analytics/get-ticket-status/", {
-        headers: {
-          "X-Tenant-Slug": effectiveTenantSlug,
-        },
       });
       const data = response.data;
       
@@ -408,9 +401,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
       const response = await apiClient.get("/support-ticket/get-next-ticket/", {
-        headers: {
-          "X-Tenant-Slug": effectiveTenantSlug,
-        },
       });
       const ticketData = response.data;
 
@@ -481,10 +471,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       await apiClient.post("/support-ticket/take-break/", {
         ticketId: currentTicket?.id,
-      }, {
-        headers: {
-          "X-Tenant-Slug": effectiveTenantSlug,
-        },
       });
 
       // Navigate to pending card
@@ -605,9 +591,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
       await apiClient.post(endpoint, payload, {
-        headers: {
-          "X-Tenant-Slug": effectiveTenantSlug,
-        },
       });
 
       // After successful API call, fetch next ticket
@@ -630,9 +613,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
       const response = await apiClient.get("/support-ticket/get-next-ticket/", {
-        headers: {
-          "X-Tenant-Slug": effectiveTenantSlug,
-        },
         params: {
           assign: "false",
         },

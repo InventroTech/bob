@@ -5,7 +5,6 @@
 
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { supabase } from '@/lib/supabase';
-import { getTenantSlug } from './config';
 import { 
   ApiError, 
   NetworkError, 
@@ -16,7 +15,7 @@ import {
 } from './errors';
 
 /**
- * Request interceptor to add authentication token and tenant slug
+ * Request interceptor to add authentication token
  */
 export const setupRequestInterceptor = (instance: any) => {
   instance.interceptors.request.use(
@@ -31,11 +30,6 @@ export const setupRequestInterceptor = (instance: any) => {
         }
       } catch (error) {
         console.warn('Failed to get auth token for request:', error);
-      }
-
-      // Add tenant slug header if not already present
-      if (!config.headers['X-Tenant-Slug']) {
-        config.headers['X-Tenant-Slug'] = getTenantSlug();
       }
 
       // Ensure Content-Type is set

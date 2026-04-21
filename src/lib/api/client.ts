@@ -4,7 +4,7 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { getBaseUrl, API_CONFIG, getTenantSlug } from './config';
+import { getBaseUrl, API_CONFIG } from './config';
 import { setupRequestInterceptor, setupResponseInterceptor } from './interceptors';
 
 /**
@@ -66,10 +66,6 @@ export const apiFetch = async (
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  if (!headers['X-Tenant-Slug']) {
-    headers['X-Tenant-Slug'] = getTenantSlug();
   }
 
   // Build full URL
