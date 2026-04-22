@@ -122,6 +122,18 @@ function formatPriceFieldDisplay(value: unknown): string {
   return formatCurrencyDisplay(n);
 }
 
+function toCurrencyNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = parseCurrencyInput(value);
+    if (typeof parsed === 'number' && Number.isFinite(parsed)) return parsed;
+    const fallback = Number(value);
+    return Number.isFinite(fallback) ? fallback : null;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Keys that we render as textarea (multi-line). */
 const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_freeform', 'project_purpose']);
 const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
@@ -170,6 +182,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [pendingWarningAction, setPendingWarningAction] = useState<StatusActionWithWarningConfig | null>(null);
   const [finalPriceValue, setFinalPriceValue] = useState<string>('');
   const [finalPriceIsTotal, setFinalPriceIsTotal] = useState<boolean>(false);
+  const [extraChargesDraft, setExtraChargesDraft] = useState<string>('');
   /** Live-formatted strings for price form fields while typing (cleared on blur). */
   const [priceFieldDraft, setPriceFieldDraft] = useState<Record<string, string>>({});
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
@@ -283,6 +296,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setNewVendorLink('');
       setFinalPriceValue('');
       setFinalPriceIsTotal(false);
+      setExtraChargesDraft('');
       setPriceFieldDraft({});
       return;
     }
@@ -297,8 +311,27 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         initial[f.key] = Array.isArray(val) ? '' : val !== undefined && val !== null ? val : '';
         return;
       }
+      if ((f.key === 'vendor' || f.key === 'vendor_name') && typeof val === 'string') {
+        initial[f.key] = toVendorStorageName(val);
+        return;
+      }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
+    if (data.extra_charges != null && data.extra_charges !== '') {
+      const parsedExtraCharges = toCurrencyNumber(data.extra_charges);
+      if (parsedExtraCharges != null) {
+        initial.extra_charges = parsedExtraCharges;
+      }
+    }
+    if (data.extra_charge_details != null) {
+      initial.extra_charge_details = String(data.extra_charge_details);
+    }
+    if (data.final_amount != null && data.final_amount !== '') {
+      const parsedFinalAmount = toCurrencyNumber(data.final_amount);
+      if (parsedFinalAmount != null) {
+        initial.final_amount = parsedFinalAmount;
+      }
+    }
     if ((hasPriceFieldInForm || (!paymentButtonConfig && effectiveShowFinalPrice)) && !initial.price_currency) {
       const savedCurrency = String(data.price_currency ?? data.currency ?? '').toUpperCase();
       initial.price_currency = savedCurrency === 'USD' ? 'USD' : 'INR';
@@ -344,6 +377,21 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     }
     return { unit_price: val, total_price: Math.round(val * qty * 100) / 100 };
   }, [finalPriceValue, finalPriceIsTotal, getQuantity]);
+
+  /** Compute final_amount from total_price + extra_charges. */
+  const getComputedFinalAmountFields = useCallback(
+    (baseData: Record<string, unknown>): Record<string, unknown> => {
+      const totalPrice = toCurrencyNumber(baseData.total_price) ?? 0;
+      const extraCharges = toCurrencyNumber(baseData.extra_charges) ?? 0;
+      const roundedExtra = Math.round(extraCharges * 100) / 100;
+      const finalAmount = Math.round((totalPrice + roundedExtra) * 100) / 100;
+      return {
+        extra_charges: roundedExtra,
+        final_amount: finalAmount,
+      };
+    },
+    []
+  );
 
   const flagConditionMatches = useCallback(
     (flag: {
@@ -478,6 +526,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           status_text: (btn.statusText ?? btn.label ?? btn.statusValue).trim(),
           ...(extraData || {}),
         };
+        if (!paymentButtonConfig && effectiveShowFinalPrice) {
+          Object.assign(dataToSend, getComputedFinalAmountFields(dataToSend));
+        }
       if (typeof dataToSend.vendor === 'string') {
         dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
       }
@@ -530,7 +581,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -539,6 +590,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setSaving(true);
       const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
       const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides };
+      if (!paymentButtonConfig && effectiveShowFinalPrice) {
+        Object.assign(dataToSend, getComputedFinalAmountFields(dataToSend));
+      }
       if (typeof dataToSend.vendor === 'string') {
         dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
       }
@@ -586,7 +640,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
 
   const handleDeleteRequest = useCallback(async () => {
     if (!canShowDeleteRequestButton || !record?.id) return;
@@ -673,6 +727,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             {formModalFields.map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
+              const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
               const isEnabled = field.enabled && canUpdate;
               const isClickableLink = field.link === true && !isEnabled && looksLikeUrl(displayStr);
               const isStatus = field.key === 'status' && statusOptions.length > 0;
@@ -751,7 +806,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     <div className="flex items-center gap-2 w-full min-w-0">
                       <div className="min-w-0 flex-1">
                       <Select
-                        value={displayStr || undefined}
+                        value={normalizedVendorValue || undefined}
                         onValueChange={(v) => {
                           if (v === ADD_VENDOR_VALUE) {
                             setIsAddVendorModalOpen(true);
@@ -769,9 +824,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                             <SelectItem value="__loading__" disabled>Loading…</SelectItem>
                           ) : (
                             <>
+                              {normalizedVendorValue &&
+                                !vendors.some((v) => toVendorStorageName(v.name) === normalizedVendorValue) ? (
+                                  <SelectItem value={normalizedVendorValue}>
+                                    {normalizedVendorValue}
+                                  </SelectItem>
+                                ) : null}
                               {vendors.map((v) => (
-                                <SelectItem key={v.id} value={v.name}>
-                                  {v.name}
+                                <SelectItem key={v.id} value={toVendorStorageName(v.name)}>
+                                  {toVendorStorageName(v.name)}
                                 </SelectItem>
                               ))}
                             </>
@@ -979,6 +1040,69 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               <p className="text-xs text-muted-foreground">
                 On save, total_price and unit_price are calculated from quantity and saved to the record.
               </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Extra charges
+                  </Label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={
+                      extraChargesDraft ||
+                      formatCurrencyDisplay(formData.extra_charges as number | '' | string | undefined)
+                    }
+                    onChange={(e) => {
+                      const { display, value } = formatCurrencyInputLive(e.target.value);
+                      setExtraChargesDraft(display);
+                      setField('extra_charges', value);
+                    }}
+                    onBlur={() => {
+                      setExtraChargesDraft('');
+                      const parsed = toCurrencyNumber(formData.extra_charges);
+                      setField('extra_charges', parsed != null ? Math.round(parsed * 100) / 100 : 0);
+                    }}
+                    className="h-9 text-sm rounded-md font-mono tabular-nums"
+                    disabled={!canUpdate}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Final amount
+                  </Label>
+                  <Input
+                    value={(() => {
+                      const priceFields = getComputedPriceFields();
+                      const totalRaw =
+                        priceFields.total_price ??
+                        (formData.total_price as number | string | undefined) ??
+                        (record?.data as any)?.total_price;
+                      const total = toCurrencyNumber(totalRaw) ?? 0;
+                      const extraRaw =
+                        (formData.extra_charges as number | string | undefined) ??
+                        (record?.data as any)?.extra_charges;
+                      const extra = toCurrencyNumber(extraRaw) ?? 0;
+                      return formatCurrencyDisplay(Math.round((total + extra) * 100) / 100);
+                    })()}
+                    readOnly
+                    disabled
+                    className="h-9 text-sm rounded-md bg-muted/50 font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Extra charge details
+                  </Label>
+                  <Textarea
+                    value={String(formData.extra_charge_details ?? '')}
+                    onChange={(e) => setField('extra_charge_details', e.target.value)}
+                    placeholder="Reason/details for extra charges"
+                    className="min-h-[72px] text-sm rounded-md"
+                    disabled={!canUpdate}
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
