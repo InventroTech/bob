@@ -349,8 +349,12 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   const mapApiDataToJob = (apiData: unknown): Job => {
     console.log('    📥 Raw API data:', apiData);
     
+    // Cast apiData to Record for safe property access
+    const apiDataRecord = apiData as Record<string, unknown>;
+    
     // Backend returns: { id, entity_type, name, data: {...} }
-    const jobData = apiData.data || apiData;
+    const jobData = apiDataRecord.data || apiData;
+    const jobDataRecord = jobData as Record<string, unknown>;
     console.log('    📦 Job data (nested):', jobData);
     
     const {
@@ -367,24 +371,28 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     } = dataMapping;
 
     // Extract form questions - prefer full form structure, fallback to simple questions
-    let formQuestions: unknown[] = [];
+    let formQuestions: Record<string, unknown>[] = [];
     
-    if (jobData.formQuestions && Array.isArray(jobData.formQuestions)) {
+    const formQuestionsData = jobDataRecord.formQuestions as unknown[];
+    if (formQuestionsData && Array.isArray(formQuestionsData)) {
       // Use full form structure if available (with types and options)
-      formQuestions = jobData.formQuestions.map((q: unknown) => ({
-        id: q.id || `q_${Date.now()}_${Math.random()}`,
-        type: q.type || 'text',
-        title: q.title || '',
-        description: q.description,
-        required: q.required !== undefined ? q.required : true,
-        placeholder: q.placeholder,
-        options: q.options,
-        validation: q.validation
-      }));
+      formQuestions = formQuestionsData.map((q) => {
+        const qRecord = q as Record<string, unknown>;
+        return {
+          id: String(qRecord.id || `q_${Date.now()}_${Math.random()}`),
+          type: String(qRecord.type || 'text'),
+          title: String(qRecord.title || ''),
+          description: qRecord.description,
+          required: Boolean(qRecord.required !== undefined ? qRecord.required : true),
+          placeholder: qRecord.placeholder,
+          options: qRecord.options,
+          validation: qRecord.validation
+        };
+      });
       console.log('    ✓ Using full form structure:', formQuestions.length, 'questions with types');
     } else {
       // Fallback: Extract questions from backend format (backward compatibility)
-      const backendQuestions = jobData.questions || {};
+      const backendQuestions = jobDataRecord.questions as Record<string, unknown> || {};
       console.log('    ❓ Backend questions:', backendQuestions);
       
       formQuestions = Object.entries(backendQuestions).map(([key, questionText]) => {
@@ -438,10 +446,11 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     }
 
     const form: DynamicFormData = {
-      id: jobData.formId || `form_${apiData.id || Date.now()}`,
-      title: jobData.formTitle || `Application for ${jobData.title || apiData.name}`,
+      id: String(jobDataRecord.formId || `form_${apiDataRecord.id || Date.now()}`),
+      title: String(jobDataRecord.formTitle || `Application for ${jobDataRecord.title || apiDataRecord.name}`),
       description: 'Please fill out this application form to apply for this position.',
-      questions: formQuestions,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      questions: formQuestions as any,
       settings: {
         allowMultipleSubmissions: false,
         showProgressBar: true,
@@ -450,24 +459,24 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
     };
 
     return {
-      id: apiData[idField] || apiData.id || '',
-      title: jobData[titleField] || jobData.title || apiData.name || '',
-      description: jobData[descriptionField] || jobData.other_description || '',
-      department: jobData[departmentField] || jobData.department || '',
-      location: jobData[locationField] || jobData.location || '',
-      type: jobData[typeField] || jobData.type || 'full-time',
-      status: jobData[statusField] || jobData.status || 'active',
-      deadline: jobData[deadlineField] || jobData.deadline || '',
-      salary: jobData[salaryField] || jobData.salary || '', // Can be string or object
-      requirements: jobData.criteria ? [jobData.criteria] : (jobData.requirements || []),
-      benefits: jobData.benefits || [],
+      id: String(apiDataRecord[idField] || apiDataRecord.id || ''),
+      title: String(jobDataRecord[titleField] || jobDataRecord.title || apiDataRecord.name || ''),
+      description: String(jobDataRecord[descriptionField] || jobDataRecord.other_description || ''),
+      department: String(jobDataRecord[departmentField] || jobDataRecord.department || ''),
+      location: String(jobDataRecord[locationField] || jobDataRecord.location || ''),
+      type: String(jobDataRecord[typeField] || jobDataRecord.type || 'full-time') as 'full-time' | 'part-time' | 'contract' | 'internship',
+      status: String(jobDataRecord[statusField] || jobDataRecord.status || 'active') as 'active' | 'inactive' | 'draft',
+      deadline: String(jobDataRecord[deadlineField] || jobDataRecord.deadline || ''),
+      salary: jobDataRecord[salaryField] || jobDataRecord.salary || '',
+      requirements: Array.isArray(jobDataRecord.requirements) ? jobDataRecord.requirements as string[] : (jobDataRecord.criteria ? [String(jobDataRecord.criteria)] : []),
+      benefits: Array.isArray(jobDataRecord.benefits) ? jobDataRecord.benefits as string[] : [],
       form: form,
-      createdAt: jobData[createdAtField] || jobData.createdAt || apiData.created_at || new Date().toISOString(),
-      applicationsCount: jobData.applicationsCount || 0,
-      company: jobData.company || {
-        name: jobData.company_name || 'Company',
-        logo: jobData.company_logo,
-        website: jobData.company_website
+      createdAt: String(jobDataRecord[createdAtField] || jobDataRecord.createdAt || apiDataRecord.created_at || new Date().toISOString()),
+      applicationsCount: Number(jobDataRecord.applicationsCount || 0),
+      company: {
+        name: String((jobDataRecord.company as Record<string, unknown> | undefined)?.name || jobDataRecord.company_name || 'Company'),
+        logo: String((jobDataRecord.company as Record<string, unknown> | undefined)?.logo || jobDataRecord.company_logo || ''),
+        website: String((jobDataRecord.company as Record<string, unknown> | undefined)?.website || jobDataRecord.company_website || '')
       }
     };
   };
@@ -924,20 +933,23 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
 
   // Render form field based on question type
   const renderFormField = (question: unknown) => {
-    const value = formData[question.id] || '';
+    const questionRecord = question as Record<string, unknown>;
+    const value = formData[questionRecord.id as string] || '';
+    const questionType = String(questionRecord.type || 'text');
+    const questionOptions = questionRecord.options as unknown[] || [];
 
-    switch (question.type) {
+    switch (questionType) {
       case 'text':
       case 'email':
       case 'phone':
         return (
           <input
-            type={question.type}
-            id={question.id}
-            value={value}
-            onChange={(e) => handleInputChange(question.id, e.target.value)}
-            placeholder={question.placeholder}
-            required={question.required}
+            type={questionType}
+            id={String(questionRecord.id)}
+            value={String(value)}
+            onChange={(e) => handleInputChange(String(questionRecord.id), e.target.value)}
+            placeholder={String(questionRecord.placeholder || '')}
+            required={Boolean(questionRecord.required)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
           />
         );
@@ -945,104 +957,104 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
       case 'textarea':
         return (
           <textarea
-            id={question.id}
-            value={value}
-            onChange={(e) => handleInputChange(question.id, e.target.value)}
-            placeholder={question.placeholder}
-            required={question.required}
+            id={String(questionRecord.id)}
+            value={String(value)}
+            onChange={(e) => handleInputChange(String(questionRecord.id), e.target.value)}
+            placeholder={String(questionRecord.placeholder || '')}
+            required={Boolean(questionRecord.required)}
             rows={4}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black resize-vertical"
           />
         );
 
-      case 'select':
-      {
-        const selectOptions = question.options && question.options.length > 0 
-          ? question.options 
+      case 'select': {
+        const selectOptions = (questionOptions && Array.isArray(questionOptions) && questionOptions.length > 0) 
+          ? questionOptions 
           : ['Option 1', 'Option 2', 'Option 3'];
-      }
+        
         return (
           <select
-            id={question.id}
-            value={value}
-            onChange={(e) => handleInputChange(question.id, e.target.value)}
-            required={question.required}
+            id={String(questionRecord.id)}
+            value={String(value)}
+            onChange={(e) => handleInputChange(String(questionRecord.id), e.target.value)}
+            required={Boolean(questionRecord.required)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
           >
             <option value="">Select an option</option>
-            {selectOptions.map((option: string, index: number) => (
-              <option key={index} value={option}>
-                {option}
+            {selectOptions.map((option: unknown, index: number) => (
+              <option key={index} value={String(option)}>
+                {String(option)}
               </option>
             ))}
           </select>
         );
-
-      case 'radio':
-      {
-        const radioOptions = question.options && question.options.length > 0 
-          ? question.options 
-          : ['Option 1', 'Option 2', 'Option 3'];
       }
+
+      case 'radio': {
+        const radioOptions = (questionOptions && Array.isArray(questionOptions) && questionOptions.length > 0) 
+          ? questionOptions 
+          : ['Option 1', 'Option 2', 'Option 3'];
+        
         return (
           <div className="space-y-2">
-            {radioOptions.map((option: string, index: number) => (
+            {radioOptions.map((option: unknown, index: number) => (
               <label key={index} className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
-                  name={question.id}
-                  value={option}
-                  checked={value === option}
-                  onChange={(e) => handleInputChange(question.id, e.target.value)}
-                  required={question.required}
+                  name={String(questionRecord.id)}
+                  value={String(option)}
+                  checked={String(value) === String(option)}
+                  onChange={(e) => handleInputChange(String(questionRecord.id), e.target.value)}
+                  required={Boolean(questionRecord.required)}
                   className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-900"
                 />
-                <span className="text-gray-700">{option}</span>
+                <span className="text-gray-700">{String(option)}</span>
               </label>
             ))}
           </div>
         );
-
-      case 'checkbox':
-      {
-        const checkboxValues = Array.isArray(value) ? value : (value ? [value] : []);
-        const checkboxOptions = question.options && question.options.length > 0 
-          ? question.options 
-          : ['Option 1', 'Option 2', 'Option 3'];
       }
+
+      case 'checkbox': {
+        const checkboxValues = Array.isArray(value) ? value : (value ? [value] : []);
+        const checkboxOptions = (questionOptions && Array.isArray(questionOptions) && questionOptions.length > 0) 
+          ? questionOptions 
+          : ['Option 1', 'Option 2', 'Option 3'];
+        
         return (
           <div className="space-y-2">
-            {checkboxOptions.map((option: string, index: number) => (
+            {checkboxOptions.map((option: unknown, index: number) => (
               <label key={index} className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  value={option}
-                  checked={checkboxValues.includes(option)}
+                  value={String(option)}
+                  checked={checkboxValues.includes(String(option))}
                   onChange={(e) => {
-                    const currentValues = checkboxValues;
+                    const currentValues = checkboxValues.map(v => String(v));
                     if (e.target.checked) {
-                      handleInputChange(question.id, [...currentValues, option]);
+                      handleInputChange(String(questionRecord.id), [...currentValues, String(option)]);
                     } else {
-                      handleInputChange(question.id, currentValues.filter(v => v !== option));
+                      handleInputChange(String(questionRecord.id), currentValues.filter(v => v !== String(option)));
                     }
                   }}
                   className="w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900"
                 />
-                <span className="text-gray-700">{option}</span>
+                <span className="text-gray-700">{String(option)}</span>
               </label>
             ))}
           </div>
         );
+      }
 
       case 'number':
         return (
           <input
             type="number"
-            id={question.id}
-            value={value}
-            onChange={(e) => handleInputChange(question.id, e.target.value)}
-            placeholder={question.placeholder}
-            required={question.required}
+            id={String(questionRecord.id)}
+            value={String(value)}
+            onChange={(e) => handleInputChange(String(questionRecord.id), e.target.value)}
+            placeholder={String(questionRecord.placeholder || '')}
+            required={Boolean(questionRecord.required)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
           />
         );
@@ -1051,26 +1063,27 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
         return (
           <input
             type="date"
-            id={question.id}
-            value={value}
-            onChange={(e) => handleInputChange(question.id, e.target.value)}
-            required={question.required}
+            id={String(questionRecord.id)}
+            value={String(value)}
+            onChange={(e) => handleInputChange(String(questionRecord.id), e.target.value)}
+            required={Boolean(questionRecord.required)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
           />
         );
 
-      case 'file':
+      case 'file': {
+        const validationRecord = questionRecord.validation as Record<string, unknown> || {};
         return (
           <div className="w-full">
             <FileUploadComponent
-              title={question.title}
-              description={question.description || 'Upload your file here'}
+              title={String(questionRecord.title || '')}
+              description={String(questionRecord.description || 'Upload your file here')}
               apiEndpoint={fileUploadEndpoint}
               apiPrefix={apiMode === 'renderer' ? 'renderer' : apiMode === 'direct' ? 'renderer' : 'localhost'}
               acceptedFileTypes={(() => {
-                if (question.validation?.pattern) {
+                const pattern = validationRecord.pattern as string;
+                if (pattern) {
                   // Convert regex pattern like '\\.(pdf|doc|docx)$' to '.pdf,.doc,.docx'
-                  const pattern = question.validation.pattern;
                   // Remove regex anchors and escape characters
                   const cleaned = pattern
                     .replace(/^\\\./, '.')  // Replace \. with .
@@ -1105,22 +1118,23 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
             {value && (
               <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-sm text-green-800">
-                  ✓ File uploaded: <a href={value} target="_blank" rel="noopener noreferrer" className="underline">{value}</a>
+                  ✓ File uploaded: <a href={String(value)} target="_blank" rel="noopener noreferrer" className="underline">{String(value)}</a>
                 </p>
               </div>
             )}
           </div>
         );
+      }
 
       default:
         return (
           <input
             type="text"
-            id={question.id}
-            value={value}
-            onChange={(e) => handleInputChange(question.id, e.target.value)}
-            placeholder={question.placeholder}
-            required={question.required}
+            id={String(questionRecord.id)}
+            value={String(value)}
+            onChange={(e) => handleInputChange(String(questionRecord.id), e.target.value)}
+            placeholder={String(questionRecord.placeholder || '')}
+            required={Boolean(questionRecord.required)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black focus:border-black text-black"
           />
         );

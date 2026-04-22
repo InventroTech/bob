@@ -1837,23 +1837,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
   };
 
-  const handleLeadUpdate = (updatedLead: unknown) => {
-    const updatedLeadData = updatedLead as Record<string, unknown>;
-    const updatedData = data.map(lead => {
-      const leadData = lead as Record<string, unknown>;
-      return leadData.id === updatedLeadData.id ? updatedLead : lead;
-    });
-    setData(updatedData);
-    
-    if (filtersApplied) {
-      fetchFilteredData();
-    } else {
-      setFilteredData(updatedData);
-    }
-    
-    setIsLeadModalOpen(false);
-  };
-
   useEffect(() => {
     const fetchLeads = async () => {
       try {
@@ -2222,7 +2205,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
               const originalLead = data.find(l => {
                 const lRecord = l as Record<string, unknown>;
                 const lData = (lRecord.data as Record<string, unknown>) || {};
-                const leadData = (leadRecord.data as Record<string, unknown>) || {};
                 return (lRecord.id === leadRecord.id) || 
                        (lRecord.id === leadRecord.user_id) ||
                        (leadRecord.praja_id && ((lData.praja_id === leadRecord.praja_id) || (lData.user_id === leadRecord.praja_id)));
