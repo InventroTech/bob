@@ -273,6 +273,13 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     
     // Always include poster field from records JSONB data
     transformedLead.poster = lead.data?.poster || lead.poster || null;
+
+    // Profile avatars in the name column (ShortProfileCard) read row.display_pic_url; API often stores it only on JSONB data
+    transformedLead.display_pic_url =
+      lead.display_pic_url ||
+      lead.data?.display_pic_url ||
+      transformedLead.display_pic_url ||
+      null;
     
     return transformedLead;
   }
@@ -288,6 +295,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
     user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
     poster: lead.data?.poster || lead.poster || null, // Add poster field from records JSONB data
+    display_pic_url: lead.display_pic_url || lead.data?.display_pic_url || null,
   };
 };
 
