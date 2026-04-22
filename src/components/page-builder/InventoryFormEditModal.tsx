@@ -311,6 +311,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         initial[f.key] = Array.isArray(val) ? '' : val !== undefined && val !== null ? val : '';
         return;
       }
+      if ((f.key === 'vendor' || f.key === 'vendor_name') && typeof val === 'string') {
+        initial[f.key] = toVendorStorageName(val);
+        return;
+      }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
     if (data.extra_charges != null && data.extra_charges !== '') {
@@ -723,6 +727,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             {formModalFields.map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
+              const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
               const isEnabled = field.enabled && canUpdate;
               const isClickableLink = field.link === true && !isEnabled && looksLikeUrl(displayStr);
               const isStatus = field.key === 'status' && statusOptions.length > 0;
@@ -801,7 +806,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     <div className="flex items-center gap-2 w-full min-w-0">
                       <div className="min-w-0 flex-1">
                       <Select
-                        value={displayStr || undefined}
+                        value={normalizedVendorValue || undefined}
                         onValueChange={(v) => {
                           if (v === ADD_VENDOR_VALUE) {
                             setIsAddVendorModalOpen(true);
@@ -819,9 +824,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                             <SelectItem value="__loading__" disabled>Loading…</SelectItem>
                           ) : (
                             <>
+                              {normalizedVendorValue &&
+                                !vendors.some((v) => toVendorStorageName(v.name) === normalizedVendorValue) ? (
+                                  <SelectItem value={normalizedVendorValue}>
+                                    {normalizedVendorValue}
+                                  </SelectItem>
+                                ) : null}
                               {vendors.map((v) => (
-                                <SelectItem key={v.id} value={v.name}>
-                                  {v.name}
+                                <SelectItem key={v.id} value={toVendorStorageName(v.name)}>
+                                  {toVendorStorageName(v.name)}
                                 </SelectItem>
                               ))}
                             </>
