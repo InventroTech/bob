@@ -4,7 +4,8 @@
  */
 
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
-import { supabase } from '@/lib/supabase';
+import { getAccessToken } from '@/lib/auth/accessTokenProvider';
+import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
 import { 
   ApiError, 
   NetworkError, 
@@ -19,17 +20,10 @@ import {
  */
 export const setupRequestInterceptor = (instance: any) => {
   instance.interceptors.request.use(
-    async (config: InternalAxiosRequestConfig) => {
-      // Attach current Supabase access token
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          config.headers.Authorization = `Bearer ${session.access_token}`;
-        }
-      } catch (error) {
-        console.warn('Failed to get auth token for request:', error);
+    (config: InternalAxiosRequestConfig) => {
+      const token = getAccessToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
 
       // Ensure Content-Type is set
@@ -87,30 +81,24 @@ export const setupResponseInterceptor = (instance: any) => {
               console.log('[Interceptor] 401 error - attempting to refresh session and retry request');
               
               // Force a session refresh
-              const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
-              
-              if (refreshError) {
-                console.error('[Interceptor] Session refresh failed:', refreshError);
-                await supabase.auth.signOut();
+              const refreshedToken = await refreshAccessToken();
+
+              if (!refreshedToken) {
+                console.error('[Interceptor] Session refresh failed');
+                await signOutAndClearSession();
                 return Promise.reject(new AuthenticationError(errorMessage, status, data));
               }
-              
-              if (session?.access_token) {
-                console.log('[Interceptor] Session refreshed successfully - retrying request with new token');
-                
-                // Update the Authorization header with the new token
-                originalRequest.headers.Authorization = `Bearer ${session.access_token}`;
-                
-                // Retry the original request with the new token
-                return instance(originalRequest);
-              } else {
-                console.warn('[Interceptor] Session refresh returned no token');
-                await supabase.auth.signOut();
-                return Promise.reject(new AuthenticationError(errorMessage, status, data));
-              }
+
+              console.log('[Interceptor] Session refreshed successfully - retrying request with new token');
+
+              // Update the Authorization header with the new token
+              originalRequest.headers.Authorization = `Bearer ${refreshedToken}`;
+
+              // Retry the original request with the new token
+              return instance(originalRequest);
             } catch (refreshError) {
               console.error('[Interceptor] Error during token refresh:', refreshError);
-              await supabase.auth.signOut();
+              await signOutAndClearSession();
               return Promise.reject(new AuthenticationError(errorMessage, status, data));
             }
           }
