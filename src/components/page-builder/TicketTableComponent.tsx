@@ -1629,7 +1629,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                         <span className="text-sm">
                           {stateFilter.length > 0
                             ? `${stateFilter.length} state(s) selected`
-                            : "All States"}
+                            : 'All States'}
                         </span>
                         <ChevronDown className="h-3 w-3 opacity-50" />
                       </Button>
@@ -1639,23 +1639,23 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                         <h5>Select states</h5>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
                           {SUPPORT_TICKET_STATE_FILTER_OPTIONS.map((state) => {
-                            const val = stateToParamValue(state);
+                            const value = stateToParamValue(state);
                             const label = state == null ? 'null' : state;
                             return (
-                              <div key={val} className="flex items-center space-x-2">
+                              <div key={value} className="flex items-center space-x-2">
                                 <Checkbox
-                                  id={`state-${val}`}
-                                  checked={stateFilter.includes(val)}
+                                  id={`state-${value}`}
+                                  checked={stateFilter.includes(value)}
                                   onCheckedChange={(checked) => {
                                     if (checked) {
-                                      setStateFilter(prev => [...prev, val]);
+                                      setStateFilter((prev) => [...prev, value]);
                                     } else {
-                                      setStateFilter(prev => prev.filter(s => s !== val));
+                                      setStateFilter((prev) => prev.filter((s) => s !== value));
                                     }
                                   }}
                                 />
                                 <label
-                                  htmlFor={`state-${val}`}
+                                  htmlFor={`state-${value}`}
                                   className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                                 >
                                   {label}
@@ -1694,7 +1694,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                         <span className="text-sm">
                           {callAttemptsFilter.length > 0
                             ? `${callAttemptsFilter.length} attempt count(s) selected`
-                            : "All Call Attempts"}
+                            : 'All Call Attempts'}
                         </span>
                         <ChevronDown className="h-3 w-3 opacity-50" />
                       </Button>
@@ -1710,9 +1710,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                                 checked={callAttemptsFilter.includes(count)}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
-                                    setCallAttemptsFilter(prev => [...prev, count]);
+                                    setCallAttemptsFilter((prev) => [...prev, count]);
                                   } else {
-                                    setCallAttemptsFilter(prev => prev.filter(c => c !== count));
+                                    setCallAttemptsFilter((prev) => prev.filter((c) => c !== count));
                                   }
                                 }}
                               />

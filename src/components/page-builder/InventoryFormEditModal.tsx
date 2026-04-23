@@ -311,11 +311,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         initial[f.key] = Array.isArray(val) ? '' : val !== undefined && val !== null ? val : '';
         return;
       }
+      if ((f.key === 'vendor' || f.key === 'vendor_name') && typeof val === 'string') {
+        initial[f.key] = toVendorStorageName(val);
+        return;
+      }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
     if (data.extra_charges != null && data.extra_charges !== '') {
-      const parsedExtraCharges = Number(data.extra_charges);
-      if (Number.isFinite(parsedExtraCharges)) {
+      const parsedExtraCharges = toCurrencyNumber(data.extra_charges);
+      if (parsedExtraCharges != null) {
         initial.extra_charges = parsedExtraCharges;
       }
     }
@@ -323,8 +327,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       initial.extra_charge_details = String(data.extra_charge_details);
     }
     if (data.final_amount != null && data.final_amount !== '') {
-      const parsedFinalAmount = Number(data.final_amount);
-      if (Number.isFinite(parsedFinalAmount)) {
+      const parsedFinalAmount = toCurrencyNumber(data.final_amount);
+      if (parsedFinalAmount != null) {
         initial.final_amount = parsedFinalAmount;
       }
     }
@@ -377,15 +381,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   /** Compute final_amount from total_price + extra_charges. */
   const getComputedFinalAmountFields = useCallback(
     (baseData: Record<string, unknown>): Record<string, unknown> => {
-      const totalRaw = baseData.total_price;
-      const totalPrice = Number(totalRaw);
-      const parsedExtra = toCurrencyNumber(baseData.extra_charges);
-      const extraCharges = parsedExtra != null ? Math.round(parsedExtra * 100) / 100 : 0;
-      const finalAmount = (Number.isFinite(totalPrice) ? totalPrice : 0) + extraCharges;
-
+      const totalPrice = toCurrencyNumber(baseData.total_price) ?? 0;
+      const extraCharges = toCurrencyNumber(baseData.extra_charges) ?? 0;
+      const roundedExtra = Math.round(extraCharges * 100) / 100;
+      const finalAmount = Math.round((totalPrice + roundedExtra) * 100) / 100;
       return {
-        extra_charges: extraCharges,
-        final_amount: Math.round(finalAmount * 100) / 100,
+        extra_charges: roundedExtra,
+        final_amount: finalAmount,
       };
     },
     []
@@ -725,6 +727,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             {formModalFields.map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
+              const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
               const isEnabled = field.enabled && canUpdate;
               const isClickableLink = field.link === true && !isEnabled && looksLikeUrl(displayStr);
               const isStatus = field.key === 'status' && statusOptions.length > 0;
@@ -803,7 +806,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     <div className="flex items-center gap-2 w-full min-w-0">
                       <div className="min-w-0 flex-1">
                       <Select
-                        value={displayStr || undefined}
+                        value={normalizedVendorValue || undefined}
                         onValueChange={(v) => {
                           if (v === ADD_VENDOR_VALUE) {
                             setIsAddVendorModalOpen(true);
@@ -821,9 +824,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                             <SelectItem value="__loading__" disabled>Loading…</SelectItem>
                           ) : (
                             <>
+                              {normalizedVendorValue &&
+                                !vendors.some((v) => toVendorStorageName(v.name) === normalizedVendorValue) ? (
+                                  <SelectItem value={normalizedVendorValue}>
+                                    {normalizedVendorValue}
+                                  </SelectItem>
+                                ) : null}
                               {vendors.map((v) => (
-                                <SelectItem key={v.id} value={v.name}>
-                                  {v.name}
+                                <SelectItem key={v.id} value={toVendorStorageName(v.name)}>
+                                  {toVendorStorageName(v.name)}
                                 </SelectItem>
                               ))}
                             </>
@@ -1051,13 +1060,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     }}
                     onBlur={() => {
                       setExtraChargesDraft('');
-                      const current = formData.extra_charges;
-                      const parsed = toCurrencyNumber(current);
-                      if (parsed != null) {
-                        setField('extra_charges', Math.round(parsed * 100) / 100);
-                      } else {
-                        setField('extra_charges', 0);
-                      }
+                      const parsed = toCurrencyNumber(formData.extra_charges);
+                      setField('extra_charges', parsed != null ? Math.round(parsed * 100) / 100 : 0);
                     }}
                     className="h-9 text-sm rounded-md font-mono tabular-nums"
                     disabled={!canUpdate}
@@ -1074,14 +1078,12 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         priceFields.total_price ??
                         (formData.total_price as number | string | undefined) ??
                         (record?.data as any)?.total_price;
-                      const total = Number(totalRaw);
+                      const total = toCurrencyNumber(totalRaw) ?? 0;
                       const extraRaw =
                         (formData.extra_charges as number | string | undefined) ??
                         (record?.data as any)?.extra_charges;
-                      const parsedExtra = toCurrencyNumber(extraRaw);
-                      const finalValue =
-                        (Number.isFinite(total) ? total : 0) + (parsedExtra ?? 0);
-                      return formatCurrencyDisplay(Math.round(finalValue * 100) / 100);
+                      const extra = toCurrencyNumber(extraRaw) ?? 0;
+                      return formatCurrencyDisplay(Math.round((total + extra) * 100) / 100);
                     })()}
                     readOnly
                     disabled
