@@ -369,7 +369,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai',
           'Content-Type': 'application/json'
         }
       });
@@ -424,7 +423,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai',
           'Content-Type': 'application/json'
         }
       });
@@ -576,8 +574,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
         },
         signal: abortController.signal
       });
@@ -761,8 +758,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': authToken ? `Bearer ${authToken}` : '',
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
+                'Authorization': authToken ? `Bearer ${authToken}` : ''
               },
               signal: abortController.signal
             });
@@ -850,8 +846,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': authToken ? `Bearer ${authToken}` : '',
-              'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              'Authorization': authToken ? `Bearer ${authToken}` : ''
             },
             signal: abortController.signal
           });
@@ -957,8 +952,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           baseUrl,
           {
             'Content-Type': 'application/json',
-            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai',
+            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : ''
           },
           'ticket_id'
         );
@@ -982,8 +976,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
           }
         });
 
@@ -1052,8 +1045,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
           }
         });
 
@@ -1191,8 +1183,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
         }
       });
 
@@ -1293,11 +1284,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           'Content-Type': 'application/json',
           'Authorization': authToken ? `Bearer ${authToken}` : ''
         };
-
-        // Add X-Tenant-Slug header only for renderer API calls
-        if (apiPrefix === 'renderer') {
-          headers['X-Tenant-Slug'] = 'bibhab-thepyro-ai';
-        }
 
         const response = await fetch(apiUrl, {
           method: 'GET',

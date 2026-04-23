@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { setSentryUser, clearSentryUser } from '../lib/sentry';
+import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider';
+import { refreshAccessToken } from '@/lib/auth/authSessionService';
 
 interface AuthContextType {
   session: Session | null;
@@ -64,6 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       sessionStorage.removeItem('ticketCarouselState');
       sessionStorage.removeItem('pyro_access_check');
+      clearAccessToken();
       clearSentryUser();
       setSession(null);
       setUser(null);
@@ -79,6 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setAccessToken(session?.access_token ?? null);
       const u = session?.user ?? null;
       setUser(u);
       if (u) {
@@ -95,6 +99,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         if (event === 'SIGNED_OUT') {
           setSession(null);
+          clearAccessToken();
           setUser(null);
           clearSentryUser();
           setLoading(false);
@@ -106,6 +111,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         if (event === 'TOKEN_REFRESHED' && !session) {
           setSession(null);
+          clearAccessToken();
           setUser(null);
           clearSentryUser();
           setLoading(false);
@@ -116,6 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         setSession(session);
+        setAccessToken(session?.access_token ?? null);
         const u = session?.user ?? null;
         setUser(u);
         if (u) {
@@ -140,9 +147,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
     const intervalId = setInterval(async () => {
       try {
-        const { error } = await supabase.auth.refreshSession();
-        if (error) {
-          console.warn('[useAuth] Proactive token refresh failed:', error.message);
+        const token = await refreshAccessToken();
+        if (!token) {
+          console.warn('[useAuth] Proactive token refresh failed');
         } else {
           console.log('[useAuth] Proactive token refresh succeeded');
         }
