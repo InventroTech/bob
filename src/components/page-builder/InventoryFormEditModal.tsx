@@ -148,6 +148,12 @@ const NUMBER_KEYS = new Set([
 ]);
 const PRICE_KEYS = new Set(['estimated_cost', 'total_price', 'unit_price']);
 
+type StatusHistoryEntry = {
+  current_status: string;
+  previous_status: string;
+  changed_by: string;
+};
+
 export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   open,
   onOpenChange,
@@ -553,6 +559,37 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           dataToSend.comments = history;
         }
 
+        // Status history: append each status transition as {current_status, previous_status, changed_by}.
+        const previousStatus =
+          record?.data && typeof record.data === 'object' ? (record.data as any)?.status : undefined;
+        const currentStatus =
+          dataToSend.status != null && String(dataToSend.status).trim() ? String(dataToSend.status).trim() : '';
+        const previousStatusText =
+          previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
+        if (currentStatus && currentStatus !== previousStatusText) {
+          const existingRaw = (record?.data as any)?.statuses;
+          let statusHistory: StatusHistoryEntry[] = [];
+          if (Array.isArray(existingRaw)) {
+            statusHistory = (existingRaw as any).filter(
+              (entry: any) =>
+                entry &&
+                typeof entry === 'object' &&
+                typeof entry.current_status === 'string' &&
+                typeof entry.previous_status === 'string' &&
+                typeof entry.changed_by === 'string'
+            );
+          }
+          statusHistory = [
+            ...statusHistory,
+            {
+              current_status: currentStatus,
+              previous_status: previousStatusText,
+              changed_by: myName,
+            },
+          ];
+          dataToSend.statuses = statusHistory;
+        }
+
         (modalFlags ?? [])
           .filter((f) => flagConditionMatches(f))
           .forEach((flag) => {
@@ -611,6 +648,37 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           history = [...history, { name: myName, role: myRoleName ?? '', comment: commentText }];
         }
         dataToSend.comments = history;
+      }
+
+      // Status history: append on manual status edits followed by Save.
+      const previousStatus =
+        record?.data && typeof record.data === 'object' ? (record.data as any)?.status : undefined;
+      const currentStatus =
+        dataToSend.status != null && String(dataToSend.status).trim() ? String(dataToSend.status).trim() : '';
+      const previousStatusText =
+        previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
+      if (currentStatus && currentStatus !== previousStatusText) {
+        const existingRaw = (record?.data as any)?.statuses;
+        let statusHistory: StatusHistoryEntry[] = [];
+        if (Array.isArray(existingRaw)) {
+          statusHistory = (existingRaw as any).filter(
+            (entry: any) =>
+              entry &&
+              typeof entry === 'object' &&
+              typeof entry.current_status === 'string' &&
+              typeof entry.previous_status === 'string' &&
+              typeof entry.changed_by === 'string'
+          );
+        }
+        statusHistory = [
+          ...statusHistory,
+          {
+            current_status: currentStatus,
+            previous_status: previousStatusText,
+            changed_by: myName,
+          },
+        ];
+        dataToSend.statuses = statusHistory;
       }
 
       (modalFlags ?? [])
