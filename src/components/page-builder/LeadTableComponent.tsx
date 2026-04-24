@@ -28,6 +28,7 @@ import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 import { convertGMTtoIST } from '@/lib/timeUtils';
+import { useSpoofUserId } from '@/lib/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 
 interface Column {
@@ -272,6 +273,13 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     
     // Always include poster field from records JSONB data
     transformedLead.poster = lead.data?.poster || lead.poster || null;
+
+    // Profile avatars in the name column (ShortProfileCard) read row.display_pic_url; API often stores it only on JSONB data
+    transformedLead.display_pic_url =
+      lead.display_pic_url ||
+      lead.data?.display_pic_url ||
+      transformedLead.display_pic_url ||
+      null;
     
     return transformedLead;
   }
@@ -287,6 +295,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
     user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
     poster: lead.data?.poster || lead.poster || null, // Add poster field from records JSONB data
+    display_pic_url: lead.display_pic_url || lead.data?.display_pic_url || null,
   };
 };
 
@@ -537,10 +546,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const requestSequenceRef = useRef<number>(0);
   const lastFetchedConfigRef = useRef<string>(''); // Track last fetched config/filter combination
   const { session, user } = useAuth();
+  const spoofUserId = useSpoofUserId();
   const { customRole } = useTenant();
   const sessionUser = session?.user ?? null;
   const activeUser = user ?? sessionUser ?? null;
-  const activeUserId = activeUser?.id ?? null;
+  // Spoof JWT `sub` when active; otherwise Supabase user id (aligns with API `{{current_user}}`).
+  const activeUserId = spoofUserId ?? activeUser?.id ?? null;
   const activeUserMetadata = activeUser?.user_metadata ?? null;
   const activeAppMetadata = activeUser?.app_metadata ?? null;
   const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);

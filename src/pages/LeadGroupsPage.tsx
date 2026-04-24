@@ -12,6 +12,7 @@ import { leadTypeAssignmentApi, groupsApi } from "@/lib/userSettingsApi";
 import { Group, GroupCreatePayload, LeadTypeAssignment } from "@/types/userSettings";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
+import { apiClient } from "@/lib/api";
 
 interface LeadGroupsPageProps {
   className?: string;
@@ -178,30 +179,13 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
 
   const loadMembershipUsers = async () => {
     try {
-      const token = session?.access_token;
-      if (!token) {
+      if (!session?.access_token) {
         setMembershipUsers([]);
         return;
       }
 
-      const tenantSlug = localStorage.getItem("tenant_slug") || "bibhab-thepyro-ai";
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/membership/users`;
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Tenant-Slug": tenantSlug,
-        },
-      });
-
-      if (!response.ok) {
-        setMembershipUsers([]);
-        return;
-      }
-
-      const payload = await response.json();
+      const response = await apiClient.get("/membership/users");
+      const payload = response?.data;
       const rows = Array.isArray(payload?.results)
         ? payload.results
         : Array.isArray(payload)
