@@ -32,6 +32,8 @@ export type ModalFlagConfig = {
 export type StatusActionButtonConfig = {
   label: string;
   statusValue: string;
+  /** Record data key to update. Defaults to `status` when empty. */
+  targetAttribute?: string;
   statusText?: string;
   /** Optional visibility rule; if omitted, button always shows. */
   conditional?: {
@@ -80,7 +82,7 @@ interface TableConfigProps {
     detailMode?: string;
     /** 'default' | 'itemsTable' — when itemsTable, first column is normal text and status buttons column can be shown */
     tableType?: 'default' | 'itemsTable';
-    /** For itemsTable/form modal: buttons that set record data.status on click (optional conditional visibility). */
+    /** For itemsTable/form modal: buttons that set record data[targetAttribute] (default: status) on click. */
     statusButtons?: StatusActionButtonConfig[];
     /** Per-field config for record detail modal: which data keys to show and whether each is editable. */
     modalFieldConfig?: Array<{ key: string; editable: boolean }>;
@@ -195,7 +197,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           </SelectContent>
         </Select>
         <p className="text-xs text-gray-500 mt-1">
-          Items table: first column is plain text; you can add status change buttons that update the record&apos;s status on click.
+          Items table: first column is plain text; you can add action buttons that update a chosen record data attribute on click.
         </p>
       </div>
 
@@ -203,7 +205,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
         <div className="space-y-2">
           <Label>Status action buttons</Label>
           <p className="text-xs text-gray-500">
-            Each button updates <code className="bg-muted px-1 rounded">data.status</code>. Optional condition: show only when attribute matches.
+            Each button updates <code className="bg-muted px-1 rounded">data[targetAttribute]</code> (defaults to <code className="bg-muted px-1 rounded">status</code>). Optional condition: show only when attribute matches.
           </p>
           {(localConfig.statusButtons || []).map((btn, idx) => (
             <div key={idx} className="space-y-3 p-3 border rounded-md bg-muted/30">
@@ -228,6 +230,18 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                     onChange={(e) => {
                       const next = [...(localConfig.statusButtons || [])];
                       next[idx] = { ...next[idx], statusValue: e.target.value };
+                      handleInputChange('statusButtons', next);
+                    }}
+                  />
+                </div>
+                <div className="md:col-span-4 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Attribute to update</Label>
+                  <Input
+                    placeholder="status"
+                    value={btn.targetAttribute || ''}
+                    onChange={(e) => {
+                      const next = [...(localConfig.statusButtons || [])];
+                      next[idx] = { ...next[idx], targetAttribute: e.target.value };
                       handleInputChange('statusButtons', next);
                     }}
                   />
@@ -544,7 +558,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => handleInputChange('statusButtons', [...(localConfig.statusButtons || []), { label: 'New', statusValue: 'NEW', statusText: 'New' }])}
+            onClick={() => handleInputChange('statusButtons', [...(localConfig.statusButtons || []), { label: 'New', statusValue: 'NEW', targetAttribute: 'status', statusText: 'New' }])}
           >
             Add status button
           </Button>

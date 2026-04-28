@@ -51,6 +51,7 @@ interface InventoryFormEditModalProps {
   actionButtons?: Array<{
     label: string;
     statusValue: string;
+    targetAttribute?: string;
     statusText?: string;
     conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
     openWarningModal?: boolean;
@@ -73,8 +74,8 @@ interface InventoryFormEditModalProps {
   showSaveButton?: boolean;
   /** When set, show one button: conditional if attribute matches, else default (e.g. Inventory Payment modal). */
   paymentButtonConfig?: {
-    conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string };
-    defaultButton: { label: string; statusValue: string };
+    conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string; targetAttribute?: string };
+    defaultButton: { label: string; statusValue: string; targetAttribute?: string };
   };
   /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
   modalFlags?: Array<{
@@ -147,6 +148,12 @@ const NUMBER_KEYS = new Set([
   'estimated_cost', 'total_quantity', 'cart_id', 'total_price', 'unit_price',
 ]);
 const PRICE_KEYS = new Set(['estimated_cost', 'total_price', 'unit_price']);
+
+type StatusHistoryEntry = {
+  current_status: string;
+  previous_status: string;
+  changed_by: string;
+};
 
 export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   open,
@@ -514,18 +521,21 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   );
 
   const handleActionClick = useCallback(
-    async (btn: { label: string; statusValue: string; statusText?: string }, extraData?: Record<string, unknown>) => {
+    async (btn: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(btn.statusValue);
+        const targetAttribute = (btn.targetAttribute || 'status').trim() || 'status';
         const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
         const dataToSend: Record<string, unknown> = {
           ...formData,
           ...priceOverrides,
-          status: btn.statusValue,
-          status_text: (btn.statusText ?? btn.label ?? btn.statusValue).trim(),
+          [targetAttribute]: btn.statusValue,
           ...(extraData || {}),
         };
+        if (targetAttribute === 'status') {
+          dataToSend.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+        }
         if (!paymentButtonConfig && effectiveShowFinalPrice) {
           Object.assign(dataToSend, getComputedFinalAmountFields(dataToSend));
         }
@@ -553,6 +563,39 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           dataToSend.comments = history;
         }
 
+        // Status history: append each status transition as {current_status, previous_status, changed_by}.
+        const previousStatus =
+          record?.data && typeof record.data === 'object' ? (record.data as any)?.status : undefined;
+        const currentStatus =
+          targetAttribute === 'status' && dataToSend.status != null && String(dataToSend.status).trim()
+            ? String(dataToSend.status).trim()
+            : '';
+        const previousStatusText =
+          previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
+        if (currentStatus && currentStatus !== previousStatusText) {
+          const existingRaw = (record?.data as any)?.statuses;
+          let statusHistory: StatusHistoryEntry[] = [];
+          if (Array.isArray(existingRaw)) {
+            statusHistory = (existingRaw as any).filter(
+              (entry: any) =>
+                entry &&
+                typeof entry === 'object' &&
+                typeof entry.current_status === 'string' &&
+                typeof entry.previous_status === 'string' &&
+                typeof entry.changed_by === 'string'
+            );
+          }
+          statusHistory = [
+            ...statusHistory,
+            {
+              current_status: currentStatus,
+              previous_status: previousStatusText,
+              changed_by: myName,
+            },
+          ];
+          dataToSend.statuses = statusHistory;
+        }
+
         (modalFlags ?? [])
           .filter((f) => flagConditionMatches(f))
           .forEach((flag) => {
@@ -568,7 +611,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           }
         }
         await onUpdate(record.id, { data: dataToSend });
-        toast({ title: 'Saved', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
+        toast({
+          title: 'Saved',
+          description: `${((btn.targetAttribute || 'status').trim() || 'status')} set to ${btn.statusValue.replace(/_/g, ' ')}.`,
+        });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
       } catch (e: any) {
@@ -611,6 +657,37 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           history = [...history, { name: myName, role: myRoleName ?? '', comment: commentText }];
         }
         dataToSend.comments = history;
+      }
+
+      // Status history: append on manual status edits followed by Save.
+      const previousStatus =
+        record?.data && typeof record.data === 'object' ? (record.data as any)?.status : undefined;
+      const currentStatus =
+        dataToSend.status != null && String(dataToSend.status).trim() ? String(dataToSend.status).trim() : '';
+      const previousStatusText =
+        previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
+      if (currentStatus && currentStatus !== previousStatusText) {
+        const existingRaw = (record?.data as any)?.statuses;
+        let statusHistory: StatusHistoryEntry[] = [];
+        if (Array.isArray(existingRaw)) {
+          statusHistory = (existingRaw as any).filter(
+            (entry: any) =>
+              entry &&
+              typeof entry === 'object' &&
+              typeof entry.current_status === 'string' &&
+              typeof entry.previous_status === 'string' &&
+              typeof entry.changed_by === 'string'
+          );
+        }
+        statusHistory = [
+          ...statusHistory,
+          {
+            current_status: currentStatus,
+            previous_status: previousStatusText,
+            changed_by: myName,
+          },
+        ];
+        dataToSend.statuses = statusHistory;
       }
 
       (modalFlags ?? [])
