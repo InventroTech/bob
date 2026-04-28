@@ -43,10 +43,11 @@ interface Column {
   actionApiMethod?: string;
   actionApiHeaders?: string;
   actionApiPayload?: string;
-  /** For type status_buttons: buttons that set record data.status to statusValue (optional conditional visibility). */
+  /** For type status_buttons: buttons that set record data[targetAttribute] (default status). */
   statusButtons?: Array<{
     label: string;
     statusValue: string;
+    targetAttribute?: string;
     statusText?: string;
     conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
     openWarningModal?: boolean;
@@ -355,10 +356,11 @@ interface LeadTableProps {
 
     /** Table type: default (first column can be profile card) or itemsTable (first column normal text, supports status buttons). */
     tableType?: 'default' | 'itemsTable';
-    /** When tableType is itemsTable: list of buttons that update record status on click (optional conditional visibility). */
+    /** When tableType is itemsTable: list of buttons that update chosen record data attribute on click. */
     statusButtons?: Array<{
       label: string;
       statusValue: string;
+      targetAttribute?: string;
       statusText?: string;
       conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
       openWarningModal?: boolean;
@@ -1039,22 +1041,24 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
   }, [session?.access_token, toast]);
 
-  // Status change button click: PATCH record with new status (for items table)
-  const handleStatusButtonClick = useCallback(async (row: any, newStatus: string) => {
+  // Status action button click: PATCH record with data[targetAttribute]=statusValue (default targetAttribute=status).
+  const handleStatusButtonClick = useCallback(async (row: any, button: { label: string; statusValue: string; targetAttribute?: string }) => {
     if (!effectiveApiEndpoint || !row?.id) return;
     const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
     const url = `${base}/${row.id}/`;
     const existingData = (row.data as Record<string, unknown>) || {};
+    const targetAttribute = (button.targetAttribute || 'status').trim() || 'status';
+    const newValue = button.statusValue;
     try {
-      const response = await apiClient.patch(url, { data: { ...existingData, status: newStatus } });
+      const response = await apiClient.patch(url, { data: { ...existingData, [targetAttribute]: newValue } });
       const updated = response.data;
       setData((prev) =>
-        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, status: newStatus } } : r))
+        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, [targetAttribute]: newValue } } : r))
       );
       setFilteredData((prev) =>
-        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, status: newStatus } } : r))
+        prev.map((r: any) => (r.id === row.id ? { ...r, ...updated, data: updated?.data ?? { ...existingData, [targetAttribute]: newValue } } : r))
       );
-      toast({ title: 'Status updated', description: `Status set to ${newStatus}` });
+      toast({ title: 'Updated', description: `${targetAttribute} set to ${newValue}` });
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message || 'Failed to update status', variant: 'destructive' });
     }
@@ -1288,7 +1292,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
               key={btn.statusValue}
               variant="outline"
               size="sm"
-              onClick={() => handleStatusButtonClick(row, btn.statusValue)}
+              onClick={() => handleStatusButtonClick(row, btn)}
             >
               {btn.label}
             </CustomButton>
