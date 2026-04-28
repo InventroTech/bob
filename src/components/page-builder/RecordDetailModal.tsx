@@ -129,6 +129,7 @@ interface RecordDetailModalProps {
   actionButtons?: Array<{
     label: string;
     statusValue: string;
+    targetAttribute?: string;
     statusText?: string;
     conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
     openWarningModal?: boolean;
@@ -1120,17 +1121,20 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   /** Apply status and save configured flag checkboxes as true/false. */
   const handleActionButtonClick = useCallback(
-    async (btn: { label: string; statusValue: string; statusText?: string }, extraData?: Record<string, unknown>) => {
+    async (btn: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(btn.statusValue);
+        const targetAttribute = (btn.targetAttribute || 'status').trim() || 'status';
         const existingData = (record.data as Record<string, unknown>) || {};
         const payload: Record<string, unknown> = {
           ...existingData,
-          status: btn.statusValue,
-          status_text: (btn.statusText ?? btn.label ?? btn.statusValue).trim(),
+          [targetAttribute]: btn.statusValue,
           ...(extraData || {}),
         };
+        if (targetAttribute === 'status') {
+          payload.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+        }
 
         // Stage comments history: append a new `{name, role, comment}` object into `data.comments[]`
         if (Object.prototype.hasOwnProperty.call(existingData, 'comments') || typeof pending?.comments !== 'undefined') {
@@ -1157,7 +1161,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           payload[key] = flagValues[key] === true;
           });
         await onUpdate(record.id, { data: payload });
-        toast({ title: 'Status updated', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
+        toast({
+          title: 'Updated',
+          description: `${targetAttribute} set to ${btn.statusValue.replace(/_/g, ' ')}.`,
+        });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
       } catch (e: any) {
