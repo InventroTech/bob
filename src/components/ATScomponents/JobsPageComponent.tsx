@@ -324,7 +324,7 @@ export const JobsPageComponent: React.FC<JobsPageComponentProps> = ({
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeUploadResponse, setResumeUploadResponse] = useState<unknown>(null);
+  const [, setResumeUploadResponse] = useState<unknown>(null);
 
   // Configuration with defaults
   const {
