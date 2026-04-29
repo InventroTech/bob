@@ -5,7 +5,7 @@ import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { userSettingsApi } from "@/lib/userSettingsApi";
+import { leadTypeAssignmentApi } from "@/lib/userSettingsApi";
 import { crmLeadsApi } from "@/lib/crmLeadsApi";
 import { FaWhatsapp } from "react-icons/fa";
 import {
@@ -402,7 +402,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
 
-  // Fetch daily target from LEAD_TYPE_ASSIGNMENT record
+  // Fetch daily target from new core KV settings table
   const fetchDailyTarget = async () => {
     try {
       if (!session) {
@@ -416,10 +416,10 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       }
 
       try {
-        const savedSetting = await userSettingsApi.get(currentUser.id, 'LEAD_TYPE_ASSIGNMENT');
-        
-        if (savedSetting.daily_target !== undefined && savedSetting.daily_target !== null) {
-          const savedTarget = savedSetting.daily_target;
+        const kvRows = await leadTypeAssignmentApi.getUserCoreKVSettings(currentUser.id);
+        const dailyTargetRow = kvRows.find((row) => row.key === 'DAILY_TARGET');
+        if (typeof dailyTargetRow?.value === 'number') {
+          const savedTarget = dailyTargetRow.value;
           setDailyTarget(savedTarget);
         } else {
           setDailyTarget(null);

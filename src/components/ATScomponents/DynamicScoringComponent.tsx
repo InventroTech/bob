@@ -58,7 +58,14 @@ const OPERATORS = [
   { value: 'contains', label: 'contains' },
   { value: 'startsWith', label: 'starts with' },
   { value: 'endsWith', label: 'ends with' },
+  /** Missing key / JSON null — value field ignored */
+  { value: 'isNull', label: 'is null' },
+  { value: 'isNotNull', label: 'is not null' },
 ];
+
+function scoringOperatorNeedsValue(operator: string): boolean {
+  return operator !== 'isNull' && operator !== 'isNotNull';
+}
 
 export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = ({
   config = {},
@@ -361,8 +368,13 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
     }
 
     // Validate rule
-    if (!rule.attribute || !rule.operator || rule.value === '' || rule.weight === 0) {
-      toast.error('Please fill all fields (attribute, operator, value, weight)');
+    const needsValue = scoringOperatorNeedsValue(rule.operator);
+    if (!rule.attribute || !rule.operator || (needsValue && rule.value === '') || rule.weight === 0) {
+      toast.error(
+        needsValue
+          ? 'Please fill all fields (attribute, operator, value, weight)'
+          : 'Please fill attribute, operator, and weight (value not used for is null / is not null)',
+      );
       return;
     }
 
@@ -413,7 +425,7 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
         attribute: fullAttributeName,
         data: {
           operator: rule.operator,
-          value: rule.value,
+          value: scoringOperatorNeedsValue(rule.operator) ? rule.value : '',
           // Allow any other fields in data - flexible structure
         },
         weight: rule.weight,
@@ -656,9 +668,15 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
     }
 
     // Validate rules
-    const invalidRules = rules.filter(rule => 
-      !rule.attribute || !rule.operator || rule.value === '' || rule.weight === 0
-    );
+    const invalidRules = rules.filter(rule => {
+      const needsValue = scoringOperatorNeedsValue(rule.operator);
+      return (
+        !rule.attribute ||
+        !rule.operator ||
+        (needsValue && rule.value === '') ||
+        rule.weight === 0
+      );
+    });
 
     if (invalidRules.length > 0) {
       toast.error('Please fill all fields for all rules');
@@ -836,7 +854,9 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                   const isNewRule = !rule.id || (typeof rule.id === 'string' && rule.id.startsWith('rule_'));
                   // Fields should be enabled for new rules, or for existing rules when editing
                   const fieldsDisabled = !isNewRule && editingRuleId !== rule.id;
-                  
+                  const valueFieldDisabled =
+                    fieldsDisabled || !scoringOperatorNeedsValue(rule.operator);
+
                   return (
                   <TableRow key={rule.id || `temp-${index}`} className="hover:bg-gray-50">
                     <TableCell>
@@ -880,9 +900,13 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
                         type="text"
                         value={rule.value}
                         onChange={(e) => handleRuleChange(rule, 'value', e.target.value)}
-                        placeholder="Enter value"
+                        placeholder={
+                          scoringOperatorNeedsValue(rule.operator)
+                            ? 'Enter value'
+                            : '— (not used)'
+                        }
                         className="w-full"
-                        disabled={fieldsDisabled}
+                        disabled={valueFieldDisabled}
                       />
                     </TableCell>
                     <TableCell>

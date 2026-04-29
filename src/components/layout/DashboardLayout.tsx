@@ -5,7 +5,12 @@ import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import { SPOOF_CHANGED_EVENT } from "@/lib/spoof";
+import {
+  SPOOF_CHANGED_EVENT,
+  SPOOF_LABEL_KEY,
+  clearSpoofLocalStorage,
+  dispatchSpoofChanged,
+} from "@/lib/spoof";
 
 interface UserInfo {
   name: string;
@@ -24,17 +29,17 @@ const DashboardLayout = ({ children, className, user }: DashboardLayoutProps) =>
   const navigate = useNavigate();
   const [spoofLabel, setSpoofLabel] = React.useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    return window.localStorage.getItem("pyro_spoof_user_label");
+    return window.localStorage.getItem(SPOOF_LABEL_KEY);
   });
 
   React.useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === "pyro_spoof_user_label") {
+      if (event.key === SPOOF_LABEL_KEY) {
         setSpoofLabel(event.newValue);
       }
     };
     const handleSpoofChanged = () => {
-      setSpoofLabel(window.localStorage.getItem("pyro_spoof_user_label"));
+      setSpoofLabel(window.localStorage.getItem(SPOOF_LABEL_KEY));
     };
 
     window.addEventListener("storage", handleStorage);
@@ -47,10 +52,9 @@ const DashboardLayout = ({ children, className, user }: DashboardLayoutProps) =>
 
   const handleStopSpoofing = React.useCallback(() => {
     try {
-      window.localStorage.removeItem("pyro_spoof_jwt");
-      window.localStorage.removeItem("pyro_spoof_original_jwt");
-      window.localStorage.removeItem("pyro_spoof_user_label");
+      clearSpoofLocalStorage();
       setSpoofLabel(null);
+      dispatchSpoofChanged();
       navigate("/");
     } catch (err) {
       console.error("Failed to stop spoofing:", err);

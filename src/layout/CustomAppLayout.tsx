@@ -7,12 +7,25 @@ import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layer
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
-import { getEffectiveToken, isSpoofing, getSpoofUserLabel, SPOOF_CHANGED_EVENT, fetchPagesForRole } from '@/lib/spoof';
-import { icons} from 'lucide-react';
+import {
+  SPOOF_CHANGED_EVENT,
+  SPOOF_JWT_KEY,
+  SPOOF_LABEL_KEY,
+  clearSpoofLocalStorage,
+  dispatchSpoofChanged,
+  fetchPagesForRole,
+  getEffectiveToken,
+  getSpoofUserLabel,
+  isSpoofing,
+} from '@/lib/spoof';
+import { icons } from 'lucide-react';
 import { CustomIcons } from '@/components/page-builder/NewCustomIcons';
-import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon} from '@/components/icons/CustomIcons';
+import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon } from '@/components/icons/CustomIcons';
 
-  const navigationIconMap: Record<string, JSX.Element> = {
+type CustomIconRow = { name: string; svg_content: string };
+
+const navigationIconMap: Record<string, JSX.Element> = {
+    "lead groups": <Users className="h-4 w-4" />,
     "lead assignment": <Users className="h-4 w-4" />,
     "user hierarchy": <Users className="h-4 w-4" />,
     "analytics": <AnalyticsIcon />,
@@ -29,7 +42,13 @@ import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, Analyt
     "lead score": <LeadScoreIcon />,
   };
 
-const DynamicSidebarIcon = ({ iconName, customIcons = [] }: { iconName: string, customIcons?: unknown[] }) => {
+const DynamicSidebarIcon = ({
+  iconName,
+  customIcons = [],
+}: {
+  iconName: string;
+  customIcons?: CustomIconRow[];
+}) => {
   
   // 1. Check if it's an uploaded custom icon from the database
   const uploadedIcon = customIcons.find(icon => icon.name.toLowerCase() === iconName.toLowerCase());
@@ -68,7 +87,7 @@ const CustomAppLayout: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, session } = useAuth();
   const [pages, setPages] = useState<{ id: string; name: string; icon_name: string }[]>([]);
-  const [customIcons, setCustomIcons] = useState<{ name: string; svg_content: string }[]>([]);
+  const [customIcons, setCustomIcons] = useState<CustomIconRow[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -91,18 +110,9 @@ const CustomAppLayout: React.FC = () => {
       user?.email?.split('@')[0] ||
       'User';
 
-  const dataExtractedRef = useRef(false); // Track if we've already extracted data from JWT
-  
-  // Debug user data
-  useEffect(() => {
-    if (user) {
-      console.log('User data:', user);
-      console.log('User metadata:', user.user_metadata);
-      console.log('Avatar URL:', user.user_metadata?.picture);
-    }
-  }, [user]);
+  const dataExtractedRef = useRef(false);
 
-  // Step 1: Get current user and their role from JWT (use spoof token when spoofing)
+  // Resolve tenant/role from JWT (spoof token when spoofing)
   useEffect(() => {
     // Reset ref when user changes (e.g., on logout/login)
     if (!user) {
@@ -150,7 +160,7 @@ const CustomAppLayout: React.FC = () => {
   // Re-extract and update UI when spoof state changes (same tab or other tab)
   useEffect(() => {
     const onStorageChange = (e: StorageEvent) => {
-      if (e.key === 'pyro_spoof_jwt' || e.key === 'pyro_spoof_user_label') {
+      if (e.key === SPOOF_JWT_KEY || e.key === SPOOF_LABEL_KEY) {
         setSpoofBannerVisible(isSpoofing());
         dataExtractedRef.current = false;
         setSpoofVersion((v) => v + 1);
@@ -174,19 +184,15 @@ const CustomAppLayout: React.FC = () => {
     const fetchPagesAndIcons = async () => {
       if (!tenantId || !userRoleId) return;
 
-      // --- NEW LOGIC: Fetch Custom Icons from Django API ---
       try {
-        // apiClient automatically points to port 8000 and handles the token!
         const iconResponse = await apiClient.get('/pages/custom-icons/');
-        
-        // axios stores the data in a .data property
         setCustomIcons(iconResponse.data || []);
       } catch (err) {
         console.error('Failed to fetch custom icons:', err);
       }
 
-      // --- EXISTING LOGIC: Fetch Pages ---
-      const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
+      const spoofToken =
+        typeof window !== 'undefined' ? window.localStorage.getItem(SPOOF_JWT_KEY) : null;
       if (spoofToken) {
         // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
         try {
@@ -220,9 +226,8 @@ const CustomAppLayout: React.FC = () => {
 
   const handleStopSpoofing = () => {
     try {
-      window.localStorage.removeItem('pyro_spoof_jwt');
-      window.localStorage.removeItem('pyro_spoof_original_jwt');
-      window.localStorage.removeItem('pyro_spoof_user_label');
+      clearSpoofLocalStorage();
+      dispatchSpoofChanged();
       dataExtractedRef.current = false;
       setTenantId(null);
       setUserRoleId(null);

@@ -9,6 +9,9 @@ import {
   LeadTypeAssignmentResponse,
   RoutingRule,
   RoutingRuleUpsertPayload,
+  Group,
+  GroupCreatePayload,
+  UserCoreKVSetting,
 } from '../types/userSettings';
 
 const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
@@ -119,7 +122,7 @@ export const leadTypeAssignmentApi = {
         lead_sources: data.lead_sources ?? [],
         lead_statuses: data.lead_statuses ?? [],
         daily_target: data.daily_target,
-        daily_limit: data.daily_limit
+        daily_limit: data.daily_limit,
       });
 
       const result = response.data;
@@ -219,6 +222,49 @@ export const leadTypeAssignmentApi = {
       return [];
     }
   },
+
+  // Get available lead states from records' state field
+  async getAvailableLeadStates(endpoint?: string): Promise<string[]> {
+    try {
+      const leadStatesEndpoint = endpoint || '/user-settings/lead-states/';
+      const response = await apiClient.get(leadStatesEndpoint);
+      const responseData = response.data;
+      if (responseData.lead_states && Array.isArray(responseData.lead_states)) {
+        return responseData.lead_states;
+      }
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching available lead states:', error);
+      return [];
+    }
+  },
+
+  // Get supported queue types
+  async getAvailableQueueTypes(endpoint?: string): Promise<string[]> {
+    try {
+      const queueTypesEndpoint = endpoint || '/user-settings/queue-types/';
+      const response = await apiClient.get(queueTypesEndpoint);
+      const responseData = response.data;
+      if (responseData.queue_types && Array.isArray(responseData.queue_types)) {
+        return responseData.queue_types;
+      }
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching available queue types:', error);
+      return [];
+    }
+  },
+
+  async getUserCoreKVSettings(userId: string): Promise<UserCoreKVSetting[]> {
+    try {
+      const response = await apiClient.get(`/user-settings/users/${userId}/core-kv-settings/`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      if (error.response?.status === 404) return [];
+      console.error('Error fetching user core kv settings:', error);
+      return [];
+    }
+  },
 };
 
 // Routing rules API functions
@@ -250,6 +296,27 @@ export const routingRulesApi = {
     } catch (error: unknown) {
       throw new Error(`Failed to delete routing rule: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
+  },
+};
+
+export const groupsApi = {
+  async getAll(): Promise<Group[]> {
+    const response = await apiClient.get('/user-settings/groups/');
+    return response.data;
+  },
+
+  async create(payload: GroupCreatePayload): Promise<Group> {
+    const response = await apiClient.post('/user-settings/groups/', payload);
+    return response.data;
+  },
+
+  async update(id: number, payload: GroupCreatePayload): Promise<Group> {
+    const response = await apiClient.put(`/user-settings/groups/${id}/`, payload);
+    return response.data;
+  },
+
+  async remove(id: number): Promise<void> {
+    await apiClient.delete(`/user-settings/groups/${id}/`);
   },
 };
 

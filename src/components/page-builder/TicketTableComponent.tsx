@@ -123,6 +123,15 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
   }
 };
 
+const SUPPORT_TICKET_STATE_FILTER_OPTIONS: (string | null)[] = [
+  'Andhra Pradesh',
+  'Karnataka',
+  'Tamil Nadu',
+  'Telangana',
+  null,
+];
+const SUPPORT_TICKET_CALL_ATTEMPT_FILTER_OPTIONS: number[] = [0, 1, 2, 3, 4, 5, 6];
+
 // Demo data for fallback
 const DEMO_TICKETS = [
   {
@@ -248,6 +257,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const [resolutionStatusFilter, setResolutionStatusFilter] = useState<string[]>([]);
   const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
   const [posterStatusFilter, setPosterStatusFilter] = useState<string[]>([]);
+  const [stateFilter, setStateFilter] = useState<string[]>([]);
+  const [callAttemptsFilter, setCallAttemptsFilter] = useState<number[]>([]);
   const [dateRangeFilter, setDateRangeFilter] = useState<{
     startDate: Date | undefined;
     endDate: Date | undefined;
@@ -358,7 +369,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai',
           'Content-Type': 'application/json'
         }
       });
@@ -413,7 +423,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai',
           'Content-Type': 'application/json'
         }
       });
@@ -459,6 +468,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     // Fallback to local data
     const statuses = [...new Set(data.map(ticket => ticket.poster))];
     return statuses.filter(status => status && status !== 'N/A' && status !== 'No Poster');
+  };
+
+  const stateToParamValue = (state: string | null | undefined): string => {
+    if (state == null || String(state).trim() === '') return 'null';
+    return String(state);
   };
 
   // Apply filters using analytics endpoint
@@ -514,6 +528,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           params.append('poster', status);
         });
       }
+
+      if (stateFilter.length > 0) {
+        stateFilter.forEach((state) => params.append('state', state));
+      }
+
+      if (callAttemptsFilter.length > 0) {
+        callAttemptsFilter.forEach((count) => params.append('call_attempts', String(count)));
+      }
       
       // Add date range filters
       if (dateRangeFilter.startDate) {
@@ -552,8 +574,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
         },
         signal: abortController.signal
       });
@@ -663,6 +684,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     setResolutionStatusFilter([]);
     setAssignedToFilter('all');
     setPosterStatusFilter([]);
+    setStateFilter([]);
+    setCallAttemptsFilter([]);
     setDateRangeFilter({
       startDate: undefined,
       endDate: undefined,
@@ -708,6 +731,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         resolutionStatusFilter.length > 0 || 
         assignedToFilter !== 'all' || 
         posterStatusFilter.length > 0 ||
+        stateFilter.length > 0 ||
+        callAttemptsFilter.length > 0 ||
         dateRangeFilter.startDate ||
         dateRangeFilter.endDate;
       
@@ -733,8 +758,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': authToken ? `Bearer ${authToken}` : '',
-                'X-Tenant-Slug': 'bibhab-thepyro-ai'
+                'Authorization': authToken ? `Bearer ${authToken}` : ''
               },
               signal: abortController.signal
             });
@@ -822,8 +846,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': authToken ? `Bearer ${authToken}` : '',
-              'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              'Authorization': authToken ? `Bearer ${authToken}` : ''
             },
             signal: abortController.signal
           });
@@ -894,7 +917,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         }
       }
     }, 500); // Increased debounce to 500ms to reduce API calls
-  }, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
+  }, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
 
   // Handle search input change from PrajaTable
   const handleSearchChange = useCallback((value: string) => {
@@ -929,8 +952,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           baseUrl,
           {
             'Content-Type': 'application/json',
-            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai',
+            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : ''
           },
           'ticket_id'
         );
@@ -954,8 +976,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
           }
         });
 
@@ -1024,8 +1045,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': authToken ? `Bearer ${authToken}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai'
+            'Authorization': authToken ? `Bearer ${authToken}` : ''
           }
         });
 
@@ -1127,6 +1147,14 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           params.append('poster', status);
         });
       }
+
+      if (stateFilter.length > 0) {
+        stateFilter.forEach((state) => params.append('state', state));
+      }
+
+      if (callAttemptsFilter.length > 0) {
+        callAttemptsFilter.forEach((count) => params.append('call_attempts', String(count)));
+      }
       
       // Add date range filters
       if (dateRangeFilter.startDate) {
@@ -1155,8 +1183,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : '',
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
         }
       });
 
@@ -1258,11 +1285,6 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           'Authorization': authToken ? `Bearer ${authToken}` : ''
         };
 
-        // Add X-Tenant-Slug header only for renderer API calls
-        if (apiPrefix === 'renderer') {
-          headers['X-Tenant-Slug'] = 'bibhab-thepyro-ai';
-        }
-
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers,
@@ -1340,6 +1362,8 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           resolutionStatusFilter.length > 0 || 
           assignedToFilter !== 'all' || 
           posterStatusFilter.length > 0 || 
+          stateFilter.length > 0 ||
+          callAttemptsFilter.length > 0 ||
           dateRangeFilter.startDate || 
           dateRangeFilter.endDate || 
           searchTerm.trim() !== ''
@@ -1380,7 +1404,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   // Apply filters when filter values change
   useEffect(() => {
     // Don't auto-apply filters, wait for user to click "Apply Filters" button
-  }, [resolutionStatusFilter, assignedToFilter, posterStatusFilter, data]);
+  }, [resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, data]);
 
   // Update apiPrefix when config changes
   useEffect(() => {
@@ -1591,6 +1615,134 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="block text-gray-700 mb-2">
+                    State
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                      >
+                        <span className="text-sm">
+                          {stateFilter.length > 0
+                            ? `${stateFilter.length} state(s) selected`
+                            : 'All States'}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-60 p-4" align="start">
+                      <div className="space-y-3">
+                        <h5>Select states</h5>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {SUPPORT_TICKET_STATE_FILTER_OPTIONS.map((state) => {
+                            const value = stateToParamValue(state);
+                            const label = state == null ? 'null' : state;
+                            return (
+                              <div key={value} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`state-${value}`}
+                                  checked={stateFilter.includes(value)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setStateFilter((prev) => [...prev, value]);
+                                    } else {
+                                      setStateFilter((prev) => prev.filter((s) => s !== value));
+                                    }
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`state-${value}`}
+                                  className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                >
+                                  {label}
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {stateFilter.length > 0 && (
+                          <div className="pt-2 border-t">
+                            <CustomButton
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setStateFilter([])}
+                              className="text-xs"
+                            >
+                              Clear All
+                            </CustomButton>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 mb-2">
+                    Number of Call Attempts
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                      >
+                        <span className="text-sm">
+                          {callAttemptsFilter.length > 0
+                            ? `${callAttemptsFilter.length} attempt count(s) selected`
+                            : 'All Call Attempts'}
+                        </span>
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-60 p-4" align="start">
+                      <div className="space-y-3">
+                        <h5>Select call attempts</h5>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {SUPPORT_TICKET_CALL_ATTEMPT_FILTER_OPTIONS.map((count) => (
+                            <div key={count} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`call-attempts-${count}`}
+                                checked={callAttemptsFilter.includes(count)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setCallAttemptsFilter((prev) => [...prev, count]);
+                                  } else {
+                                    setCallAttemptsFilter((prev) => prev.filter((c) => c !== count));
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`call-attempts-${count}`}
+                                className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {count}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        {callAttemptsFilter.length > 0 && (
+                          <div className="pt-2 border-t">
+                            <CustomButton
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setCallAttemptsFilter([])}
+                              className="text-xs"
+                            >
+                              Clear All
+                            </CustomButton>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
               {/* Date Range Filters - 2nd Line */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div>
@@ -1709,18 +1861,20 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
               {/* Filter Summary */}
               <div className="mt-3 text-sm text-gray-600">
                 Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} tickets
-                {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
+                {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2">
                     (Filtered by: 
                     {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.map(status => status === null ? 'Open' : status).join(', ')}`}
                     {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter === 'unassigned' ? 'Unassigned' : getUniqueAssignedTo().find(a => a.id === assignedToFilter)?.name || assignedToFilter}`}
                     {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
-                    {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
-                    {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
+                    {stateFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}State: ${stateFilter.join(', ')}`}
+                    {callAttemptsFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0) ? ', ' : ''}Call Attempts: ${[...callAttemptsFilter].sort((a, b) => a - b).join(', ')}`}
+                    {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
+                    {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
                     )
                   </span>
                 )}
-                {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
+                {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                   <span className="ml-2 text-orange-600">
                     (Filters selected - click "Apply Filters" to see results)
                   </span>

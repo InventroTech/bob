@@ -22,9 +22,15 @@ import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
+import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 
 const RECORDS_URL = '/crm-records/records/';
 const ADD_VENDOR_VALUE = '__add_vendor__';
+const toVendorStorageName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
 
 export type FormModalFieldConfig = {
   key: string;
@@ -42,7 +48,21 @@ interface InventoryFormEditModalProps {
   /** Field config: key (data key), label (text to show), enabled (editable vs read-only). */
   formModalFields: FormModalFieldConfig[];
   /** Action buttons: label + status value. Click updates record with form data + this status. */
-  actionButtons?: Array<{ label: string; statusValue: string }>;
+  actionButtons?: Array<{
+    label: string;
+    statusValue: string;
+    targetAttribute?: string;
+    statusText?: string;
+    conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    openWarningModal?: boolean;
+    warningModalConfig?: {
+      title?: string;
+      description?: string;
+      confirmationText?: string;
+      formType?: 'payment_confirmation';
+      paymentMethods?: string[];
+    };
+  }>;
   onUpdate?: (recordId: number, patch: { data?: Record<string, unknown> }) => Promise<void>;
   onRecordUpdated?: (recordId: number) => void;
   cartOptions?: Array<{ id: number; label: string }>;
@@ -54,8 +74,8 @@ interface InventoryFormEditModalProps {
   showSaveButton?: boolean;
   /** When set, show one button: conditional if attribute matches, else default (e.g. Inventory Payment modal). */
   paymentButtonConfig?: {
-    conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string };
-    defaultButton: { label: string; statusValue: string };
+    conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string; targetAttribute?: string };
+    defaultButton: { label: string; statusValue: string; targetAttribute?: string };
   };
   /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
   modalFlags?: Array<{
@@ -103,8 +123,24 @@ function formatPriceFieldDisplay(value: unknown): string {
   return formatCurrencyDisplay(n);
 }
 
+function toCurrencyNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = parseCurrencyInput(value);
+    if (typeof parsed === 'number' && Number.isFinite(parsed)) return parsed;
+    const fallback = Number(value);
+    return Number.isFinite(fallback) ? fallback : null;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Keys that we render as textarea (multi-line). */
 const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_freeform', 'project_purpose']);
+const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'CRITICAL', label: 'Critical' },
+];
 
 /** Keys that are typically numbers. */
 const NUMBER_KEYS = new Set([
@@ -112,6 +148,12 @@ const NUMBER_KEYS = new Set([
   'estimated_cost', 'total_quantity', 'cart_id', 'total_price', 'unit_price',
 ]);
 const PRICE_KEYS = new Set(['estimated_cost', 'total_price', 'unit_price']);
+
+type StatusHistoryEntry = {
+  current_status: string;
+  previous_status: string;
+  changed_by: string;
+};
 
 export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   open,
@@ -144,8 +186,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
+  const [pendingWarningAction, setPendingWarningAction] = useState<StatusActionWithWarningConfig | null>(null);
   const [finalPriceValue, setFinalPriceValue] = useState<string>('');
   const [finalPriceIsTotal, setFinalPriceIsTotal] = useState<boolean>(false);
+  const [extraChargesDraft, setExtraChargesDraft] = useState<string>('');
   /** Live-formatted strings for price form fields while typing (cleared on blur). */
   const [priceFieldDraft, setPriceFieldDraft] = useState<Record<string, string>>({});
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
@@ -222,7 +266,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   }, [open, fetchVendors, formModalFields]);
 
   const saveNewVendor = useCallback(async () => {
-    const name = (newVendorName ?? '').trim();
+    const name = toVendorStorageName((newVendorName ?? '').trim());
     if (!name) {
       toast({ title: 'Enter vendor name', variant: 'destructive' });
       return;
@@ -259,6 +303,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setNewVendorLink('');
       setFinalPriceValue('');
       setFinalPriceIsTotal(false);
+      setExtraChargesDraft('');
       setPriceFieldDraft({});
       return;
     }
@@ -273,8 +318,27 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         initial[f.key] = Array.isArray(val) ? '' : val !== undefined && val !== null ? val : '';
         return;
       }
+      if ((f.key === 'vendor' || f.key === 'vendor_name') && typeof val === 'string') {
+        initial[f.key] = toVendorStorageName(val);
+        return;
+      }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
+    if (data.extra_charges != null && data.extra_charges !== '') {
+      const parsedExtraCharges = toCurrencyNumber(data.extra_charges);
+      if (parsedExtraCharges != null) {
+        initial.extra_charges = parsedExtraCharges;
+      }
+    }
+    if (data.extra_charge_details != null) {
+      initial.extra_charge_details = String(data.extra_charge_details);
+    }
+    if (data.final_amount != null && data.final_amount !== '') {
+      const parsedFinalAmount = toCurrencyNumber(data.final_amount);
+      if (parsedFinalAmount != null) {
+        initial.final_amount = parsedFinalAmount;
+      }
+    }
     if ((hasPriceFieldInForm || (!paymentButtonConfig && effectiveShowFinalPrice)) && !initial.price_currency) {
       const savedCurrency = String(data.price_currency ?? data.currency ?? '').toUpperCase();
       initial.price_currency = savedCurrency === 'USD' ? 'USD' : 'INR';
@@ -320,6 +384,21 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     }
     return { unit_price: val, total_price: Math.round(val * qty * 100) / 100 };
   }, [finalPriceValue, finalPriceIsTotal, getQuantity]);
+
+  /** Compute final_amount from total_price + extra_charges. */
+  const getComputedFinalAmountFields = useCallback(
+    (baseData: Record<string, unknown>): Record<string, unknown> => {
+      const totalPrice = toCurrencyNumber(baseData.total_price) ?? 0;
+      const extraCharges = toCurrencyNumber(baseData.extra_charges) ?? 0;
+      const roundedExtra = Math.round(extraCharges * 100) / 100;
+      const finalAmount = Math.round((totalPrice + roundedExtra) * 100) / 100;
+      return {
+        extra_charges: roundedExtra,
+        final_amount: finalAmount,
+      };
+    },
+    []
+  );
 
   const flagConditionMatches = useCallback(
     (flag: {
@@ -385,13 +464,84 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     [formData, record?.data]
   );
 
+  const actionButtonConditionMatches = useCallback(
+    (btn: {
+      label: string;
+      statusValue: string;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    }) => {
+      const cond = btn.conditional;
+      if (!cond?.attribute || !cond.attribute.trim()) return true;
+      const attribute = cond.attribute.trim();
+      const raw =
+        (formData as any)?.[attribute] !== undefined ? (formData as any)[attribute] : (record?.data as any)?.[attribute];
+      const threshold = cond.value;
+
+      const numRaw = Number(raw);
+      const numThreshold = Number(threshold);
+      if (Number.isFinite(numRaw) && Number.isFinite(numThreshold)) {
+        switch (cond.operator) {
+          case 'gt':
+            return numRaw > numThreshold;
+          case 'gte':
+            return numRaw >= numThreshold;
+          case 'lt':
+            return numRaw < numThreshold;
+          case 'lte':
+            return numRaw <= numThreshold;
+          case 'eq':
+            return numRaw === numThreshold;
+          default:
+            return false;
+        }
+      }
+
+      const strRaw = raw == null ? '' : String(raw);
+      const strVal = threshold == null ? '' : String(threshold);
+      const cmp = strRaw.localeCompare(strVal, undefined, { numeric: true });
+      const rawLower = strRaw.trim().toLowerCase();
+      const valLower = strVal.trim().toLowerCase();
+
+      switch (cond.operator) {
+        case 'gt':
+          return cmp > 0;
+        case 'gte':
+          return cmp >= 0;
+        case 'lt':
+          return cmp < 0;
+        case 'lte':
+          return cmp <= 0;
+        case 'eq':
+          return rawLower === valLower;
+        default:
+          return false;
+      }
+    },
+    [formData, record?.data]
+  );
+
   const handleActionClick = useCallback(
-    async (btn: { label: string; statusValue: string }) => {
+    async (btn: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(btn.statusValue);
+        const targetAttribute = (btn.targetAttribute || 'status').trim() || 'status';
         const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
-        const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides, status: btn.statusValue };
+        const dataToSend: Record<string, unknown> = {
+          ...formData,
+          ...priceOverrides,
+          [targetAttribute]: btn.statusValue,
+          ...(extraData || {}),
+        };
+        if (targetAttribute === 'status') {
+          dataToSend.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+        }
+        if (!paymentButtonConfig && effectiveShowFinalPrice) {
+          Object.assign(dataToSend, getComputedFinalAmountFields(dataToSend));
+        }
+      if (typeof dataToSend.vendor === 'string') {
+        dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
+      }
 
         // Stage comment history: append `{name, role, comment}` into `data.comments`.
         if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as unknown))) {
@@ -413,6 +563,39 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           dataToSend.comments = history;
         }
 
+        // Status history: append each status transition as {current_status, previous_status, changed_by}.
+        const previousStatus =
+          record?.data && typeof record.data === 'object' ? (record.data as any)?.status : undefined;
+        const currentStatus =
+          targetAttribute === 'status' && dataToSend.status != null && String(dataToSend.status).trim()
+            ? String(dataToSend.status).trim()
+            : '';
+        const previousStatusText =
+          previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
+        if (currentStatus && currentStatus !== previousStatusText) {
+          const existingRaw = (record?.data as any)?.statuses;
+          let statusHistory: StatusHistoryEntry[] = [];
+          if (Array.isArray(existingRaw)) {
+            statusHistory = (existingRaw as any).filter(
+              (entry: any) =>
+                entry &&
+                typeof entry === 'object' &&
+                typeof entry.current_status === 'string' &&
+                typeof entry.previous_status === 'string' &&
+                typeof entry.changed_by === 'string'
+            );
+          }
+          statusHistory = [
+            ...statusHistory,
+            {
+              current_status: currentStatus,
+              previous_status: previousStatusText,
+              changed_by: myName,
+            },
+          ];
+          dataToSend.statuses = statusHistory;
+        }
+
         (modalFlags ?? [])
           .filter((f) => flagConditionMatches(f))
           .forEach((flag) => {
@@ -428,7 +611,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           }
         }
         await onUpdate(record.id, { data: dataToSend });
-        toast({ title: 'Saved', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
+        toast({
+          title: 'Saved',
+          description: `${((btn.targetAttribute || 'status').trim() || 'status')} set to ${btn.statusValue.replace(/_/g, ' ')}.`,
+        });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
       } catch (e: unknown) {
@@ -441,7 +627,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -450,6 +636,12 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setSaving(true);
       const priceOverrides = paymentButtonConfig || !effectiveShowFinalPrice ? {} : getComputedPriceFields();
       const dataToSend: Record<string, unknown> = { ...formData, ...priceOverrides };
+      if (!paymentButtonConfig && effectiveShowFinalPrice) {
+        Object.assign(dataToSend, getComputedFinalAmountFields(dataToSend));
+      }
+      if (typeof dataToSend.vendor === 'string') {
+        dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
+      }
 
       if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as unknown))) {
         const existingRaw = (record?.data as unknown)?.comments;
@@ -465,6 +657,37 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           history = [...history, { name: myName, role: myRoleName ?? '', comment: commentText }];
         }
         dataToSend.comments = history;
+      }
+
+      // Status history: append on manual status edits followed by Save.
+      const previousStatus =
+        record?.data && typeof record.data === 'object' ? (record.data as any)?.status : undefined;
+      const currentStatus =
+        dataToSend.status != null && String(dataToSend.status).trim() ? String(dataToSend.status).trim() : '';
+      const previousStatusText =
+        previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
+      if (currentStatus && currentStatus !== previousStatusText) {
+        const existingRaw = (record?.data as any)?.statuses;
+        let statusHistory: StatusHistoryEntry[] = [];
+        if (Array.isArray(existingRaw)) {
+          statusHistory = (existingRaw as any).filter(
+            (entry: any) =>
+              entry &&
+              typeof entry === 'object' &&
+              typeof entry.current_status === 'string' &&
+              typeof entry.previous_status === 'string' &&
+              typeof entry.changed_by === 'string'
+          );
+        }
+        statusHistory = [
+          ...statusHistory,
+          {
+            current_status: currentStatus,
+            previous_status: previousStatusText,
+            changed_by: myName,
+          },
+        ];
+        dataToSend.statuses = statusHistory;
       }
 
       (modalFlags ?? [])
@@ -494,7 +717,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
 
   const handleDeleteRequest = useCallback(async () => {
     if (!canShowDeleteRequestButton || !record?.id) return;
@@ -555,7 +778,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const usePaymentButtons = paymentButtonConfig?.conditionalButton && paymentButtonConfig?.defaultButton;
   const effectiveActionButtons = usePaymentButtons
     ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
-    : actionButtons;
+    : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
@@ -581,12 +804,14 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             {formModalFields.map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
+              const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
               const isEnabled = field.enabled && canUpdate;
               const isClickableLink = field.link === true && !isEnabled && looksLikeUrl(displayStr);
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isCartId = field.key === 'cart_id' && isInventoryRequest && cartOptions && cartOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
+              const isUrgency = field.key === 'urgency_level';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
               const isNumber = NUMBER_KEYS.has(field.key) && field.key !== 'cart_id';
               const spanFullWidth = TEXTAREA_KEYS.has(field.key);
@@ -658,13 +883,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     <div className="flex items-center gap-2 w-full min-w-0">
                       <div className="min-w-0 flex-1">
                       <Select
-                        value={displayStr || undefined}
+                        value={normalizedVendorValue || undefined}
                         onValueChange={(v) => {
                           if (v === ADD_VENDOR_VALUE) {
                             setIsAddVendorModalOpen(true);
                             return;
                           }
-                          setField(field.key, v ?? '');
+                          setField(field.key, toVendorStorageName(v ?? ''));
                         }}
                         disabled={!isEnabled}
                       >
@@ -676,9 +901,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                             <SelectItem value="__loading__" disabled>Loading…</SelectItem>
                           ) : (
                             <>
+                              {normalizedVendorValue &&
+                                !vendors.some((v) => toVendorStorageName(v.name) === normalizedVendorValue) ? (
+                                  <SelectItem value={normalizedVendorValue}>
+                                    {normalizedVendorValue}
+                                  </SelectItem>
+                                ) : null}
                               {vendors.map((v) => (
-                                <SelectItem key={v.id} value={v.name}>
-                                  {v.name}
+                                <SelectItem key={v.id} value={toVendorStorageName(v.name)}>
+                                  {toVendorStorageName(v.name)}
                                 </SelectItem>
                               ))}
                             </>
@@ -746,6 +977,22 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         <SelectItem value="false">No</SelectItem>
                       </SelectContent>
                     </Select>
+                  ) : isUrgency ? (
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
+                      {URGENCY_BUTTON_OPTIONS.map((opt) => (
+                        <Button
+                          key={opt.value}
+                          type="button"
+                          variant={String(displayStr || '').toUpperCase() === opt.value ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setField(field.key, opt.value)}
+                          disabled={!isEnabled}
+                          className="rounded-full h-8"
+                        >
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
                   ) : isTextarea ? (
                     <Textarea
                       className="min-h-[80px] text-sm rounded-md"
@@ -870,6 +1117,69 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               <p className="text-xs text-muted-foreground">
                 On save, total_price and unit_price are calculated from quantity and saved to the record.
               </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Extra charges
+                  </Label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={
+                      extraChargesDraft ||
+                      formatCurrencyDisplay(formData.extra_charges as number | '' | string | undefined)
+                    }
+                    onChange={(e) => {
+                      const { display, value } = formatCurrencyInputLive(e.target.value);
+                      setExtraChargesDraft(display);
+                      setField('extra_charges', value);
+                    }}
+                    onBlur={() => {
+                      setExtraChargesDraft('');
+                      const parsed = toCurrencyNumber(formData.extra_charges);
+                      setField('extra_charges', parsed != null ? Math.round(parsed * 100) / 100 : 0);
+                    }}
+                    className="h-9 text-sm rounded-md font-mono tabular-nums"
+                    disabled={!canUpdate}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Final amount
+                  </Label>
+                  <Input
+                    value={(() => {
+                      const priceFields = getComputedPriceFields();
+                      const totalRaw =
+                        priceFields.total_price ??
+                        (formData.total_price as number | string | undefined) ??
+                        (record?.data as any)?.total_price;
+                      const total = toCurrencyNumber(totalRaw) ?? 0;
+                      const extraRaw =
+                        (formData.extra_charges as number | string | undefined) ??
+                        (record?.data as any)?.extra_charges;
+                      const extra = toCurrencyNumber(extraRaw) ?? 0;
+                      return formatCurrencyDisplay(Math.round((total + extra) * 100) / 100);
+                    })()}
+                    readOnly
+                    disabled
+                    className="h-9 text-sm rounded-md bg-muted/50 font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Extra charge details
+                  </Label>
+                  <Textarea
+                    value={String(formData.extra_charge_details ?? '')}
+                    onChange={(e) => setField('extra_charge_details', e.target.value)}
+                    placeholder="Reason/details for extra charges"
+                    className="min-h-[72px] text-sm rounded-md"
+                    disabled={!canUpdate}
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -920,7 +1230,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     size="default"
                     className="gap-2 h-9 rounded-md"
                     disabled={!!applyingStatusValue}
-                    onClick={() => handleActionClick(btn)}
+                    onClick={() => {
+                      if ((btn as any).openWarningModal) {
+                        setPendingWarningAction(btn as StatusActionWithWarningConfig);
+                        return;
+                      }
+                      handleActionClick(btn);
+                    }}
                   >
                     {applyingStatusValue === btn.statusValue ? (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -991,6 +1307,21 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <StatusActionWarningModal
+        open={pendingWarningAction != null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPendingWarningAction(null);
+        }}
+        actionButton={pendingWarningAction}
+        actorName={myName}
+        submitting={applyingStatusValue != null}
+        onSubmit={async (payload) => {
+          if (!pendingWarningAction) return;
+          await handleActionClick(pendingWarningAction, payload);
+          setPendingWarningAction(null);
+        }}
+      />
     </Dialog>
   );
 };

@@ -41,6 +41,7 @@ import {
   PRICE_FIELD_KEYS,
 } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
+import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -125,7 +126,21 @@ interface RecordDetailModalProps {
   /** Called after a record is updated by an action (e.g. Proceed to PM) so the parent can refresh the table. */
   onRecordUpdated?: (recordId: number) => void;
   /** Optional action buttons that set record data.status on click. */
-  actionButtons?: Array<{ label: string; statusValue: string }>;
+  actionButtons?: Array<{
+    label: string;
+    statusValue: string;
+    targetAttribute?: string;
+    statusText?: string;
+    conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    openWarningModal?: boolean;
+    warningModalConfig?: {
+      title?: string;
+      description?: string;
+      confirmationText?: string;
+      formType?: 'payment_confirmation';
+      paymentMethods?: string[];
+    };
+  }>;
   /** Optional checkbox flags shown beside action buttons; each can be conditional. */
   modalFlags?: Array<{
     label: string;
@@ -152,6 +167,11 @@ const FINAL_PRICE_HIDDEN_ROW_KEYS = new Set([
   'including_gst',
 ]);
 const ADD_VENDOR_VALUE = '__add_vendor__';
+const toVendorStorageName = (name: string): string =>
+  String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
 
 /** Detail rows that span both columns (long text, comments). */
 const DETAIL_ROW_FULL_WIDTH_KEYS = new Set([
@@ -161,6 +181,10 @@ const DETAIL_ROW_FULL_WIDTH_KEYS = new Set([
   'item_name_freeform',
   'project_purpose',
 ]);
+const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'CRITICAL', label: 'Critical' },
+];
 
 /**
  * Build display rows from API-shaped record only:
@@ -469,6 +493,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
+  const [pendingWarningAction, setPendingWarningAction] = useState<StatusActionWithWarningConfig | null>(null);
 
   useEffect(() => {
     setPriceInputDraft({});
@@ -525,7 +550,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   }, [open, visibleRows, editableSet]);
 
   const saveNewVendor = useCallback(async () => {
-    const name = (newVendorName ?? '').trim();
+    const name = toVendorStorageName((newVendorName ?? '').trim());
     if (!name) {
       toast({ title: 'Enter vendor name', variant: 'destructive' });
       return;
@@ -737,6 +762,64 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     [pending, record?.data]
   );
 
+  const actionButtonConditionMatches = useCallback(
+    (btn: {
+      label: string;
+      statusValue: string;
+      conditional?: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'; value: string | number };
+    }) => {
+      const cond = btn.conditional;
+      if (!cond?.attribute || !cond.attribute.trim()) return true;
+      const attribute = cond.attribute.trim();
+      const raw =
+        pending?.[attribute] !== undefined
+          ? pending?.[attribute]
+          : (record?.data as any)?.[attribute];
+      const threshold = cond.value;
+
+      const numRaw = Number(raw);
+      const numThreshold = Number(threshold);
+      if (Number.isFinite(numRaw) && Number.isFinite(numThreshold)) {
+        switch (cond.operator) {
+          case 'gt':
+            return numRaw > numThreshold;
+          case 'gte':
+            return numRaw >= numThreshold;
+          case 'lt':
+            return numRaw < numThreshold;
+          case 'lte':
+            return numRaw <= numThreshold;
+          case 'eq':
+            return numRaw === numThreshold;
+          default:
+            return false;
+        }
+      }
+
+      const strRaw = raw == null ? '' : String(raw);
+      const strVal = threshold == null ? '' : String(threshold);
+      const cmp = strRaw.localeCompare(strVal, undefined, { numeric: true });
+      const rawLower = strRaw.trim().toLowerCase();
+      const valLower = strVal.trim().toLowerCase();
+
+      switch (cond.operator) {
+        case 'gt':
+          return cmp > 0;
+        case 'gte':
+          return cmp >= 0;
+        case 'lt':
+          return cmp < 0;
+        case 'lte':
+          return cmp <= 0;
+        case 'eq':
+          return rawLower === valLower;
+        default:
+          return false;
+      }
+    },
+    [pending, record?.data]
+  );
+
   const handleRemoveRequestFromCart = useCallback(
     async (req: { id: number; data?: Record<string, unknown> }) => {
       try {
@@ -797,6 +880,9 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     setSaving(key);
     try {
       let dataPatch: Record<string, unknown> = { [key]: value };
+      if ((key === 'vendor' || key === 'vendor_name') && typeof value === 'string') {
+        dataPatch[key] = toVendorStorageName(value);
+      }
       if (key === 'comments') {
         const existingRaw = (record?.data as unknown)?.comments;
         const existingHistory: Array<{ name: string; role: string; comment: string }> = [];
@@ -860,7 +946,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   const handleSaveClick = useCallback((key: string, value: unknown) => {
     if (!editableSet.has(key)) return;
-    const toSave = pending[key] !== undefined ? pending[key] : value;
+      const toSave =
+        (key === 'vendor' || key === 'vendor_name') && typeof (pending[key] !== undefined ? pending[key] : value) === 'string'
+          ? toVendorStorageName(String(pending[key] !== undefined ? pending[key] : value))
+          : (pending[key] !== undefined ? pending[key] : value);
     handleSave(key, toSave);
   }, [editableSet, pending, handleSave]);
 
@@ -1032,12 +1121,20 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   /** Apply status and save configured flag checkboxes as true/false. */
   const handleActionButtonClick = useCallback(
-    async (btn: { label: string; statusValue: string }) => {
+    async (btn: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
       try {
         setApplyingStatusValue(btn.statusValue);
+        const targetAttribute = (btn.targetAttribute || 'status').trim() || 'status';
         const existingData = (record.data as Record<string, unknown>) || {};
-        const payload: Record<string, unknown> = { ...existingData, status: btn.statusValue };
+        const payload: Record<string, unknown> = {
+          ...existingData,
+          [targetAttribute]: btn.statusValue,
+          ...(extraData || {}),
+        };
+        if (targetAttribute === 'status') {
+          payload.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+        }
 
         // Stage comments history: append a new `{name, role, comment}` object into `data.comments[]`
         if (Object.prototype.hasOwnProperty.call(existingData, 'comments') || typeof pending?.comments !== 'undefined') {
@@ -1064,7 +1161,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           payload[key] = flagValues[key] === true;
           });
         await onUpdate(record.id, { data: payload });
-        toast({ title: 'Status updated', description: `Status set to ${btn.statusValue.replace(/_/g, ' ')}.` });
+        toast({
+          title: 'Updated',
+          description: `${targetAttribute} set to ${btn.statusValue.replace(/_/g, ' ')}.`,
+        });
         onRecordUpdated?.(record.id);
         onOpenChange(false);
       } catch (e: unknown) {
@@ -1274,6 +1374,22 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                   placeholder="Add a new comment..."
                                 />
                               </div>
+                            ) : key === 'urgency_level' ? (
+                              <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
+                                {URGENCY_BUTTON_OPTIONS.map((opt) => (
+                                  <Button
+                                    key={opt.value}
+                                    type="button"
+                                    variant={String(displayValue ?? '').toUpperCase() === opt.value ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => handleEditableChange(key, value, opt.value)}
+                                    disabled={isSaving}
+                                    className="rounded-full h-8"
+                                  >
+                                    {opt.label}
+                                  </Button>
+                                ))}
+                              </div>
                             ) : (
                               <Input
                                 className="w-full max-w-md min-w-0 h-9 text-sm rounded-md"
@@ -1451,7 +1567,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   </label>
                 );
               })}
-              {actionButtons.map((btn) => (
+              {actionButtons.filter((btn) => actionButtonConditionMatches(btn)).map((btn) => (
                   <Button
                     key={btn.statusValue}
                     type="button"
@@ -1459,7 +1575,13 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                     size="default"
                     className="gap-2 h-9 rounded-md"
                     disabled={!!applyingStatusValue}
-                    onClick={() => handleActionButtonClick(btn)}
+                    onClick={() => {
+                      if (btn.openWarningModal) {
+                        setPendingWarningAction(btn as StatusActionWithWarningConfig);
+                        return;
+                      }
+                      handleActionButtonClick(btn);
+                    }}
                   >
                     {applyingStatusValue === btn.statusValue ? (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -1636,6 +1758,21 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <StatusActionWarningModal
+        open={pendingWarningAction != null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPendingWarningAction(null);
+        }}
+        actionButton={pendingWarningAction}
+        actorName={myName}
+        submitting={applyingStatusValue != null}
+        onSubmit={async (payload) => {
+          if (!pendingWarningAction) return;
+          await handleActionButtonClick(pendingWarningAction, payload);
+          setPendingWarningAction(null);
+        }}
+      />
     </Dialog>
   );
 };

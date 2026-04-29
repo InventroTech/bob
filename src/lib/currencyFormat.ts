@@ -66,6 +66,8 @@ export const PRICE_FIELD_KEYS = new Set([
   'unit_price',
   'estimated_cost',
   'default_cost_per_unit',
+  'extra_charges',
+  'final_amount',
 ]);
 
 export function formatPriceFieldRead(value: unknown): string {
