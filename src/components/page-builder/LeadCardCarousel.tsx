@@ -1104,7 +1104,13 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
           }
         } else {
           persistActionButtonsState(undefined, false);
-          await fetchFirstLead();
+          // Do not auto-fetch next lead after an outcome.
+          // User must click "Get Leads" manually for the next lead.
+          setShowPendingCard(true);
+          setCurrentLead(null);
+          resetLeadState();
+          isInitialized.current = false;
+          await fetchLeadStats();
         }
       }
 
@@ -1131,40 +1137,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     }
     return await handleActionButton("Not Interested", { reason });
   };
-
-  const handleTakeBreak = async () => {
-    if (isInModal) {
-      return;
-    }
-    if (!currentLead?.id) {
-      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
-      return;
-    }
-    const ok = await sendLeadEvent(
-      "agent.take_break",
-      { notes: lead.notes },
-      { successTitle: "Taking break", successDescription: "Bye, Come back soon!" }
-    );
-    if (ok) {
-      // Return to landing (pending) screen
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      resetLeadState();
-      isInitialized.current = false;
-      await fetchLeadStats();
-    }
-  };
-
-  const handleTakeBreakRef = useRef(handleTakeBreak);
-  handleTakeBreakRef.current = handleTakeBreak;
-
-  useEffect(() => {
-    const onTakeBreak = () => {
-      void handleTakeBreakRef.current();
-    };
-    window.addEventListener("pyro-lead-take-break", onTakeBreak);
-    return () => window.removeEventListener("pyro-lead-take-break", onTakeBreak);
-  }, []);
 
   const handleRefresh = async () => {
     if (!currentLead?.id) {
