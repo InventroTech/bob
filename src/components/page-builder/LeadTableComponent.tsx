@@ -391,6 +391,8 @@ interface LeadTableProps {
     showFinalPriceSection?: boolean;
     /** Default modal: show requestor-side "Delete request" action. Default false. */
     showDeleteRequestButton?: boolean;
+    /** Show "See request history" button in record modals. */
+    showHistoryButton?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;
@@ -2589,6 +2591,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
             try { await fetchFilteredData(); } catch (e) { console.error('Error refreshing table after form modal update', e); }
           }}
           showDeleteRequestButton={config?.showDeleteRequestButton}
+          showHistoryButton={config?.showHistoryButton}
           onDeleted={async (recordId: number) => {
             setData((prev) => prev.filter((r: any) => r.id !== recordId));
             setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
@@ -2623,6 +2626,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         modalFlags={config?.modalFlags}
         showFinalPriceSection={config?.showFinalPriceSection}
         showDeleteRequestButton={config?.showDeleteRequestButton}
+        showHistoryButton={config?.showHistoryButton}
         onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
           ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
               const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');

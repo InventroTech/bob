@@ -102,6 +102,8 @@ interface TableConfigProps {
     showFinalPriceSection?: boolean;
     /** Default record detail modal: show requestor-side Delete request button. Default off. */
     showDeleteRequestButton?: boolean;
+    /** Show request history button in record modals. */
+    showHistoryButton?: boolean;
     /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
     modalFlags?: ModalFlagConfig[];
   };
@@ -597,6 +599,28 @@ export const TableConfig: React.FC<TableConfigProps> = ({
               What happens when a row is clicked. Payment modal: one conditional + one default action button.
             </p>
           </div>
+
+          {(localConfig.detailMode === 'record_form_modal' ||
+            localConfig.detailMode === 'inventory_payment_modal' ||
+            localConfig.detailMode === 'inventory_request' ||
+            localConfig.detailMode === 'inventory_cart') && (
+            <div className="space-y-2">
+              <Label>Request history button</Label>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-history-button"
+                  checked={localConfig.showHistoryButton === true}
+                  onCheckedChange={(checked) => handleInputChange('showHistoryButton', checked)}
+                />
+                <Label htmlFor="show-history-button" className="text-sm font-normal cursor-pointer">
+                  Show &quot;See request history&quot; in record modals
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500">
+                Default is off. When enabled, users can open a history modal that shows object-level changes for the request.
+              </p>
+            </div>
+          )}
 
           {/* Record detail (request/cart) — default or form-style */}
           {(localConfig.detailMode === 'inventory_request' || localConfig.detailMode === 'inventory_cart') && (
