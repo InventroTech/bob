@@ -31,7 +31,7 @@ export function formatCurrencyInputLive(raw: string): { display: string; value: 
 
   const firstDot = cleaned.indexOf('.');
   const intPartRaw = firstDot === -1 ? cleaned : cleaned.slice(0, firstDot);
-  let decPart = firstDot === -1 ? '' : cleaned.slice(firstDot + 1).replace(/\./g, '').slice(0, 2);
+  const decPart = firstDot === -1 ? '' : cleaned.slice(firstDot + 1).replace(/\./g, '').slice(0, 2);
 
   let intDigits = intPartRaw.replace(/\D/g, '');
   if (intDigits.length > 1) intDigits = intDigits.replace(/^0+(?=\d)/, '');

@@ -1,8 +1,6 @@
 import React from 'react';
 
-interface FormComponentProps {}
-
-export const FormComponent: React.FC<FormComponentProps> = () => {
+export const FormComponent = () => {
   return (
     <div className="border border-dashed border-purple-400 p-4">
       <p className="text-xs text-purple-500 mb-2">Form</p>

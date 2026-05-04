@@ -541,7 +541,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
@@ -683,7 +683,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
 
   // Filter and sort applications
   const filteredAndSortedApplications = useMemo(() => {
-    let filtered = applications.filter(app => {
+    const filtered = applications.filter(app => {
       // Job filter
       if (selectedJobId !== 'all' && String(app.jobId) !== String(selectedJobId)) return false;
       
@@ -858,7 +858,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           ? `${url}${applicationId}/` 
           : `${url}/${applicationId}/`;
 
-        let headers: Record<string, string> = {
+        const headers: Record<string, string> = {
           'Content-Type': 'application/json'
         };
 
@@ -1084,7 +1084,7 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
           </div>
         ) : <span className="text-sm text-gray-400">Not provided</span>;
         
-      case 'skills':
+      case 'skills': {
         if (!application.skills) {
           return <span className="text-sm text-gray-400">Not specified</span>;
         }
@@ -1103,14 +1103,16 @@ export const ApplicantTableComponent: React.FC<ApplicantTableComponentProps> = (
             ))}
           </div>
         );
+      }
         
-      case 'stage':
+      case 'stage': {
         const currentStage = application.stage || 'Initial';
         return (
           <Badge className={`${getStageColor(currentStage)} flex items-center gap-1 w-fit`}>
             {currentStage}
           </Badge>
         );
+      }
         
       case 'date':
         if (column.format === 'relative-time') {
