@@ -30,6 +30,8 @@ import { buildActionApiRequest } from '@/lib/actionApiUtils';
 import { convertGMTtoIST } from '@/lib/timeUtils';
 import { useSpoofUserId } from '@/lib/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
+import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
+import { getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
 
 interface Column {
   header: string;
@@ -70,6 +72,10 @@ const getStatusColor = (status: string, statusColors?: Record<string, string>) =
   // Default fallback colors - matching design
   const statusLower = status.toLowerCase();
   switch (statusLower) {
+    case 'critical':
+      return 'bg-orange-50 text-orange-900 border-orange-300 dark:bg-orange-950/55 dark:text-orange-100 dark:border-orange-700';
+    case 'standard':
+      return 'bg-sky-50 text-sky-900 border-sky-300 dark:bg-sky-950/55 dark:text-sky-100 dark:border-sky-700';
     case 'paid':
     case 'active':
       return 'bg-green-50 text-green-700 border-green-200';
@@ -1143,19 +1149,22 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         const selected = String(value ?? '').toUpperCase();
         return (
           <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-            {URGENCY_BUTTON_OPTIONS.map((opt) => (
-              <Button
-                key={opt.value}
-                type="button"
-                size="sm"
-                variant={selected === opt.value ? 'default' : 'outline'}
-                className="rounded-full h-8"
-                disabled={inlineSaving}
-                onClick={() => handleInlineCellSave(row, column as Column, opt.value)}
-              >
-                {opt.label}
-              </Button>
-            ))}
+            {URGENCY_BUTTON_OPTIONS.map((opt) => {
+              const isSel = selected === opt.value;
+              return (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={urgencyToneButtonClassName(opt.value, isSel, 'rounded-full h-8')}
+                  disabled={inlineSaving}
+                  onClick={() => handleInlineCellSave(row, column as Column, opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              );
+            })}
           </div>
         );
       }
@@ -1258,10 +1267,28 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       );
     }
     
+    // Urgency: show colored pill even when column type is `text` (items tables often use text columns).
+    const urgencyUpper = String(displayValue ?? '').trim().toUpperCase();
+    if (column.accessor === 'urgency_level' && (urgencyUpper === 'CRITICAL' || urgencyUpper === 'STANDARD')) {
+      return (
+        <Badge
+          className={`${getStatusColor(displayValue, config?.statusColors)} text-sm px-2 py-0.5 border font-semibold tracking-wide`}
+          title={displayValue}
+        >
+          {truncateText(displayValue, columnIndex)}
+        </Badge>
+      );
+    }
+
     // Render chip/badge for chip type columns
     if (column.type === 'chip') {
+      const useInventoryStatusTone =
+        config?.tableType === 'itemsTable' && String(column.accessor || '').toLowerCase() === 'status';
+      const chipToneClass = useInventoryStatusTone
+        ? getInventoryStatusToneClass(displayValue)
+        : getStatusColor(displayValue, config?.statusColors);
       return (
-        <Badge className={`${getStatusColor(displayValue, config?.statusColors)} text-sm px-2 py-0.5`} title={displayValue}>
+        <Badge className={`${chipToneClass} text-sm px-2 py-0.5`} title={displayValue}>
           {truncateText(displayValue, columnIndex)}
         </Badge>
       );
@@ -1287,16 +1314,22 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     if (column.type === 'status_buttons' && column.statusButtons?.length) {
       return (
         <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
-          {column.statusButtons.map((btn) => (
-            <CustomButton
-              key={btn.statusValue}
-              variant="outline"
-              size="sm"
-              onClick={() => handleStatusButtonClick(row, btn)}
-            >
-              {btn.label}
-            </CustomButton>
-          ))}
+          {column.statusButtons.map((btn) => {
+            const targetAttr = btn.targetAttribute ?? 'status';
+            const current = String(row[targetAttr] ?? '').toUpperCase();
+            const isActive = current === String(btn.statusValue ?? '').toUpperCase();
+            return (
+              <CustomButton
+                key={btn.statusValue}
+                variant="outline"
+                size="sm"
+                className={urgencyToneButtonClassName(btn.statusValue, isActive, 'text-xs')}
+                onClick={() => handleStatusButtonClick(row, btn)}
+              >
+                {btn.label}
+              </CustomButton>
+            );
+          })}
         </div>
       );
     }

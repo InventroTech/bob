@@ -41,6 +41,14 @@ import {
   PRICE_FIELD_KEYS,
 } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
+import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import {
+  urgencyToneButtonClassName,
+  urgencyReadonlyFieldCardClassName,
+  urgencyReadonlyValueTextClassName,
+  isUrgencyToneValue,
+} from '@/lib/urgencyButtonStyles';
+import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 
 export type RecordDetailEntityType =
@@ -337,6 +345,19 @@ function renderDisplayValue(key: string, value: unknown): React.ReactNode {
   }
   const str = formatValue(value);
   if (str === '—') return <span className="text-foreground">{str}</span>;
+  if (key === 'status') {
+    return (
+      <span
+        className={cn(
+          'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-sm font-semibold tracking-wide',
+          getInventoryStatusToneClass(str),
+        )}
+        title={str}
+      >
+        {getInventoryStatusLabel(str)}
+      </span>
+    );
+  }
   const isLink = isUrl(value) || (LINK_KEYS.has(key) && typeof value === 'string' && value.trim().length > 0);
   if (isLink) {
     const href = typeof value === 'string' ? value.trim() : str;
@@ -354,13 +375,6 @@ function renderDisplayValue(key: string, value: unknown): React.ReactNode {
   }
   return <span className="text-foreground">{str}</span>;
 }
-
-const ENTITY_LABELS: Record<string, string> = {
-  inventory_request: 'Request',
-  inventory_cart: 'Cart',
-  inventory_item: 'Item',
-  lead: 'Lead',
-};
 
 /** Human-readable label for a field key (e.g. cart_id → Cart, created_at → Created at). */
 function humanizeLabel(key: string): string {
@@ -405,7 +419,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   open,
   onOpenChange,
   record,
-  entityLabel,
+  entityLabel: _entityLabel,
   entityType,
   editableFields: editableFieldsProp,
   onUpdate,
@@ -1184,23 +1198,14 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1rem)] max-w-6xl sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30 shrink-0">
-          <div className="flex items-center gap-3">
-            <DialogTitle className="text-xl font-semibold tracking-tight">
-              {entityLabel ||
-                (entityType && ENTITY_LABELS[entityType]) ||
-                (entityType && entityType.replace(/_/g, ' ')) ||
-                'Record'}{' '}
-              <span className="text-muted-foreground font-medium">#{record?.id ?? '—'}</span>
-            </DialogTitle>
-            {entityType && (
-              <Badge variant="secondary" className="shrink-0 font-normal">
-                {ENTITY_LABELS[entityType] ?? entityType}
-              </Badge>
+          <DialogTitle className="pr-8 text-left leading-snug">
+            {record?.id != null ? (
+              <RecordModalTitleDisplay record={record} />
+            ) : (
+              <span className="text-xl font-semibold tracking-tight text-muted-foreground">Record</span>
             )}
-          </div>
-          <DialogDescription className="text-muted-foreground mt-1">
-            {canEdit ? 'View and edit fields below. Changes are saved per field.' : 'View-only. You do not have permission to edit.'}
-          </DialogDescription>
+          </DialogTitle>
+          <DialogDescription className="sr-only">Record details</DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 pb-6">
           {visibleRows.length === 0 ? (
@@ -1245,13 +1250,22 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                 onValueChange={(val) => handleEditableChange(key, value, val)}
                                 disabled={isSaving}
                               >
-                                <SelectTrigger className="w-full max-w-md min-w-0 h-9 text-sm rounded-md">
+                                <SelectTrigger
+                                  className={cn(
+                                    'w-full max-w-md min-w-0 h-9 text-sm rounded-md border font-medium',
+                                    getInventoryStatusToneClass(selectValue),
+                                  )}
+                                >
                                   <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {options.map((opt) => (
-                                    <SelectItem key={opt} value={opt}>
-                                      {opt.replace(/_/g, ' ')}
+                                    <SelectItem
+                                      key={opt}
+                                      value={opt}
+                                      className={cn('font-medium', getInventoryStatusToneClass(opt))}
+                                    >
+                                      {getInventoryStatusLabel(opt)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1376,19 +1390,22 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               </div>
                             ) : key === 'urgency_level' ? (
                               <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
-                                {URGENCY_BUTTON_OPTIONS.map((opt) => (
-                                  <Button
-                                    key={opt.value}
-                                    type="button"
-                                    variant={String(displayValue ?? '').toUpperCase() === opt.value ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => handleEditableChange(key, value, opt.value)}
-                                    disabled={isSaving}
-                                    className="rounded-full h-8"
-                                  >
-                                    {opt.label}
-                                  </Button>
-                                ))}
+                                {URGENCY_BUTTON_OPTIONS.map((opt) => {
+                                  const selected = String(displayValue ?? '').toUpperCase() === opt.value;
+                                  return (
+                                    <Button
+                                      key={opt.value}
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleEditableChange(key, value, opt.value)}
+                                      disabled={isSaving}
+                                      className={urgencyToneButtonClassName(opt.value, selected, 'rounded-full h-8')}
+                                    >
+                                      {opt.label}
+                                    </Button>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <Input
@@ -1415,10 +1432,35 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                             )}
                           </Button>
                         </div>
+                      ) : key === 'urgency_level' && String(displayValue ?? '').trim() && displayValue !== '—' ? (
+                        <div
+                          className={cn(
+                            'inline-flex max-w-full rounded-lg border px-3 py-2.5 shadow-sm',
+                            isUrgencyToneValue(String(displayValue))
+                              ? urgencyReadonlyFieldCardClassName(String(displayValue))
+                              : 'border-border bg-card',
+                          )}
+                          role="status"
+                        >
+                          <span
+                            className={cn(
+                              'text-base font-bold tracking-wide uppercase break-words',
+                              urgencyReadonlyValueTextClassName(String(displayValue)),
+                            )}
+                          >
+                            {String(displayValue).trim()}
+                          </span>
+                        </div>
                       ) : key === 'status' && String(displayValue ?? '').trim() ? (
-                        <Badge variant="secondary" className="font-normal">
-                          {String(displayValue).replace(/_/g, ' ')}
-                        </Badge>
+                        <span
+                          className={cn(
+                            'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-sm font-semibold tracking-wide',
+                            getInventoryStatusToneClass(displayValue),
+                          )}
+                          title={String(displayValue)}
+                        >
+                          {getInventoryStatusLabel(displayValue)}
+                        </span>
                       ) : key === 'estimated_cost' ? (
                         <span className="text-foreground font-mono tabular-nums">
                           {formatPriceFieldRead(displayValue)}
@@ -1567,13 +1609,23 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   </label>
                 );
               })}
-              {actionButtons.filter((btn) => actionButtonConditionMatches(btn)).map((btn) => (
+              {actionButtons.filter((btn) => actionButtonConditionMatches(btn)).map((btn) => {
+                const targetAttr = btn.targetAttribute ?? 'status';
+                const dataObj = record?.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : null;
+                const currentVal = String(dataObj?.[targetAttr] ?? '').toUpperCase();
+                const applyingThis = applyingStatusValue === btn.statusValue;
+                const highlighted =
+                  currentVal === String(btn.statusValue ?? '').toUpperCase() || applyingThis;
+                return (
                   <Button
                     key={btn.statusValue}
                     type="button"
                     variant="outline"
                     size="default"
-                    className="gap-2 h-9 rounded-md"
+                    className={cn(
+                      'gap-2 h-9 rounded-md',
+                      urgencyToneButtonClassName(btn.statusValue, highlighted),
+                    )}
                     disabled={!!applyingStatusValue}
                     onClick={() => {
                       if (btn.openWarningModal) {
@@ -1588,7 +1640,8 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                     ) : null}
                     {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
                   </Button>
-              ))}
+                );
+              })}
             </div>
           </DialogFooter>
         )}
