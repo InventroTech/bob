@@ -41,7 +41,6 @@ interface LeadCardCarouselProps {
   config?: {
     title?: string;
     apiEndpoint?: string;
-    statusDataApiEndpoint?: string;
     leadAssignmentWebhookUrl?: string;
     whatsappTemplatesApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
@@ -112,14 +111,6 @@ interface LeadData {
   };
 }
 
-interface LeadStats {
-  total: number;
-  fresh_leads: number;
-  leads_won: number;
-  wip_leads: number;
-  lost_leads: number;
-}
-
 interface LeadState {
   leadStatus: string;
   notes: string;
@@ -133,13 +124,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const { toast } = useToast();
   const { user: authUser, session } = useAuth();
   const [currentLead, setCurrentLead] = useState<LeadData | null>(initialLead || null);
-  const [leadStats, setLeadStats] = useState<LeadStats>({
-    total: 0,
-    fresh_leads: 0,
-    leads_won: 0,
-    wip_leads: 0,
-    lost_leads: 0,
-  });
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
@@ -846,32 +830,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     return <div className={className}>{content}</div>;
   };
 
-  // Fetching the lead stats
-  const fetchLeadStats = async () => {
-    // Skip stats fetching when opened from modal - stats are not needed in modal context
-    if (isInModal || initialLead) {
-      return;
-    }
-    // Also skip if config explicitly has the old endpoint (shouldn't happen, but defensive)
-    if (config?.statusDataApiEndpoint === '/get-lead-status' || config?.statusDataApiEndpoint === 'get-lead-status') {
-      return;
-    }
-    try {
-      const data = await crmLeadsApi.getLeadStats(config?.statusDataApiEndpoint);
-      setLeadStats(data);
-    } catch (error) {
-      console.error("Error fetching lead statistics:", error);
-      // Set default stats on error to prevent UI issues
-      setLeadStats({
-        total: 0,
-        fresh_leads: 0,
-        leads_won: 0,
-        wip_leads: 0,
-        lost_leads: 0,
-      });
-    }
-  };
-
   // Fetching the next lead from API
   const fetchFirstLead = async () => {
     try {
@@ -888,7 +846,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         setCurrentLead(null);
         resetLeadState();
         isInitialized.current = false;
-        await fetchLeadStats();
         toast({
           title: "Info",
           description: "No leads available at the moment.",
@@ -922,7 +879,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       // No need to call from frontend
 
       isInitialized.current = true;
-      await fetchLeadStats();
       
     } catch (error: any) {
       console.error("Error fetching lead:", error);
@@ -934,7 +890,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         setCurrentLead(null);
         resetLeadState();
         isInitialized.current = false;
-        await fetchLeadStats();
         toast({
           title: "Info",
           description: "No leads available at the moment.",
@@ -950,7 +905,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         setCurrentLead(null);
         resetLeadState();
         isInitialized.current = false;
-        await fetchLeadStats();
       }
     } finally {
       setLoading(false);
@@ -1104,7 +1058,12 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
           }
         } else {
           persistActionButtonsState(undefined, false);
-          await fetchFirstLead();
+          // Do not auto-fetch next lead after an outcome.
+          // User must click "Get Leads" manually for the next lead.
+          setShowPendingCard(true);
+          setCurrentLead(null);
+          resetLeadState();
+          isInitialized.current = false;
         }
       }
 
@@ -1131,40 +1090,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     }
     return await handleActionButton("Not Interested", { reason });
   };
-
-  const handleTakeBreak = async () => {
-    if (isInModal) {
-      return;
-    }
-    if (!currentLead?.id) {
-      toast({ title: "Error", description: "No lead to act on", variant: "destructive" });
-      return;
-    }
-    const ok = await sendLeadEvent(
-      "agent.take_break",
-      { notes: lead.notes },
-      { successTitle: "Taking break", successDescription: "Bye, Come back soon!" }
-    );
-    if (ok) {
-      // Return to landing (pending) screen
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      resetLeadState();
-      isInitialized.current = false;
-      await fetchLeadStats();
-    }
-  };
-
-  const handleTakeBreakRef = useRef(handleTakeBreak);
-  handleTakeBreakRef.current = handleTakeBreak;
-
-  useEffect(() => {
-    const onTakeBreak = () => {
-      void handleTakeBreakRef.current();
-    };
-    window.addEventListener("pyro-lead-take-break", onTakeBreak);
-    return () => window.removeEventListener("pyro-lead-take-break", onTakeBreak);
-  }, []);
 
   const handleRefresh = async () => {
     if (!currentLead?.id) {
@@ -1287,14 +1212,12 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const initialLeadId = initialLead?.id != null ? Number(initialLead.id) : null;
   useEffect(() => {
     const initializeComponent = async () => {
-      // If initialLead is provided, skip auto-initialization and stats fetching
+      // If initialLead is provided, skip auto-initialization
       if (initialLead) {
-        // Don't fetch stats when opened from modal - not needed
         fetchDailyTarget();
         return;
       }
       
-      fetchLeadStats();
       fetchDailyTarget();
       
       // Initialize fetched leads count from localStorage
@@ -1361,7 +1284,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
           leadStartTime: new Date(),
         }));
         isInitialized.current = true;
-        await fetchLeadStats();
         setLoading(false);
         return;
       }
