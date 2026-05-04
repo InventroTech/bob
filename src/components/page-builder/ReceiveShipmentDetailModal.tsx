@@ -11,6 +11,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 
 interface ReceiveShipmentDetailModalProps {
   open: boolean;
@@ -102,10 +105,14 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Receive shipment — Request #{record?.id ?? '—'}</DialogTitle>
-          <DialogDescription>
-            Add received items to inventory or roll this request back to PM if there is a problem.
-          </DialogDescription>
+          <DialogTitle className="pr-2 text-left leading-snug">
+            {record?.id != null ? (
+              <RecordModalTitleDisplay record={record} />
+            ) : (
+              <span className="text-lg font-semibold tracking-tight sm:text-xl">Receive shipment</span>
+            )}
+          </DialogTitle>
+          <DialogDescription className="sr-only">Receive shipment actions</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <dl className="grid gap-2 text-sm">
@@ -122,6 +129,15 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
                     >
                       Link
                     </a>
+                  ) : key === 'status' ? (
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide',
+                        getInventoryStatusToneClass(data[key]),
+                      )}
+                    >
+                      {getInventoryStatusLabel(data[key])}
+                    </span>
                   ) : (
                     (data[key] != null && data[key] !== '' ? String(data[key]) : '—')
                   )}
