@@ -274,6 +274,13 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     
     // Always include poster field from records JSONB data
     transformedLead.poster = lead.data?.poster || lead.poster || null;
+
+    // Profile avatars in the name column (ShortProfileCard) read row.display_pic_url; API often stores it only on JSONB data
+    transformedLead.display_pic_url =
+      lead.display_pic_url ||
+      lead.data?.display_pic_url ||
+      transformedLead.display_pic_url ||
+      null;
     
     return transformedLead;
   }
@@ -289,6 +296,7 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
     whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
     user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
     poster: lead.data?.poster || lead.poster || null, // Add poster field from records JSONB data
+    display_pic_url: lead.display_pic_url || lead.data?.display_pic_url || null,
   };
 };
 
@@ -383,6 +391,8 @@ interface LeadTableProps {
     showFinalPriceSection?: boolean;
     /** Default modal: show requestor-side "Delete request" action. Default false. */
     showDeleteRequestButton?: boolean;
+    /** Show "See request history" button in record modals. */
+    showHistoryButton?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;
@@ -2581,6 +2591,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
             try { await fetchFilteredData(); } catch (e) { console.error('Error refreshing table after form modal update', e); }
           }}
           showDeleteRequestButton={config?.showDeleteRequestButton}
+          showHistoryButton={config?.showHistoryButton}
           onDeleted={async (recordId: number) => {
             setData((prev) => prev.filter((r: any) => r.id !== recordId));
             setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
@@ -2615,6 +2626,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         modalFlags={config?.modalFlags}
         showFinalPriceSection={config?.showFinalPriceSection}
         showDeleteRequestButton={config?.showDeleteRequestButton}
+        showHistoryButton={config?.showHistoryButton}
         onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
           ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
               const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
