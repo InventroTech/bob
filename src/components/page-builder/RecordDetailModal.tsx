@@ -42,6 +42,7 @@ import {
 } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
+import { RequestHistoryPanel, type RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 
 export type RecordDetailEntityType =
   | 'inventory_request'
@@ -156,6 +157,8 @@ interface RecordDetailModalProps {
   showFinalPriceSection?: boolean;
   /** Whether requestor can see the "Delete request" button (any status). Default: false. */
   showDeleteRequestButton?: boolean;
+  /** Show "See request history" button and history modal. */
+  showHistoryButton?: boolean;
 }
 
 /** Data keys hidden in default record when Final price section is off (matches form modal behavior). */
@@ -416,6 +419,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   modalFlags,
   showFinalPriceSection,
   showDeleteRequestButton,
+  showHistoryButton,
 }) => {
   const { toast } = useToast();
   const [pending, setPending] = useState<Record<string, unknown>>({});
@@ -453,6 +457,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
   const canShowDeleteRequestButton = showDeleteRequestButton === true;
+  const canShowHistoryButton = showHistoryButton === true && record?.id != null;
 
   /** Rows to show: hide system fields for all users, and PM-only fields for requestors. */
   const visibleRows = displayRows.filter((r) => {
@@ -494,6 +499,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
   const [pendingWarningAction, setPendingWarningAction] = useState<StatusActionWithWarningConfig | null>(null);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<RequestHistoryEntry[]>([]);
 
   useEffect(() => {
     setPriceInputDraft({});
@@ -1180,23 +1189,47 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     [record?.id, record?.data, onUpdate, toast, onRecordUpdated, onOpenChange, modalFlags, flagValues, pending, myName, myRoleName, flagConditionMatches]
   );
 
+  const handleOpenHistory = useCallback(async () => {
+    if (!record?.id) return;
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const response = await apiClient.get(`/crm-records/records/${record.id}/history/`);
+      const list = Array.isArray(response?.data?.history) ? response.data.history : [];
+      setHistoryEntries(list);
+    } catch (e: any) {
+      setHistoryEntries([]);
+      setHistoryError(e?.message || 'Could not load request history.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [record?.id]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1rem)] max-w-6xl sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
         <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30 shrink-0">
-          <div className="flex items-center gap-3">
-            <DialogTitle className="text-xl font-semibold tracking-tight">
-              {entityLabel ||
-                (entityType && ENTITY_LABELS[entityType]) ||
-                (entityType && entityType.replace(/_/g, ' ')) ||
-                'Record'}{' '}
-              <span className="text-muted-foreground font-medium">#{record?.id ?? '—'}</span>
-            </DialogTitle>
-            {entityType && (
-              <Badge variant="secondary" className="shrink-0 font-normal">
-                {ENTITY_LABELS[entityType] ?? entityType}
-              </Badge>
-            )}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <DialogTitle className="text-xl font-semibold tracking-tight">
+                {entityLabel ||
+                  (entityType && ENTITY_LABELS[entityType]) ||
+                  (entityType && entityType.replace(/_/g, ' ')) ||
+                  'Record'}{' '}
+                <span className="text-muted-foreground font-medium">#{record?.id ?? '—'}</span>
+              </DialogTitle>
+              {entityType && (
+                <Badge variant="secondary" className="shrink-0 font-normal">
+                  {ENTITY_LABELS[entityType] ?? entityType}
+                </Badge>
+              )}
+            </div>
+            {canShowHistoryButton ? (
+              <Button type="button" variant="outline" size="sm" onClick={handleOpenHistory}>
+                See request history
+              </Button>
+            ) : null}
           </div>
           <DialogDescription className="text-muted-foreground mt-1">
             {canEdit ? 'View and edit fields below. Changes are saved per field.' : 'View-only. You do not have permission to edit.'}
@@ -1551,6 +1584,18 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         {actionButtons && actionButtons.length > 0 && record?.id && canEdit && (
           <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-2 flex-wrap">
             <div className="flex flex-wrap gap-2">
+              {canShowHistoryButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="default"
+                  className="h-9 rounded-md"
+                  disabled={!!applyingStatusValue}
+                  onClick={handleOpenHistory}
+                >
+                  See request history
+                </Button>
+              ) : null}
               {(modalFlags ?? [])
                 .filter((f) => (f.key ?? '').trim() && (f.label ?? '').trim())
                 .filter((f) => flagConditionMatches(f))
@@ -1597,23 +1642,36 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             "px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row",
             canShowDeleteRequestButton ? "justify-between sm:justify-between" : "justify-end sm:justify-end",
           )}>
-            {canShowDeleteRequestButton ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="default"
-                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 order-2 sm:order-1"
-                disabled={deleting || proceeding}
-                onClick={handleDelete}
-              >
-                {deleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                ) : (
-                  <Trash2 className="h-4 w-4" aria-hidden />
-                )}
-                {deleting ? 'Deleting…' : 'Delete request'}
-              </Button>
-            ) : null}
+            <div className="flex items-center gap-2 order-2 sm:order-1">
+              {canShowHistoryButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="default"
+                  disabled={deleting || proceeding}
+                  onClick={handleOpenHistory}
+                >
+                  See request history
+                </Button>
+              ) : null}
+              {canShowDeleteRequestButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="default"
+                  className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70"
+                  disabled={deleting || proceeding}
+                  onClick={handleDelete}
+                >
+                  {deleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  )}
+                  {deleting ? 'Deleting…' : 'Delete request'}
+                </Button>
+              ) : null}
+            </div>
             <Button
               type="button"
               size="default"
@@ -1638,6 +1696,18 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
             <DialogFooter className="px-6 py-4 border-t bg-muted/20 flex-col items-stretch sm:flex-row sm:items-center sm:justify-between gap-3">
               <p className="text-sm font-medium text-foreground shrink-0">Add request to a cart</p>
               <div className="flex flex-wrap items-center gap-2">
+                {canShowHistoryButton ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="default"
+                    className="h-9 rounded-md"
+                    disabled={addingToCart || deleting || proceeding}
+                    onClick={handleOpenHistory}
+                  >
+                    See request history
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="default"
@@ -1773,6 +1843,18 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           setPendingWarningAction(null);
         }}
       />
+
+      <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Request history</DialogTitle>
+            <DialogDescription>Each entry shows who changed what, from the previous value to the new value.</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            <RequestHistoryPanel loading={historyLoading} error={historyError} entries={historyEntries} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

@@ -427,6 +427,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showFinalPriceSection?: boolean;
     /** Requestor-side Delete request (any status when on). Default false. */
     showDeleteRequestButton?: boolean;
+    /** Show "See request history" button in record modals. */
+    showHistoryButton?: boolean;
     modalFlags?: import('@/component-config').ModalFlagConfig[];
   };
 
@@ -497,6 +499,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
     showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
     showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
+    showHistoryButton: (initialConfig as any).showHistoryButton ?? false,
     modalFlags: (initialConfig as any).modalFlags ?? [],
   });
 
