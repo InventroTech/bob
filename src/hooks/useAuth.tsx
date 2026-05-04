@@ -34,7 +34,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [location.pathname]);
 
   const getLoginUrl = useCallback((): string => {
-    const match = locationRef.current.match(/^\/app\/([^\/]+)/);
+    const match = locationRef.current.match(/^\/app\/([^/]+)/);
     const tenantSlug = match ? match[1] : null;
     if (tenantSlug && tenantSlug !== 'login' && tenantSlug !== 'auth') {
       return `/app/${tenantSlug}/login`;
@@ -137,7 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [navigate, getLoginUrl]);
 
   // Proactive token refresh: keep JWT fresh every 10 minutes while user is active

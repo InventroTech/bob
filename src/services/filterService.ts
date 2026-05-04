@@ -458,13 +458,15 @@ export class FilterService {
       case 'search':
         return `${filter.label}: "${value}"`;
 
-      case 'date_gte':
+      case 'date_gte': {
         const startDate = value instanceof Date ? value : new Date(value);
         return `${filter.label} from ${startDate.toLocaleDateString()}`;
+      }
 
-      case 'date_lte':
+      case 'date_lte': {
         const endDate = value instanceof Date ? value : new Date(value);
         return `${filter.label} to ${endDate.toLocaleDateString()}`;
+      }
 
       case 'date_range':
         if (value && typeof value === 'object') {
