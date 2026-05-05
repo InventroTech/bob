@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 
 interface ReceiveShipmentDetailModalProps {
@@ -121,14 +122,7 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
                 <dt className="text-gray-600">{label}</dt>
                 <dd className="text-gray-900 truncate">
                   {key === 'tracking_link' && data[key] ? (
-                    <a
-                      href={String(data[key])}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline"
-                    >
-                      Link
-                    </a>
+                    <OpenLinkButton href={String(data[key])} />
                   ) : key === 'status' ? (
                     <span
                       className={cn(
