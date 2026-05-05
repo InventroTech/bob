@@ -19,7 +19,6 @@ import {
   XCircle,
   AlertCircle,
   PieChart,
-  Coffee,
   Waypoints,
   MoreVertical,
   X,
@@ -550,45 +549,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     }
   };
 
-  // Taking a break
-  const handleTakeBreak = async () => {
-    try {
-      const apiUrl = `${import.meta.env.VITE_API_URI}/take-a-break`;
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          leadId: currentLead?.id
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Navigate to pending card
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      resetLeadState();
-      isInitialized.current = false;
-      clearPersistedState();
-      await fetchLeadStats();
-      toast.info("Taking a break. Click 'Get Leads' when ready to continue.");
-    } catch (error) {
-      console.error("Error taking break:", error);
-      toast.error("Error taking break. Please try again.");
-    }
-  };
-
   // Fetching the lead stats (initially)
   useEffect(() => {
     fetchLeadStats();
@@ -687,8 +647,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // After successful API call, fetch next lead
-      await fetchNextLead(currentLead?.id);
+      // After successful API call, return to pending state.
+      // Next lead should only load when user clicks "Get Leads" manually.
+      setShowPendingCard(true);
+      setCurrentLead(null);
+      resetLeadState();
+      isInitialized.current = false;
+      clearPersistedState();
+      await fetchLeadStats();
 
     } catch (error: any) {
       console.error("Error in handleActionButton:", error);
@@ -887,17 +853,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   // Showing the lead card
   return (
     <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-      <div className="mt-4 flex w-[70%] justify-end">
-        <CustomButton
-          onClick={handleTakeBreak}
-          variant="outline"
-          size="sm"
-          icon={<Coffee className="h-3 w-3" />}
-          disabled={updating}
-        >
-          Take a Break
-        </CustomButton>
-      </div>
       <div className="relative w-[70%] h-full">
         <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
           {fetchingNext && (
