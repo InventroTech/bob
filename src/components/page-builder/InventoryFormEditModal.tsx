@@ -22,6 +22,15 @@ import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
+import {
+  urgencyToneButtonClassName,
+  urgencyReadonlyFieldCardClassName,
+  urgencyReadonlyValueTextClassName,
+  isUrgencyToneValue,
+} from '@/lib/urgencyButtonStyles';
+import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
+import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import { RequestHistoryPanel, type RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 
@@ -105,6 +114,13 @@ function looksLikeUrl(value: string): boolean {
   return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('mailto:');
 }
 
+/** Read-only modal fields that should show “Open link” instead of the raw URL. */
+function isLinkLikeFieldKey(key: string): boolean {
+  if (key === 'product_link' || key === 'tracking_link' || key === 'tracking_link_url') return true;
+  if (key === 'link' || key === 'url') return true;
+  return key.endsWith('_link') || key.endsWith('_url');
+}
+
 function formatDisplayValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
@@ -169,7 +185,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   onRecordUpdated,
   cartOptions,
   formModalTitle,
-  formModalDescription,
+  formModalDescription: _formModalDescription,
   showSaveButton,
   paymentButtonConfig,
   modalFlags,
@@ -845,7 +861,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
               const isEnabled = field.enabled && canUpdate;
-              const isClickableLink = field.link === true && !isEnabled && looksLikeUrl(displayStr);
+              const isClickableLink =
+                !isEnabled && looksLikeUrl(displayStr) && (field.link === true || isLinkLikeFieldKey(field.key));
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isCartId = field.key === 'cart_id' && isInventoryRequest && cartOptions && cartOptions.length > 0;
               const isVendor = field.key === 'vendor';
@@ -860,20 +877,14 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   key={field.key}
                   className={cn('space-y-1.5 min-w-0', spanFullWidth && 'md:col-span-2 xl:col-span-3')}
                 >
-                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {field.label || field.key.replace(/_/g, ' ')}
-                  </Label>
-                  {isClickableLink ? (
-                    <a
-                      href={displayStr}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm underline underline-offset-4 break-all"
-                    >
-                      {displayStr}
-                      <span className="text-xs text-muted-foreground">(open)</span>
-                    </a>
-                  ) : field.key === 'comments' ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                    <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      {field.label || field.key.replace(/_/g, ' ')}
+                    </Label>
+                    {isClickableLink ? <OpenLinkButton href={displayStr} /> : null}
+                  </div>
+                  {!isClickableLink ? (
+                    field.key === 'comments' ? (
                     (() => {
                       const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as any).comments : undefined) as unknown;
                       const history: Array<{ name: string; role: string; comment: string }> = Array.isArray(existingRaw)
@@ -973,13 +984,22 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       onValueChange={(v) => setField(field.key, v)}
                       disabled={!isEnabled}
                     >
-                      <SelectTrigger className="h-9 text-sm rounded-md">
+                      <SelectTrigger
+                        className={cn(
+                          'h-9 text-sm rounded-md border font-medium',
+                          getInventoryStatusToneClass(displayStr || statusOptions[0]),
+                        )}
+                      >
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
                         {statusOptions.map((opt) => (
-                          <SelectItem key={opt} value={opt}>
-                            {opt.replace(/_/g, ' ')}
+                          <SelectItem
+                            key={opt}
+                            value={opt}
+                            className={cn('font-medium', getInventoryStatusToneClass(opt))}
+                          >
+                            {getInventoryStatusLabel(opt)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1017,21 +1037,46 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       </SelectContent>
                     </Select>
                   ) : isUrgency ? (
-                    <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
-                      {URGENCY_BUTTON_OPTIONS.map((opt) => (
-                        <Button
-                          key={opt.value}
-                          type="button"
-                          variant={String(displayStr || '').toUpperCase() === opt.value ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setField(field.key, opt.value)}
-                          disabled={!isEnabled}
-                          className="rounded-full h-8"
+                    !isEnabled ? (
+                      <div
+                        className={cn(
+                          'rounded-lg border px-3 py-2.5 shadow-sm',
+                          isUrgencyToneValue(displayStr)
+                            ? urgencyReadonlyFieldCardClassName(String(displayStr))
+                            : 'border-border bg-card',
+                        )}
+                        role="status"
+                        aria-label="Urgency"
+                      >
+                        <span
+                          className={cn(
+                            'text-base font-bold tracking-wide uppercase',
+                            urgencyReadonlyValueTextClassName(String(displayStr)),
+                          )}
                         >
-                          {opt.label}
-                        </Button>
-                      ))}
-                    </div>
+                          {displayStr && displayStr !== 'N/A' ? String(displayStr).trim() : '—'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
+                        {URGENCY_BUTTON_OPTIONS.map((opt) => {
+                          const selected = String(displayStr || '').toUpperCase() === opt.value;
+                          return (
+                            <Button
+                              key={opt.value}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setField(field.key, opt.value)}
+                              disabled={!isEnabled}
+                              className={urgencyToneButtonClassName(opt.value, selected, 'rounded-full h-8')}
+                            >
+                              {opt.label}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    )
                   ) : isTextarea ? (
                     <Textarea
                       className="min-h-[80px] text-sm rounded-md"
@@ -1105,7 +1150,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       disabled={!isEnabled}
                       placeholder={field.label || field.key}
                     />
-                  )}
+                  ))
+                  : null}
                 </div>
               );
             })}
@@ -1273,13 +1319,26 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     </label>
                   );
                 })}
-                {effectiveActionButtons!.map((btn) => (
+                {effectiveActionButtons!.map((btn) => {
+                  const targetAttr = btn.targetAttribute ?? 'status';
+                  const currentVal = String(
+                    (record?.data && typeof record.data === 'object'
+                      ? (record.data as Record<string, unknown>)[targetAttr]
+                      : '') ?? '',
+                  ).toUpperCase();
+                  const applyingThis = applyingStatusValue === btn.statusValue;
+                  const urgencyHighlighted =
+                    currentVal === String(btn.statusValue ?? '').toUpperCase() || applyingThis;
+                  return (
                   <Button
                     key={btn.statusValue}
                     type="button"
                     variant="outline"
                     size="default"
-                    className="gap-2 h-9 rounded-md"
+                    className={cn(
+                      'gap-2 h-9 rounded-md',
+                      urgencyToneButtonClassName(btn.statusValue, urgencyHighlighted),
+                    )}
                     disabled={!!applyingStatusValue}
                     onClick={() => {
                       if ((btn as any).openWarningModal) {
@@ -1294,7 +1353,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     ) : null}
                     {applyingStatusValue === btn.statusValue ? 'Updating…' : btn.label}
                   </Button>
-                ))}
+                );
+                })}
               </>
             )}
             {canUpdate && hasEditableField && effectiveShowSaveButton && (
