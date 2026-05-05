@@ -59,6 +59,13 @@ export type RecordDetailEntityType =
   | 'lead'
   | string;
 
+const ENTITY_LABELS: Record<string, string> = {
+  inventory_request: 'Inventory request',
+  inventory_cart: 'Inventory cart',
+  inventory_item: 'Inventory item',
+  lead: 'Lead',
+};
+
 /** Top-level keys that are part of the API record (tenant_id excluded from view). */
 const RECORD_TOP_LEVEL_KEYS = ['id', 'created_at', 'updated_at'];
 
@@ -1336,7 +1343,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <DialogTitle className="text-xl font-semibold tracking-tight">
-                {entityLabel ||
+                {_entityLabel ||
                   (entityType && ENTITY_LABELS[entityType]) ||
                   (entityType && entityType.replace(/_/g, ' ')) ||
                   'Record'}{' '}

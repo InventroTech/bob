@@ -845,8 +845,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               </Button>
             ) : null}
           </div>
-          <DialogDescription>
-            {formModalDescription ?? (hasEditableField
+          <DialogDescription className="sr-only">
+            {_formModalDescription ?? (hasEditableField
               ? 'Edit fields below. Use an action button to save and set status, or Save to save changes only.'
               : 'View and update using action buttons.')}
           </DialogDescription>
