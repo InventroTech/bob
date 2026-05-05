@@ -832,7 +832,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       <DialogContent className="max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full">
         <DialogHeader>
           <div className="flex items-center justify-between gap-3">
-            <DialogTitle>{formModalTitle ?? 'Edit record'}</DialogTitle>
+            <DialogTitle className="pr-2 text-left leading-snug">
+              {record?.id != null ? (
+                <RecordModalTitleDisplay record={record} />
+              ) : (
+                <span className="text-lg font-semibold tracking-tight sm:text-xl">
+                  {formModalTitle ?? 'Edit record'}
+                </span>
+              )}
+            </DialogTitle>
             {canShowHistoryButton ? (
               <Button
                 type="button"
