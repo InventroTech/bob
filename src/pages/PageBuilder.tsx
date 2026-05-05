@@ -1389,7 +1389,7 @@ useEffect(() => {
         // Add the new component to the canvas state
         setCanvasComponents((prev) => [...prev, newComponent]);
       } else {
-        
+        // Unknown component type: ignore drop
       }
     } 
     // ADD THIS SECTION to handle drops onto existing components
@@ -1426,7 +1426,7 @@ useEffect(() => {
       }
     }
     else {
-      
+      // Drop outside valid targets: no state change
     }
   };
 
