@@ -99,36 +99,6 @@ export const crmLeadsApi = {
   },
 
   /**
-   * Fetch lead statistics
-   */
-  async getLeadStats(statusEndpoint?: string): Promise<any> {
-    try {
-      // Map old endpoint to new one for backward compatibility
-      let endpoint = statusEndpoint || '/crm-records/leads/stats/';
-      if (endpoint === '/get-lead-status' || endpoint === 'get-lead-status') {
-        endpoint = '/crm-records/leads/stats/';
-      }
-      
-      const response = await apiClient.get(endpoint);
-      
-      return response.data;
-    } catch (error) {
-      console.error('[crmLeadsApi] Error fetching lead statistics:', error);
-      // Return default stats instead of throwing to prevent UI errors
-      return {
-        total_leads: 0,
-        in_queue: 0,
-        assigned: 0,
-        call_later: 0,
-        scheduled: 0,
-        won: 0,
-        lost: 0,
-        closed: 0
-      };
-    }
-  },
-
-  /**
    * Send a lead event
    */
   async sendLeadEvent(

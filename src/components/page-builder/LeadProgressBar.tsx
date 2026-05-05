@@ -324,14 +324,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
             </div>
           </div>
 
-          <button
-            type="button"
-            aria-label="Take a break"
-            onClick={() => window.dispatchEvent(new CustomEvent('pyro-lead-take-break'))}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
-          >
-            <Coffee className="h-5 w-5" />
-          </button>
+
         </div>
       </div>
     </Card>
