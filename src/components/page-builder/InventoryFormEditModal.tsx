@@ -23,6 +23,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
+import { RequestHistoryPanel, type RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 
 const RECORDS_URL = '/crm-records/records/';
 const ADD_VENDOR_VALUE = '__add_vendor__';
@@ -92,6 +93,8 @@ interface InventoryFormEditModalProps {
   showFinalPriceSection?: boolean;
   /** Requestor-only: show "Delete request" for inventory_request (any status). Default false. */
   showDeleteRequestButton?: boolean;
+  /** Show "See request history" button and history modal. */
+  showHistoryButton?: boolean;
   /** Called after a successful delete (e.g. refresh table). */
   onDeleted?: (recordId: number) => void;
 }
@@ -172,6 +175,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   modalFlags,
   showFinalPriceSection,
   showDeleteRequestButton,
+  showHistoryButton,
   onDeleted,
 }) => {
   const { toast } = useToast();
@@ -194,6 +198,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [priceFieldDraft, setPriceFieldDraft] = useState<Record<string, string>>({});
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
   const [myRoleName, setMyRoleName] = useState<string>('');
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<RequestHistoryEntry[]>([]);
 
   const myName =
     user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
@@ -211,6 +219,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     isInventoryRequest &&
     isRequester &&
     !paymentButtonConfig;
+  const canShowHistoryButton = showHistoryButton === true && record?.id != null;
   const canUpdate = Boolean(onUpdate && record?.id != null);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
@@ -744,6 +753,23 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     }
   }, [canShowDeleteRequestButton, record?.id, onDeleted, onOpenChange, toast]);
 
+  const handleOpenHistory = useCallback(async () => {
+    if (!record?.id) return;
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const response = await apiClient.get(`/crm-records/records/${record.id}/history/`);
+      const list = Array.isArray(response?.data?.history) ? (response.data.history as RequestHistoryEntry[]) : [];
+      setHistoryEntries(list);
+    } catch (err: any) {
+      setHistoryEntries([]);
+      setHistoryError(err?.message || 'Could not load request history.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [record?.id]);
+
   if (!record) return null;
 
   /** For payment modal: evaluate condition on record.data[attribute] vs value; return true if conditional button should show. */
@@ -789,7 +815,20 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full">
         <DialogHeader>
-          <DialogTitle>{formModalTitle ?? 'Edit record'}</DialogTitle>
+          <div className="flex items-center justify-between gap-3">
+            <DialogTitle>{formModalTitle ?? 'Edit record'}</DialogTitle>
+            {canShowHistoryButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={applyingStatusValue != null || saving}
+                onClick={handleOpenHistory}
+              >
+                See request history
+              </Button>
+            ) : null}
+          </div>
           <DialogDescription>
             {formModalDescription ?? (hasEditableField
               ? 'Edit fields below. Use an action button to save and set status, or Save to save changes only.'
@@ -1185,6 +1224,18 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         </div>
         <DialogFooter className="border-t pt-4 gap-3 flex-wrap flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2 items-center">
+            {canShowHistoryButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="default"
+                className="h-9 rounded-md"
+                disabled={applyingStatusValue != null || saving}
+                onClick={handleOpenHistory}
+              >
+                See request history
+              </Button>
+            ) : null}
             {canShowDeleteRequestButton ? (
               <Button
                 type="button"
@@ -1322,6 +1373,18 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           setPendingWarningAction(null);
         }}
       />
+
+      <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Request history</DialogTitle>
+            <DialogDescription>Each entry shows who changed what, from the previous value to the new value.</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            <RequestHistoryPanel loading={historyLoading} error={historyError} entries={historyEntries} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };
