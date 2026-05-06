@@ -52,8 +52,7 @@ export interface HierarchyAssignment {
 
 export interface GetUsersResponse {
   results?: MembershipUser[];
-  data?: MembershipUser[];
-  // Direct array response is also supported
+  count?: number;
 }
 
 export interface User {
@@ -65,6 +64,53 @@ export interface User {
   role: {
     name: string;
   } | null;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isRoleArray(value: unknown): value is Role[] {
+  return Array.isArray(value);
+}
+
+function isMembershipUserArray(value: unknown): value is MembershipUser[] {
+  return Array.isArray(value);
+}
+
+function extractRoles(payload: GetRolesResponse | Role[]): Role[] {
+  if (Array.isArray(payload)) return payload;
+  if (!isObjectRecord(payload)) return [];
+  if (isRoleArray(payload.results)) return payload.results;
+  if (isRoleArray(payload.data)) return payload.data;
+  return [];
+}
+
+function toRoleInfo(user: MembershipUser): { name: string } | null {
+  if (user.role?.name) return { name: user.role.name };
+  if (user.role?.key) return { name: user.role.key };
+  if (user.role_name) return { name: user.role_name };
+  return null;
+}
+
+function getMembershipId(user: MembershipUser): number | null {
+  if (typeof user.id === 'number') return user.id;
+  if (typeof user.id === 'string') {
+    const parsed = Number(user.id);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function extractMembershipUsers(payload: unknown): MembershipUser[] {
+  // Canonical backend contract for GET /membership/users is:
+  // { count: number, results: MembershipUser[] }.
+  // Keep only a minimal array fallback for backward compatibility.
+  if (isMembershipUserArray(payload)) return payload;
+  if (!isObjectRecord(payload)) return [];
+  if (isMembershipUserArray(payload.results)) return payload.results;
+
+  return [];
 }
 
 export interface MyMembershipResponse {
@@ -95,27 +141,8 @@ export const membershipService = {
   async getRoles(): Promise<Role[]> {
     try {
       const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/');
-      
-      const responseData = response.data;
-      
-      // Handle different response formats
-      if (Array.isArray(responseData)) {
-        return responseData;
-      }
-      
-      if (responseData && typeof responseData === 'object') {
-        // Handle { results: [...] } format
-        if ('results' in responseData && Array.isArray(responseData.results)) {
-          return responseData.results;
-        }
-        // Handle { data: [...] } format
-        if ('data' in responseData && Array.isArray(responseData.data)) {
-          return responseData.data;
-        }
-      }
-      
-      return [];
-    } catch (error: any) {
+      return extractRoles(response.data);
+    } catch (error: unknown) {
       console.error('Error fetching roles:', error);
       throw error;
     }
@@ -138,20 +165,11 @@ export const membershipService = {
         config.headers = { 'X-Tenant-Slug': tenantSlug };
       }
       const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', config);
-      const responseData = response.data;
-      let roles: Role[] = [];
-      if (Array.isArray(responseData)) {
-        roles = responseData;
-      } else if (responseData && typeof responseData === 'object') {
-        if ('results' in responseData && Array.isArray(responseData.results)) {
-          roles = responseData.results;
-        } else if ('data' in responseData && Array.isArray(responseData.data)) {
-          roles = responseData.data;
-        }
-      }
+      const roles = extractRoles(response.data);
       return roles.length > 0 ? roles[0] : null;
-    } catch (error: any) {
-      console.warn('Failed to fetch public role via membership API:', error?.message || error);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : error;
+      console.warn('Failed to fetch public role via membership API:', message);
       return null;
     }
   },
@@ -165,23 +183,7 @@ export const membershipService = {
   async getUsers(): Promise<User[]> {
     try {
       const response = await apiClient.get<GetUsersResponse | MembershipUser[]>('/membership/users/');
-      
-      const responseData = response.data;
-      
-      // Handle different response formats
-      let usersData: MembershipUser[] = [];
-      if (Array.isArray(responseData)) {
-        usersData = responseData;
-      } else if (responseData && typeof responseData === 'object') {
-        // Handle { results: [...] } format
-        if ('results' in responseData && Array.isArray(responseData.results)) {
-          usersData = responseData.results;
-        }
-        // Handle { data: [...] } format
-        if ('data' in responseData && Array.isArray(responseData.data)) {
-          usersData = responseData.data;
-        }
-      }
+      const usersData = extractMembershipUsers(response.data);
       
       // Transform the data to match the User interface.
       // For routing rules we key by TenantMembership id, so prefer id (membership pk) when present.
@@ -198,13 +200,7 @@ export const membershipService = {
           email: user.email || 'No Email',
           role_id: user.role_id || user.role?.id || '',
           created_at: user.created_at || user.date_joined || new Date().toISOString(),
-          role: user.role?.name
-            ? { name: user.role.name }
-            : user.role?.key
-              ? { name: user.role.key }
-              : user.role_name
-                ? { name: user.role_name }
-                : null,
+          role: toRoleInfo(user),
         };
       });
       
@@ -212,7 +208,7 @@ export const membershipService = {
       return transformedUsers.sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching users:', error);
       throw error;
     }
@@ -255,7 +251,7 @@ export const membershipService = {
       // This allows the UI to continue even if response format is unexpected
       console.warn('Unexpected response format from create role endpoint, using fallback');
       return { id: '', name };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating role:', error);
       throw error;
     }
@@ -266,30 +262,21 @@ export const membershipService = {
    * Uses the same GET /membership/users endpoint (backend includes id and user_parent_id).
    */
   async getUsersForHierarchy(): Promise<HierarchyUser[]> {
-    const response = await apiClient.get<GetUsersResponse>('/membership/users/');
-    const responseData = response.data;
-    let usersData: MembershipUser[] = [];
-    if (responseData && typeof responseData === 'object') {
-      if ('results' in responseData && Array.isArray(responseData.results)) {
-        usersData = responseData.results;
-      } else if ('data' in responseData && Array.isArray(responseData.data)) {
-        usersData = responseData.data;
-      }
-    }
+    const response = await apiClient.get<GetUsersResponse | MembershipUser[]>('/membership/users/');
+    const usersData = extractMembershipUsers(response.data);
+
     return usersData
-      .filter((u) => u.id != null && typeof u.id === 'number')
+      .map((u) => ({ user: u, membershipId: getMembershipId(u) }))
+      .filter(
+        (item): item is { user: MembershipUser; membershipId: number } =>
+          item.membershipId != null
+      )
       .map((u) => ({
-        membershipId: u.id as number,
-        user_parent_id: u.user_parent_id ?? null,
-        name: u.name || u.full_name || 'Unnamed User',
-        email: u.email || 'No Email',
-        role: u.role?.name
-          ? { name: u.role.name }
-          : u.role?.key
-            ? { name: u.role.key }
-            : u.role_name
-              ? { name: u.role_name }
-              : null,
+        membershipId: u.membershipId,
+        user_parent_id: u.user.user_parent_id ?? null,
+        name: u.user.name || u.user.full_name || 'Unnamed User',
+        email: u.user.email || 'No Email',
+        role: toRoleInfo(u.user),
       }));
   },
 
@@ -360,12 +347,16 @@ export const membershipService = {
       });
 
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = error as {
+        message?: string;
+        response?: { status?: number; statusText?: string; data?: unknown };
+      };
       console.error('[membershipService] getMyMembership: ❌ Error fetching membership', {
-        error: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
+        error: apiError.message,
+        status: apiError.response?.status,
+        statusText: apiError.response?.statusText,
+        data: apiError.response?.data,
       });
       return null;
     }
