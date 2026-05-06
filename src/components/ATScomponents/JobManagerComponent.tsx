@@ -407,7 +407,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
@@ -524,7 +524,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         url = baseUrl ? `${baseUrl}${apiEndpoint}` : apiEndpoint;
       }
 
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
@@ -825,7 +825,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
         updateUrl = url.endsWith('/') ? `${url}${job.id}` : `${url}/${job.id}`;
       }
 
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
 
@@ -923,7 +923,7 @@ export const JobManagerComponent: React.FC<JobManagerComponentProps> = ({
           ? `${url}${jobId}/` 
           : `${url}/${jobId}/`;
 
-        let headers: Record<string, string> = {
+        const headers: Record<string, string> = {
           'Content-Type': 'application/json'
         };
 

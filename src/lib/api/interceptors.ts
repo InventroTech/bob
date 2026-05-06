@@ -70,16 +70,16 @@ export const setupResponseInterceptor = (instance: any) => {
 
       // Map HTTP status codes to custom error classes
       switch (status) {
-        case 401:
+        case 401: {
           // Attempt to refresh token and retry request once
           const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-          
+
           if (!originalRequest._retry) {
             originalRequest._retry = true;
-            
+
             try {
               console.log('[Interceptor] 401 error - attempting to refresh session and retry request');
-              
+
               // Force a session refresh
               const refreshedToken = await refreshAccessToken();
 
@@ -102,11 +102,12 @@ export const setupResponseInterceptor = (instance: any) => {
               return Promise.reject(new AuthenticationError(errorMessage, status, data));
             }
           }
-          
+
           // Already retried once, fail with authentication error
           console.log('[Interceptor] Request already retried - authentication failed');
           return Promise.reject(new AuthenticationError(errorMessage, status, data));
-          
+        }
+
         case 403:
           return Promise.reject(new AuthorizationError(errorMessage, status, data));
         case 404:

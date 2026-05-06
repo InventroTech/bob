@@ -35,7 +35,7 @@ const formatConditionsReadable = (conditions: Record<string, any> | null | undef
         {conditions.filters.map((filter: any, idx: number) => {
           const field = filter.field || 'unknown';
           const op = filter.op || '=';
-          let value = filter.value;
+          const value = filter.value;
           
           // Format the operator
           const opLabel = op === 'in' ? 'is one of' 

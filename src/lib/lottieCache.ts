@@ -72,7 +72,7 @@ export async function fetchLottieAnimation(urls: string[]): Promise<any | null> 
 
 export function requestIdle(fn: () => void, timeout = 1500): void {
   // Use requestIdleCallback if available; otherwise fallback to setTimeout
-  // @ts-ignore - TS may not know about requestIdleCallback in DOM lib settings
+  // @ts-expect-error DOM lib may omit requestIdleCallback on globalThis typing
   const ric: ((cb: any, opts?: any) => number) | undefined = (globalThis as any).requestIdleCallback;
   if (typeof ric === "function") {
     ric(fn, { timeout });

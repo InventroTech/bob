@@ -449,7 +449,7 @@ export const JobsPage: React.FC = () => {
 
   // Filter jobs based on search and filters
   useEffect(() => {
-    let filtered = jobs.filter(job => {
+    const filtered = jobs.filter(job => {
       const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            job.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            job.company?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
