@@ -1278,18 +1278,6 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         </div>
         <DialogFooter className="border-t pt-4 gap-3 flex-wrap flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2 items-center">
-            {canShowHistoryButton ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="default"
-                className="h-9 rounded-md"
-                disabled={applyingStatusValue != null || saving}
-                onClick={handleOpenHistory}
-              >
-                See request history
-              </Button>
-            ) : null}
             {canShowDeleteRequestButton ? (
               <Button
                 type="button"
