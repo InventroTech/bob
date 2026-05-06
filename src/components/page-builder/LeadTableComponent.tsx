@@ -773,10 +773,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         const displayKey = filter.optionsDisplayKey.trim();
         const valueKey = filter.optionsValueKey.trim();
         let options: FilterOption[] = (arr as any[])
-          .map((item: any) => ({
-            label: String(item?.[displayKey] ?? ''),
-            value: String(item?.[valueKey] ?? ''),
-          }))
+          .map((item: any) => {
+            const displayRaw = displayKey.includes('.')
+              ? getNestedValue(item, displayKey)
+              : (item?.[displayKey] ?? item?.data?.[displayKey]);
+            const valueRaw = valueKey.includes('.')
+              ? getNestedValue(item, valueKey)
+              : (item?.[valueKey] ?? item?.data?.[valueKey]);
+            return {
+              label: String(displayRaw ?? ''),
+              value: String(valueRaw ?? ''),
+            };
+          })
           .filter((o) => o.value !== undefined && o.value !== '');
         if (filter.optionsIncludeNull) {
           const nullLabel = (filter.optionsNullLabel ?? 'Unassigned').trim() || 'Unassigned';
@@ -2257,7 +2265,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
                   {/* Filter Summary */}
                   <div className="mt-3 text-sm text-gray-600">
-                    Showing {filteredData.length} of {pagination.totalCount} leads
+                    Showing {filteredData.length} of {pagination.totalCount} records
                     {filtersApplied && getActiveFiltersCount() > 0 && hasActiveFilters && (
                       <span className="ml-2">
                         (Filtered by: {filterService.getFilterDescription(filterState.values)})
