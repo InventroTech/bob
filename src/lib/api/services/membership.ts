@@ -113,6 +113,15 @@ function extractMembershipUsers(payload: unknown): MembershipUser[] {
   return [];
 }
 
+/** User shape for lead-assignment workflows (keeps both membership id and auth UUID). */
+export interface AssignmentUser {
+  id: string; // TenantMembership id
+  userUuid: string; // auth.users UUID used for assigned_to
+  name: string;
+  email: string;
+  roleName: string;
+}
+
 export interface MyMembershipResponse {
   role_key: string | null;
   role_name: string | null;
@@ -210,6 +219,42 @@ export const membershipService = {
       );
     } catch (error: unknown) {
       console.error('Error fetching users:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get active users for lead assignment.
+   * Returns both membership id and auth UUID (user_id/uid) required by lead assigned_to.
+   */
+  async getActiveUsersForAssignment(): Promise<AssignmentUser[]> {
+    try {
+      const response = await apiClient.get<GetUsersResponse | MembershipUser[]>('/membership/users/');
+      const responseData = response.data;
+
+      let usersData: MembershipUser[] = [];
+      if (Array.isArray(responseData)) {
+        usersData = responseData;
+      } else if (responseData && typeof responseData === 'object') {
+        if ('results' in responseData && Array.isArray(responseData.results)) {
+          usersData = responseData.results;
+        } else if ('data' in responseData && Array.isArray(responseData.data)) {
+          usersData = responseData.data;
+        }
+      }
+
+      return usersData
+        .filter((u) => u.is_active !== false)
+        .map((u, index) => ({
+          id: String(u.id ?? `idx-${index}`),
+          userUuid: String(u.user_id || u.uid || ''),
+          name: u.name || u.full_name || 'Unnamed User',
+          email: u.email || 'No email',
+          roleName: u.role?.name || u.role?.key || u.role_name || '',
+        }))
+        .filter((u) => u.userUuid.length > 0);
+    } catch (error: any) {
+      console.error('Error fetching active users for assignment:', error);
       throw error;
     }
   },

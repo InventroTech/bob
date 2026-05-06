@@ -37,6 +37,7 @@ export { pageService } from './services/pageService';
 export type {
   Role,
   User,
+  AssignmentUser,
   HierarchyUser,
   HierarchyAssignment,
 } from './services/membership';

@@ -13,6 +13,7 @@ import LeadCardCarousel from './LeadCardCarousel';
 import { RecordDetailModal } from './RecordDetailModal';
 import { InventoryFormEditModal } from './InventoryFormEditModal';
 import { ReceiveShipmentDetailModal } from './ReceiveShipmentDetailModal';
+import { AssignLeadModal } from './AssignLeadModal';
 import { Button } from '@/components/ui/button';
 import ShortProfileCard from '../ui/ShortProfileCard';
 
@@ -343,7 +344,7 @@ interface LeadTableProps {
     };
     entityType?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
     statusOptions?: string[];
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
@@ -449,6 +450,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [isRecordDetailModalOpen, setIsRecordDetailModalOpen] = useState(false);
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [cartOptions, setCartOptions] = useState<Array<{ id: number; label: string }>>([]);
   const [cartOptionsLoading, setCartOptionsLoading] = useState(false);
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
@@ -1815,6 +1817,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       setIsLeadModalOpen(true);
       return;
     }
+    if (effectiveDetailMode === 'lead_assignment_modal') {
+      setSelectedRecord(row);
+      setIsCustomModalOpen(true);
+      return;
+    }
     // inventory_request | inventory_cart (or any other record type)
     setSelectedRecord(row);
     setIsRecordDetailModalOpen(true);
@@ -2744,6 +2751,27 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         }}
         actionButtons={config?.statusButtons}
       />
+      )}
+
+      {effectiveDetailMode === 'lead_assignment_modal' && (
+        <AssignLeadModal
+          open={isCustomModalOpen}
+          onOpenChange={(open) => {
+            setIsCustomModalOpen(open);
+            if (!open) setSelectedRecord(null);
+          }}
+          leadRecord={selectedRecord}
+          updateBasePath={effectiveApiEndpoint.split('?')[0].replace(/\/$/, '')}
+          title={config?.formModalTitle || 'Assign Lead'}
+          description={config?.formModalDescription || 'Select a user and assign this lead.'}
+          onSaved={async () => {
+            try {
+              await fetchFilteredData();
+            } catch (e) {
+              console.error('Error refreshing table after lead assignment:', e);
+            }
+          }}
+        />
       )}
     </>
   );
