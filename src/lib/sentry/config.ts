@@ -13,6 +13,8 @@ export interface SentryConfig {
   replaySampleRate: number;
   errorSampleRate: number;
   tracesSampleRate: number;
+  replayMaskAllText: boolean;
+  replayBlockAllMedia: boolean;
   release?: string;
 }
 
@@ -43,6 +45,10 @@ export const getSentryConfig = (): SentryConfig | null => {
 
   const environment = import.meta.env.MODE || import.meta.env.NODE_ENV || 'development';
   const defaultRates = getDefaultSampleRates(environment);
+  const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
+    if (value === undefined) return defaultValue;
+    return value.toLowerCase() === 'true';
+  };
 
   // Parse sample rates with validation
   const parseSampleRate = (value: string | undefined, defaultValue: number): number => {
@@ -72,6 +78,8 @@ export const getSentryConfig = (): SentryConfig | null => {
       import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE,
       defaultRates.tracesSampleRate
     ),
+    replayMaskAllText: parseBoolean(import.meta.env.VITE_SENTRY_REPLAY_MASK_ALL_TEXT, false),
+    replayBlockAllMedia: parseBoolean(import.meta.env.VITE_SENTRY_REPLAY_BLOCK_ALL_MEDIA, false),
     release: import.meta.env.VITE_SENTRY_RELEASE,
   };
 };
