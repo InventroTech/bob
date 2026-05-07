@@ -440,7 +440,18 @@ function actionBadgeProps(action: string): { variant: 'default' | 'secondary' | 
 
 function formatHistoryTimestamp(value: string | null | undefined): string {
   if (!value) return 'Unknown time';
-  const date = new Date(value);
+
+  const raw = String(value).trim();
+  if (!raw) return 'Unknown time';
+
+  // Backend can return naive UTC timestamps (without timezone suffix).
+  // Treat those explicitly as UTC so IST conversion is always correct.
+  const normalized =
+    /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw)
+      ? raw
+      : `${raw.replace(' ', 'T')}Z`;
+
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return 'Unknown time';
 
   const datePart = new Intl.DateTimeFormat('en-GB', {
