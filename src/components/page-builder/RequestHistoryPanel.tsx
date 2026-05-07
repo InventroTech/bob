@@ -438,6 +438,29 @@ function actionBadgeProps(action: string): { variant: 'default' | 'secondary' | 
   return { variant: 'secondary' };
 }
 
+function formatHistoryTimestamp(value: string | null | undefined): string {
+  if (!value) return 'Unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+
+  const datePart = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+
+  const timePart = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).format(date);
+
+  return `${datePart}, ${timePart} IST`;
+}
+
 export type RequestHistoryPanelProps = {
   loading: boolean;
   error: string | null;
@@ -492,7 +515,7 @@ export function RequestHistoryPanel({ loading, error, entries }: RequestHistoryP
                 </span>
               </div>
               <time className="text-xs tabular-nums text-muted-foreground sm:text-right">
-                {entry.created_at ? new Date(entry.created_at).toLocaleString() : 'Unknown time'}
+                {formatHistoryTimestamp(entry.created_at)}
               </time>
             </div>
 
