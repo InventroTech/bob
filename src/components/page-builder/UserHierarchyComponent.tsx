@@ -9,6 +9,7 @@ import {
 } from '@/lib/api';
 import ReactFlow, {
   Background,
+  ConnectionLineType,
   Controls,
   MiniMap,
   useNodesState,
@@ -22,9 +23,15 @@ import ReactFlow, {
   Position,
   type Connection,
   type EdgeChange,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Button } from '@/components/ui/button';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export interface UserHierarchyComponentConfig {
   title?: string;
@@ -42,19 +49,102 @@ const LEVEL_GAP = 100;
 const SIBLING_GAP = 40;
 
 const HIERARCHY_NODE_TYPE = 'hierarchyNode';
+const NO_MANAGER_VALUE = '__no_manager__';
+
+type HierarchyNodeData = {
+  membershipId: number;
+  name: string;
+  email: string;
+  roleName: string;
+  isConnecting?: boolean;
+  isDropTarget?: boolean;
+  managerValue: string;
+  managerOptions: Array<{ value: string; label: string; searchText: string }>;
+  onManagerSelect: (membershipId: number, managerMembershipId: number | null) => void;
+};
 
 /** Custom node: name + role, with target handle (top) and source handle (bottom) for connect/disconnect */
-function HierarchyNode({ data }: NodeProps<{ name: string; email: string; roleName: string }>) {
+function HierarchyNode({
+  data,
+}: NodeProps<HierarchyNodeData>) {
+  const [managerPickerOpen, setManagerPickerOpen] = useState(false);
+  const selectedManagerLabel =
+    data.managerOptions.find((opt) => opt.value === data.managerValue)?.label ?? 'Set manager';
+
   return (
-    <div className="px-3 py-2 rounded-lg border-2 border-gray-300 bg-white shadow-sm min-w-[180px] min-h-[52px] flex flex-col justify-center">
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-gray-500" />
+    <div
+      className={`group relative px-3 py-2 rounded-lg border-2 bg-white shadow-sm min-w-[180px] min-h-[52px] flex flex-col justify-center transition-colors ${
+        data.isDropTarget
+          ? 'border-blue-500 ring-2 ring-blue-200'
+          : data.isConnecting
+            ? 'border-gray-400'
+            : 'border-gray-300 hover:border-gray-400'
+      }`}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!w-[132px] !h-3 !rounded-full !border !border-gray-300 !bg-transparent !opacity-0 !-top-[6px] group-hover:!opacity-100 !transition-opacity"
+      />
       <div className="text-sm font-medium text-gray-900 truncate max-w-[168px]" title={data.email}>
         {data.name}
+      </div>
+      <div className="text-[11px] text-gray-500 truncate max-w-[168px]" title={data.email}>
+        {data.email}
       </div>
       <div className="text-xs text-gray-600 truncate max-w-[168px]">
         {data.roleName || '—'}
       </div>
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-gray-500" />
+      <div className="mt-2">
+        <Popover open={managerPickerOpen} onOpenChange={setManagerPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={managerPickerOpen}
+              className="h-7 w-full justify-between px-2 text-[11px] font-normal"
+            >
+              <span className="truncate">{selectedManagerLabel}</span>
+              <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[220px] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search manager..." className="h-9 text-xs" />
+              <CommandList>
+                <CommandEmpty>No manager found.</CommandEmpty>
+                {data.managerOptions.map((opt) => (
+                  <CommandItem
+                    key={opt.value}
+                    value={opt.searchText}
+                    onSelect={() => {
+                      data.onManagerSelect(
+                        data.membershipId,
+                        opt.value === NO_MANAGER_VALUE ? null : Number(opt.value)
+                      );
+                      setManagerPickerOpen(false);
+                    }}
+                    className="text-xs"
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-3 w-3',
+                        data.managerValue === opt.value ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                    {opt.label}
+                  </CommandItem>
+                ))}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!w-[132px] !h-3 !rounded-full !border !border-gray-300 !bg-transparent !opacity-0 !-bottom-[6px] group-hover:!opacity-100 !transition-opacity"
+      />
     </div>
   );
 }
@@ -150,21 +240,34 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
   const { session } = useAuth();
   const [users, setUsers] = useState<HierarchyUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [managerOverrides, setManagerOverrides] = useState<Record<number, number | null>>({});
+  const [flowReady, setFlowReady] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectingSourceId, setConnectingSourceId] = useState<number | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null);
+  const reactFlow = useReactFlow();
 
   const title = config.title ?? 'User Hierarchy';
   const showDiagram = config.showDiagram !== false;
 
   const fetchUsers = useCallback(async () => {
-    if (!session?.access_token) return;
+    if (!session?.access_token) {
+      setUsers([]);
+      setLoadError('Session not ready. Please refresh this page.');
+      setLoading(false);
+      return;
+    }
     try {
+      setLoadError(null);
       const data = await membershipService.getUsersForHierarchy();
       setUsers(data);
       setManagerOverrides({});
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch users';
       toast.error(`Failed to load hierarchy: ${message}`);
+      setLoadError(message);
       setUsers([]);
     } finally {
       setLoading(false);
@@ -181,6 +284,36 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
     return u.user_parent_id;
   };
 
+  const getCurrentParentsMap = useCallback((): Record<number, number | null> => {
+    const currentParents: Record<number, number | null> = {};
+    users.forEach((u) => {
+      currentParents[u.membershipId] = getCurrentParent(u);
+    });
+    return currentParents;
+  }, [users, managerOverrides]);
+
+  const canAssignManager = useCallback(
+    (reportId: number, managerId: number | null): boolean => {
+      if (managerId == null) return true;
+      if (managerId === reportId) return false;
+      const currentParents = getCurrentParentsMap();
+      const descendantsOfReport = getDescendantIds(reportId, currentParents);
+      return !descendantsOfReport.has(managerId);
+    },
+    [getCurrentParentsMap]
+  );
+
+  const setReportManager = useCallback(
+    (reportId: number, managerId: number | null) => {
+      if (!canAssignManager(reportId, managerId)) {
+        toast.error('Cannot assign manager: this would create a cycle.');
+        return;
+      }
+      setManagerOverrides((prev) => ({ ...prev, [reportId]: managerId }));
+    },
+    [canAssignManager]
+  );
+
   const nodeTypes = useMemo(() => ({ [HIERARCHY_NODE_TYPE]: HierarchyNode }), []);
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
@@ -189,8 +322,60 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
       user_parent_id: getCurrentParent(u),
     }));
     const layout = buildTreeLayout(withOverrides);
-    return { ...layout, edges: layout.edges.map((e) => ({ ...e, deletable: true })) };
-  }, [users, managerOverrides]);
+    return {
+      nodes: layout.nodes.map((node) => {
+        const nodeData = node.data as { name: string; email: string; roleName: string };
+        const membershipId = Number(node.id);
+        const managerValue = String(
+          withOverrides.find((u) => u.membershipId === membershipId)?.user_parent_id ?? NO_MANAGER_VALUE
+        );
+        const managerOptions = [
+          { value: NO_MANAGER_VALUE, label: 'No manager', searchText: 'no manager none unassigned' },
+          ...withOverrides
+            .filter((candidate) => canAssignManager(membershipId, candidate.membershipId))
+            .map((candidate) => ({
+              value: String(candidate.membershipId),
+              label: candidate.name,
+              searchText: `${candidate.name} ${candidate.email}`.toLowerCase(),
+            })),
+        ];
+
+        const canDropFromCurrentSource =
+          connectingSourceId != null
+            ? canAssignManager(membershipId, connectingSourceId) && connectingSourceId !== membershipId
+            : false;
+        const isDropTarget =
+          isConnecting && hoveredNodeId === membershipId && canDropFromCurrentSource;
+
+        return {
+          ...node,
+          data: {
+            ...nodeData,
+            membershipId,
+            managerValue,
+            managerOptions,
+            isConnecting,
+            isDropTarget,
+            onManagerSelect: setReportManager,
+          } satisfies HierarchyNodeData,
+        };
+      }),
+      edges: layout.edges.map((e) => ({
+        ...e,
+        deletable: true,
+        type: 'default',
+        style: { strokeWidth: 2.5 },
+      })),
+    };
+  }, [
+    users,
+    managerOverrides,
+    isConnecting,
+    hoveredNodeId,
+    connectingSourceId,
+    canAssignManager,
+    setReportManager,
+  ]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState(initialEdges);
@@ -199,6 +384,17 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  const handleFlowInit = useCallback(() => {
+    setFlowReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!flowReady || nodes.length === 0) return;
+    requestAnimationFrame(() => {
+      reactFlow.fitView({ padding: 0.2, duration: 250 });
+    });
+  }, [flowReady, nodes, reactFlow]);
 
   /** When user deletes an edge in the diagram, clear that report's manager */
   const onEdgesChange = useCallback(
@@ -224,18 +420,42 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
       const sourceId = Number(connection.source);
       const targetId = Number(connection.target);
       if (sourceId === targetId) return;
-      const currentParents: Record<number, number | null> = {};
-      users.forEach((u) => {
-        currentParents[u.membershipId] = getCurrentParent(u);
-      });
-      const descendantsOfTarget = getDescendantIds(targetId, currentParents);
-      if (descendantsOfTarget.has(sourceId)) {
-        toast.error('Cannot connect: would create a cycle (manager cannot report to report).');
-        return;
-      }
-      setManagerOverrides((prev) => ({ ...prev, [targetId]: sourceId }));
+      setReportManager(targetId, sourceId);
     },
-    [users, managerOverrides]
+    [setReportManager]
+  );
+
+  const onConnectStart = useCallback((_: unknown, params: { nodeId?: string }) => {
+    setIsConnecting(true);
+    setConnectingSourceId(params?.nodeId ? Number(params.nodeId) : null);
+  }, []);
+
+  const onConnectEnd = useCallback(() => {
+    setIsConnecting(false);
+    setConnectingSourceId(null);
+    setHoveredNodeId(null);
+  }, []);
+
+  const onNodeMouseEnter = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      if (!isConnecting) return;
+      setHoveredNodeId(Number(node.id));
+    },
+    [isConnecting]
+  );
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, []);
+
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return false;
+      const sourceId = Number(connection.source);
+      const targetId = Number(connection.target);
+      return canAssignManager(targetId, sourceId);
+    },
+    [canAssignManager]
   );
 
   const handleSave = async () => {
@@ -260,6 +480,8 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
     return users.some((u) => getCurrentParent(u) !== u.user_parent_id);
   }, [users, managerOverrides]);
 
+  const graphHasData = nodes.length > 0;
+
   if (loading) {
     return (
       <div className="p-6">
@@ -283,25 +505,39 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
       <p className="text-sm text-muted-foreground">
         Set who reports to whom. Changes affect team metrics
       </p>
+      {loadError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          Failed to load hierarchy data: {loadError}
+        </div>
+      )}
 
       {showDiagram && (
         <Card className="flex min-h-0 flex-1 flex-col">
           <CardHeader>
-            <CardTitle className="text-base">Visualization</CardTitle>
+            {/* <CardTitle className="text-base">Org Chart</CardTitle> */}
           </CardHeader>
           <CardContent className="flex min-h-0 flex-1 flex-col p-6 pt-0">
-            <div className="h-[min(72vh,880px)] min-h-[360px] w-full min-w-0 flex-1 rounded-lg border border-gray-300 bg-muted/30 overflow-hidden">
+            <div className="h-[72vh] max-h-[880px] min-h-[360px] w-full min-w-0 rounded-lg border border-gray-300 bg-muted/30 overflow-hidden">
               <ReactFlow
                 className="h-full w-full"
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                onInit={handleFlowInit}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onConnectStart={onConnectStart}
+                onConnectEnd={onConnectEnd}
+                onNodeMouseEnter={onNodeMouseEnter}
+                onNodeMouseLeave={onNodeMouseLeave}
+                isValidConnection={isValidConnection}
                 fitView
                 minZoom={0.08}
                 maxZoom={1.5}
+                connectionLineType={ConnectionLineType.Bezier}
+                connectionLineStyle={{ strokeWidth: 2.5 }}
+                defaultEdgeOptions={{ type: 'default', style: { strokeWidth: 2.5 } }}
                 nodesConnectable
                 elementsSelectable
                 zoomOnScroll={false}
@@ -314,9 +550,27 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
                 <Controls />
                 <MiniMap className="!bg-background/90 !border-border" maskColor="rgba(0,0,0,0.1)" />
                 <Panel position="top-center" className="text-xs text-muted-foreground text-center max-w-md px-2">
-                  Drag handles to connect. Scroll on the chart to pan; ⌘ or Ctrl + scroll to zoom. Delete
-                  removes a selected line.
+                  Drag from a card&apos;s bottom edge to another card&apos;s top edge. Scroll on chart to pan;
+                  ⌘ or Ctrl + scroll to zoom. You can also use each card&apos;s “Set manager” dropdown.
                 </Panel>
+                {isConnecting && (
+                  <Panel
+                    position="top-left"
+                    className="rounded bg-background/95 px-2 py-1 text-xs text-muted-foreground"
+                  >
+                    Drop on another card&apos;s top edge to set manager.
+                  </Panel>
+                )}
+                {!graphHasData && (
+                  <Panel position="top-left" className="rounded bg-background/95 px-2 py-1 text-xs text-muted-foreground">
+                    No users available to visualize.
+                  </Panel>
+                )}
+                {graphHasData && !flowReady && (
+                  <Panel position="top-left" className="rounded bg-background/95 px-2 py-1 text-xs text-muted-foreground">
+                    Initializing visualization...
+                  </Panel>
+                )}
               </ReactFlow>
             </div>
           </CardContent>
