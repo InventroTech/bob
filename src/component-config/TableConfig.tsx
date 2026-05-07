@@ -592,6 +592,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 <SelectItem value="record_form_modal">Record form modal</SelectItem>
                 <SelectItem value="inventory_payment_modal">Inventory Payment modal</SelectItem>
                 <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
+                <SelectItem value="lead_assignment_modal">Lead assignment modal</SelectItem>
                 <SelectItem value="none">None (no row click)</SelectItem>
               </SelectContent>
             </Select>
