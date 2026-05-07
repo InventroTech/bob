@@ -121,6 +121,8 @@ export function initSentry(config: SentryConfig): void {
     replaySampleRate,
     errorSampleRate,
     tracesSampleRate,
+    replayMaskAllText,
+    replayBlockAllMedia,
     release,
   } = config;
 
@@ -157,9 +159,9 @@ export function initSentry(config: SentryConfig): void {
   if (enableReplay) {
     integrations.push(
       Sentry.replayIntegration({
-        // Privacy settings - mask sensitive content
-        maskAllText: true,
-        blockAllMedia: false,
+        // Privacy settings - configurable via env vars
+        maskAllText: replayMaskAllText,
+        blockAllMedia: replayBlockAllMedia,
         // Performance settings
         networkDetailAllowUrls: [
           // Only capture network details for your API endpoints
