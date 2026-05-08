@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 export type StatusActionWarningModalConfig = {
   title?: string;
@@ -30,7 +31,7 @@ interface StatusActionWarningModalProps {
   actionButton: StatusActionWithWarningConfig | null;
   actorName: string;
   submitting?: boolean;
-  onSubmit: (payload: { payment_method: string; paid_by: string }) => Promise<void> | void;
+  onSubmit: (payload: { payment_method: string; paid_by: string; payment_note: string }) => Promise<void> | void;
 }
 
 const DEFAULT_METHODS = ['NEFT', 'UPI', 'WIRE_TRANSFER', 'COMPANY_CARD', 'OTHER'];
@@ -45,11 +46,13 @@ export const StatusActionWarningModal: React.FC<StatusActionWarningModalProps> =
 }) => {
   const [confirmed, setConfirmed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
 
   useEffect(() => {
     if (!open) {
       setConfirmed(false);
       setPaymentMethod('');
+      setPaymentNote('');
     }
   }, [open]);
 
@@ -70,11 +73,15 @@ export const StatusActionWarningModal: React.FC<StatusActionWarningModalProps> =
     return cleaned.length > 0 ? cleaned : DEFAULT_METHODS;
   }, [actionButton?.warningModalConfig?.paymentMethods]);
 
-  const canSubmit = confirmed && paymentMethod.trim() !== '' && !submitting;
+  const canSubmit = confirmed && paymentMethod.trim() !== '' && paymentNote.trim() !== '' && !submitting;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
-    await onSubmit({ payment_method: paymentMethod, paid_by: actorName });
+    await onSubmit({
+      payment_method: paymentMethod,
+      paid_by: actorName,
+      payment_note: paymentNote.trim(),
+    });
   };
 
   return (
@@ -109,6 +116,17 @@ export const StatusActionWarningModal: React.FC<StatusActionWarningModalProps> =
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Payment note</Label>
+            <Textarea
+              value={paymentNote}
+              onChange={(e) => setPaymentNote(e.target.value)}
+              placeholder="Add payment note..."
+              className="min-h-[88px] text-sm rounded-md"
+              disabled={submitting}
+            />
           </div>
 
           <label className="inline-flex items-center gap-2 text-sm">
