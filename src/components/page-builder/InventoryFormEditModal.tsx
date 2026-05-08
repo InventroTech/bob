@@ -237,6 +237,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     !paymentButtonConfig;
   const canShowHistoryButton = showHistoryButton === true && record?.id != null;
   const canUpdate = Boolean(onUpdate && record?.id != null);
+  const isPaymentModal = Boolean(paymentButtonConfig);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
 
@@ -363,6 +364,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       if (parsedFinalAmount != null) {
         initial.final_amount = parsedFinalAmount;
       }
+    }
+    if (data.payment_note != null) {
+      initial.payment_note = String(data.payment_note);
     }
     if ((hasPriceFieldInForm || (!paymentButtonConfig && effectiveShowFinalPrice)) && !initial.price_currency) {
       const savedCurrency = String(data.price_currency ?? data.currency ?? '').toUpperCase();
@@ -548,6 +552,19 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const handleActionClick = useCallback(
     async (btn: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
+
+      if (isPaymentModal) {
+        const paymentNote = String(extraData?.payment_note ?? formData.payment_note ?? '').trim();
+        if (!paymentNote) {
+          toast({
+            title: 'Payment note required',
+            description: 'Please add a payment note before proceeding.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
       try {
         setApplyingStatusValue(btn.statusValue);
         const targetAttribute = (btn.targetAttribute || 'status').trim() || 'status';
@@ -560,6 +577,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         };
         if (targetAttribute === 'status') {
           dataToSend.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+        }
+        if (isPaymentModal) {
+          dataToSend.payment_note = String(extraData?.payment_note ?? formData.payment_note ?? '').trim();
         }
         if (!paymentButtonConfig && effectiveShowFinalPrice) {
           Object.assign(dataToSend, getComputedFinalAmountFields(dataToSend));
@@ -652,7 +672,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches, isPaymentModal]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -1273,6 +1293,20 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   />
                 </div>
               </div>
+            </div>
+          )}
+          {isPaymentModal && (
+            <div className="space-y-1.5 pt-2 border-t border-border/60">
+              <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Payment note
+              </Label>
+              <Textarea
+                value={String(formData.payment_note ?? '')}
+                onChange={(e) => setField('payment_note', e.target.value)}
+                placeholder="Add payment confirmation notes..."
+                className="min-h-[88px] text-sm rounded-md"
+                disabled={!canUpdate || !!applyingStatusValue}
+              />
             </div>
           )}
         </div>

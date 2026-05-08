@@ -131,6 +131,55 @@ function formatCommentsSummary(comments: unknown): string {
     .join('\n');
 }
 
+type ParsedCommentRow = {
+  name: string;
+  role: string;
+  comment: string;
+};
+
+function parseCommentRows(value: unknown): ParsedCommentRow[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const name = String(row.name ?? '').trim();
+      const role = String(row.role ?? '').trim();
+      const comment = String(row.comment ?? '').trim();
+      if (!name && !role && !comment) return null;
+      return { name, role, comment };
+    })
+    .filter((row): row is ParsedCommentRow => row !== null);
+}
+
+function CommentList({ value, muted = false }: { value: unknown; muted?: boolean }) {
+  const rows = parseCommentRows(value);
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground">—</p>;
+  }
+  return (
+    <ul className="space-y-2">
+      {rows.map((row, idx) => (
+        <li
+          key={`${row.name}-${row.role}-${idx}`}
+          className={cn(
+            'rounded-md border px-2.5 py-2 text-sm',
+            muted
+              ? 'border-border/50 bg-muted/60 text-muted-foreground'
+              : 'border-primary/20 bg-primary/5 text-foreground',
+          )}
+        >
+          <div className="mb-1 text-xs">
+            <span className="font-medium">{row.name || 'Someone'}</span>
+            {row.role ? <span className="text-muted-foreground"> ({row.role})</span> : null}
+          </div>
+          <p className="whitespace-pre-wrap break-words">{row.comment || '—'}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function formatDataValueNode(key: string, value: unknown): React.ReactNode {
   if (value === null || value === undefined || value === '') {
     return <span className="text-muted-foreground">—</span>;
@@ -408,9 +457,37 @@ function StatusesChangeBlock({ from, to }: { from: unknown; to: unknown }) {
   );
 }
 
+function CommentsChangeBlock({ from, to }: { from: unknown; to: unknown }) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-background/60 px-3 py-2.5 shadow-sm">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Comments</div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="text-[10px] font-medium text-muted-foreground">Before</div>
+          <div className="rounded-md bg-muted/40 px-2 py-2">
+            <CommentList value={from} muted />
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center justify-center pt-5 text-muted-foreground sm:pt-7">
+          <ArrowRight className="h-4 w-4 rotate-90 sm:rotate-0" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="text-[10px] font-medium text-muted-foreground">After</div>
+          <div className="rounded-md bg-primary/5 px-2 py-2 ring-1 ring-primary/10">
+            <CommentList value={to} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function renderChangeRow(key: string, from: unknown, to: unknown): React.ReactNode {
   if (key === 'data') {
     return <DataChangeBlock from={from} to={to} />;
+  }
+  if (key === 'comments') {
+    return <CommentsChangeBlock from={from} to={to} />;
   }
   if (key === 'statuses') {
     return <StatusesChangeBlock from={from} to={to} />;
