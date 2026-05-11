@@ -57,6 +57,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     getQueryParams,
     getFilterDisplayValue
   } = filterContext ?? internal;
+  const [selectSearchTerms, setSelectSearchTerms] = React.useState<Record<string, string>>({});
 
   const activeFiltersCount = getActiveFiltersCount();
 
@@ -90,6 +91,17 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     }
   };
 
+  const getFilteredSelectOptions = (filter: FilterConfig) => {
+    const term = (selectSearchTerms[filter.key] ?? '').trim().toLowerCase();
+    const options = filter.options ?? [];
+    if (!term) return options;
+    return options.filter((option) => {
+      const label = String(option.label ?? '').toLowerCase();
+      const value = String(option.value ?? '').toLowerCase();
+      return label.includes(term) || value.includes(term);
+    });
+  };
+
   // Render appropriate input by filter type; values are kept in useFilters state
   const renderFilterInput = (filter: FilterConfig) => {
     const value = filterState.values[filter.key];
@@ -97,6 +109,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
 
     switch (filter.type) {
       case 'select':
+        const filteredOptions = getFilteredSelectOptions(filter);
         return (
           <Popover>
             <PopoverTrigger asChild>
@@ -115,9 +128,20 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
             <PopoverContent className="w-60 p-0" align="start">
               <div className="p-3 border-b">
                 <Label className="text-sm font-medium">Select {filter.label}</Label>
+                <Input
+                  value={selectSearchTerms[filter.key] ?? ''}
+                  onChange={(e) =>
+                    setSelectSearchTerms((prev) => ({
+                      ...prev,
+                      [filter.key]: e.target.value,
+                    }))
+                  }
+                  placeholder="Search options..."
+                  className="mt-2 h-8 text-xs"
+                />
               </div>
               <div className="max-h-60 overflow-y-auto p-1">
-                {filter.options?.map((option) => {
+                {filteredOptions.map((option) => {
                   const isSelected = Array.isArray(value) ? value.includes(option.value) : value === option.value;
                   return (
                     <div key={option.value} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
@@ -151,6 +175,11 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
                     </div>
                   );
                 })}
+                {filteredOptions.length === 0 && (
+                  <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                    No matching options
+                  </div>
+                )}
               </div>
               {Array.isArray(value) && value.length > 0 && (
                 <div className="p-3 border-t">
