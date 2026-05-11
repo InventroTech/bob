@@ -6,7 +6,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { getAccessToken } from '@/lib/auth/accessTokenProvider';
 import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
-import { getTenantSlug } from './config';
 import { 
   ApiError, 
   NetworkError, 
@@ -25,10 +24,6 @@ export const setupRequestInterceptor = (instance: any) => {
       const token = getAccessToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-      }
-
-      if (!config.headers['X-Tenant-Slug']) {
-        config.headers['X-Tenant-Slug'] = getTenantSlug();
       }
 
       if (!config.headers['Content-Type']) {
