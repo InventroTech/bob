@@ -108,7 +108,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     const isActive = isFilterActive(filter.key);
 
     switch (filter.type) {
-      case 'select':
+      case 'select': {
         const filteredOptions = getFilteredSelectOptions(filter);
         return (
           <Popover>
@@ -196,6 +196,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
             </PopoverContent>
           </Popover>
         );
+      }
 
       case 'text':
         return (
