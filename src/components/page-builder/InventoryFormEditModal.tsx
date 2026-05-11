@@ -851,7 +851,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full">
         <DialogHeader>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 pr-10">
             <DialogTitle className="pr-2 text-left leading-snug">
               {record?.id != null ? (
                 <RecordModalTitleDisplay record={record} />
