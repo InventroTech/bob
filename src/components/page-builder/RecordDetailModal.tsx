@@ -1339,7 +1339,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1rem)] max-w-6xl sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl border border-border/80 shadow-xl">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30 shrink-0">
+        <DialogHeader className="pl-6 pr-14 pt-6 pb-4 border-b bg-muted/30 shrink-0">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <DialogTitle className="text-xl font-semibold tracking-tight">
