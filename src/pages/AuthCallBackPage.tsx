@@ -35,8 +35,7 @@ const AuthCallbackPage = () => {
         if (!isAlreadyLinked) {
           console.log('[AuthCallBackPage] User needs linking, calling link-user-uid...');
           const result = await authService.linkUserUid(
-            { uid: user.id, email: user.email },
-            tenantSlug || 'bibhab-thepyro-ai'
+            { uid: user.id, email: user.email }
           );
 
           if (result.success === false || result.error) {
@@ -105,7 +104,7 @@ const AuthCallbackPage = () => {
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`,
-              'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              'X-Tenant-Slug': resolveTenantSlugForRequest()
             },
             body: JSON.stringify({
               uid: user.id,
@@ -164,7 +163,7 @@ const AuthCallbackPage = () => {
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`,
-              'X-Tenant-Slug': 'bibhab-thepyro-ai'
+              'X-Tenant-Slug': resolveTenantSlugForRequest()
             },
             body: JSON.stringify({
               uid: user.id,
