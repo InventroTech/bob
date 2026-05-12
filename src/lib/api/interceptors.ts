@@ -26,7 +26,6 @@ export const setupRequestInterceptor = (instance: any) => {
         config.headers.Authorization = `Bearer ${token}`;
       }
 
-      // Ensure Content-Type is set
       if (!config.headers['Content-Type']) {
         config.headers['Content-Type'] = 'application/json';
       }
