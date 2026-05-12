@@ -29,12 +29,37 @@ const isAbortError = (error: any): boolean => {
   );
 };
 
+const isChunkLoadError = (error: any): boolean => {
+  if (!error) return false;
+  const msg = error.message || String(error);
+  return (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('error loading dynamically imported module')
+  );
+};
+
+const RELOAD_KEY = 'pyro_chunk_reload';
+
+function handleChunkError() {
+  const lastReload = Number(sessionStorage.getItem(RELOAD_KEY) || '0');
+  if (Date.now() - lastReload < 10_000) return;
+  sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+  window.location.reload();
+}
+
 // Handle unhandled promise rejections (most common for AbortErrors)
 window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason;
   
   if (isAbortError(error)) {
-    event.preventDefault(); // Prevent the error from being logged
+    event.preventDefault();
+    return;
+  }
+
+  if (isChunkLoadError(error)) {
+    event.preventDefault();
+    handleChunkError();
     return;
   }
 });
@@ -44,7 +69,13 @@ window.addEventListener('error', (event) => {
   const error = event.error;
   
   if (isAbortError(error)) {
-    event.preventDefault(); // Prevent the error from being logged
+    event.preventDefault();
+    return;
+  }
+
+  if (isChunkLoadError(error)) {
+    event.preventDefault();
+    handleChunkError();
     return;
   }
 });

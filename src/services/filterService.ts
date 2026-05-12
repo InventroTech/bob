@@ -64,7 +64,7 @@ export class FilterService {
   validateFilters(): { isValid: boolean; errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const accessors = new Set<string>();
+    const paramNames = new Set<string>();
     const keys = new Set<string>();
 
     this.filters.forEach((filter, index) => {
@@ -72,10 +72,17 @@ export class FilterService {
 
       if (!accessor || accessor.trim() === '') {
         errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Missing accessor field`);
-      } else if (accessors.has(accessor)) {
-        errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Duplicate accessor "${accessor}" - this will cause the same values to be sent to multiple fields`);
       } else {
-        accessors.add(accessor);
+        const lookup = filter.lookup || this.getLookupFromType(filter.type);
+        const effectiveParam = this.getEffectiveParamName(accessor, filter.type, lookup);
+        const paramList = Array.isArray(effectiveParam) ? effectiveParam : [effectiveParam];
+        for (const p of paramList) {
+          if (paramNames.has(p)) {
+            errors.push(`Filter ${index + 1} (${filter.label || filter.key}): Duplicate query param "${p}" - this will cause the same values to be sent to multiple fields`);
+          } else {
+            paramNames.add(p);
+          }
+        }
       }
 
       if (!filter.key || filter.key.trim() === '') {
@@ -215,6 +222,40 @@ export class FilterService {
   /**
    * Get Django ORM lookup from filter type
    */
+  private getEffectiveParamName(accessor: string, type: FilterConfig['type'], lookup: string): string | string[] {
+    switch (type) {
+      case 'select':
+      case 'in':
+        return (lookup === 'in' || lookup === '') ? accessor : `${accessor}__${lookup}`;
+      case 'text':
+      case 'icontains':
+        return `${accessor}__icontains`;
+      case 'search':
+        return 'search';
+      case 'date_range':
+      case 'date_time_range':
+        return [`${accessor}__gte`, `${accessor}__lte`];
+      case 'date_gte':
+      case 'number_gte':
+        return `${accessor}__gte`;
+      case 'date_lte':
+      case 'number_lte':
+        return `${accessor}__lte`;
+      case 'gt':
+        return `${accessor}__gt`;
+      case 'lt':
+        return `${accessor}__lt`;
+      case 'exact':
+        return `${accessor}__exact`;
+      case 'startswith':
+        return `${accessor}__startswith`;
+      case 'endswith':
+        return `${accessor}__endswith`;
+      default:
+        return lookup ? `${accessor}__${lookup}` : `${accessor}__icontains`;
+    }
+  }
+
   private getLookupFromType(type: FilterConfig['type']): string {
     switch (type) {
       case 'select':
