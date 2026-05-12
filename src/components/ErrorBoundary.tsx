@@ -19,9 +19,24 @@ interface ErrorFallbackProps {
  * Error Fallback UI Component
  * Displays a user-friendly error message with recovery options
  */
+const RELOAD_KEY = 'pyro_chunk_reload';
+
 const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, resetError }) => {
   const errorMessage = error instanceof Error ? error.message : String(error);
   const errorStack = error instanceof Error ? error.stack : undefined;
+
+  const isChunkError =
+    errorMessage.includes('Failed to fetch dynamically imported module') ||
+    errorMessage.includes('Importing a module script failed') ||
+    errorMessage.includes('error loading dynamically imported module');
+
+  React.useEffect(() => {
+    if (!isChunkError) return;
+    const lastReload = Number(sessionStorage.getItem(RELOAD_KEY) || '0');
+    if (Date.now() - lastReload < 10_000) return;
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    window.location.reload();
+  }, [isChunkError]);
 
   const handleReload = () => {
     window.location.reload();
