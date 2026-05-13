@@ -113,6 +113,35 @@ function extractMembershipUsers(payload: unknown): MembershipUser[] {
   return [];
 }
 
+/** Shared GET /membership/roles/ — tenant resolved from JWT on the backend. */
+async function fetchMembershipRoles(params?: Record<string, string>): Promise<Role[]> {
+  const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', {
+    ...(params ? { params } : {}),
+  });
+  return extractRoles(response.data);
+}
+
+/** Normalize POST /membership/roles/ response shapes to a Role. */
+function parseCreatedRolePayload(responseData: unknown): Role {
+  if (responseData && typeof responseData === 'object') {
+    if ('data' in responseData && responseData.data) {
+      return responseData.data as Role;
+    }
+    if (
+      'results' in responseData &&
+      Array.isArray(responseData.results) &&
+      responseData.results.length > 0
+    ) {
+      return responseData.results[0] as Role;
+    }
+    if ('id' in responseData && 'name' in responseData) {
+      return responseData as Role;
+    }
+  }
+  console.warn('Unexpected response format from create role endpoint, using fallback');
+  return { id: '', name: '' };
+}
+
 /** User shape for lead-assignment workflows (keeps both membership id and auth UUID). */
 export interface AssignmentUser {
   id: string; // TenantMembership id
@@ -149,8 +178,7 @@ export const membershipService = {
    */
   async getRoles(): Promise<Role[]> {
     try {
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/');
-      return extractRoles(response.data);
+      return await fetchMembershipRoles();
     } catch (error: unknown) {
       console.error('Error fetching roles:', error);
       throw error;
@@ -167,10 +195,7 @@ export const membershipService = {
    */
   async getPublicRole(): Promise<Role | null> {
     try {
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', {
-        params: { key: 'public' },
-      });
-      const roles = extractRoles(response.data);
+      const roles = await fetchMembershipRoles({ key: 'public' });
       return roles.length > 0 ? roles[0] : null;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : error;
@@ -272,29 +297,8 @@ export const membershipService = {
           name,
         }
       );
-      
-      const responseData = response.data;
-      
-      // Handle different response formats
-      if (responseData && typeof responseData === 'object') {
-        // Handle { data: {...} } format
-        if ('data' in responseData && responseData.data) {
-          return responseData.data as Role;
-        }
-        // Handle { results: [{...}] } format
-        if ('results' in responseData && Array.isArray(responseData.results) && responseData.results.length > 0) {
-          return responseData.results[0] as Role;
-        }
-        // Handle direct role object
-        if ('id' in responseData && 'name' in responseData) {
-          return responseData as Role;
-        }
-      }
-      
-      // If we can't parse the response but got a 200, return a minimal role object
-      // This allows the UI to continue even if response format is unexpected
-      console.warn('Unexpected response format from create role endpoint, using fallback');
-      return { id: '', name };
+
+      return parseCreatedRolePayload(response.data);
     } catch (error: unknown) {
       console.error('Error creating role:', error);
       throw error;

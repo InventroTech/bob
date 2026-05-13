@@ -80,24 +80,18 @@ export const authService = {
 export const linkUserUidLegacy = async (
   uid: string,
   email: string,
-  token: string,
-  tenantSlug?: string
+  token: string
 ): Promise<{ success: boolean; data?: any; error?: string }> => {
   try {
     const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
     const apiUrl = `${baseUrl}/accounts/link-user-uid/`;
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    };
-    if (tenantSlug) {
-      headers['X-Tenant-Slug'] = tenantSlug;
-    }
-
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ uid, email }),
     });
 
