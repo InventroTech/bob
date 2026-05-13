@@ -46,7 +46,7 @@ const PublicTenantPage: React.FC = () => {
         }
 
         // Get the public role via membership API (Django authz at /membership/roles)
-        const publicRole = await membershipService.getPublicRole(tenantSlug || undefined);
+        const publicRole = await membershipService.getPublicRole();
 
         // Fetch public page for this tenant (public role or unassigned)
         const query = supabase

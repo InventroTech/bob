@@ -146,8 +146,7 @@ const AddUserComponent: React.FC = () => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -359,8 +358,7 @@ const AddUserComponent: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
@@ -396,7 +394,6 @@ const AddUserComponent: React.FC = () => {
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
-                'X-Tenant-Slug': 'bibhab-thepyro-ai',
               },
               body: JSON.stringify({
                 assignments: [{ membership_id: createdMembershipId, parent_membership_id: managerUser.tenant_membership_id }],
@@ -474,8 +471,7 @@ const AddUserComponent: React.FC = () => {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           email,
@@ -572,7 +568,6 @@ const AddUserComponent: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai',
         },
         body: JSON.stringify(payload),
       });
@@ -606,7 +601,6 @@ const AddUserComponent: React.FC = () => {
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`,
-              'X-Tenant-Slug': 'bibhab-thepyro-ai',
             },
             body: JSON.stringify({
               assignments: [{ membership_id: editedUser.tenant_membership_id, parent_membership_id: parentMembershipId }],

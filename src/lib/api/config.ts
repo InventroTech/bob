@@ -27,8 +27,7 @@ export const getBaseUrl = (): string => {
 const TENANT_SLUG_KEY = 'tenant_slug';
 
 /**
- * Get tenant slug for API requests (e.g. X-Tenant-Slug).
- * Uses stored slug from signup/setup when available, else default.
+ * Stored tenant slug from signup / membership (for UI only; API tenant uses JWT).
  */
 export const getTenantSlug = (): string => {
   if (typeof window === 'undefined') return API_CONFIG.DEFAULT_TENANT_SLUG;

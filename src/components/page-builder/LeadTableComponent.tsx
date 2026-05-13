@@ -1048,7 +1048,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           {
             'Content-Type': 'application/json',
             'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
-            'X-Tenant-Slug': 'bibhab-thepyro-ai',
           },
           'lead_id'
         );
