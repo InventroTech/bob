@@ -22,6 +22,8 @@ const IGNORED_ERRORS = [
   "NetworkError",
   "Network request failed",
   "Failed to fetch",
+  // Old SPA tab after a deploy: hashed chunk URLs no longer exist (hard refresh fixes)
+  "Failed to fetch dynamically imported module",
   // Abort errors (expected when components unmount or requests are cancelled)
   "AbortError",
   "signal is aborted",

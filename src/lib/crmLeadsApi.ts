@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase';
 
 import { createApiClient } from '@/lib/api/client';
+import { formatClientErrorDetail } from '@/lib/api/errors';
 
 const BASE_URL = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '') || '';
 
@@ -117,14 +118,9 @@ export const crmLeadsApi = {
       const response = await apiClient.post('/crm-records/records/events/', body);
       console.log('[crmLeadsApi] Event request successful:', response.status, response.data);
       return true;
-    } catch (error: any) {
-      console.error('[crmLeadsApi] Event request failed', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        error: error.message,
-        stack: error.stack,
-      });
+    } catch (error: unknown) {
+      // One string so Sentry captureConsoleIntegration does not title the issue as "... [object Object]"
+      console.error(`[crmLeadsApi] Event request failed: ${formatClientErrorDetail(error)}`);
       throw error;
     }
   },
