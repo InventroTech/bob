@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { apiClient } from '@/lib/api/client';
 import { membershipService } from '@/lib/api';
 
 export interface TenantContext {
@@ -20,9 +19,8 @@ export function useTenant(): TenantContext {
   const fetchCustomRole = useCallback(async () => {
     if (!session?.access_token) return;
     try {
-      const roleResponse = await apiClient.get(`/membership/me/role/?_=${Date.now()}`);
-      const roleData = roleResponse.data;
-      if (roleData?.role_key) setCustomRole(roleData.role_key);
+      const data = await membershipService.getMyMembership();
+      if (data?.role_key) setCustomRole(data.role_key);
       else setCustomRole(null);
     } catch {
       setCustomRole(null);

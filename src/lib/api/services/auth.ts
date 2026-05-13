@@ -37,27 +37,16 @@ export const authService = {
   /**
    * Link Supabase user UID with email in Django backend
    * This is called after successful Supabase authentication
-   * 
+   * Tenant is resolved from the Supabase JWT on the backend.
+   *
    * @param data - User UID and email
-   * @param tenantSlug - Optional tenant slug (defaults to config default)
    * @returns Promise with link response
    */
-  async linkUserUid(
-    data: LinkUserUidRequest,
-    tenantSlug?: string
-  ): Promise<LinkUserUidResponse> {
+  async linkUserUid(data: LinkUserUidRequest): Promise<LinkUserUidResponse> {
     try {
-      const headers: Record<string, string> = {};
-      
-      // Override tenant slug if provided
-      if (tenantSlug) {
-        headers['X-Tenant-Slug'] = tenantSlug;
-      }
-
       const response = await apiClient.post<LinkUserUidResponse>(
         '/accounts/link-user-uid/',
-        data,
-        { headers }
+        data
       );
 
       return response.data;
@@ -92,19 +81,23 @@ export const linkUserUidLegacy = async (
   uid: string,
   email: string,
   token: string,
-  tenantSlug: string = 'bibhab-thepyro-ai'
+  tenantSlug?: string
 ): Promise<{ success: boolean; data?: any; error?: string }> => {
   try {
     const baseUrl = import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
     const apiUrl = `${baseUrl}/accounts/link-user-uid/`;
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+    if (tenantSlug) {
+      headers['X-Tenant-Slug'] = tenantSlug;
+    }
+
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-Tenant-Slug': tenantSlug,
-      },
+      headers,
       body: JSON.stringify({ uid, email }),
     });
 

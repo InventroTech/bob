@@ -161,19 +161,15 @@ export const membershipService = {
    * Get the public role for a tenant (key=public).
    * Uses the membership/roles endpoint. Returns null on any error or if not found.
    * Use this instead of the non-existent api/authz/roles endpoint.
+   * Tenant is resolved from the Supabase JWT (user_data) on the backend.
    *
-   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header (e.g. from URL params)
    * @returns Promise with the public role or null
    */
-  async getPublicRole(tenantSlug?: string): Promise<Role | null> {
+  async getPublicRole(): Promise<Role | null> {
     try {
-      const config: { params?: { key: string }; headers?: { 'X-Tenant-Slug': string } } = {
+      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', {
         params: { key: 'public' },
-      };
-      if (tenantSlug) {
-        config.headers = { 'X-Tenant-Slug': tenantSlug };
-      }
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', config);
+      });
       const roles = extractRoles(response.data);
       return roles.length > 0 ? roles[0] : null;
     } catch (error: unknown) {
@@ -269,10 +265,13 @@ export const membershipService = {
    */
   async createRole(key: string, name: string): Promise<Role> {
     try {
-      const response = await apiClient.post<Role | { data: Role } | { id: string; name: string } | { results: Role[] }>('/membership/roles/', {
-        key,
-        name
-      });
+      const response = await apiClient.post<Role | { data: Role } | { id: string; name: string } | { results: Role[] }>(
+        '/membership/roles/',
+        {
+          key,
+          name,
+        }
+      );
       
       const responseData = response.data;
       
@@ -343,23 +342,17 @@ export const membershipService = {
    * Get current user's membership information (tenant_id, role_id) from backend.
    * Used as fallback when JWT doesn't contain user_data claims.
    * This is the source of truth for user's tenant and role.
-   * 
-   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header
+   * Tenant is resolved from the Supabase JWT on the backend.
+   *
    * @returns Promise with membership info (tenant_id, role_id, role_key, etc.) or null if not found
    */
-  async getMyMembership(tenantSlug?: string): Promise<MyMembershipResponse | null> {
+  async getMyMembership(): Promise<MyMembershipResponse | null> {
     try {
       console.log('[membershipService] getMyMembership: Fetching membership from backend API', {
-        tenantSlug: tenantSlug || 'not provided',
         endpoint: '/membership/me/role',
       });
 
-      const config: { headers?: { 'X-Tenant-Slug': string } } = {};
-      if (tenantSlug) {
-        config.headers = { 'X-Tenant-Slug': tenantSlug };
-      }
-
-      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/', config);
+      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/');
       
       console.log('[membershipService] getMyMembership: Response received', {
         hasData: !!response.data,
@@ -419,7 +412,7 @@ export const membershipService = {
       email: string;
       name?: string;
       tenant_id?: string;
-    }>(`/membership/users/${membershipId}/spoof-token/`);
+    }>(`/membership/users/${membershipId}/spoof-token/`, {});
     return response.data;
   },
 };
