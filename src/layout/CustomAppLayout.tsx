@@ -215,7 +215,13 @@ const CustomAppLayout: React.FC = () => {
 
       if (error) {
         toast.error('Failed to load pages');
-        console.error('Pages fetch error:', error);
+        const pg = error as { message?: string; code?: string; details?: string; hint?: string };
+        console.error(
+          'Pages fetch error:',
+          pg.message ?? 'unknown',
+          pg.code ? `code=${pg.code}` : '',
+          pg.details || pg.hint || ''
+        );
       } else {
         setPages(pagesData || []);
       }
