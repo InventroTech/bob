@@ -190,10 +190,10 @@ function formatDataValueNode(key: string, value: unknown): React.ReactNode {
     return (
       <span className="whitespace-pre-wrap break-words">
         {text.split('\n').map((line, i) => (
-          <React.Fragment key={i}>
+          <span key={i} className="contents">
             {i > 0 ? <br /> : null}
             {line}
-          </React.Fragment>
+          </span>
         ))}
       </span>
     );
@@ -612,7 +612,9 @@ export function RequestHistoryPanel({ loading, error, entries }: RequestHistoryP
                 <h4 className="text-xs font-semibold text-muted-foreground">Changes ({pairs.length})</h4>
                 <div className="space-y-2">
                   {pairs.map((p) => (
-                    <React.Fragment key={p.key}>{renderChangeRow(p.key, p.from, p.to)}</React.Fragment>
+                    <span key={p.key} className="contents">
+                      {renderChangeRow(p.key, p.from, p.to)}
+                    </span>
                   ))}
                 </div>
               </div>

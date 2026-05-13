@@ -32,7 +32,7 @@ const UnauthorizedPage: React.FC<{
 
         if (tenant) {
           // Get the public role via membership API (Django authz at /membership/roles)
-          const publicRole = await membershipService.getPublicRole(tenantSlug || undefined);
+          const publicRole = await membershipService.getPublicRole();
 
           // Fetch public and unassigned pages
           const query = supabase
@@ -240,7 +240,7 @@ const ProtectedAppRoute: React.FC = () => {
           if (!jwtTenantId || !jwtRoleId) {
             console.log('[ProtectedAppRoute] Using API fallback to get membership from backend...');
             try {
-              const membership = await membershipService.getMyMembership(tenantSlug);
+              const membership = await membershipService.getMyMembership();
               if (membership?.tenant_id && membership?.role_id) {
                 jwtTenantId = membership.tenant_id;
                 jwtRoleId = membership.role_id;
@@ -275,10 +275,9 @@ const ProtectedAppRoute: React.FC = () => {
 
         // Link user UID (non-blocking, once per session)
         if (accessCheckedRef.current !== checkKey) {
-          authService.linkUserUid(
-            { uid: session.user.id, email: session.user.email },
-            tenantSlug
-          ).catch(err => console.error('Failed to link user UID:', err));
+          authService
+            .linkUserUid({ uid: session.user.id, email: session.user.email })
+            .catch((err) => console.error('Failed to link user UID:', err));
         }
 
         // Validate role exists for tenant

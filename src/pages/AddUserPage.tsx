@@ -111,8 +111,7 @@ const AddUserPage = () => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -235,8 +234,7 @@ const AddUserPage = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
@@ -295,8 +293,7 @@ const AddUserPage = () => {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Tenant-Slug': 'bibhab-thepyro-ai'
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           email,

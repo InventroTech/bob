@@ -113,6 +113,35 @@ function extractMembershipUsers(payload: unknown): MembershipUser[] {
   return [];
 }
 
+/** Shared GET /membership/roles/ — tenant resolved from JWT on the backend. */
+async function fetchMembershipRoles(params?: Record<string, string>): Promise<Role[]> {
+  const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', {
+    ...(params ? { params } : {}),
+  });
+  return extractRoles(response.data);
+}
+
+/** Normalize POST /membership/roles/ response shapes to a Role. */
+function parseCreatedRolePayload(responseData: unknown): Role {
+  if (responseData && typeof responseData === 'object') {
+    if ('data' in responseData && responseData.data) {
+      return responseData.data as Role;
+    }
+    if (
+      'results' in responseData &&
+      Array.isArray(responseData.results) &&
+      responseData.results.length > 0
+    ) {
+      return responseData.results[0] as Role;
+    }
+    if ('id' in responseData && 'name' in responseData) {
+      return responseData as Role;
+    }
+  }
+  console.warn('Unexpected response format from create role endpoint, using fallback');
+  return { id: '', name: '' };
+}
+
 /** User shape for lead-assignment workflows (keeps both membership id and auth UUID). */
 export interface AssignmentUser {
   id: string; // TenantMembership id
@@ -149,8 +178,7 @@ export const membershipService = {
    */
   async getRoles(): Promise<Role[]> {
     try {
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/');
-      return extractRoles(response.data);
+      return await fetchMembershipRoles();
     } catch (error: unknown) {
       console.error('Error fetching roles:', error);
       throw error;
@@ -161,20 +189,13 @@ export const membershipService = {
    * Get the public role for a tenant (key=public).
    * Uses the membership/roles endpoint. Returns null on any error or if not found.
    * Use this instead of the non-existent api/authz/roles endpoint.
+   * Tenant is resolved from the Supabase JWT (user_data) on the backend.
    *
-   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header (e.g. from URL params)
    * @returns Promise with the public role or null
    */
-  async getPublicRole(tenantSlug?: string): Promise<Role | null> {
+  async getPublicRole(): Promise<Role | null> {
     try {
-      const config: { params?: { key: string }; headers?: { 'X-Tenant-Slug': string } } = {
-        params: { key: 'public' },
-      };
-      if (tenantSlug) {
-        config.headers = { 'X-Tenant-Slug': tenantSlug };
-      }
-      const response = await apiClient.get<GetRolesResponse | Role[]>('/membership/roles/', config);
-      const roles = extractRoles(response.data);
+      const roles = await fetchMembershipRoles({ key: 'public' });
       return roles.length > 0 ? roles[0] : null;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : error;
@@ -269,33 +290,15 @@ export const membershipService = {
    */
   async createRole(key: string, name: string): Promise<Role> {
     try {
-      const response = await apiClient.post<Role | { data: Role } | { id: string; name: string } | { results: Role[] }>('/membership/roles/', {
-        key,
-        name
-      });
-      
-      const responseData = response.data;
-      
-      // Handle different response formats
-      if (responseData && typeof responseData === 'object') {
-        // Handle { data: {...} } format
-        if ('data' in responseData && responseData.data) {
-          return responseData.data as Role;
+      const response = await apiClient.post<Role | { data: Role } | { id: string; name: string } | { results: Role[] }>(
+        '/membership/roles/',
+        {
+          key,
+          name,
         }
-        // Handle { results: [{...}] } format
-        if ('results' in responseData && Array.isArray(responseData.results) && responseData.results.length > 0) {
-          return responseData.results[0] as Role;
-        }
-        // Handle direct role object
-        if ('id' in responseData && 'name' in responseData) {
-          return responseData as Role;
-        }
-      }
-      
-      // If we can't parse the response but got a 200, return a minimal role object
-      // This allows the UI to continue even if response format is unexpected
-      console.warn('Unexpected response format from create role endpoint, using fallback');
-      return { id: '', name };
+      );
+
+      return parseCreatedRolePayload(response.data);
     } catch (error: unknown) {
       console.error('Error creating role:', error);
       throw error;
@@ -343,23 +346,17 @@ export const membershipService = {
    * Get current user's membership information (tenant_id, role_id) from backend.
    * Used as fallback when JWT doesn't contain user_data claims.
    * This is the source of truth for user's tenant and role.
-   * 
-   * @param tenantSlug - Optional tenant slug for X-Tenant-Slug header
+   * Tenant is resolved from the Supabase JWT on the backend.
+   *
    * @returns Promise with membership info (tenant_id, role_id, role_key, etc.) or null if not found
    */
-  async getMyMembership(tenantSlug?: string): Promise<MyMembershipResponse | null> {
+  async getMyMembership(): Promise<MyMembershipResponse | null> {
     try {
       console.log('[membershipService] getMyMembership: Fetching membership from backend API', {
-        tenantSlug: tenantSlug || 'not provided',
         endpoint: '/membership/me/role',
       });
 
-      const config: { headers?: { 'X-Tenant-Slug': string } } = {};
-      if (tenantSlug) {
-        config.headers = { 'X-Tenant-Slug': tenantSlug };
-      }
-
-      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/', config);
+      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/');
       
       console.log('[membershipService] getMyMembership: Response received', {
         hasData: !!response.data,
@@ -419,7 +416,7 @@ export const membershipService = {
       email: string;
       name?: string;
       tenant_id?: string;
-    }>(`/membership/users/${membershipId}/spoof-token/`);
+    }>(`/membership/users/${membershipId}/spoof-token/`, {});
     return response.data;
   },
 };
