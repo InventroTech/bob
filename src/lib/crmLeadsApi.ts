@@ -2,7 +2,7 @@
 import { supabase } from '@/lib/supabase';
 
 import { createApiClient } from '@/lib/api/client';
-import { formatClientErrorDetail } from '@/lib/api/errors';
+import { formatClientErrorDetail, isExpectedAuthWall } from '@/lib/api/errors';
 
 const BASE_URL = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '') || '';
 
@@ -45,12 +45,15 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error: any) {
-      // 404 means no lead assigned
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number } };
+      if (err.response?.status === 404) {
         return null;
       }
-      console.error('[crmLeadsApi] Error fetching current lead:', error);
+      if (isExpectedAuthWall(error)) {
+        return null;
+      }
+      console.error('[crmLeadsApi] Error fetching current lead:', formatClientErrorDetail(error));
       return null;
     }
   },
@@ -89,12 +92,15 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error: any) {
-      // 404 means no leads available
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number } };
+      if (err.response?.status === 404) {
         return null;
       }
-      console.error('[crmLeadsApi] Error fetching next lead:', error);
+      if (isExpectedAuthWall(error)) {
+        return null;
+      }
+      console.error('[crmLeadsApi] Error fetching next lead:', formatClientErrorDetail(error));
       throw error;
     }
   },
@@ -119,7 +125,11 @@ export const crmLeadsApi = {
       console.log('[crmLeadsApi] Event request successful:', response.status, response.data);
       return true;
     } catch (error: unknown) {
-      // One string so Sentry captureConsoleIntegration does not title the issue as "... [object Object]"
+      if (isExpectedAuthWall(error)) {
+        // Stale session / no tenant permission — do not throw or console.error (Sentry noise)
+        console.warn(`[crmLeadsApi] Event not sent (session/permission): ${formatClientErrorDetail(error)}`);
+        return false;
+      }
       console.error(`[crmLeadsApi] Event request failed: ${formatClientErrorDetail(error)}`);
       throw error;
     }
@@ -147,11 +157,15 @@ export const crmLeadsApi = {
       }
 
       return processedLead;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number } };
+      if (err.response?.status === 404) {
         return null;
       }
-      console.error('[crmLeadsApi] Error fetching lead by ID:', error);
+      if (isExpectedAuthWall(error)) {
+        return null;
+      }
+      console.error('[crmLeadsApi] Error fetching lead by ID:', formatClientErrorDetail(error));
       throw error;
     }
   },
@@ -184,8 +198,11 @@ export const crmLeadsApi = {
       });
 
       return response.data.count || 0;
-    } catch (error) {
-      console.error('[crmLeadsApi] Error fetching trial activation count:', error);
+    } catch (error: unknown) {
+      if (isExpectedAuthWall(error)) {
+        return 0;
+      }
+      console.error('[crmLeadsApi] Error fetching trial activation count:', formatClientErrorDetail(error));
       throw error;
     }
   },

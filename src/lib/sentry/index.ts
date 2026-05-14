@@ -7,6 +7,7 @@ import * as Sentry from "@sentry/react";
 import { SentrySpanProcessor, SentrySampler } from "@sentry/opentelemetry";
 import { browserTracingIntegration, replayIntegration } from "@sentry/react";
 import type { SentryConfig } from "./config";
+import { AuthorizationError } from "@/lib/api/errors";
 
 /**
  * Common errors that should be ignored (not actionable)
@@ -59,6 +60,10 @@ const DENIED_URLS = [
  * Removes sensitive data and filters unwanted errors
  */
 const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null => {
+  if (hint.originalException instanceof AuthorizationError) {
+    return null;
+  }
+
   // Filter ignored errors
   if (event.exception) {
     const errorMessage = event.exception.values?.[0]?.value || '';
@@ -87,6 +92,11 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
         return null; // Drop the event
       }
     }
+  }
+
+  // Console / HTTP integrations sometimes stringify as "HTTP Client Error with status code: 403"
+  if (event.exception?.values?.[0]?.value?.includes('status code: 403')) {
+    return null;
   }
 
   // Filter by URL
@@ -146,9 +156,12 @@ export function initSentry(config: SentryConfig): void {
       levels: ['error'], // Only capture console.error, not warnings/info
     }),
     Sentry.httpClientIntegration({
-      // Capture HTTP errors
-      failedRequestStatusCodes: [[400, 599]], // Capture 4xx and 5xx errors
-      failedRequestTargets: [/.*/], // Capture all failed requests
+      // Omit 403: expected when session is stale or user lacks tenant permission (noisy in Sentry)
+      failedRequestStatusCodes: [
+        [400, 402],
+        [404, 599],
+      ],
+      failedRequestTargets: [/.*/],
     }),
     // Performance monitoring
     Sentry.browserTracingIntegration({
@@ -195,6 +208,7 @@ export function initSentry(config: SentryConfig): void {
     // Error filtering
     ignoreErrors: [
       ...IGNORED_ERRORS,
+      /^AuthorizationError/i,
       // AbortError patterns
       /^AbortError/i,
       /signal is aborted/i,
