@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from '../client';
+import { formatClientErrorDetail, isExpectedAuthWall } from '../errors';
 
 export interface Role {
   id: string;
@@ -352,54 +353,47 @@ export const membershipService = {
    */
   async getMyMembership(): Promise<MyMembershipResponse | null> {
     try {
-      console.log('[membershipService] getMyMembership: Fetching membership from backend API', {
-        endpoint: '/membership/me/role',
-      });
+      if (import.meta.env.DEV) {
+        console.log('[membershipService] getMyMembership: GET /membership/me/role/');
+      }
 
       const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/');
-      
-      console.log('[membershipService] getMyMembership: Response received', {
-        hasData: !!response.data,
-        role_id: response.data?.role_id || 'MISSING',
-        tenant_id: response.data?.tenant_id || 'MISSING',
-        role_key: response.data?.role_key || 'MISSING',
-        hasError: !!response.data?.error,
-        error: response.data?.error,
-      });
+
+      if (import.meta.env.DEV) {
+        const d = response.data;
+        console.log(
+          `[membershipService] getMyMembership: response role_id=${d?.role_id ?? 'n/a'} tenant_id=${d?.tenant_id ?? 'n/a'} role_key=${d?.role_key ?? 'n/a'} backendError=${d?.error ?? 'none'}`
+        );
+      }
 
       if (response.data?.error) {
-        console.warn('[membershipService] getMyMembership: Backend returned error', {
-          error: response.data.error,
-        });
+        console.warn(`[membershipService] getMyMembership: backend error field: ${response.data.error}`);
         return null;
       }
 
       if (!response.data?.role_id || !response.data?.tenant_id) {
-        console.warn('[membershipService] getMyMembership: Missing required fields', {
-          hasRoleId: !!response.data?.role_id,
-          hasTenantId: !!response.data?.tenant_id,
-        });
+        console.warn('[membershipService] getMyMembership: missing role_id or tenant_id in response');
         return null;
       }
 
-      console.log('[membershipService] getMyMembership: ✅ Successfully retrieved membership', {
-        tenant_id: response.data.tenant_id,
-        role_id: response.data.role_id,
-        role_key: response.data.role_key,
-      });
+      if (import.meta.env.DEV) {
+        console.log(
+          `[membershipService] getMyMembership: OK tenant=${response.data.tenant_id} role=${response.data.role_id} role_key=${response.data.role_key ?? 'n/a'}`
+        );
+      }
 
       return response.data;
     } catch (error: unknown) {
-      const apiError = error as {
-        message?: string;
-        response?: { status?: number; statusText?: string; data?: unknown };
-      };
-      console.error('[membershipService] getMyMembership: ❌ Error fetching membership', {
-        error: apiError.message,
-        status: apiError.response?.status,
-        statusText: apiError.response?.statusText,
-        data: apiError.response?.data,
-      });
+      if (isExpectedAuthWall(error)) {
+        // Stale session / no tenant permission — expected; do not console.error (Sentry captureConsoleIntegration)
+        console.warn(
+          `[membershipService] getMyMembership: not available (auth): ${formatClientErrorDetail(error)}`
+        );
+        return null;
+      }
+      console.error(
+        `[membershipService] getMyMembership: unexpected failure: ${formatClientErrorDetail(error)}`
+      );
       return null;
     }
   },

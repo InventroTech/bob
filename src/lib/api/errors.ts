@@ -84,3 +84,18 @@ export function formatClientErrorDetail(error: unknown): string {
   return `${prefix}${msg}${statusPart}${dataPart}`;
 }
 
+/**
+ * Session expired, logged-out tab, or tenant/membership no longer allows the call.
+ * These should not break the UI or spam Sentry as hard failures.
+ */
+export function isExpectedAuthWall(error: unknown): boolean {
+  if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
+    return true;
+  }
+  if (error == null || typeof error !== 'object') return false;
+  const e = error as { name?: string; status?: number; response?: { status?: number } };
+  if (e.name === 'AuthorizationError' || e.name === 'AuthenticationError') return true;
+  const st = e.response?.status ?? e.status;
+  return st === 401 || st === 403;
+}
+
