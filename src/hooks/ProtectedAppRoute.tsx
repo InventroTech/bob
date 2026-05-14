@@ -191,14 +191,7 @@ const ProtectedAppRoute: React.FC = () => {
       }
 
       const denyAccess = (reason: string) => {
-        console.error(`[ProtectedAppRoute] ACCESS DENIED — reason: ${reason}`, {
-          mountCount: mountCountRef.current,
-          checkKey,
-          refValue: accessCheckedRef.current,
-          allowedState: allowed,
-          cachedAccess: sessionStorage.getItem(ACCESS_CACHE_KEY),
-          timestamp: new Date().toISOString(),
-        });
+        console.warn(`[ProtectedAppRoute] ACCESS DENIED — ${reason}`);
         if (isMounted) {
           setErrorMessage(reason);
           setAllowed(false);

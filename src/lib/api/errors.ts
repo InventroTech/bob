@@ -56,3 +56,46 @@ export class ValidationError extends ApiError {
   }
 }
 
+/** Single-line detail for logs / Sentry (axios errors use response; ApiError uses status/data). */
+export function formatClientErrorDetail(error: unknown): string {
+  if (error == null) return 'unknown';
+  if (typeof error !== 'object') return String(error);
+  const e = error as {
+    name?: string;
+    message?: string;
+    status?: number;
+    response?: { status?: number; data?: unknown };
+    data?: unknown;
+  };
+  const status = e.response?.status ?? e.status;
+  const msg = e.message ?? String(error);
+  const data = e.response?.data ?? e.data;
+  let dataStr = '';
+  try {
+    if (data !== undefined) {
+      dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+    }
+  } catch {
+    dataStr = '[unserializable]';
+  }
+  const prefix = e.name && e.name !== 'Error' ? `${e.name}: ` : '';
+  const statusPart = status != null ? ` HTTP ${status}` : '';
+  const dataPart = dataStr ? ` | ${dataStr}` : '';
+  return `${prefix}${msg}${statusPart}${dataPart}`;
+}
+
+/**
+ * Session expired, logged-out tab, or tenant/membership no longer allows the call.
+ * These should not break the UI or spam Sentry as hard failures.
+ */
+export function isExpectedAuthWall(error: unknown): boolean {
+  if (error instanceof AuthorizationError || error instanceof AuthenticationError) {
+    return true;
+  }
+  if (error == null || typeof error !== 'object') return false;
+  const e = error as { name?: string; status?: number; response?: { status?: number } };
+  if (e.name === 'AuthorizationError' || e.name === 'AuthenticationError') return true;
+  const st = e.response?.status ?? e.status;
+  return st === 401 || st === 403;
+}
+

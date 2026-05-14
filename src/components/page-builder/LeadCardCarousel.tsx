@@ -946,11 +946,20 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       }
       console.log('[sendLeadEvent] Calling API with:', { eventName, recordId, payload });
       try {
-        await crmLeadsApi.sendLeadEvent(eventName, recordId, payload);
+        const posted = await crmLeadsApi.sendLeadEvent(eventName, recordId, payload);
+        if (!posted) {
+          console.warn('[sendLeadEvent] Event not posted (session expired or no permission)');
+          toast({
+            title: 'Action not saved',
+            description: 'Your session may have expired. Refresh the page or sign in again, then retry.',
+            variant: 'default',
+          });
+          return false;
+        }
         console.log('[sendLeadEvent] API call successful');
-      } catch (apiError: any) {
+      } catch (apiError: unknown) {
         console.error('[sendLeadEvent] API call failed:', apiError);
-        throw apiError; // Re-throw to be caught by outer catch
+        throw apiError;
       }
 
       if (options.successTitle || options.successDescription) {
@@ -1068,7 +1077,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       }
 
       return ok;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[handleActionButton] Error caught:', error);
       // Ensure processingAction is cleared even on error
       setProcessingAction(null);
