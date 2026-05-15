@@ -4,7 +4,12 @@
  */
 
 import { apiClient } from '../client';
+import { API_CONFIG } from '../config';
 import { LinkUserUidRequest, LinkUserUidResponse } from '../types';
+
+function getPublicApiBaseUrl(): string {
+  return (API_CONFIG.RENDER_API || API_CONFIG.BASE_URL).replace(/\/+$/, '');
+}
 
 export interface SetupNewTenantRequest {
   tenant_slug: string;
@@ -22,6 +27,37 @@ export interface SetupNewTenantResponse {
 }
 
 export const authService = {
+  /**
+   * Request a password reset email via pyro-backend (proxies Supabase /auth/v1/recover).
+   * Uses fetch without the JWT interceptor so stale sessions do not affect the request.
+   */
+  async requestPasswordReset(email: string, redirectTo: string): Promise<{ ok: boolean; error?: string }> {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      return { ok: false, error: 'Email is required.' };
+    }
+    const url = `${getPublicApiBaseUrl()}/auth/forgot-password/`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed, redirect_to: redirectTo }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return { ok: true };
+      }
+      const message =
+        (data as { error?: string }).error ||
+        (data as { message?: string }).message ||
+        `Request failed (${response.status})`;
+      return { ok: false, error: message };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Network error';
+      return { ok: false, error: message };
+    }
+  },
+
   /**
    * Create tenant, PYRO_ADMIN role, and TenantMembership (signup flow).
    * Requires Supabase JWT. Path is excluded from tenant resolution.
