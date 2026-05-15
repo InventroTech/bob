@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { authService } from '@/lib/api/services/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,56 +9,39 @@ import { KeyRound } from 'lucide-react';
 
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
   const loginHref = tenantSlug ? `/app/${tenantSlug}/login` : '/auth';
-  const afterResetPath = tenantSlug ? `/app/${tenantSlug}` : '/';
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' && session) {
-        setSessionReady(true);
-        setError('');
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-      }
-    });
-
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setSessionReady(true);
-      }
-    });
-
-    const timeoutId = window.setTimeout(() => {
-      void supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session) {
-          setError((prev) =>
-            prev ||
-            'This reset link is invalid or expired. Request a new reset from the sign-in page.'
-          );
-        }
-      });
-    }, 8000);
-
-    return () => {
-      subscription.unsubscribe();
-      window.clearTimeout(timeoutId);
-    };
-  }, []);
+    const fromQuery = searchParams.get('email');
+    if (fromQuery) {
+      setEmail(decodeURIComponent(fromQuery));
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setMessage('');
 
+    if (!email.trim()) {
+      setError('Enter the email address you used for the reset request.');
+      return;
+    }
+    if (!/^\d{6}$/.test(otp.trim())) {
+      setError('Enter the 6-digit code from your email.');
+      return;
+    }
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
       return;
@@ -70,15 +53,20 @@ const ResetPasswordPage = () => {
 
     setLoading(true);
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password });
-      if (updateError) {
-        setError(updateError.message);
+      const result = await authService.confirmPasswordResetWithOtp(
+        email,
+        otp,
+        password,
+        confirm
+      );
+      if (!result.ok) {
+        setError(result.error || 'Could not reset password.');
         return;
       }
-      setMessage('Your password has been updated.');
+      setMessage('Your password has been updated. You can sign in with the new password.');
       setTimeout(() => {
-        navigate(afterResetPath, { replace: true });
-      }, 1200);
+        navigate(loginHref, { replace: true });
+      }, 1500);
     } finally {
       setLoading(false);
     }
@@ -90,52 +78,73 @@ const ResetPasswordPage = () => {
         <Card className="shadow-lg animate-fade-in">
           <CardHeader className="text-center">
             <KeyRound className="mx-auto h-10 w-10 text-foreground mb-2" />
-            <CardTitle className="text-2xl">Set a new password</CardTitle>
+            <CardTitle className="text-2xl">Reset password</CardTitle>
             <CardDescription className="text-gray-700">
-              Choose a new password for your account.
+              Enter the code from your email, then choose a new password. The code expires in 5 minutes.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!sessionReady ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Checking your reset link… If this does not continue, open the link from your email again or request a new
-                reset.
-              </p>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-1">
-                  <Label htmlFor="reset-password">New password</Label>
-                  <Input
-                    id="reset-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    disabled={loading}
-                    autoComplete="new-password"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="reset-confirm">Confirm password</Label>
-                  <Input
-                    id="reset-confirm"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    required
-                    minLength={6}
-                    disabled={loading}
-                    autoComplete="new-password"
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? 'Saving…' : 'Update password'}
-                </Button>
-              </form>
-            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="reset-email">Email</Label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="reset-otp">6-digit code</Label>
+                <Input
+                  id="reset-otp"
+                  inputMode="numeric"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  required
+                  disabled={loading}
+                  autoComplete="one-time-code"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="reset-password">New password</Label>
+                <Input
+                  id="reset-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  disabled={loading}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="reset-confirm">Confirm new password</Label>
+                <Input
+                  id="reset-confirm"
+                  type="password"
+                  placeholder="••••••••"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  required
+                  minLength={6}
+                  disabled={loading}
+                  autoComplete="new-password"
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Saving…' : 'Update password'}
+              </Button>
+            </form>
           </CardContent>
           {(message || error) && (
             <CardFooter className="flex-col text-center text-sm pt-0">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { authService } from '@/lib/api/services/auth';
+import { PASSWORD_RESET_OTP_TTL_MINUTES } from '@/lib/emails/passwordResetOtp';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,15 +23,14 @@ const ForgotPasswordPage = () => {
     setError('');
     setLoading(true);
     try {
-      const redirectTo = tenantSlug
-        ? `${window.location.origin}/app/${tenantSlug}/auth/reset-password`
-        : `${window.location.origin}/auth/reset-password`;
-      const result = await authService.requestPasswordReset(email, redirectTo);
+      const result = await authService.requestPasswordReset(email, { tenantSlug });
       if (!result.ok) {
         setError(result.error || 'Something went wrong.');
         return;
       }
-      setMessage('If an account exists for that email, you will receive a reset link shortly.');
+      setMessage(
+        `If an account exists for that email, you will receive a message with a reset link and a 6-digit code. The code expires in ${PASSWORD_RESET_OTP_TTL_MINUTES} minutes`
+      );
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,7 @@ const ForgotPasswordPage = () => {
             <Mail className="mx-auto h-10 w-10 text-foreground mb-2" />
             <CardTitle className="text-2xl">Forgot password</CardTitle>
             <CardDescription className="text-gray-700">
-              Enter your email and we will send you a link to choose a new password.
+              We will email you a link to the reset page and a 6-digit code; the code expires in 5 minutes.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -63,7 +63,7 @@ const ForgotPasswordPage = () => {
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Sending…' : 'Send reset link'}
+                {loading ? 'Sending…' : 'Send code'}
               </Button>
             </form>
           </CardContent>
