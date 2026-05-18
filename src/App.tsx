@@ -15,6 +15,8 @@ import Dashboard from './pages/Dashboard'
 import ProfilePage from './pages/ProfilePage'
 import AuthPage from './pages/AuthPage'
 import SignupPage from './pages/SignupPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import ProtectedRoute from './hooks/ProtectedRoute'
 import MyPages from './pages/MyPages'
 import CustomAppAuthPage from './pages/CustomAppAuthPage';
@@ -47,6 +49,8 @@ const App = () => (
           <Routes>
           {/* Public routes - login & signup */}
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
           <Route path="/signup" element={<SignupPage />} />
 
           {/* Protected Routes - Require Login */}
@@ -75,6 +79,8 @@ const App = () => (
           {/* Custom App Routes */}
           <Route path="/app/:tenantSlug/login" element={<CustomAppAuthPage />} />
           <Route path="/app/:tenantSlug/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/app/:tenantSlug/auth/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/app/:tenantSlug/auth/reset-password" element={<ResetPasswordPage />} />
           
           {/* Public Tenant Pages - No Authentication Required */}
           <Route path="/app/:tenantSlug/public/:pageId" element={<PublicTenantPage />} />
