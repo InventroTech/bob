@@ -4,7 +4,30 @@
  */
 
 import { apiClient } from '../client';
+import { API_CONFIG } from '../config';
+import { buildPasswordResetOtpEmail } from '@/lib/emails/passwordResetOtp';
 import { LinkUserUidRequest, LinkUserUidResponse } from '../types';
+
+function getPublicApiBaseUrl(): string {
+  return (API_CONFIG.RENDER_API || API_CONFIG.BASE_URL).replace(/\/+$/, '');
+}
+
+/** Absolute URL of the SPA reset-password screen (for links inside emails). */
+export function buildPasswordResetPageUrl(email: string, tenantSlug?: string): string {
+  const trimmed = email.trim();
+  const fromWindow =
+    typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+  const fromEnv =
+    typeof import.meta.env.VITE_PUBLIC_APP_URL === 'string'
+      ? import.meta.env.VITE_PUBLIC_APP_URL.replace(/\/+$/, '')
+      : '';
+  const base = fromWindow || fromEnv;
+  const q = `?email=${encodeURIComponent(trimmed)}`;
+  const path = tenantSlug
+    ? `/app/${tenantSlug}/auth/reset-password${q}`
+    : `/auth/reset-password${q}`;
+  return base ? `${base}${path}` : path;
+}
 
 export interface SetupNewTenantRequest {
   tenant_slug: string;
@@ -22,6 +45,88 @@ export interface SetupNewTenantResponse {
 }
 
 export const authService = {
+  /**
+   * Request a 6-digit OTP by email (stored server-side with 5-minute TTL). No Supabase recovery email.
+   * Uses fetch without the JWT interceptor so stale sessions do not affect the request.
+   */
+  async requestPasswordReset(
+    email: string,
+    opts?: { tenantSlug?: string }
+  ): Promise<{ ok: boolean; error?: string }> {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      return { ok: false, error: 'Email is required.' };
+    }
+    const url = `${getPublicApiBaseUrl()}/auth/forgot-password/`;
+    const resetLink = buildPasswordResetPageUrl(trimmed, opts?.tenantSlug);
+    const { subject, textBody, htmlBody } = buildPasswordResetOtpEmail({ resetLink });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: trimmed,
+          subject,
+          message: textBody,
+          html_message: htmlBody,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return { ok: true };
+      }
+      const message =
+        (data as { error?: string }).error ||
+        (data as { message?: string }).message ||
+        `Request failed (${response.status})`;
+      return { ok: false, error: message };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Network error';
+      return { ok: false, error: message };
+    }
+  },
+
+  /**
+   * Set a new password using email + OTP from the forgot-password flow.
+   */
+  async confirmPasswordResetWithOtp(
+    email: string,
+    otp: string,
+    password: string,
+    passwordConfirm: string
+  ): Promise<{ ok: boolean; error?: string }> {
+    const trimmedEmail = email.trim();
+    const trimmedOtp = otp.trim().replace(/\s+/g, '');
+    if (!trimmedEmail || !trimmedOtp || !password) {
+      return { ok: false, error: 'Email, code, and password are required.' };
+    }
+    const url = `${getPublicApiBaseUrl()}/auth/reset-password/confirm/`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: trimmedEmail.toLowerCase(),
+          otp: trimmedOtp,
+          password,
+          password_confirm: passwordConfirm,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return { ok: true };
+      }
+      const message =
+        (data as { error?: string }).error ||
+        (data as { message?: string }).message ||
+        `Request failed (${response.status})`;
+      return { ok: false, error: message };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Network error';
+      return { ok: false, error: message };
+    }
+  },
+
   /**
    * Create tenant, PYRO_ADMIN role, and TenantMembership (signup flow).
    * Requires Supabase JWT. Path is excluded from tenant resolution.

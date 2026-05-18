@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
@@ -152,6 +152,14 @@ const CustomAppAuthPage: React.FC = () => {
                   required
                   disabled={loading}
                 />
+              </div>
+              <div className="text-right">
+                <Link
+                  to={`/app/${tenantSlug}/auth/forgot-password`}
+                  className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+                >
+                  Forgot password?
+                </Link>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign in'}
