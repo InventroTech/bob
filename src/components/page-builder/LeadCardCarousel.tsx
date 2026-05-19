@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
-import { fetchLottieAnimation, requestIdle } from "@/lib/lottieCache";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -19,6 +18,7 @@ import {
   MessageSquare,
   X,
   RefreshCw,
+  Target,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -119,6 +119,14 @@ interface LeadState {
   leadStartTime: Date;
 }
 
+/** Format CRM recall timestamp for the pending-dashboard cards */
+function formatRecallAtLabel(iso: string | null): string {
+  if (!iso) return 'No recall time set';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 
 const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProps>(({ config, initialLead, onLeadUpdate, isInModal = false, hideActionBar = false, onActionButtonsVisibilityChange, onCallBackModalChange, onActionComplete }, ref) => {
   const { toast } = useToast();
@@ -130,8 +138,20 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const [showPendingCard, setShowPendingCard] = useState(true);
   const [hasCheckedForLeads, setHasCheckedForLeads] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [inspirationalMessage, setInspirationalMessage] = useState<string>('');
-  const [animationData, setAnimationData] = useState<any>(null);
+  /** Idle “pending leads” dashboard: recall queue + today’s activity */
+  const [pendingDash, setPendingDash] = useState<{
+    notConnected: { name: string; nextCallLabel: string } | null;
+    snoozed: { name: string; nextCallLabel: string } | null;
+    trialAcceptedToday: number;
+    notInterestedToday: number;
+    loading: boolean;
+  }>({
+    notConnected: null,
+    snoozed: null,
+    trialAcceptedToday: 0,
+    notInterestedToday: 0,
+    loading: true,
+  });
   const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
   const [showCallBackDialog, setShowCallBackDialog] = useState(false);
 
@@ -166,6 +186,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [dailyTarget, setDailyTarget] = useState<number | null>(null);
+  const [quotaSettingsLoaded, setQuotaSettingsLoaded] = useState(false);
   const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
@@ -386,16 +407,20 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
 
-  // Fetch daily target from new core KV settings table
-  const fetchDailyTarget = async () => {
+  // Fetch daily target from core KV (`DAILY_TARGET`) whenever session is known
+  const fetchDailyTarget = useCallback(async () => {
+    if (session) {
+      setQuotaSettingsLoaded(false);
+    }
     try {
       if (!session) {
+        setDailyTarget(null);
         return;
       }
 
-      // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) {
+        setDailyTarget(null);
         return;
       }
 
@@ -419,8 +444,14 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     } catch (error) {
       console.error('[LeadCardCarousel] Error fetching daily target:', error);
       setDailyTarget(null);
+    } finally {
+      setQuotaSettingsLoaded(true);
     }
-  };
+  }, [session]);
+
+  useEffect(() => {
+    void fetchDailyTarget();
+  }, [fetchDailyTarget]);
 
   // Fetch current assigned lead from API
   const fetchCurrentLead = async () => {
@@ -432,18 +463,50 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     }
   };
 
-  // Inspirational messages for workers
-  const inspirationalMessages = [
-    "Every call brings you closer to success! 💪",
-    "Your dedication drives results! 🚀",
-    "Turn challenges into opportunities! 🌟",
-    "Every lead is a chance to make a difference! 💎",
-    "You're building relationships that matter! 🤝",
-    "Success is calling - answer it! 📞",
-    "Each interaction creates value! ✨",
-    "You've got this! Keep pushing forward! 💯"
-  ];
+  const refreshPendingDashboard = useCallback(async () => {
+    if (!session) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
+    setPendingDash((prev) => ({ ...prev, loading: true }));
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const dateFrom = todayStart.toISOString();
+    const dateTo = tomorrowStart.toISOString();
+
+    try {
+      const [nc, sz, trials, notInterested] = await Promise.all([
+        crmLeadsApi.getRecallPreviewForAssignee(user.id, 'CALL_NOT_CONNECTED'),
+        crmLeadsApi.getRecallPreviewForAssignee(user.id, 'SNOOZED'),
+        crmLeadsApi.getTrialActivationCount(user.id, dateFrom, dateTo),
+        crmLeadsApi.getLeadEventCount(user.id, 'lead.not_interested', dateFrom, dateTo),
+      ]);
+
+      setPendingDash({
+        notConnected: nc
+          ? { name: nc.name, nextCallLabel: formatRecallAtLabel(nc.nextCallAtIso) }
+          : null,
+        snoozed: sz
+          ? { name: sz.name, nextCallLabel: formatRecallAtLabel(sz.nextCallAtIso) }
+          : null,
+        trialAcceptedToday: trials,
+        notInterestedToday: notInterested,
+        loading: false,
+      });
+    } catch (error) {
+      console.error('[LeadCardCarousel] Error loading pending dashboard:', error);
+      setPendingDash({
+        notConnected: null,
+        snoozed: null,
+        trialAcceptedToday: 0,
+        notInterestedToday: 0,
+        loading: false,
+      });
+    }
+  }, [session]);
 
   // Utility functions
   const getLeadName = (lead: LeadData | null): string => {
@@ -1197,44 +1260,19 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     actionButtonsVisible,
   }), [updating, currentLead, actionButtonsVisible]);
 
-  // Load Lottie animation (idle + cached)
-  useEffect(() => {
-    const urls = [
-      'https://lottie.host/embed/c7676df8-1c6b-4703-b6dd-3e861d2c90a2/tl7ZtL4MJc.json',
-      'https://assets5.lottiefiles.com/packages/lf20_jcikwtux.json',
-      'https://assets5.lottiefiles.com/packages/lf20_qp1spzqv.json',
-    ];
-
-    requestIdle(() => {
-      fetchLottieAnimation(urls)
-        .then((data) => {
-          if (data) setAnimationData(data);
-        })
-        .catch(() => {
-          // noop; we already show a lightweight fallback
-        });
-    });
-  }, []);
-
   // Initialize component - fetch current lead on refresh (skip if initialLead is provided)
   // Use initialLead?.id so we don't re-run when parent re-renders with new object ref (same lead)
   const initialLeadId = initialLead?.id != null ? Number(initialLead.id) : null;
   useEffect(() => {
     const initializeComponent = async () => {
-      // If initialLead is provided, skip auto-initialization
+      // If initialLead is provided, skip auto-initialization (daily quota loads via session effect)
       if (initialLead) {
-        fetchDailyTarget();
         return;
       }
-      
-      fetchDailyTarget();
-      
+
       // Initialize fetched leads count from localStorage
       const persistedCount = getPersistedFetchedCount();
       setFetchedLeadsCount(persistedCount);
-      
-      // Set random inspirational message
-      setInspirationalMessage(inspirationalMessages[Math.floor(Math.random() * inspirationalMessages.length)]);
       
       // Fetch current assigned lead from API on refresh
       const currentLead = await fetchCurrentLead();
@@ -1350,68 +1388,176 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     setImageError(false);
   }, [currentLead]);
 
+  // Load recall queue + today’s stats while the idle “pending fresh leads” card is visible
+  useEffect(() => {
+    if (!showPendingCard || !session) return;
+    void refreshPendingDashboard();
+    const interval = window.setInterval(() => void refreshPendingDashboard(), 120_000);
+    return () => clearInterval(interval);
+  }, [showPendingCard, session, refreshPendingDashboard]);
+
   // Pending card
   if (showPendingCard) {
+    const recallSkeleton = (
+      <div className="space-y-2 animate-pulse" aria-hidden>
+        <div className="h-4 w-3/4 rounded bg-muted" />
+        <div className="h-3 w-1/2 rounded bg-muted/80" />
+      </div>
+    );
+
+    const freshRemainingToday =
+      dailyTarget !== null ? Math.max(0, dailyTarget - fetchedLeadsCount) : null;
+
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
         <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
-          <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-6">
-            {/* Header */}
-            <div className="text-center mb-6">
-              <h5>
-                {config?.title || "Lead Management"}
+          <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white shadow-sm p-6 md:p-8">
+            <div className="text-center space-y-1 mb-8">
+              <h5 className="text-xl font-semibold tracking-tight text-slate-900">
+                Pending Fresh Leads
               </h5>
+              {config?.title ? (
+                <p className="text-sm text-muted-foreground">{config.title}</p>
+              ) : null}
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Your next callbacks and today&apos;s outcomes at a glance.
+              </p>
             </div>
 
-            {/* Inspirational Messages for Workers */}
-            <div className="mb-6 space-y-3">
-              <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 rounded-lg text-center shadow-lg">
-                <p className="text-white text-xl font-semibold mb-2">
-                  {inspirationalMessage}
-                </p>
-                <p className="text-blue-100 text-sm">
-                  Ready to make your next call count?
-                </p>
-              </div>
-              
-              {/* Lottie Animation */}
-              <div className="flex justify-center items-center h-64">
-                {animationData ? (
-                  <React.Suspense
-                    fallback={
-                      <div className="flex flex-col items-center justify-center h-64">
-                        <div className="text-6xl mb-4">🎯</div>
-                        <p className="text-gray-500 text-sm">Loading animation...</p>
-                      </div>
-                    }
-                  >
-                    {/* Lazy import to avoid blocking initial render with lottie-web */}
-                    {(() => {
-                      const Lottie = React.lazy(() => import('lottie-react'));
-                      return (
-                        <Lottie
-                          animationData={animationData}
-                          loop={true}
-                          autoplay={true}
-                          rendererSettings={{ progressiveLoad: true, hideOnTransparent: true }}
-                          style={{ height: 250, width: 250 }}
-                        />
-                      );
-                    })()}
-                  </React.Suspense>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-64">
-                    <div className="text-6xl mb-4">🎯</div>
-                    <p className="text-gray-500 text-sm">Loading animation...</p>
+            {freshRemainingToday !== null ? (
+              <div className="mb-6 flex justify-center">
+                <div className="inline-flex flex-col items-center gap-2 rounded-xl border border-sky-200/90 bg-gradient-to-br from-sky-50 via-white to-cyan-50/80 px-5 py-4 shadow-sm max-w-full">
+                  <div className="flex items-center gap-2 text-sky-900/90">
+                    <Target className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="text-xs font-semibold uppercase tracking-wide">
+                      Fresh leads remaining today
+                    </span>
                   </div>
+                  <p className="text-center text-sm text-slate-700 leading-snug">
+                    <span className="text-3xl font-bold tabular-nums text-sky-950">
+                      {freshRemainingToday}
+                    </span>
+                    <span className="text-slate-500"> of </span>
+                    <span className="text-lg font-semibold tabular-nums text-slate-800">
+                      {dailyTarget}
+                    </span>
+                    <span className="block sm:inline sm:ml-1 text-slate-600">
+                      still available against your daily quota.
+                    </span>
+                  </p>
+                </div>
+              </div>
+            ) : quotaSettingsLoaded ? (
+              <p className="mb-6 text-center text-xs text-muted-foreground px-4">
+                Daily quota isn&apos;t configured — ask your admin to set DAILY_TARGET to see remaining fresh leads here.
+              </p>
+            ) : (
+              <div className="mb-6 flex justify-center" aria-hidden>
+                <div className="h-16 w-full max-w-sm rounded-xl bg-muted/50 animate-pulse" />
+              </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-4 mb-6">
+              <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-amber-50/90 to-white p-5 space-y-3">
+                <div className="flex items-center gap-2 text-amber-800/90">
+                  <Phone className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="text-xs font-semibold uppercase tracking-wide">
+                    Next not connected
+                  </span>
+                </div>
+                {pendingDash.loading ? (
+                  recallSkeleton
+                ) : pendingDash.notConnected ? (
+                  <>
+                    <p className="text-base font-medium text-slate-900 leading-snug">
+                      {pendingDash.notConnected.name}
+                    </p>
+                    <p className="flex items-start gap-2 text-sm text-slate-600">
+                      <Clock className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" aria-hidden />
+                      <span>
+                        Next call at{' '}
+                        <span className="font-medium text-slate-800">
+                          {pendingDash.notConnected.nextCallLabel}
+                        </span>
+                      </span>
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No assigned not-connected leads with a queued recall.
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-violet-50/90 to-white p-5 space-y-3">
+                <div className="flex items-center gap-2 text-violet-900/85">
+                  <Clock className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="text-xs font-semibold uppercase tracking-wide">
+                    Next snoozed
+                  </span>
+                </div>
+                {pendingDash.loading ? (
+                  recallSkeleton
+                ) : pendingDash.snoozed ? (
+                  <>
+                    <p className="text-base font-medium text-slate-900 leading-snug">
+                      {pendingDash.snoozed.name}
+                    </p>
+                    <p className="flex items-start gap-2 text-sm text-slate-600">
+                      <Clock className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" aria-hidden />
+                      <span>
+                        Next call at{' '}
+                        <span className="font-medium text-slate-800">
+                          {pendingDash.snoozed.nextCallLabel}
+                        </span>
+                      </span>
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No assigned snoozed leads scheduled.
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Action Button */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-5 mb-8">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-4">
+                Today&apos;s stats
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-lg bg-white border border-slate-200/80 px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-2 text-emerald-700 mb-1">
+                    <CheckCircle2 className="h-4 w-4" aria-hidden />
+                    <span className="text-xs font-medium">Trial accepted</span>
+                  </div>
+                  {pendingDash.loading ? (
+                    <div className="h-8 w-12 rounded-md bg-muted animate-pulse mt-1" aria-hidden />
+                  ) : (
+                    <p className="text-2xl font-semibold tabular-nums text-slate-900">
+                      {pendingDash.trialAcceptedToday}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-lg bg-white border border-slate-200/80 px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-2 text-rose-700 mb-1">
+                    <XCircle className="h-4 w-4" aria-hidden />
+                    <span className="text-xs font-medium">Not interested</span>
+                  </div>
+                  {pendingDash.loading ? (
+                    <div className="h-8 w-12 rounded-md bg-muted animate-pulse mt-1" aria-hidden />
+                  ) : (
+                    <p className="text-2xl font-semibold tabular-nums text-slate-900">
+                      {pendingDash.notInterestedToday}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-center items-center w-full">
-              <CustomButton 
-                onClick={handleGetLeads} 
+              <CustomButton
+                onClick={handleGetLeads}
                 disabled={loading}
                 loading={loading}
                 className="max-w-xs"
