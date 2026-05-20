@@ -19,7 +19,6 @@ import ShortProfileCard from '../ui/ShortProfileCard';
 
 
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
@@ -1903,124 +1902,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
   };
 
-  // Handle page selection from dropdown
-  const handlePageChange = async (pageNumber: string) => {
-    const page = parseInt(pageNumber, 10);
-    if (isNaN(page) || page < 1 || page > pagination.numberOfPages) {
-      return;
-    }
-
-    try {
-      setTableLoading(true);
-
-      if (!effectiveApiEndpoint) {
-        console.warn('LeadTableComponent: apiEndpoint is not configured.');
-        setTableLoading(false);
-        return;
-      }
-
-      const endpoint = effectiveApiEndpoint;
-
-      // Build query parameters
-      let params: URLSearchParams;
-
-      // Use new dynamic filter system if filters are configured
-      if (hasActiveFilters) {
-        params = filterService.generateQueryParams(filterState.values);
-        // Add pagination with selected page
-        params.set('page', page.toString());
-        params.set('page_size', '10');
-      } else {
-        // Fallback to legacy filter system
-        params = new URLSearchParams();
-
-        // Only add entity_type if using generic records endpoint and entityType is configured
-        if (endpoint.includes('/crm-records/records') && config?.entityType) {
-          params.append('entity_type', config.entityType);
-        }
-
-        // Add lead stage filters
-        if (leadStatusFilter.length > 0) {
-          params.append('lead_stage', leadStatusFilter.join(','));
-        }
-
-        // Add source filter
-        if (sourceFilter !== 'all') {
-          params.append('source', sourceFilter);
-        }
-
-        // Add date range filters
-        if (dateRangeFilter.startDate) {
-          const startDateTime = new Date(dateRangeFilter.startDate);
-          const [startHour, startMinute] = dateRangeFilter.startTime.split(':').map(Number);
-          startDateTime.setHours(startHour, startMinute, 0, 0);
-          params.append('created_at__gte', startDateTime.toISOString());
-        }
-        if (dateRangeFilter.endDate) {
-          const endDateTime = new Date(dateRangeFilter.endDate);
-          const [endHour, endMinute] = dateRangeFilter.endTime.split(':').map(Number);
-          endDateTime.setHours(endHour, endMinute, 59, 999);
-          params.append('created_at__lte', endDateTime.toISOString());
-        }
-
-        // Include search and search_fields
-        if (searchTerm && searchTerm.trim() !== '') {
-          params.append('search', searchTerm.trim());
-          if (config?.searchFields) {
-            params.append('search_fields', config.searchFields);
-          }
-        }
-        
-        // Add pagination with selected page
-        params.append('page', page.toString());
-        params.append('page_size', '10');
-      }
-
-      // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
-      removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
-
-      const url = buildUrlWithParams(endpoint, params);
-
-      const response = await apiClient.get(url);
-      const responseData = response.data;
-      
-      let leads = [];
-      let pageMeta = null;
-
-      if (responseData.results && Array.isArray(responseData.results)) {
-        leads = responseData.results;
-        pageMeta = responseData.page_meta;
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        leads = responseData.data;
-        pageMeta = responseData.page_meta;
-      } else if (Array.isArray(responseData)) {
-        leads = responseData;
-      }
-
-      // Transform the data
-      const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
-
-      setData(transformedData);
-      setFilteredData(transformedData);
-      
-      if (pageMeta) {
-        setPagination({
-          totalCount: pageMeta.total_count || 0,
-          numberOfPages: pageMeta.number_of_pages || 0,
-          currentPage: pageMeta.current_page || 1,
-          pageSize: pageMeta.page_size || 10,
-          nextPageLink: pageMeta.next_page_link || null,
-          previousPageLink: pageMeta.previous_page_link || null
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching page:', error);
-      toast({ title: 'Error', description: `Failed to load page ${page}`, variant: 'destructive' });
-    } finally {
-      setTableLoading(false);
-    }
-  };
-
   const handleLeadUpdate = (updatedLead: any) => {
     const updatedData = data.map(lead => 
       lead.id === updatedLead.id ? updatedLead : lead
@@ -2271,7 +2152,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
                   {/* Filter Summary */}
                   <div className="mt-3 text-sm text-gray-600">
-                    Showing {filteredData.length} of {pagination.totalCount} records
+                    Showing {filteredData.length} records
+                    {pagination.currentPage > 1 && (
+                      <span> · Page {pagination.currentPage}</span>
+                    )}
                     {filtersApplied && getActiveFiltersCount() > 0 && hasActiveFilters && (
                       <span className="ml-2">
                         (Filtered by: {filterService.getFilterDescription(filterState.values)})
@@ -2323,30 +2207,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           />
         </div>
         
-        {/* Server-side pagination controls - works for both search and normal view */}
-        {pagination.totalCount > 0 && filteredData.length > 0 && (
+        {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
+        {filteredData.length > 0 &&
+          (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
           <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Page</span>
-              <Select
-                value={pagination.currentPage.toString()}
-                onValueChange={handlePageChange}
-                disabled={tableLoading}
-              >
-                <SelectTrigger className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-3 py-1.5 h-auto w-[70px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: pagination.numberOfPages }, (_, i) => i + 1).map((pageNum) => (
-                    <SelectItem key={pageNum} value={pageNum.toString()} className="hover:bg-gray-100 focus:bg-gray-100">
-                      {pageNum}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className="text-sm text-gray-600">of {pagination.numberOfPages}</span>
-            </div>
-            
+            <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
+
             <div className="flex items-center gap-2">
               <CustomButton
                 variant="outline"
