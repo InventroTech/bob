@@ -387,7 +387,6 @@ export function mergeDispatchFilterValues(
   existing: DispatchFilterValues,
   filters: FilterConfig[]
 ): DispatchFilterValues {
-  const validKeys = new Set(filters.map((f) => f.key));
   const merged: DispatchFilterValues = {};
 
   for (const f of filters) {
