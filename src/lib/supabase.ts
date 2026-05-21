@@ -12,7 +12,12 @@ if (!supabaseAnonKey) {
   throw new Error("VITE_SUPABASE_ANON_KEY is not defined in .env file");
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  },
+});
 
 /** Used when spoofing to call Supabase REST with the spoof token so RLS sees the spoofed user */
 export const getSupabaseRestConfig = () => ({
