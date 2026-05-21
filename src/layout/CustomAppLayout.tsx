@@ -3,7 +3,9 @@ import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
-import { Bell, PanelLeft, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers } from 'lucide-react';
+import { Bell, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers, ChevronLeft } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
@@ -82,6 +84,28 @@ const DynamicSidebarIcon = ({
   return <Sparkles className="h-4 w-4" />;
 };
 
+function NavIcon({
+  isMobile,
+  isActive,
+  iconName,
+  customIcons,
+}: {
+  isMobile: boolean;
+  isActive: boolean;
+  iconName: string;
+  customIcons: CustomIconRow[];
+}) {
+  return (
+    <div
+      className={`flex h-8 w-8 items-center justify-center rounded-full ${
+        isMobile ? 'text-white' : isActive ? 'text-white' : 'text-gray-600'
+      }`}
+    >
+      <DynamicSidebarIcon iconName={iconName} customIcons={customIcons} />
+    </div>
+  );
+}
+
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
@@ -95,6 +119,8 @@ const CustomAppLayout: React.FC = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [spoofBannerVisible, setSpoofBannerVisible] = useState(() => isSpoofing());
   const [spoofVersion, setSpoofVersion] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const sidebarWidths = {
     expanded: 288,
@@ -243,6 +269,43 @@ const CustomAppLayout: React.FC = () => {
     }
   };
 
+  const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
+    <>
+      {pages.map((page) => (
+        <NavLink
+          key={page.id}
+          to={`/app/${tenantSlug}/pages/${page.id}`}
+          onClick={opts.onNavigate}
+          className={({ isActive }) =>
+            `flex items-center rounded-xl text-sm font-medium transition ${
+              opts.collapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'
+            } ${
+              isMobile
+                ? isActive
+                  ? 'bg-gray-800 text-white'
+                  : 'bg-gray-900 text-white hover:bg-gray-800'
+                : isActive
+                  ? 'bg-black text-white'
+                  : 'text-gray-700 hover:bg-gray-50'
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <NavIcon
+                isMobile={isMobile}
+                isActive={isActive}
+                iconName={page.icon_name}
+                customIcons={customIcons}
+              />
+              {!opts.collapsed && <span>{page.name}</span>}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </>
+  );
+
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -262,6 +325,12 @@ const CustomAppLayout: React.FC = () => {
     }
   };
 
+  const mainMarginLeft = isMobile
+    ? 0
+    : sidebarCollapsed
+      ? sidebarWidths.collapsed
+      : sidebarWidths.expanded;
+
   return (
     <div
       className="flex min-h-screen"
@@ -269,9 +338,73 @@ const CustomAppLayout: React.FC = () => {
         ['--sidebar-width' as string]: `${sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded}px`
       }}
     >
-      {/* Sidebar */}
+      {isMobile ? (
+        <>
+          <header className="fixed left-0 right-0 top-0 z-50 flex h-14 items-center justify-between bg-black px-3 text-white">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg"
+              aria-label="Open menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+            <img src="/fire-logo.png" alt="Pyro" className="h-8 object-contain" />
+            <div className="w-10" />
+          </header>
+          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+            <SheetContent side="left" className="flex w-[min(100vw-2rem,320px)] flex-col bg-white p-0">
+              <div className="flex items-center gap-2 border-b px-4 py-4">
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border"
+                  aria-label="Close menu"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <img src="/fire-logo.png" alt="Pyro" className="h-8 object-contain" />
+              </div>
+              <nav className="flex-1 space-y-2 overflow-y-auto p-3">
+                {renderNavLinks({ collapsed: false, onNavigate: () => setMobileNavOpen(false) })}
+              </nav>
+              <div className="border-t p-3 space-y-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
+                >
+                  <Bell className="h-4 w-4" />
+                  Notifications
+                </button>
+                <div className="flex items-center gap-3 rounded-xl px-3 py-2">
+                  <img
+                    src={profileImage || '/default-avatar.png'}
+                    alt={profileName}
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                  <p className="truncate text-sm font-semibold text-gray-900">{profileName}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    void handleLogout();
+                  }}
+                  disabled={isLoggingOut}
+                  className="flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium text-gray-600"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {isLoggingOut ? 'Logging out...' : 'Logout'}
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </>
+      ) : null}
+
+      {/* Desktop sidebar */}
       <div
-        className="fixed left-0 top-0 h-full bg-white transition-all duration-200"
+        className={`fixed left-0 top-0 h-full bg-white transition-all duration-200 ${isMobile ? 'hidden' : ''}`}
         style={{ width: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
@@ -385,7 +518,7 @@ const CustomAppLayout: React.FC = () => {
       {/* Main Content */}
       <main
         className="flex-1 bg-white transition-all duration-200 overflow-auto"
-        style={{ marginLeft: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
+        style={{ marginLeft: mainMarginLeft, paddingTop: isMobile ? 56 : 0 }}
       >
         {spoofBannerVisible && spoofLabel && (
           <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">

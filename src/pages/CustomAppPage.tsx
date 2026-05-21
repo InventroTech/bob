@@ -139,13 +139,18 @@ const CustomAppPage: React.FC = () => {
   };
 
   const headerTitle = getHeaderTitle();
-  console.log('Rendering page with header_title:', headerTitle);
+  const hidePageHeader =
+    Array.isArray(page.config) &&
+    page.config.some(
+      (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
+        comp.type === 'dispatchCardList' && comp.config?.hidePageHeader !== false
+    );
 
   return (
     <div className="w-full">
       {/* Fixed Header */}
-      {headerTitle && (
-        <div className="sticky top-0 z-50 w-full bg-white border-b border-gray-300 shadow-sm">
+      {headerTitle && !hidePageHeader && (
+        <div className="sticky top-0 z-40 w-full border-b border-gray-300 bg-white shadow-sm max-md:hidden">
           <div className="px-6 py-4">
             <h2 className="text-3xl font-bold text-gray-900">
               {headerTitle}

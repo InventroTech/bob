@@ -35,6 +35,11 @@ export interface FilterConfig {
   /** Label for the end date field in Date Range filter (e.g. "To", "End date"). */
   dateRangeEndLabel?: string;
   placeholder?: string; // For text and search filters
+  /** Dispatch mobile sheet: control type (Page Builder → Dispatch Card List). */
+  dispatchUi?: 'text' | 'date' | 'floatingDate' | 'toggle' | 'segment' | 'chip';
+  /** Group fields on one row (e.g. `row_start` = Start Date + toggles). */
+  dispatchRow?: string;
+  dispatchWidth?: 'full' | 'half';
 }
 
 interface DynamicFilterConfigProps {
@@ -44,6 +49,8 @@ interface DynamicFilterConfigProps {
   };
   localFilters: FilterConfig[];
   numFilters: number;
+  /** Dispatch Card List: show mobile layout fields (UI type, row group). */
+  showDispatchMobileUi?: boolean;
   handleInputChange: (field: string, value: string | number | boolean) => void;
   handleFilterCountChange: (count: number) => void;
   handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterOption[] | boolean) => void;
@@ -58,6 +65,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
   localConfig,
   localFilters,
   numFilters,
+  showDispatchMobileUi,
   handleInputChange,
   handleFilterCountChange,
   handleFilterFieldChange,
@@ -126,6 +134,56 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                     Field to filter on (uses display name if empty)
                   </p>
                 </div>
+                {showDispatchMobileUi ? (
+                  <>
+                    <div>
+                      <Label>Mobile UI control</Label>
+                      <Select
+                        value={filter.dispatchUi ?? 'text'}
+                        onValueChange={(value: NonNullable<FilterConfig['dispatchUi']>) =>
+                          handleFilterFieldChange(index, 'dispatchUi', value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Text field</SelectItem>
+                          <SelectItem value="floatingDate">Start date (floating label)</SelectItem>
+                          <SelectItem value="date">Date text field</SelectItem>
+                          <SelectItem value="toggle">Toggle (DC in Office style)</SelectItem>
+                          <SelectItem value="segment">Segment (NR / Paid style)</SelectItem>
+                          <SelectItem value="chip">Client chip</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Row group</Label>
+                      <Input
+                        value={filter.dispatchRow ?? ''}
+                        onChange={(e) => handleFilterFieldChange(index, 'dispatchRow', e.target.value)}
+                        placeholder="e.g. row_start, row_dates (same row = side by side)"
+                      />
+                    </div>
+                    <div>
+                      <Label>Width</Label>
+                      <Select
+                        value={filter.dispatchWidth ?? 'full'}
+                        onValueChange={(value: 'full' | 'half') =>
+                          handleFilterFieldChange(index, 'dispatchWidth', value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full">Full width</SelectItem>
+                          <SelectItem value="half">Half width</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : null}
                 <div className="col-span-2">
                   <Label>Filter Type</Label>
                   <Select
