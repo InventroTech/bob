@@ -35,6 +35,7 @@ import {
   MessageSquare,
   Database,
   Sparkles,
+  Truck,
 } from "lucide-react";
 import { icons } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -142,6 +143,8 @@ import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 import type { RoutingRulesConfigData, RoutingFilterField } from "@/component-config";
 import { CustomIcons, CUSTOM_ICON_NAMES } from "@/components/page-builder/NewCustomIcons";
+import { DispatchCardListComponent } from "@/components/page-builder/DispatchCardListComponent";
+import { DispatchCardListConfigPanel } from "@/components/page-builder/component-config/DispatchCardListConfig";
 
 // Wrapper component to prevent unnecessary re-renders in RoutingRulesConfig
 interface RoutingRulesConfigWrapperProps {
@@ -314,6 +317,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
+  dispatchCardList: DispatchCardListComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -686,6 +690,15 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     }
   }, [localFilters, debouncedUpdateWithDelay]);
 
+  const handleReplaceFilters = useCallback(
+    (filters: FilterConfig[]) => {
+      setLocalFilters(filters);
+      setNumFilters(filters.length);
+      debouncedUpdateWithDelay({ filters });
+    },
+    [debouncedUpdateWithDelay]
+  );
+
   const handleFilterOptionsSourceChange = useCallback((index: number, source: 'manual' | 'api') => {
     const newFilters = [...localFilters];
     const current = (newFilters[index] || {}) as any;
@@ -768,6 +781,43 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
 
       case 'leadTable':
       case 'oeLeadsTable':
+        return (
+          <TableConfig
+            localConfig={localConfig as any}
+            localColumns={localColumns}
+            numColumns={numColumns}
+            localFilters={localFilters}
+            numFilters={numFilters}
+            handleInputChange={handleInputChange}
+            handleColumnCountChange={handleColumnCountChange}
+            handleColumnFieldChange={handleColumnFieldChange}
+            handleColumnDelete={handleColumnDelete}
+            handleFilterCountChange={handleFilterCountChange}
+            handleFilterFieldChange={handleFilterFieldChange}
+            handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
+            handleAddFilterOption={handleAddFilterOption}
+            handleRemoveFilterOption={handleRemoveFilterOption}
+            handleFilterOptionChange={handleFilterOptionChange}
+          />
+        );
+
+      case 'dispatchCardList':
+        return (
+          <DispatchCardListConfigPanel
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+            localFilters={localFilters}
+            numFilters={numFilters}
+            onReplaceFilters={handleReplaceFilters}
+            handleFilterCountChange={handleFilterCountChange}
+            handleFilterFieldChange={handleFilterFieldChange}
+            handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
+            handleAddFilterOption={handleAddFilterOption}
+            handleRemoveFilterOption={handleRemoveFilterOption}
+            handleFilterOptionChange={handleFilterOptionChange}
+          />
+        );
+
       case 'inventoryTable':
         return (
           <TableConfig
@@ -1218,7 +1268,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1797,6 +1847,11 @@ useEffect(() => {
                           icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
+                          id="dispatchCardList"
+                          label="Dispatch Card List"
+                          icon={<Truck className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
                           id="inventoryRequestForm"
                           label="Inventory Request Form"
                           icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
@@ -2030,6 +2085,7 @@ useEffect(() => {
       {/* Add the configuration panel */}
       {selectedComponentId && (
         <ConfigurationPanel
+          key={selectedComponentId}
           selectedComponent={canvasComponents.find(c => c.id === selectedComponentId) || {} as CanvasComponentData}
           setCanvasComponents={setCanvasComponents}
           onClose={() => setSelectedComponentId(null)}
