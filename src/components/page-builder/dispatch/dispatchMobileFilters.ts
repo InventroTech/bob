@@ -286,7 +286,7 @@ export function forcesFullWidthField(filter: FilterConfig): boolean {
 export function layoutDispatchFilterRows(filters: FilterConfig[]): DispatchFilterLayoutGroup[] {
   const groups: DispatchFilterLayoutGroup[] = [];
   const seenRowIds = new Set<string>();
-  let halfQueue: FilterConfig[] = [];
+  const halfQueue: FilterConfig[] = [];
 
   const emitHalfQueue = () => {
     if (!halfQueue.length) return;
