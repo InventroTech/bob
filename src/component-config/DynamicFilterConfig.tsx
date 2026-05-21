@@ -14,7 +14,7 @@ export interface FilterOption {
 export interface FilterConfig {
   key: string;
   label: string;
-  type: 'select' | 'text' | 'date_gte' | 'date_lte' | 'date_range' | 'date_time_range' | 'number_gte' | 'number_lte' | 'search' | 'exact' | 'icontains' | 'startswith' | 'endswith' | 'gt' | 'lt' | 'in';
+  type: 'select' | 'text' | 'date_gte' | 'date_lte' | 'date_exact' | 'date_range' | 'date_time_range' | 'number_gte' | 'number_lte' | 'search' | 'exact' | 'icontains' | 'startswith' | 'endswith' | 'gt' | 'lt' | 'in';
   accessor?: string; // Field to filter on (defaults to key if not provided)
   lookup?: string; // Custom Django ORM lookup (e.g., 'icontains', 'exact', 'gte', etc.)
   options?: FilterOption[]; // For select type filters (manual options)
@@ -205,6 +205,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       <SelectItem value="search">Global Search</SelectItem>
                       <SelectItem value="date_gte">Date From (≥)</SelectItem>
                       <SelectItem value="date_lte">Date To (≤)</SelectItem>
+                      <SelectItem value="date_exact">Exact Date (=)</SelectItem>
                       <SelectItem value="date_range">Date Range</SelectItem>
                       <SelectItem value="date_time_range">Date Time Range</SelectItem>
                       <SelectItem value="number_gte">Number From (≥)</SelectItem>
@@ -214,9 +215,9 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       <SelectItem value="in">In List</SelectItem>
                     </SelectContent>
                   </Select>
-                  {(filter.type === 'date_gte' || filter.type === 'date_lte' || filter.type === 'date_range' || filter.type === 'date_time_range') && (
+                  {(filter.type === 'date_gte' || filter.type === 'date_lte' || filter.type === 'date_exact' || filter.type === 'date_range' || filter.type === 'date_time_range') && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      <strong>Date filters:</strong> Date From (≥) → <code className="bg-muted px-1 rounded">accessor__gte</code> (start). Date To (≤) → <code className="bg-muted px-1 rounded">accessor__lte</code> (end). Date Range / Date Time Range → both.
+                      <strong>Date filters:</strong> From (≥) → <code className="bg-muted px-1 rounded">accessor__gte</code>. To (≤) → <code className="bg-muted px-1 rounded">accessor__lte</code>. Exact (=) → <code className="bg-muted px-1 rounded">accessor</code> (YYYY-MM-DD). Range → both gte and lte.
                     </p>
                   )}
                 </div>

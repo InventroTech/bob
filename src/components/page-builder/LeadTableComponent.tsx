@@ -892,6 +892,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           }
           case 'date_gte':
           case 'date_lte':
+          case 'date_exact':
           case 'text':
           case 'search':
           case 'number_gte':
