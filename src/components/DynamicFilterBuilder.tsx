@@ -248,6 +248,20 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
           </div>
         );
 
+      case 'date_exact':
+        return (
+          <div className="relative">
+            <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Input
+              type="date"
+              value={value ? new Date(value).toISOString().split('T')[0] : ''}
+              onChange={(e) => handleFilterChange(filter.key, e.target.value ? new Date(e.target.value) : '')}
+              className={`pl-10 ${isActive ? 'border-blue-500' : ''}`}
+              placeholder={filter.placeholder || filter.label}
+            />
+          </div>
+        );
+
       case 'date_range': {
         const startDate = value?.start ? (value.start instanceof Date ? value.start : new Date(value.start)) : undefined;
         const endDate = value?.end ? (value.end instanceof Date ? value.end : new Date(value.end)) : undefined;

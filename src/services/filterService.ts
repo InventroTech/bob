@@ -197,6 +197,7 @@ export class FilterService {
         break;
       case 'date_gte':
       case 'date_lte':
+      case 'date_exact':
       case 'date_range':
       case 'date_time_range':
         this.addDateParam(params, accessor, filter, value);
@@ -241,6 +242,8 @@ export class FilterService {
       case 'date_lte':
       case 'number_lte':
         return `${accessor}__lte`;
+      case 'date_exact':
+        return accessor;
       case 'gt':
         return `${accessor}__gt`;
       case 'lt':
@@ -276,6 +279,8 @@ export class FilterService {
         return 'gte';
       case 'date_lte':
         return 'lte';
+      case 'date_exact':
+        return '';
       case 'date_range':
       case 'date_time_range':
         return 'range';
@@ -345,7 +350,7 @@ export class FilterService {
   /**
    * Add date parameter with specified lookup
    */
-  // Support date_gte/date_lte/date_range; values serialized as ISO strings
+  // Support date_gte/date_lte/date_exact/date_range; values serialized as YYYY-MM-DD
   private addDateParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: any): void {
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
 
@@ -353,19 +358,24 @@ export class FilterService {
       // Handle date range and date time range (start/end with optional time)
       if (value.start && this.isValidDate(value.start)) {
         const startDate = value.start instanceof Date ? value.start : new Date(value.start);
-        params.append(`${accessor}__gte`, startDate.toISOString());
+        params.append(`${accessor}__gte`, startDate.toISOString().slice(0, 10));
       }
       if (value.end && this.isValidDate(value.end)) {
         const endDate = value.end instanceof Date ? value.end : new Date(value.end);
-        params.append(`${accessor}__lte`, endDate.toISOString());
+        params.append(`${accessor}__lte`, endDate.toISOString().slice(0, 10));
       }
     } else if (this.isValidDate(value)) {
       const date = value instanceof Date ? value : new Date(value);
+      const dateOnly = date.toISOString().slice(0, 10);
+      if (filter.type === 'date_exact') {
+        params.append(accessor, dateOnly);
+        return;
+      }
       const paramName = lookup === 'gte' || lookup === '' ? `${accessor}__gte` :
                        lookup === 'lte' ? `${accessor}__lte` :
                        lookup === 'gt' ? `${accessor}__gt` :
                        lookup === 'lt' ? `${accessor}__lt` : `${accessor}__${lookup}`;
-      params.append(paramName, date.toISOString());
+      params.append(paramName, dateOnly);
     }
   }
 
@@ -435,6 +445,7 @@ export class FilterService {
    */
   private isEmpty(value: any): boolean {
     if (value === null || value === undefined) return true;
+    if (value instanceof Date) return isNaN(value.getTime());
     if (typeof value === 'string') return value.trim() === '';
     if (Array.isArray(value)) return value.length === 0;
     if (typeof value === 'object') return Object.keys(value).length === 0;
@@ -507,6 +518,11 @@ export class FilterService {
       case 'date_lte': {
         const endDate = value instanceof Date ? value : new Date(value);
         return `${filter.label} to ${endDate.toLocaleDateString()}`;
+      }
+
+      case 'date_exact': {
+        const exactDate = value instanceof Date ? value : new Date(value);
+        return `${filter.label}: ${exactDate.toLocaleDateString()}`;
       }
 
       case 'date_range':

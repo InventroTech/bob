@@ -180,10 +180,11 @@ export const DispatchCardListConfigPanel: React.FC<Props> = ({
 
           <TabsContent value="filters" className="space-y-4 pt-4">
             <p className="text-xs text-muted-foreground">
-              Filters use the same <strong>Filter Type</strong> and API params as the records table (e.g.{' '}
-              <strong>Date Range</strong> → start/end calendars and <code>dc_date__gte</code> /{' '}
-              <code>dc_date__lte</code>). <strong>Mobile UI</strong> and <strong>Row group</strong> only control
-              layout (toggles, segments, paired rows)—not filter behavior.
+              Filters use the same <strong>Filter Type</strong> and API params as the records table (Date From,
+              Date To, <strong>Exact Date</strong>, Date Range).{' '}
+              <strong>Width → Half</strong> puts a field in the left column (pairs with the next half-width
+              filter below it in the list). <strong>Row group</strong> (e.g. <code>row_dates</code>) keeps two
+              fields on one row. Segments and date ranges default to full width unless you set Half explicitly.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button

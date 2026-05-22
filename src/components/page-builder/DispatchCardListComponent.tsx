@@ -3,39 +3,27 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { createApiClient } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 import type { CrmRecord } from '@/lib/crmRecordsApi';
 import { DispatchDetailView } from './dispatch/DispatchDetailView';
 import { DispatchFilterSheet } from './dispatch/DispatchFilterSheet';
 import { DispatchFilterIcon } from './dispatch/DispatchFilterIcon';
 import {
   buildDispatchFilterParams,
+  cloneDispatchFilterValues,
   countActiveDispatchFilterValues,
   emptyDispatchFilterValues,
+  getApiSelectFilters,
+  mergeDispatchFilterValues,
   normalizeDispatchFilters,
   type DispatchFilterValues,
 } from './dispatch/dispatchMobileFilters';
+import { fetchDispatchFilterOptions } from './dispatch/fetchDispatchFilterOptions';
 import { DEFAULT_DISPATCH_SEARCH_FIELDS } from './dispatch/dispatchFieldSections';
 import { formatDispatchValue, getRecordData } from './dispatch/formatDispatchValue';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import type { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
-
-const apiClient = createApiClient(
-  import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '') || ''
-);
-
-const getNestedValue = (source: unknown, path: string): unknown => {
-  if (!source || !path) return undefined;
-  return path
-    .split('.')
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .reduce((current: unknown, key) => {
-      if (current === undefined || current === null) return undefined;
-      return (current as Record<string, unknown>)[key];
-    }, source);
-};
 
 export type DispatchCardListConfig = {
   title?: string;
@@ -128,8 +116,8 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
   const showFiltersGlobally = config?.showFilters !== false;
 
   const mobileFilters = useMemo(
-    () => normalizeDispatchFilters(config?.filters),
-    [config?.filters]
+    () => normalizeDispatchFilters(config?.filters, entityType),
+    [config?.filters, entityType]
   );
 
   const listTitleField = config?.listTitleField ?? 'account_name';
@@ -137,52 +125,68 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
   const listSalesOrderField = config?.listSalesOrderField ?? 'sales_order_number';
   const listIndexField = config?.listIndexField ?? 'sr_no';
 
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState<Record<string, boolean>>({});
+  const [filterOptionsError, setFilterOptionsError] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    const apiSelectFilters = mobileFilters.filter(
-      (f): f is FilterConfig & { optionsApiUrl: string; optionsDisplayKey: string; optionsValueKey: string } =>
-        f.type === 'select' &&
-        !!(f.optionsApiUrl?.trim() && f.optionsDisplayKey?.trim() && f.optionsValueKey?.trim())
-    );
+  const loadFilterOptions = useCallback(async () => {
+    const apiSelectFilters = getApiSelectFilters(mobileFilters);
     if (!apiSelectFilters.length) {
       setResolvedFilterOptions({});
+      setFilterOptionsLoading({});
+      setFilterOptionsError({});
       return;
     }
-    let cancelled = false;
-    apiSelectFilters.forEach(async (filter) => {
-      try {
-        const url = filter.optionsApiUrl.startsWith('/')
-          ? filter.optionsApiUrl
-          : `/${filter.optionsApiUrl}`;
-        const res = await apiClient.get<unknown>(url);
-        const raw = res.data;
-        const arr = Array.isArray(raw)
-          ? raw
-          : (raw as { results?: unknown })?.results ?? (raw as { data?: unknown })?.data ?? [];
-        const dk = filter.optionsDisplayKey.trim();
-        const vk = filter.optionsValueKey.trim();
-        const options: FilterOption[] = (arr as Record<string, unknown>[]).map((item) => ({
-          label: String((dk.includes('.') ? getNestedValue(item, dk) : item?.[dk]) ?? ''),
-          value: String((vk.includes('.') ? getNestedValue(item, vk) : item?.[vk]) ?? ''),
-        }));
-        if (!cancelled) setResolvedFilterOptions((p) => ({ ...p, [filter.key]: options }));
-      } catch {
-        if (!cancelled) setResolvedFilterOptions((p) => ({ ...p, [filter.key]: [] }));
-      }
+
+    const loading: Record<string, boolean> = {};
+    apiSelectFilters.forEach((f) => {
+      loading[f.key] = true;
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [mobileFilters]);
+    setFilterOptionsLoading(loading);
+
+    await Promise.all(
+      apiSelectFilters.map(async (filter) => {
+        try {
+          const options = await fetchDispatchFilterOptions(filter, apiClient, entityType);
+          setResolvedFilterOptions((p) => ({ ...p, [filter.key]: options }));
+          setFilterOptionsError((p) => {
+            const next = { ...p };
+            delete next[filter.key];
+            return next;
+          });
+        } catch (err) {
+          console.warn(`[DispatchCardList] Failed to load filter options for ${filter.key}:`, err);
+          setResolvedFilterOptions((p) => ({ ...p, [filter.key]: [] }));
+          setFilterOptionsError((p) => ({
+            ...p,
+            [filter.key]: 'Could not load options',
+          }));
+        } finally {
+          setFilterOptionsLoading((p) => ({ ...p, [filter.key]: false }));
+        }
+      })
+    );
+  }, [mobileFilters, entityType]);
+
+  useEffect(() => {
+    loadFilterOptions();
+  }, [loadFilterOptions]);
+
+  useEffect(() => {
+    if (filterSheetOpen) {
+      loadFilterOptions();
+    }
+  }, [filterSheetOpen, loadFilterOptions]);
 
   const effectiveFilters = useMemo(
     () =>
-      mobileFilters.map((f) =>
-        f.type === 'select' && f.optionsApiUrl && resolvedFilterOptions[f.key]
-          ? { ...f, options: resolvedFilterOptions[f.key] }
-          : f
-      ),
+      mobileFilters.map((f) => {
+        if (f.type === 'select' && f.optionsApiUrl && f.key in resolvedFilterOptions) {
+          return { ...f, options: resolvedFilterOptions[f.key] };
+        }
+        return f;
+      }),
     [mobileFilters, resolvedFilterOptions]
   );
 
@@ -192,21 +196,16 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
   const [hasMore, setHasMore] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [selected, setSelected] = useState<CrmRecord | null>(null);
 
-  const [draftFilters, setDraftFilters] = useState<DispatchFilterValues>(() =>
-    emptyDispatchFilterValues(effectiveFilters)
-  );
-  const [appliedFilters, setAppliedFilters] = useState<DispatchFilterValues>(() =>
-    emptyDispatchFilterValues(effectiveFilters)
-  );
+  const [draftFilters, setDraftFilters] = useState<DispatchFilterValues>({});
+  const [appliedFilters, setAppliedFilters] = useState<DispatchFilterValues>({});
   const [appliedFilterParams, setAppliedFilterParams] = useState(() => new URLSearchParams());
 
+  // When filter config/options load, add new keys only — never wipe applied filters.
   useEffect(() => {
-    setDraftFilters(emptyDispatchFilterValues(effectiveFilters));
-    setAppliedFilters(emptyDispatchFilterValues(effectiveFilters));
-    setAppliedFilterParams(new URLSearchParams());
+    setDraftFilters((prev) => mergeDispatchFilterValues(prev, effectiveFilters));
+    setAppliedFilters((prev) => mergeDispatchFilterValues(prev, effectiveFilters));
   }, [effectiveFilters]);
 
   useEffect(() => {
@@ -268,9 +267,15 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
   const listTitle = (config?.title ?? 'DISPATCH DATA').toUpperCase();
 
   const handleApplyFilters = () => {
-    setAppliedFilters({ ...draftFilters });
-    setAppliedFilterParams(buildDispatchFilterParams(effectiveFilters, draftFilters));
+    const nextApplied = cloneDispatchFilterValues(draftFilters);
+    setAppliedFilters(nextApplied);
+    setAppliedFilterParams(buildDispatchFilterParams(effectiveFilters, nextApplied));
     setFilterSheetOpen(false);
+  };
+
+  const openFilterSheet = () => {
+    setDraftFilters(cloneDispatchFilterValues(appliedFilters));
+    setFilterSheetOpen(true);
   };
 
   const handleClearFilters = () => {
@@ -300,10 +305,7 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
         {showFiltersGlobally ? (
           <button
             type="button"
-            onClick={() => {
-              setDraftFilters({ ...appliedFilters });
-              setFilterSheetOpen(true);
-            }}
+            onClick={openFilterSheet}
             className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white shadow-sm"
             aria-label="Filters"
           >
@@ -320,10 +322,14 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
       <DispatchFilterSheet
         open={filterSheetOpen}
         onOpenChange={(open) => {
-          if (open) setDraftFilters({ ...appliedFilters });
+          if (open) {
+            setDraftFilters(cloneDispatchFilterValues(appliedFilters));
+          }
           setFilterSheetOpen(open);
         }}
         filters={effectiveFilters}
+        filterOptionsLoading={filterOptionsLoading}
+        filterOptionsError={filterOptionsError}
         draft={draftFilters}
         onDraftChange={setDraftFilters}
         onApply={handleApplyFilters}
