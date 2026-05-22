@@ -4,7 +4,8 @@ import { CustomButton } from "@/components/ui/CustomButton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { leadTypeAssignmentApi } from "@/lib/userSettingsApi";
+import { leadTypeAssignmentApi, resolveDailyFreshLeadLimitFromKv } from "@/lib/userSettingsApi";
+import { membershipService } from "@/lib/api/services/membership";
 import { crmLeadsApi } from "@/lib/crmLeadsApi";
 import { FaWhatsapp } from "react-icons/fa";
 import {
@@ -185,8 +186,8 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   }, [actionButtonsVisible, onActionButtonsVisibilityChange]);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
-  const [dailyTarget, setDailyTarget] = useState<number | null>(null);
-  const [quotaSettingsLoaded, setQuotaSettingsLoaded] = useState(false);
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
+  const [dailyLimitLoaded, setDailyLimitLoaded] = useState(false);
   const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
 
   const isInitialized = useRef(false);
@@ -407,51 +408,47 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
 
-  // Fetch daily target from core KV (`DAILY_TARGET`) whenever session is known
-  const fetchDailyTarget = useCallback(async () => {
+  // Load daily fresh-lead cap from core KV (`DAILY_LIMIT`) for this membership
+  const fetchDailyLimit = useCallback(async () => {
     if (session) {
-      setQuotaSettingsLoaded(false);
+      setDailyLimitLoaded(false);
     }
     try {
       if (!session) {
-        setDailyTarget(null);
+        setDailyLimit(null);
         return;
       }
 
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
-        setDailyTarget(null);
+      const membership = await membershipService.getMyMembership();
+      const membershipId = membership?.tenant_membership_id;
+      if (membershipId == null || !Number.isFinite(Number(membershipId))) {
+        setDailyLimit(null);
         return;
       }
 
       try {
-        const kvRows = await leadTypeAssignmentApi.getUserCoreKVSettings(currentUser.id);
-        const dailyTargetRow = kvRows.find((row) => row.key === 'DAILY_TARGET');
-        if (typeof dailyTargetRow?.value === 'number') {
-          const savedTarget = dailyTargetRow.value;
-          setDailyTarget(savedTarget);
-        } else {
-          setDailyTarget(null);
-        }
+        const kvRows = await leadTypeAssignmentApi.getUserCoreKVSettings(String(membershipId));
+        const limit = resolveDailyFreshLeadLimitFromKv(kvRows);
+        setDailyLimit(limit);
       } catch (error: any) {
         if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          setDailyTarget(null);
+          setDailyLimit(null);
         } else {
-          console.error('[LeadCardCarousel] Error loading daily target:', error);
-          setDailyTarget(null);
+          console.error('[LeadCardCarousel] Error loading daily limit from core KV:', error);
+          setDailyLimit(null);
         }
       }
     } catch (error) {
-      console.error('[LeadCardCarousel] Error fetching daily target:', error);
-      setDailyTarget(null);
+      console.error('[LeadCardCarousel] Error fetching daily limit:', error);
+      setDailyLimit(null);
     } finally {
-      setQuotaSettingsLoaded(true);
+      setDailyLimitLoaded(true);
     }
   }, [session]);
 
   useEffect(() => {
-    void fetchDailyTarget();
-  }, [fetchDailyTarget]);
+    void fetchDailyLimit();
+  }, [fetchDailyLimit]);
 
   // Fetch current assigned lead from API
   const fetchCurrentLead = async () => {
@@ -933,8 +930,8 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         leadStartTime: new Date(),
       }));
 
-      // Increment fetched leads count (only if daily target is set)
-      if (dailyTarget !== null) {
+      // Increment fetched leads count (only if daily limit is configured)
+      if (dailyLimit !== null) {
         incrementFetchedCount();
       }
 
@@ -1265,7 +1262,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const initialLeadId = initialLead?.id != null ? Number(initialLead.id) : null;
   useEffect(() => {
     const initializeComponent = async () => {
-      // If initialLead is provided, skip auto-initialization (daily quota loads via session effect)
+      // If initialLead is provided, skip auto-initialization (daily limit loads via session effect)
       if (initialLead) {
         return;
       }
@@ -1406,7 +1403,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     );
 
     const freshRemainingToday =
-      dailyTarget !== null ? Math.max(0, dailyTarget - fetchedLeadsCount) : null;
+      dailyLimit !== null ? Math.max(0, dailyLimit - fetchedLeadsCount) : null;
 
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
@@ -1439,17 +1436,18 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                     </span>
                     <span className="text-slate-500"> of </span>
                     <span className="text-lg font-semibold tabular-nums text-slate-800">
-                      {dailyTarget}
+                      {dailyLimit}
                     </span>
                     <span className="block sm:inline sm:ml-1 text-slate-600">
-                      still available against your daily quota.
+                      still available against your daily limit.
                     </span>
                   </p>
                 </div>
               </div>
-            ) : quotaSettingsLoaded ? (
+            ) : dailyLimitLoaded ? (
               <p className="mb-6 text-center text-xs text-muted-foreground px-4">
-                Daily quota isn&apos;t configured — ask your admin to set DAILY_TARGET to see remaining fresh leads here.
+                Daily limit isn&apos;t configured — ask your admin to set{' '}
+                <span className="font-mono">DAILY_LIMIT</span> in core settings for your user.
               </p>
             ) : (
               <div className="mb-6 flex justify-center" aria-hidden>
