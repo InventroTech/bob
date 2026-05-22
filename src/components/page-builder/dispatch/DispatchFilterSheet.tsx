@@ -11,7 +11,8 @@ import {
   emptyDispatchFilterValues,
   getActiveDispatchFilterChips,
   getEmptyValueForFilter,
-  groupDispatchFilterRows,
+  layoutDispatchFilterRows,
+  type DispatchFilterLayoutGroup,
   inferSegmentSide,
   type DispatchFilterValues,
 } from './dispatchMobileFilters';
@@ -20,6 +21,8 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   filters: FilterConfig[];
+  filterOptionsLoading?: Record<string, boolean>;
+  filterOptionsError?: Record<string, string>;
   draft: DispatchFilterValues;
   onDraftChange: (next: DispatchFilterValues) => void;
   onApply: () => void;
@@ -273,7 +276,13 @@ function ToggleRow({
   );
 }
 
-/** Segment control — matches Figma: lavender bar, purple pill on selected option only. */
+/**
+ * Segmented control (SIS CTF Done, Freight Mode) — Figma spec:
+ * - Bold label above (not underlined)
+ * - Full-width lavender track; both options always visible
+ * - Selected: purple pill (#7c3aed) + white text (same for left OR right)
+ * - Unselected: dark text on lavender (never grey/black blocks)
+ */
 function SegmentRow({
   label,
   leftLabel,
@@ -293,8 +302,8 @@ function SegmentRow({
       <button
         type="button"
         onClick={() => onChange(selected ? null : side)}
-        className={`relative z-10 flex flex-1 items-center justify-center rounded-[10px] py-3 text-sm font-semibold transition-colors duration-150 ${
-          selected ? 'text-white' : 'text-[#1e293b]'
+        className={`relative z-10 flex flex-1 items-center justify-center rounded-lg py-3 text-sm font-semibold transition-colors duration-150 ${
+          selected ? 'text-white' : 'text-gray-800'
         }`}
       >
         {text}
@@ -304,12 +313,12 @@ function SegmentRow({
 
   return (
     <div>
-      <p className="mb-2.5 text-[15px] font-bold leading-tight text-[#0f172a]">{label}</p>
-      <div className="relative flex w-full rounded-xl bg-[#f3f0ff] p-1.5">
+      <p className="mb-2 text-sm font-bold text-gray-900">{label}</p>
+      <div className="relative flex w-full rounded-xl bg-[#ede9fe] p-1">
         <span
           aria-hidden
-          className={`pointer-events-none absolute bottom-1.5 top-1.5 w-[calc(50%-6px)] rounded-[10px] bg-[#7c3aed] shadow-sm transition-all duration-200 ease-out ${
-            value === 'right' ? 'left-[calc(50%+3px)]' : 'left-1.5'
+          className={`pointer-events-none absolute bottom-1 top-1 left-1 w-[calc(50%-0.5rem)] rounded-lg bg-[#7c3aed] shadow-sm transition-all duration-200 ease-out ${
+            value === 'right' ? 'translate-x-[calc(100%+0.5rem)]' : 'translate-x-0'
           } ${value === null ? 'opacity-0' : 'opacity-100'}`}
         />
         {segmentBtn('left', leftLabel)}
@@ -356,14 +365,19 @@ function MobileSelectField({
   filter,
   value,
   onChange,
+  loadingOptions,
+  optionsError,
 }: {
   filter: FilterConfig;
   value: unknown;
   onChange: (v: string[]) => void;
+  loadingOptions?: boolean;
+  optionsError?: string;
 }) {
   const selected = Array.isArray(value) ? (value as string[]) : value ? [String(value)] : [];
   const options = filter.options ?? [];
   const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const toggle = (optValue: string) => {
     const next = selected.includes(optValue)
@@ -372,48 +386,100 @@ function MobileSelectField({
     onChange(next);
   };
 
-  const summary =
-    selected.length === 0
-      ? filter.placeholder || `Select ${filter.label}`
-      : selected
-          .map((v) => options.find((o) => o.value === v)?.label ?? v)
-          .join(', ');
+  const term = searchTerm.trim().toLowerCase();
+  const filteredOptions = term
+    ? options.filter((opt) => {
+        const label = String(opt.label ?? '').toLowerCase();
+        const val = String(opt.value ?? '').toLowerCase();
+        return label.includes(term) || val.includes(term);
+      })
+    : options;
+
+  const summary = loadingOptions
+    ? 'Loading…'
+    : optionsError
+      ? optionsError
+      : selected.length === 0
+        ? filter.placeholder || `Select ${filter.label}`
+        : selected.map((v) => options.find((o) => o.value === v)?.label ?? v).join(', ');
 
   return (
     <div>
       <FieldLabel>{filter.label}</FieldLabel>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setSearchTerm('');
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900"
+            disabled={loadingOptions}
+            className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 disabled:opacity-60"
           >
             <span className="truncate text-left">{summary}</span>
             <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
-          <div className="max-h-48 space-y-1 overflow-y-auto">
-            {options.map((opt) => (
-              <label
-                key={opt.value}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50"
-              >
-                <Checkbox
-                  checked={selected.includes(opt.value)}
-                  onCheckedChange={() => toggle(opt.value)}
-                />
-                <span className="text-sm">{opt.label}</span>
-              </label>
-            ))}
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <div className="border-b border-gray-100 p-3">
+            <p className="text-xs font-semibold text-gray-700">Select {filter.label}</p>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search options…"
+              className="mt-2 h-9 w-full rounded-md border border-gray-300 px-2 text-sm focus:border-[#6366f1] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/25"
+            />
           </div>
+          <div className="max-h-52 space-y-0.5 overflow-y-auto p-1">
+            {optionsError ? (
+              <p className="px-2 py-4 text-center text-xs text-red-600">{optionsError}</p>
+            ) : filteredOptions.length === 0 ? (
+              <p className="px-2 py-4 text-center text-xs text-gray-500">
+                {loadingOptions ? 'Loading…' : 'No engineers found'}
+              </p>
+            ) : (
+              filteredOptions.map((opt) => (
+                <label
+                  key={opt.value}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50"
+                >
+                  <Checkbox
+                    checked={selected.includes(opt.value)}
+                    onCheckedChange={() => toggle(opt.value)}
+                  />
+                  <span className="text-sm">{opt.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+          {selected.length > 0 ? (
+            <div className="border-t border-gray-100 p-2">
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="w-full rounded-md py-2 text-xs font-semibold text-[#6366f1] hover:bg-[#ede9fe]"
+              >
+                Clear selection
+              </button>
+            </div>
+          ) : null}
         </PopoverContent>
       </Popover>
     </div>
   );
 }
 
-function renderField(filter: FilterConfig, draft: DispatchFilterValues, patch: PatchFn) {
+function renderField(
+  filter: FilterConfig,
+  draft: DispatchFilterValues,
+  patch: PatchFn,
+  filterOptionsLoading?: Record<string, boolean>,
+  filterOptionsError?: Record<string, string>
+): React.ReactNode {
   const raw = draft[filter.key];
 
   if (filter.dispatchUi === 'toggle') {
@@ -477,6 +543,7 @@ function renderField(filter: FilterConfig, draft: DispatchFilterValues, patch: P
       );
     case 'date_gte':
     case 'date_lte':
+    case 'date_exact':
       return (
         <MobileSingleDateField
           key={filter.key}
@@ -493,6 +560,8 @@ function renderField(filter: FilterConfig, draft: DispatchFilterValues, patch: P
           filter={filter}
           value={raw}
           onChange={(v) => patch(filter.key, v)}
+          loadingOptions={!!filterOptionsLoading?.[filter.key]}
+          optionsError={filterOptionsError?.[filter.key]}
         />
       );
     case 'number_gte':
@@ -523,63 +592,54 @@ function renderField(filter: FilterConfig, draft: DispatchFilterValues, patch: P
   }
 }
 
-function FilterRowBlock({
-  row,
+function FilterLayoutBlock({
+  group,
   draft,
   onDraftChange,
+  filterOptionsLoading,
+  filterOptionsError,
 }: {
-  row: { rowId: string; fields: FilterConfig[] };
+  group: DispatchFilterLayoutGroup;
   draft: DispatchFilterValues;
   onDraftChange: (next: DispatchFilterValues) => void;
+  filterOptionsLoading?: Record<string, boolean>;
+  filterOptionsError?: Record<string, string>;
 }) {
   const patch: PatchFn = (key, value) => onDraftChange({ ...draft, [key]: value });
+  const render = (f: FilterConfig) =>
+    renderField(f, draft, patch, filterOptionsLoading, filterOptionsError);
 
-  const dateRangeFields = row.fields.filter(
-    (f) => f.type === 'date_range' || f.type === 'date_time_range'
-  );
-  const toggles = row.fields.filter((f) => f.dispatchUi === 'toggle');
-  const nonToggleFields = row.fields.filter((f) => f.dispatchUi !== 'toggle');
-
-  const isRowStart = row.rowId === 'row_start';
-  const isPairedDates =
-    row.fields.length === 2 &&
-    row.fields.every((f) => f.type === 'date_gte' || f.type === 'date_lte');
-
-  if (isRowStart && (dateRangeFields.length > 0 || toggles.length > 0)) {
-    const mainFields = nonToggleFields.filter(
-      (f) => f.type !== 'date_range' && f.type !== 'date_time_range'
+  if (group.layout === 'row-start') {
+    const dateRangeFields = group.fields.filter(
+      (f) => f.type === 'date_range' || f.type === 'date_time_range'
     );
+    const toggles = group.fields.filter((f) => f.dispatchUi === 'toggle');
+    const mainFields = group.fields.filter(
+      (f) =>
+        f.dispatchUi !== 'toggle' &&
+        f.type !== 'date_range' &&
+        f.type !== 'date_time_range'
+    );
+
     return (
       <div className="space-y-3">
         {dateRangeFields.map((f) => (
-          <div key={f.key}>{renderField(f, draft, patch)}</div>
+          <div key={f.key}>{render(f)}</div>
         ))}
         {mainFields.map((f) => (
-          <div key={f.key}>{renderField(f, draft, patch)}</div>
+          <div key={f.key}>{render(f)}</div>
         ))}
         <ToggleRow toggles={toggles} draft={draft} patch={patch} />
       </div>
     );
   }
 
-  if (isPairedDates) {
+  if (group.layout === 'grid-2') {
     return (
       <div className="grid grid-cols-2 gap-3">
-        {row.fields.map((f) => (
+        {group.fields.map((f) => (
           <div key={f.key} className="min-w-0">
-            {renderField(f, draft, patch)}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (row.fields.length === 2 && row.fields.every((f) => f.dispatchWidth === 'half')) {
-    return (
-      <div className="grid grid-cols-2 gap-3">
-        {row.fields.map((f) => (
-          <div key={f.key} className="min-w-0">
-            {renderField(f, draft, patch)}
+            {render(f)}
           </div>
         ))}
       </div>
@@ -588,9 +648,9 @@ function FilterRowBlock({
 
   return (
     <div className="space-y-3">
-      {row.fields.map((f) => (
+      {group.fields.map((f) => (
         <div key={f.key} className="min-w-0">
-          {renderField(f, draft, patch)}
+          {render(f)}
         </div>
       ))}
     </div>
@@ -601,12 +661,14 @@ export const DispatchFilterSheet: React.FC<Props> = ({
   open,
   onOpenChange,
   filters,
+  filterOptionsLoading,
+  filterOptionsError,
   draft,
   onDraftChange,
   onApply,
   onClear,
 }) => {
-  const rows = useMemo(() => groupDispatchFilterRows(filters), [filters]);
+  const layoutGroups = useMemo(() => layoutDispatchFilterRows(filters), [filters]);
   const activeChips = useMemo(
     () => getActiveDispatchFilterChips(filters, draft),
     [filters, draft]
@@ -636,8 +698,15 @@ export const DispatchFilterSheet: React.FC<Props> = ({
 
         <div className="flex-1 overflow-y-auto bg-white px-4 py-4">
           <div className="space-y-4">
-            {rows.map((row) => (
-              <FilterRowBlock key={row.rowId} row={row} draft={draft} onDraftChange={onDraftChange} />
+            {layoutGroups.map((group) => (
+              <FilterLayoutBlock
+                key={group.key}
+                group={group}
+                draft={draft}
+                onDraftChange={onDraftChange}
+                filterOptionsLoading={filterOptionsLoading}
+                filterOptionsError={filterOptionsError}
+              />
             ))}
           </div>
         </div>

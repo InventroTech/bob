@@ -80,10 +80,17 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
 
   const isFilterActive = useCallback((key: string) => {
     const value = filterState.values[key];
+    if (value instanceof Date) {
+      return !isNaN(value.getTime());
+    }
     if (Array.isArray(value)) {
       return value.length > 0;
     }
     if (typeof value === 'object' && value !== null) {
+      const range = value as { start?: unknown; end?: unknown };
+      if ('start' in range || 'end' in range) {
+        return !!(range.start || range.end);
+      }
       return Object.keys(value).length > 0;
     }
     return value !== undefined && value !== null && value !== '' && value !== false;
@@ -139,7 +146,7 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
           if (value instanceof Date || (typeof value === 'string' && value.trim() !== '')) {
             const date = value instanceof Date ? value : new Date(value);
             if (!isNaN(date.getTime())) {
-              params.append(`${accessor}__gte`, date.toISOString());
+              params.append(`${accessor}__gte`, date.toISOString().slice(0, 10));
             }
           }
           break;
@@ -149,7 +156,17 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
           if (value instanceof Date || (typeof value === 'string' && value.trim() !== '')) {
             const date = value instanceof Date ? value : new Date(value);
             if (!isNaN(date.getTime())) {
-              params.append(`${accessor}__lte`, date.toISOString());
+              params.append(`${accessor}__lte`, date.toISOString().slice(0, 10));
+            }
+          }
+          break;
+
+        case 'date_exact':
+          // Exact date (=)
+          if (value instanceof Date || (typeof value === 'string' && value.trim() !== '')) {
+            const date = value instanceof Date ? value : new Date(value);
+            if (!isNaN(date.getTime())) {
+              params.append(accessor, date.toISOString().slice(0, 10));
             }
           }
           break;
@@ -161,13 +178,13 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
             if (value.start && (value.start instanceof Date || typeof value.start === 'string')) {
               const startDate = value.start instanceof Date ? value.start : new Date(value.start);
               if (!isNaN(startDate.getTime())) {
-                params.append(`${accessor}__gte`, startDate.toISOString());
+                params.append(`${accessor}__gte`, startDate.toISOString().slice(0, 10));
               }
             }
             if (value.end && (value.end instanceof Date || typeof value.end === 'string')) {
               const endDate = value.end instanceof Date ? value.end : new Date(value.end);
               if (!isNaN(endDate.getTime())) {
-                params.append(`${accessor}__lte`, endDate.toISOString());
+                params.append(`${accessor}__lte`, endDate.toISOString().slice(0, 10));
               }
             }
           }
@@ -223,6 +240,7 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
 
       case 'date_gte':
       case 'date_lte':
+      case 'date_exact':
         if (value instanceof Date) {
           return value.toLocaleDateString();
         }
