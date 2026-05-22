@@ -19,6 +19,24 @@ const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VIT
 // Create API client for this service
 const apiClient = createApiClient(API_BASE_URL);
 
+/** Coerce core-KV numeric values (often JSON numbers, sometimes strings). */
+function coerceNonNegativeInt(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  }
+  return null;
+}
+
+/** Daily fresh-lead cap from TenantMemberSetting core KV key `DAILY_LIMIT`. */
+export function resolveDailyFreshLeadLimitFromKv(kv: UserCoreKVSetting[]): number | null {
+  const limitRow = kv.find((row) => row.key === 'DAILY_LIMIT');
+  return coerceNonNegativeInt(limitRow?.value);
+}
+
 // User Settings API functions
 export const userSettingsApi = {
   // Get all user settings for the current tenant
