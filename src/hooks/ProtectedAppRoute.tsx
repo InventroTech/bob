@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate, Outlet, useParams } from 'react-router-dom';
+import { useNavigate, Outlet, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -303,7 +303,6 @@ const ProtectedAppRoute: React.FC = () => {
     if (!authLoading) {
       if (!session) {
         clearCachedAccess();
-        navigate(`/app/${tenantSlug}/login`, { replace: true });
         return;
       }
       checkAccess();
@@ -322,6 +321,12 @@ const ProtectedAppRoute: React.FC = () => {
     }
   };
 
+  const loginPath = tenantSlug ? `/app/${tenantSlug}/login` : '/auth';
+
+  if (!authLoading && !session) {
+    return <Navigate to={loginPath} replace />;
+  }
+
   if (authLoading || allowed === null) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -331,11 +336,6 @@ const ProtectedAppRoute: React.FC = () => {
         </div>
       </div>
     );
-  }
-
-  if (!session) {
-    navigate(`/app/${tenantSlug}/login`, { replace: true });
-    return null;
   }
 
   if (!allowed) {

@@ -1,5 +1,53 @@
-import type { FilterConfig } from '@/component-config/DynamicFilterConfig';
+import type { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { FilterService } from '@/services/filterService';
+
+const getNestedValue = (source: unknown, path: string): unknown => {
+  if (!source || !path) return undefined;
+  return path
+    .split('.')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .reduce((current: unknown, key) => {
+      if (current === undefined || current === null) return undefined;
+      return (current as Record<string, unknown>)[key];
+    }, source);
+};
+
+/** Parse API dropdown payloads (same shapes as LeadTableComponent). */
+export function parseFilterOptionsFromApiResponse(
+  raw: unknown,
+  displayKey: string,
+  valueKey: string
+): FilterOption[] {
+  let arr: unknown[] = [];
+  if (Array.isArray(raw)) {
+    arr = raw;
+  } else if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (Array.isArray(obj.results)) arr = obj.results;
+    else if (Array.isArray(obj.data)) arr = obj.data;
+    else if (Array.isArray(obj.values)) {
+      arr = (obj.values as unknown[]).map((v) =>
+        typeof v === 'string' || typeof v === 'number'
+          ? { label: String(v), value: String(v) }
+          : v
+      );
+    }
+  }
+
+  return (arr as Record<string, unknown>[])
+    .map((item) => {
+      const displayRaw = displayKey.includes('.')
+        ? getNestedValue(item, displayKey)
+        : item?.[displayKey];
+      const valueRaw = valueKey.includes('.') ? getNestedValue(item, valueKey) : item?.[valueKey];
+      return {
+        label: String(displayRaw ?? ''),
+        value: String(valueRaw ?? ''),
+      };
+    })
+    .filter((o) => o.value !== '');
+}
 
 /** Same shape as records table filter state (`useFilters`). */
 export type DispatchFilterValues = Record<string, unknown>;
@@ -9,9 +57,14 @@ export const DEFAULT_DISPATCH_MOBILE_FILTERS: FilterConfig[] = [
   {
     key: 'engineer',
     label: 'Engineer',
-    type: 'icontains',
+    type: 'select',
     accessor: 'engineer',
     dispatchWidth: 'full',
+    placeholder: 'Select engineer',
+    optionsApiUrl:
+      '/crm-records/records/distinct-values/?entity_type=dispatch_request&field=engineer',
+    optionsDisplayKey: 'label',
+    optionsValueKey: 'value',
   },
   {
     key: 'dc_date',
@@ -50,7 +103,7 @@ export const DEFAULT_DISPATCH_MOBILE_FILTERS: FilterConfig[] = [
   {
     key: 'po_date',
     label: 'PO Date',
-    type: 'date_lte',
+    type: 'date_exact',
     accessor: 'po_date',
     dispatchWidth: 'half',
     dispatchRow: 'row_dates',
@@ -96,14 +149,40 @@ export const DEFAULT_DISPATCH_MOBILE_FILTERS: FilterConfig[] = [
   },
 ];
 
-export function normalizeDispatchFilters(filters?: FilterConfig[]): FilterConfig[] {
-  if (!filters?.length) return DEFAULT_DISPATCH_MOBILE_FILTERS;
+export function buildDistinctValuesApiUrl(entityType: string, field: string): string {
+  const params = new URLSearchParams({
+    entity_type: entityType,
+    field,
+  });
+  return `/crm-records/records/distinct-values/?${params.toString()}`;
+}
+
+function applyEngineerSelectDefaults(f: FilterConfig, entityType: string): FilterConfig {
+  const field = (f.accessor || f.key || '').trim();
+  if (field !== 'engineer') return f;
+
+  return {
+    ...f,
+    type: 'select',
+    accessor: field,
+    placeholder: f.placeholder || 'Select engineer',
+    optionsApiUrl: f.optionsApiUrl?.trim() || buildDistinctValuesApiUrl(entityType, 'engineer'),
+    optionsDisplayKey: f.optionsDisplayKey?.trim() || 'label',
+    optionsValueKey: f.optionsValueKey?.trim() || 'value',
+  };
+}
+
+export function normalizeDispatchFilters(
+  filters?: FilterConfig[],
+  entityType = 'dispatch_request'
+): FilterConfig[] {
+  const source = filters?.length ? filters : DEFAULT_DISPATCH_MOBILE_FILTERS;
 
   const seenKeys = new Set<string>();
   const slugify = (s: string) =>
     s.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
-  return filters.map((f, idx) => {
+  return source.map((f, idx) => {
     let key = (f.key || '').trim() || (f.accessor || '').trim();
     if (!key && f.label) key = slugify(f.label);
     if (!key) key = `filter_${idx}`;
@@ -112,12 +191,53 @@ export function normalizeDispatchFilters(filters?: FilterConfig[]): FilterConfig
     while (seenKeys.has(uniqueKey)) uniqueKey = `${key}_${n++}`;
     seenKeys.add(uniqueKey);
 
-    return {
+    const normalized: FilterConfig = {
       ...f,
       key: uniqueKey,
       accessor: (f.accessor || uniqueKey).trim(),
     };
+
+    return applyEngineerSelectDefaults(normalized, entityType);
   });
+}
+
+export type ApiSelectFilter = FilterConfig & {
+  optionsApiUrl: string;
+  optionsDisplayKey: string;
+  optionsValueKey: string;
+};
+
+export function getApiSelectFilters(filters: FilterConfig[]): ApiSelectFilter[] {
+  return filters.filter(
+    (f): f is ApiSelectFilter =>
+      f.type === 'select' &&
+      !!(f.optionsApiUrl?.trim() && f.optionsDisplayKey?.trim() && f.optionsValueKey?.trim())
+  );
+}
+
+/** Rewrite entity_type in distinct-values URLs to match the component config. */
+export function resolveFilterOptionsApiUrl(filter: FilterConfig, entityType: string): string {
+  const raw = (filter.optionsApiUrl || '').trim();
+  if (!raw) return buildDistinctValuesApiUrl(entityType, filter.accessor || filter.key);
+
+  if (raw.includes('distinct-values')) {
+    try {
+      const path = raw.startsWith('http') ? raw : `https://local${raw.startsWith('/') ? '' : '/'}${raw}`;
+      const url = new URL(path);
+      if (url.searchParams.has('entity_type')) {
+        url.searchParams.set('entity_type', entityType);
+      }
+      const field = url.searchParams.get('field') || filter.accessor || filter.key;
+      if (!url.searchParams.has('field') && field) {
+        url.searchParams.set('field', field);
+      }
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return buildDistinctValuesApiUrl(entityType, filter.accessor || filter.key);
+    }
+  }
+
+  return raw.startsWith('/') ? raw : `/${raw}`;
 }
 
 export type DispatchFilterRow = {
@@ -125,6 +245,7 @@ export type DispatchFilterRow = {
   fields: FilterConfig[];
 };
 
+/** @deprecated Use layoutDispatchFilterRows for rendering. */
 export function groupDispatchFilterRows(filters: FilterConfig[]): DispatchFilterRow[] {
   const rows: DispatchFilterRow[] = [];
   const rowIndex = new Map<string, number>();
@@ -142,6 +263,99 @@ export function groupDispatchFilterRows(filters: FilterConfig[]): DispatchFilter
   return rows;
 }
 
+export type DispatchFilterLayout = 'stack' | 'grid-2' | 'row-start';
+
+export type DispatchFilterLayoutGroup = {
+  key: string;
+  layout: DispatchFilterLayout;
+  fields: FilterConfig[];
+};
+
+/** Fields that stay full-width unless Width = half is set explicitly. */
+export function forcesFullWidthField(filter: FilterConfig): boolean {
+  if (filter.dispatchWidth === 'half') return false;
+  if (filter.type === 'date_range' || filter.type === 'date_time_range') return true;
+  if (filter.dispatchUi === 'segment') return true;
+  return false;
+}
+
+/**
+ * Build render groups respecting Page Builder Width (half / full) and Row group.
+ * Half width: pairs with the next half-width filter in list order (50% column each).
+ */
+export function layoutDispatchFilterRows(filters: FilterConfig[]): DispatchFilterLayoutGroup[] {
+  const groups: DispatchFilterLayoutGroup[] = [];
+  const seenRowIds = new Set<string>();
+  const halfQueue: FilterConfig[] = [];
+
+  const emitHalfQueue = () => {
+    if (!halfQueue.length) return;
+    groups.push({
+      key: `half-${halfQueue.map((f) => f.key).join('_')}`,
+      layout: 'grid-2',
+      fields: halfQueue.splice(0, halfQueue.length),
+    });
+  };
+
+  const emitStack = (field: FilterConfig) => {
+    groups.push({ key: `stack-${field.key}`, layout: 'stack', fields: [field] });
+  };
+
+  for (const field of filters) {
+    const rowId = field.dispatchRow?.trim();
+
+    if (rowId) {
+      if (seenRowIds.has(rowId)) continue;
+      seenRowIds.add(rowId);
+      emitHalfQueue();
+
+      const rowFields = filters.filter((f) => f.dispatchRow?.trim() === rowId);
+
+      if (rowId === 'row_start') {
+        groups.push({ key: 'row-start', layout: 'row-start', fields: rowFields });
+        continue;
+      }
+
+      const useGrid =
+        rowFields.length >= 1 &&
+        rowFields.every(
+          (f) =>
+            f.dispatchWidth === 'half' ||
+            f.type === 'date_gte' ||
+            f.type === 'date_lte' ||
+            f.type === 'date_exact'
+        ) &&
+        !rowFields.some((f) => forcesFullWidthField(f) && f.dispatchWidth !== 'half');
+
+      if (useGrid && rowFields.length <= 2) {
+        groups.push({ key: `row-${rowId}`, layout: 'grid-2', fields: rowFields });
+      } else {
+        for (const f of rowFields) {
+          if (f.dispatchWidth === 'half' && !forcesFullWidthField(f)) {
+            halfQueue.push(f);
+            if (halfQueue.length === 2) emitHalfQueue();
+          } else {
+            emitHalfQueue();
+            emitStack(f);
+          }
+        }
+      }
+      continue;
+    }
+
+    if (field.dispatchWidth === 'half' && !forcesFullWidthField(field)) {
+      halfQueue.push(field);
+      if (halfQueue.length === 2) emitHalfQueue();
+    } else {
+      emitHalfQueue();
+      emitStack(field);
+    }
+  }
+
+  emitHalfQueue();
+  return groups;
+}
+
 export function getEmptyValueForFilter(f: FilterConfig): unknown {
   if (f.dispatchUi === 'toggle' || f.dispatchUi === 'segment') return null;
   switch (f.type) {
@@ -153,6 +367,7 @@ export function getEmptyValueForFilter(f: FilterConfig): unknown {
       return { start: undefined, end: undefined };
     case 'date_gte':
     case 'date_lte':
+    case 'date_exact':
       return undefined;
     default:
       return '';
@@ -167,13 +382,52 @@ export function emptyDispatchFilterValues(filters: FilterConfig[]): DispatchFilt
   return values;
 }
 
+/** Keep applied/draft values when filter options load; only add keys for new filters. */
+export function mergeDispatchFilterValues(
+  existing: DispatchFilterValues,
+  filters: FilterConfig[]
+): DispatchFilterValues {
+  const merged: DispatchFilterValues = {};
+
+  for (const f of filters) {
+    if (f.key in existing) {
+      merged[f.key] = existing[f.key];
+    } else {
+      merged[f.key] = getEmptyValueForFilter(f);
+    }
+  }
+
+  return merged;
+}
+
+/** Copy draft so editing in the sheet does not mutate applied state. */
+export function cloneDispatchFilterValues(values: DispatchFilterValues): DispatchFilterValues {
+  const out: DispatchFilterValues = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value instanceof Date) {
+      out[key] = new Date(value.getTime());
+    } else if (Array.isArray(value)) {
+      out[key] = [...value];
+    } else if (value && typeof value === 'object') {
+      out[key] = { ...(value as Record<string, unknown>) };
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 /** Mirrors `useFilters` `isFilterActive` for badge count. */
 export function isDispatchFilterActive(key: string, values: DispatchFilterValues): boolean {
   const value = values[key];
+  if (value instanceof Date) return !isNaN(value.getTime());
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === 'object' && value !== null) {
     const range = value as { start?: unknown; end?: unknown };
-    return !!(range.start || range.end);
+    if ('start' in range || 'end' in range) {
+      return !!(range.start || range.end);
+    }
+    return false;
   }
   if (typeof value === 'boolean') return true;
   if (value === null || value === undefined) return false;
@@ -225,6 +479,7 @@ export function formatDispatchFilterChipLabel(
     }
     case 'date_gte':
     case 'date_lte':
+    case 'date_exact':
       return `${filter.label}: ${formatDate(value)}`;
     case 'date_range':
     case 'date_time_range': {
@@ -268,15 +523,9 @@ export function inferSegmentSide(
   return null;
 }
 
-/** Date range / multi-select fields span full row width on mobile. */
+/** @deprecated Layout handled by layoutDispatchFilterRows. */
 export function fieldSpansFullRow(filter: FilterConfig): boolean {
-  return (
-    filter.type === 'date_range' ||
-    filter.type === 'date_time_range' ||
-    filter.dispatchWidth === 'full' ||
-    filter.dispatchUi === 'segment' ||
-    filter.dispatchUi === 'chip'
-  );
+  return forcesFullWidthField(filter) || filter.dispatchWidth === 'full';
 }
 
 /** Same query param generation as records table (`FilterService`). */
