@@ -64,11 +64,6 @@ function toDate(value: unknown): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
-function dateInputValue(value: unknown): string {
-  const d = toDate(value);
-  return d ? format(d, 'yyyy-MM-dd') : '';
-}
-
 function MobileSingleDateField({
   filter,
   value,
@@ -79,20 +74,11 @@ function MobileSingleDateField({
   onChange: (v: Date | undefined) => void;
 }) {
   return (
-    <div>
-      <FieldLabel>{filter.label}</FieldLabel>
-      <div className="relative">
-        <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input
-          type="date"
-          value={dateInputValue(value)}
-          onChange={(e) =>
-            onChange(e.target.value ? new Date(`${e.target.value}T12:00:00`) : undefined)
-          }
-          className="h-11 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-3 text-sm text-gray-900 focus:border-[#6366f1] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/25"
-        />
-      </div>
-    </div>
+    <MobileCalendarButton
+      label={filter.label}
+      date={toDate(value)}
+      onSelect={onChange}
+    />
   );
 }
 
@@ -406,24 +392,25 @@ function MobileSelectField({
   return (
     <div>
       <FieldLabel>{filter.label}</FieldLabel>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setSearchTerm('');
+      <button
+        type="button"
+        disabled={loadingOptions}
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((prev) => {
+            if (prev) setSearchTerm('');
+            return !prev;
+          });
         }}
+        className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 disabled:opacity-60"
       >
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={loadingOptions}
-            className="flex h-11 w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 disabled:opacity-60"
-          >
-            <span className="truncate text-left">{summary}</span>
-            <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <span className="truncate text-left">{summary}</span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open ? (
+        <div className="mt-2 overflow-hidden rounded-lg border border-gray-300 bg-white shadow-sm">
           <div className="border-b border-gray-100 p-3">
             <p className="text-xs font-semibold text-gray-700">Select {filter.label}</p>
             <input
@@ -434,7 +421,11 @@ function MobileSelectField({
               className="mt-2 h-9 w-full rounded-md border border-gray-300 px-2 text-sm focus:border-[#6366f1] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/25"
             />
           </div>
-          <div className="max-h-52 space-y-0.5 overflow-y-auto p-1">
+          <div
+            className="max-h-52 touch-pan-y space-y-0.5 overflow-y-auto overscroll-contain p-1 [-webkit-overflow-scrolling:touch]"
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
             {optionsError ? (
               <p className="px-2 py-4 text-center text-xs text-red-600">{optionsError}</p>
             ) : filteredOptions.length === 0 ? (
@@ -445,7 +436,7 @@ function MobileSelectField({
               filteredOptions.map((opt) => (
                 <label
                   key={opt.value}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 active:bg-gray-100"
                 >
                   <Checkbox
                     checked={selected.includes(opt.value)}
@@ -467,8 +458,8 @@ function MobileSelectField({
               </button>
             </div>
           ) : null}
-        </PopoverContent>
-      </Popover>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -696,7 +687,7 @@ export const DispatchFilterSheet: React.FC<Props> = ({
           <span className="text-base font-semibold tracking-wide">Filters</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-white px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white px-4 py-4 [-webkit-overflow-scrolling:touch]">
           <div className="space-y-4">
             {layoutGroups.map((group) => (
               <FilterLayoutBlock
