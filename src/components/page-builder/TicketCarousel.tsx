@@ -185,6 +185,9 @@ interface TicketCarouselProps {
     statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
     title?: string;
+    workItemMode?: boolean;
+    fetchNextWorkItem?: () => Promise<unknown>;
+    onWorkItemResolved?: () => void | Promise<void>;
   };
   initialTicket?: any;
   onUpdate?: (updatedTicket: any) => void;
@@ -400,9 +403,24 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
-      const response = await apiClient.get("/support-ticket/get-next-ticket/", {
-      });
-      const ticketData = response.data;
+      let ticketData: any;
+      if (config?.workItemMode && config?.fetchNextWorkItem) {
+        const item = await config.fetchNextWorkItem() as { ticket: any } | null;
+        if (!item?.ticket) {
+          setShowPendingCard(true);
+          setCurrentTicket(null);
+          resetTicketState();
+          isInitialized.current = false;
+          clearPersistedState();
+          await fetchTicketStats();
+          toast.info("No more work items available.");
+          return;
+        }
+        ticketData = { ticket: item.ticket };
+      } else {
+        const response = await apiClient.get("/support-ticket/get-next-ticket/", {});
+        ticketData = response.data;
+      }
 
       if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
         setShowPendingCard(true);
@@ -472,6 +490,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       await apiClient.post("/support-ticket/take-break/", {
         ticketId: currentTicket?.id,
       });
+
+      if (config?.workItemMode && config.onWorkItemResolved) {
+        await config.onWorkItemResolved();
+        return;
+      }
 
       // Navigate to pending card
       setShowPendingCard(true);
@@ -592,6 +615,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       await apiClient.post(endpoint, payload, {
       });
+
+      if (config?.workItemMode && config.onWorkItemResolved) {
+        await config.onWorkItemResolved();
+        return;
+      }
 
       // After successful API call, fetch next ticket
       await fetchNextTicket(currentTicket?.id);
@@ -732,7 +760,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           variant="outline"
           size="sm"
           icon={<Coffee className="h-3 w-3" />}
-          disabled={updating || isCompact}
+          disabled={updating || (isCompact && !config?.workItemMode)}
         >
           Take a Break
         </CustomButton>
