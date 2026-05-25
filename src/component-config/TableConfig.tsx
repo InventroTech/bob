@@ -116,6 +116,7 @@ interface TableConfigProps {
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string | boolean) => void;
   handleColumnDelete?: (index: number) => void;
   handleFilterCountChange: (count: number) => void;
+  handleFilterDelete: (index: number) => void;
   handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterConfig['options'] | boolean) => void;
   handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
   handleAddFilterOption: (filterIndex: number) => void;
@@ -134,6 +135,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   handleColumnFieldChange,
   handleColumnDelete,
   handleFilterCountChange,
+  handleFilterDelete,
   handleFilterFieldChange,
   handleFilterOptionsSourceChange,
   handleAddFilterOption,
@@ -1207,6 +1209,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             numFilters={numFilters}
             handleInputChange={handleInputChange}
             handleFilterCountChange={handleFilterCountChange}
+            handleFilterDelete={handleFilterDelete}
             handleFilterFieldChange={handleFilterFieldChange}
             handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
             handleAddFilterOption={handleAddFilterOption}

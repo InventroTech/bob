@@ -630,6 +630,16 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     debouncedUpdateWithDelay({ filters: newFilters });
   }, [localFilters, debouncedUpdateWithDelay]);
 
+  const handleFilterDelete = useCallback(
+    (index: number) => {
+      const newFilters = localFilters.filter((_, i) => i !== index);
+      setLocalFilters(newFilters);
+      setNumFilters(newFilters.length);
+      debouncedUpdateWithDelay({ filters: newFilters });
+    },
+    [localFilters, debouncedUpdateWithDelay]
+  );
+
   const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options'] | boolean) => {
     const newFilters = [...localFilters];
 
@@ -771,6 +781,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             handleColumnFieldChange={handleColumnFieldChange}
             handleColumnDelete={handleColumnDelete}
             handleFilterCountChange={handleFilterCountChange}
+            handleFilterDelete={handleFilterDelete}
             handleFilterFieldChange={handleFilterFieldChange}
             handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
             handleAddFilterOption={handleAddFilterOption}
@@ -793,6 +804,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             handleColumnFieldChange={handleColumnFieldChange}
             handleColumnDelete={handleColumnDelete}
             handleFilterCountChange={handleFilterCountChange}
+            handleFilterDelete={handleFilterDelete}
             handleFilterFieldChange={handleFilterFieldChange}
             handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
             handleAddFilterOption={handleAddFilterOption}
@@ -810,6 +822,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             numFilters={numFilters}
             onReplaceFilters={handleReplaceFilters}
             handleFilterCountChange={handleFilterCountChange}
+            handleFilterDelete={handleFilterDelete}
             handleFilterFieldChange={handleFilterFieldChange}
             handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
             handleAddFilterOption={handleAddFilterOption}
@@ -831,6 +844,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             handleColumnFieldChange={handleColumnFieldChange}
             handleColumnDelete={handleColumnDelete}
             handleFilterCountChange={handleFilterCountChange}
+            handleFilterDelete={handleFilterDelete}
             handleFilterFieldChange={handleFilterFieldChange}
             handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
             handleAddFilterOption={handleAddFilterOption}

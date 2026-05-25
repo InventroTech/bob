@@ -53,6 +53,7 @@ interface DynamicFilterConfigProps {
   showDispatchMobileUi?: boolean;
   handleInputChange: (field: string, value: string | number | boolean) => void;
   handleFilterCountChange: (count: number) => void;
+  handleFilterDelete: (index: number) => void;
   handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterOption[] | boolean) => void;
   /** When switching options source (manual vs API), update all related fields in one go. */
   handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
@@ -68,6 +69,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
   showDispatchMobileUi,
   handleInputChange,
   handleFilterCountChange,
+  handleFilterDelete,
   handleFilterFieldChange,
   handleFilterOptionsSourceChange,
   handleAddFilterOption,
@@ -101,13 +103,16 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
           };
 
           return (
-            <div key={index} className="space-y-3 p-4 border rounded-lg">
+            <div
+              key={filter.key || `filter-row-${index}`}
+              className="space-y-3 p-4 border rounded-lg"
+            >
               <div className="flex items-center justify-between">
                 <h4 className="font-medium">Filter {index + 1}</h4>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleFilterCountChange(numFilters - 1)}
+                  onClick={() => handleFilterDelete(index)}
                   className="text-red-600 hover:text-red-700"
                 >
                   <Trash2 className="h-4 w-4" />
