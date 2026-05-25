@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMobileBackStack } from '@/hooks/useMobileBackStack';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
@@ -20,7 +21,11 @@ import {
 } from './dispatch/dispatchMobileFilters';
 import { fetchDispatchFilterOptions } from './dispatch/fetchDispatchFilterOptions';
 import { DEFAULT_DISPATCH_SEARCH_FIELDS } from './dispatch/dispatchFieldSections';
-import { formatDispatchValue, getRecordData } from './dispatch/formatDispatchValue';
+import {
+  DISPATCH_NO_DATA,
+  formatDispatchValue,
+  getRecordData,
+} from './dispatch/formatDispatchValue';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import type { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
@@ -74,10 +79,7 @@ function DispatchListCard({
   const titleVal = formatDispatchValue(data[titleField]);
   const po = formatDispatchValue(data[poField]);
   const so = formatDispatchValue(data[salesOrderField]);
-  const idx =
-    data[indexField] != null && data[indexField] !== ''
-      ? String(data[indexField])
-      : String(index + 1).padStart(3, '0');
+  const topLeft = formatDispatchValue(data[indexField]);
 
   return (
     <button
@@ -86,13 +88,13 @@ function DispatchListCard({
       className="w-full rounded-2xl border-2 border-[#7c3aed]/40 bg-white p-4 text-left shadow-[0_2px_12px_rgba(124,58,237,0.15)] transition active:scale-[0.99]"
     >
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-        <p className="text-xs font-medium text-gray-500">{idx}</p>
+        <p className="line-clamp-1 text-xs font-medium text-gray-600">{topLeft}</p>
         <p className="text-right text-xs text-gray-600">
           <span className="text-gray-500">Po # :</span>{' '}
           <span className="font-semibold text-gray-800">{po}</span>
         </p>
         <p className="line-clamp-2 text-sm font-bold uppercase leading-snug text-gray-900">{titleVal}</p>
-        {so !== '—' ? (
+        {so !== DISPATCH_NO_DATA ? (
           <p className="text-right text-xs font-semibold text-gray-800 line-clamp-2">{so}</p>
         ) : (
           <span />
@@ -123,7 +125,7 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
   const listTitleField = config?.listTitleField ?? 'account_name';
   const listPoField = config?.listPoField ?? 'po_number';
   const listSalesOrderField = config?.listSalesOrderField ?? 'sales_order_number';
-  const listIndexField = config?.listIndexField ?? 'sr_no';
+  const listIndexField = config?.listIndexField ?? 'engineer';
 
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
@@ -260,9 +262,57 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
     fetchPage(1, false);
   }, [fetchPage]);
 
-  if (selected) {
-    return <DispatchDetailView record={selected} onBack={() => setSelected(null)} />;
-  }
+  const { pushOverlay, closeOverlay, consumeBackNavigation, onPopState } = useMobileBackStack();
+  const filterOpenRef = useRef(filterSheetOpen);
+  const selectedRef = useRef(selected);
+  filterOpenRef.current = filterSheetOpen;
+  selectedRef.current = selected;
+
+  useEffect(() => {
+    return onPopState(() => {
+      const overlay = consumeBackNavigation();
+      if (overlay === 'filters' || filterOpenRef.current) {
+        setFilterSheetOpen(false);
+        return 'filters';
+      }
+      if (overlay === 'detail' || selectedRef.current) {
+        setSelected(null);
+        return 'detail';
+      }
+      return null;
+    });
+  }, [onPopState, consumeBackNavigation]);
+
+  const closeDetail = useCallback(() => {
+    setSelected(null);
+    closeOverlay('detail');
+  }, [closeOverlay]);
+
+  const openDetail = useCallback(
+    (record: CrmRecord) => {
+      setSelected(record);
+      pushOverlay('detail');
+    },
+    [pushOverlay]
+  );
+
+  useEffect(() => {
+    if (!selected) return;
+    const main = document.querySelector('main');
+    const prevBody = document.body.style.overflow;
+    const prevMain = main instanceof HTMLElement ? main.style.overflow : '';
+    document.body.style.overflow = 'hidden';
+    if (main instanceof HTMLElement) main.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevBody;
+      if (main instanceof HTMLElement) main.style.overflow = prevMain;
+    };
+  }, [selected]);
+
+  const closeFilterSheet = useCallback(() => {
+    setFilterSheetOpen(false);
+    closeOverlay('filters');
+  }, [closeOverlay]);
 
   const listTitle = (config?.title ?? 'DISPATCH DATA').toUpperCase();
 
@@ -270,12 +320,15 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
     const nextApplied = cloneDispatchFilterValues(draftFilters);
     setAppliedFilters(nextApplied);
     setAppliedFilterParams(buildDispatchFilterParams(effectiveFilters, nextApplied));
-    setFilterSheetOpen(false);
+    closeFilterSheet();
   };
 
   const openFilterSheet = () => {
     setDraftFilters(cloneDispatchFilterValues(appliedFilters));
-    setFilterSheetOpen(true);
+    if (!filterSheetOpen) {
+      setFilterSheetOpen(true);
+      pushOverlay('filters');
+    }
   };
 
   const handleClearFilters = () => {
@@ -286,7 +339,15 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-56px)] max-w-lg flex-col bg-white md:max-w-2xl">
+    <div className="relative mx-auto flex min-h-[calc(100dvh-56px)] max-w-lg flex-col bg-white md:max-w-2xl">
+      {selected ? (
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 mx-auto flex h-[calc(100dvh-56px)] max-h-[calc(100dvh-56px)] w-full max-w-lg flex-col overflow-hidden bg-[#f3f4f6] md:max-w-2xl"
+          style={{ top: 56 }}
+        >
+          <DispatchDetailView record={selected} onBack={closeDetail} />
+        </div>
+      ) : null}
       <div className="px-4 pb-2 pt-4">
         <h1 className="text-xl font-bold uppercase tracking-wide text-gray-900">{listTitle}</h1>
         <div className="mt-3 h-px w-full bg-gray-300" />
@@ -324,8 +385,13 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
         onOpenChange={(open) => {
           if (open) {
             setDraftFilters(cloneDispatchFilterValues(appliedFilters));
+            if (!filterSheetOpen) {
+              setFilterSheetOpen(true);
+              pushOverlay('filters');
+            }
+          } else if (filterSheetOpen) {
+            closeFilterSheet();
           }
-          setFilterSheetOpen(open);
         }}
         filters={effectiveFilters}
         filterOptionsLoading={filterOptionsLoading}
@@ -358,7 +424,7 @@ export const DispatchCardListComponent: React.FC<DispatchCardListProps> = ({ con
               poField={listPoField}
               salesOrderField={listSalesOrderField}
               indexField={listIndexField}
-              onClick={() => setSelected(record)}
+              onClick={() => openDetail(record)}
             />
           ))
         )}

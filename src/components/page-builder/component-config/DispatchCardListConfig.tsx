@@ -254,10 +254,11 @@ function ListFieldGrid({
           onChange={(e) => handleInputChange('listSalesOrderField', e.target.value)}
         />
       </Field>
-      <Field label="Index field">
+      <Field label="Engineer field (top-left on card)">
         <Input
-          value={localConfig.listIndexField ?? 'sr_no'}
+          value={localConfig.listIndexField ?? 'engineer'}
           onChange={(e) => handleInputChange('listIndexField', e.target.value)}
+          placeholder="engineer"
         />
       </Field>
     </div>

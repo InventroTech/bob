@@ -1,5 +1,8 @@
 import type { DispatchFieldType } from './dispatchFieldSections';
 
+/** Shown in detail cards and list when a field value is null or empty. */
+export const DISPATCH_NO_DATA = 'No Data Available';
+
 function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
@@ -8,7 +11,7 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 
 /** Format ISO / sheet dates for mobile display (e.g. 14-JAN-26). */
 export function formatDispatchDate(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return DISPATCH_NO_DATA;
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (/^\d{2}-[A-Z]{3}-\d{2,4}$/i.test(trimmed)) return trimmed.toUpperCase();
@@ -30,7 +33,7 @@ export function formatDispatchDate(value: unknown): string {
 }
 
 export function formatDispatchCurrency(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return DISPATCH_NO_DATA;
   const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
   if (!Number.isFinite(n)) return String(value);
   return `₹ ${n.toLocaleString('en-IN')}/-`;
@@ -44,7 +47,7 @@ export function formatDispatchBool(value: unknown): { text: string; positive: bo
     return { text: 'No', positive: false };
   }
   const s = value == null ? '' : String(value).trim();
-  if (!s) return { text: '—', positive: false };
+  if (!s) return { text: DISPATCH_NO_DATA, positive: false };
   const lower = s.toLowerCase();
   if (['sent', 'done', 'yes', 'received', 'complete', 'completed'].some((w) => lower.includes(w))) {
     return { text: s, positive: true };
@@ -61,9 +64,9 @@ export function formatDispatchValue(value: unknown, type: DispatchFieldType = 's
     case 'bool':
       return formatDispatchBool(value).text;
     case 'time':
-      return value == null || value === '' ? '—' : String(value);
+      return value == null || value === '' ? DISPATCH_NO_DATA : String(value);
     default:
-      return value == null || value === '' ? '—' : String(value);
+      return value == null || value === '' ? DISPATCH_NO_DATA : String(value);
   }
 }
 
