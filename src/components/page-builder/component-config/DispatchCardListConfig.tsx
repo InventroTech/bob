@@ -34,6 +34,7 @@ interface Props {
   numFilters: number;
   onReplaceFilters?: (filters: FilterConfig[]) => void;
   handleFilterCountChange: (count: number) => void;
+  handleFilterDelete: (index: number) => void;
   handleFilterFieldChange: (
     index: number,
     field: keyof FilterConfig,
@@ -75,6 +76,7 @@ export const DispatchCardListConfigPanel: React.FC<Props> = ({
   numFilters,
   onReplaceFilters,
   handleFilterCountChange,
+  handleFilterDelete,
   handleFilterFieldChange,
   handleFilterOptionsSourceChange,
   handleAddFilterOption,
@@ -211,6 +213,7 @@ export const DispatchCardListConfigPanel: React.FC<Props> = ({
               showDispatchMobileUi
               handleInputChange={handleInputChange}
               handleFilterCountChange={handleFilterCountChange}
+              handleFilterDelete={handleFilterDelete}
               handleFilterFieldChange={handleFilterFieldChange}
               handleFilterOptionsSourceChange={handleFilterOptionsSourceChange}
               handleAddFilterOption={handleAddFilterOption}
