@@ -75,7 +75,6 @@ import {
   InventoryTableComponent,
   InventoryRequestFormComponent,
 } from "@/components/page-builder";
-import RoutingRulesComponent from "@/components/page-builder/RoutingRulesComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
@@ -133,7 +132,6 @@ import {
   LeadCardCarouselConfig,
   LeadAssignmentConfig,
   CallAttemptMatrixConfig,
-  RoutingRulesConfig
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
@@ -141,58 +139,9 @@ import { WhatsAppTemplateComponent } from "@/components/page-builder/WhatsAppTem
 import { WhatsAppTemplateConfig } from "@/components/page-builder/component-config/WhatsAppTemplateConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
-import type { RoutingRulesConfigData, RoutingFilterField } from "@/component-config";
 import { CustomIcons, CUSTOM_ICON_NAMES } from "@/components/page-builder/NewCustomIcons";
 import { DispatchCardListComponent } from "@/components/page-builder/DispatchCardListComponent";
 import { DispatchCardListConfigPanel } from "@/components/page-builder/component-config/DispatchCardListConfig";
-
-// Wrapper component to prevent unnecessary re-renders in RoutingRulesConfig
-interface RoutingRulesConfigWrapperProps {
-  filterFields: RoutingFilterField[];
-  title: string;
-  description: string;
-  onTitleChange: (title: string) => void;
-  onDescriptionChange: (description: string) => void;
-  onFilterFieldsChange: (fields: RoutingFilterField[]) => void;
-}
-
-const RoutingRulesConfigWrapper = React.memo<RoutingRulesConfigWrapperProps>(({
-  filterFields,
-  title,
-  description,
-  onTitleChange,
-  onDescriptionChange,
-  onFilterFieldsChange,
-}) => {
-  // Memoize the config object
-  const localConfig = useMemo<RoutingRulesConfigData>(() => ({
-    filterFields,
-    title,
-    description,
-  }), [filterFields, title, description]);
-
-  // Memoize the onConfigChange callback
-  const handleConfigChange = useCallback((newConfig: Partial<RoutingRulesConfigData>) => {
-    if (newConfig.title !== undefined) {
-      onTitleChange(newConfig.title);
-    }
-    if (newConfig.description !== undefined) {
-      onDescriptionChange(newConfig.description);
-    }
-    if (newConfig.filterFields !== undefined) {
-      onFilterFieldsChange(newConfig.filterFields);
-    }
-  }, [onTitleChange, onDescriptionChange, onFilterFieldsChange]);
-
-  return (
-    <RoutingRulesConfig
-      localConfig={localConfig}
-      onConfigChange={handleConfigChange}
-    />
-  );
-});
-
-RoutingRulesConfigWrapper.displayName = 'RoutingRulesConfigWrapper';
 
 interface ComponentConfig {
   apiEndpoint?: string;
@@ -311,7 +260,6 @@ export const componentMap: Record<string, React.FC<any>> = {
   applicantTable: ApplicantTableComponent,
   fileUpload: FileUploadPageComponent,
   dynamicScoring: DynamicScoringComponent,
-  routingRules: RoutingRulesComponent,
   whatsappTemplate: WhatsAppTemplateComponent,
   teamDashboard: TeamDashboardComponent,
   operationsPrograms: OperationsProgramsComponent,
@@ -506,11 +454,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     showHistoryButton: (initialConfig as any).showHistoryButton ?? false,
     modalFlags: (initialConfig as any).modalFlags ?? [],
   });
-
-  // Separate state for routing rules filter fields to prevent re-renders
-  const [localFilterFields, setLocalFilterFields] = useState<any[]>(
-    (initialConfig as any).filterFields || []
-  );
 
   // Separate state for columns
   const [localColumns, setLocalColumns] = useState<ColumnConfig[]>(initialColumns);
@@ -970,21 +913,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
-      case 'routingRules':
-        return (
-          <RoutingRulesConfigWrapper
-            filterFields={localFilterFields}
-            title={localConfig.title || ''}
-            description={localConfig.description || ''}
-            onTitleChange={(title) => handleInputChange('title', title)}
-            onDescriptionChange={(description) => handleInputChange('description', description)}
-            onFilterFieldsChange={(fields) => {
-              setLocalFilterFields(fields);
-              debouncedUpdateWithDelay({ filterFields: fields } as any);
-            }}
-          />
-        );
-
       case 'whatsappTemplate':
         return (
           <WhatsAppTemplateConfig
@@ -1282,7 +1210,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1884,11 +1812,6 @@ useEffect(() => {
                           id="addUser"
                           label="Add User"
                           icon={<User className="h-8 w-8 mb-1 text-foreground" />}
-                        />
-                        <DraggableSidebarItem
-                          id="routingRules"
-                          label="Routing Rules"
-                          icon={<Users className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="openModalButton"

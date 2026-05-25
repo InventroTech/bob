@@ -41,5 +41,4 @@ export type {
   HierarchyUser,
   HierarchyAssignment,
 } from './services/membership';
-export { routingRulesService } from './services/routingRules';
 
