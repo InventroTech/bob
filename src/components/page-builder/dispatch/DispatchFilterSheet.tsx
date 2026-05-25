@@ -684,7 +684,15 @@ export const DispatchFilterSheet: React.FC<Props> = ({
       >
         <div className="flex shrink-0 items-center gap-2 bg-black px-4 py-3 text-white">
           <DispatchFilterIcon inverted />
-          <span className="text-base font-semibold tracking-wide">Filters</span>
+          <span className="flex-1 text-base font-semibold tracking-wide">Filters</span>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-md text-white/90 hover:bg-white/10 active:bg-white/20"
+            aria-label="Close filters"
+          >
+            <X className="h-5 w-5" strokeWidth={2.5} />
+          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white px-4 py-4 [-webkit-overflow-scrolling:touch]">
