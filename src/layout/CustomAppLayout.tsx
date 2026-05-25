@@ -217,12 +217,14 @@ const CustomAppLayout: React.FC = () => {
         console.error('Failed to fetch custom icons:', err);
       }
 
+      const token = await getEffectiveToken(session?.access_token ?? null);
+
       const spoofToken =
         typeof window !== 'undefined' ? window.localStorage.getItem(SPOOF_JWT_KEY) : null;
-      if (spoofToken) {
+      if (spoofToken && token) {
         // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
         try {
-          const pagesData = await fetchPagesForRole(tenantId, userRoleId, spoofToken);
+          const pagesData = await fetchPagesForRole(tenantId, userRoleId, token);
           setPages(pagesData || []);
         } catch (err) {
           console.error('Pages fetch error (spoof):', err);
@@ -237,6 +239,7 @@ const CustomAppLayout: React.FC = () => {
         .select('id, name, display_order, icon_name')
         .eq('tenant_id', tenantId)
         .eq('role', userRoleId)
+        .eq('is_deleted', false)
         .order('display_order', { ascending: true });
 
       if (error) {
