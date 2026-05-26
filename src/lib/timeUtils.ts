@@ -2,30 +2,6 @@
  * Simple GMT to IST converter for ticket times
  */
 
-/** True when the string already carries UTC/Z or a numeric offset (e.g. +00:00). */
-function hasTimezoneInfo(value: string): boolean {
-  const trimmed = value.trim();
-  return /Z$/i.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed);
-}
-
-function parseUtcDate(dateInput: string | Date): Date | null {
-  if (dateInput instanceof Date) {
-    return isNaN(dateInput.getTime()) ? null : dateInput;
-  }
-  const dateString = String(dateInput).trim();
-  if (!dateString) return null;
-
-  const candidates = hasTimezoneInfo(dateString)
-    ? [dateString]
-    : [dateString + 'Z', dateString + ' UTC'];
-
-  for (const candidate of candidates) {
-    const parsed = new Date(candidate);
-    if (!isNaN(parsed.getTime())) return parsed;
-  }
-  return null;
-}
-
 /**
  * Converts GMT timestamp to IST and formats it
  * @param dateString - GMT timestamp from database
@@ -33,15 +9,22 @@ function parseUtcDate(dateInput: string | Date): Date | null {
  * @param options - Date format options (only used when format='date')
  */
 export const convertGMTtoIST = (
-  dateString: string | Date,
+  dateString: string, 
   format: 'relative' | 'date' = 'relative',
   options?: Intl.DateTimeFormatOptions
 ) => {
   if (!dateString) return 'N/A';
-
-  const gmtDate = parseUtcDate(dateString);
-  if (!gmtDate) return 'Invalid date';
-
+  
+  // Parse GMT timestamp and add IST offset (+5:30)
+  let gmtDate = new Date(dateString + (dateString.includes('Z') ? '' : 'Z'));
+  if (isNaN(gmtDate.getTime())) {
+    gmtDate = new Date(dateString + ' UTC');
+  }
+  if (isNaN(gmtDate.getTime())) return 'Invalid date';
+  
+  // Convert to IST (GMT + 5.5 hours)
+  const istDate = new Date(gmtDate.getTime() + (5.5 * 60 * 60 * 1000));
+  
   if (format === 'date') {
     const defaultOptions: Intl.DateTimeFormatOptions = {
       year: "numeric",
