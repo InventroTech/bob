@@ -23,7 +23,6 @@ import {
   Coffee,
   Waypoints,
   MoreVertical,
-  ExternalLink,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -186,9 +185,6 @@ interface TicketCarouselProps {
     statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
     title?: string;
-    workItemMode?: boolean;
-    fetchNextWorkItem?: () => Promise<unknown>;
-    onWorkItemResolved?: () => void | Promise<void>;
   };
   initialTicket?: any;
   onUpdate?: (updatedTicket: any) => void;
@@ -404,24 +400,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         throw new Error("Authentication required");
       }
 
-      let ticketData: any;
-      if (config?.workItemMode && config?.fetchNextWorkItem) {
-        const item = await config.fetchNextWorkItem() as { ticket: any } | null;
-        if (!item?.ticket) {
-          setShowPendingCard(true);
-          setCurrentTicket(null);
-          resetTicketState();
-          isInitialized.current = false;
-          clearPersistedState();
-          await fetchTicketStats();
-          toast.info("No more work items available.");
-          return;
-        }
-        ticketData = { ticket: item.ticket };
-      } else {
-        const response = await apiClient.get("/support-ticket/get-next-ticket/", {});
-        ticketData = response.data;
-      }
+      const response = await apiClient.get("/support-ticket/get-next-ticket/", {
+      });
+      const ticketData = response.data;
 
       if (!ticketData || (typeof ticketData === "object" && !Object.keys(ticketData).length)) {
         setShowPendingCard(true);
@@ -491,11 +472,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       await apiClient.post("/support-ticket/take-break/", {
         ticketId: currentTicket?.id,
       });
-
-      if (config?.workItemMode && config.onWorkItemResolved) {
-        await config.onWorkItemResolved();
-        return;
-      }
 
       // Navigate to pending card
       setShowPendingCard(true);
@@ -616,11 +592,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       await apiClient.post(endpoint, payload, {
       });
-
-      if (config?.workItemMode && config.onWorkItemResolved) {
-        await config.onWorkItemResolved();
-        return;
-      }
 
       // After successful API call, fetch next ticket
       await fetchNextTicket(currentTicket?.id);
@@ -761,7 +732,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           variant="outline"
           size="sm"
           icon={<Coffee className="h-3 w-3" />}
-          disabled={updating || (isCompact && !config?.workItemMode)}
+          disabled={updating || isCompact}
         >
           Take a Break
         </CustomButton>
@@ -828,93 +799,107 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             
            
               <div className="">
-                <div className="flex items-center text-sm bg-muted/50 p-4 rounded-md">
-                  {currentTicket?.display_pic_url ? (
-                    <img
-                      src={currentTicket.display_pic_url}
-                      alt={`${currentTicket.name || "User"} profile`}
-                      className="h-12 w-12 rounded-full mr-2 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                      }}
-                    />
-                  ) : null}
-                  <User
-                    className={`h-3 w-3 mr-2 text-primary ${
-                      currentTicket?.display_pic_url ? "hidden" : ""
-                    }`}
-                  />
-                  <div className="flex flex-col w-full gap-2">
-                    <div>
-                      {currentTicket?.user_id ? (
-                        <a
-                          href={`https://jathara.thecircleapp.in/create-layout?user_id=${currentTicket.user_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-lg text-primary hover:underline"
-                        >
-                          {currentTicket?.name || "N/A"}
-                        </a>
-                      ) : (
-                        <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
-                      )}
-                      <div className="flex items-center gap-2 pt-1 flex-wrap">
-                        <p className="text-xs text-muted-foreground">
-                          ID: {currentTicket?.user_id || "N/A"}
-                        </p>
-                        {currentTicket?.praja_dashboard_user_link && (
-                          <a
-                            href={currentTicket.praja_dashboard_user_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                          >
-                            <ExternalLink className="h-3 w-3 shrink-0" />
-                            Admin
-                          </a>
-                        )}
+                {currentTicket?.praja_dashboard_user_link ? (
+                  <a
+                    href={currentTicket.praja_dashboard_user_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <div className="flex items-center text-sm bg-muted/50 p-4 rounded-md cursor-pointer hover:bg-muted/70 transition-colors">
+                      {currentTicket?.display_pic_url ? (
+                        <img
+                          src={currentTicket.display_pic_url}
+                          alt={`${currentTicket.name || "User"} profile`}
+                          className="h-12 w-12 rounded-full mr-2 object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                          }}
+                        />
+                      ) : null}
+                      <User
+                        className={`h-3 w-3 mr-2 text-primary ${
+                          currentTicket?.display_pic_url ? "hidden" : ""
+                        }`}
+                      />
+                      <div className="flex flex-col w-full gap-2">
+                        <div>
+                          <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
+                          <p className="text-xs text-muted-foreground pt-2">
+                            ID: {currentTicket?.user_id || "N/A"}
+                          </p>
+                        </div>
+                        <span className="font-medium text-sm  flex items-center gap-1">
+                          {currentTicket?.poster ? (
+                            (() => {
+                              const posterInfo = formatPosterStatus(currentTicket.poster);
+                              return (
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
+                                  {posterInfo.label}
+                                </span>
+                              );
+                            })()
+                          ) : (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
+                              No Poster
+                            </span>
+                          )}
+                        </span>
                       </div>
                     </div>
-                    <span className="font-medium text-sm flex items-center gap-1">
-                      {currentTicket?.poster ? (
-                        (() => {
-                          const posterInfo = formatPosterStatus(currentTicket.poster);
-                          return (
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
-                              {posterInfo.label}
-                            </span>
-                          );
-                        })()
-                      ) : (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
-                          No Poster
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center text-sm bg-muted/50 p-2 rounded-md mt-1">
-                  <a
-                    href={`tel:${(() => {
-                      const clean = getCleanPhoneNumber(currentTicket?.phone);
-                      if (clean.length === 10) return `+91${clean}`;
-                      if (clean.startsWith("91") && clean.length === 12) return `+${clean}`;
-                      return clean;
-                    })()}`}
-                    className="flex items-center flex-1 hover:text-primary transition-colors"
-                  >
-                    <Phone className="h-3 w-3 mr-2 text-primary" />
-                    <span className="font-medium text-sm">{formatPhoneNumber(currentTicket?.phone) || "N/A"}</span>
                   </a>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); handleWhatsApp(currentTicket?.phone); }}
-                    className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 border border-green-200 transition-colors"
-                  >
-                    <MessageSquare className="h-3 w-3" />
-                    WhatsApp
-                  </button>
+                ) : (
+                  <div className="flex items-center text-sm bg-muted/50 p-4 rounded-md">
+                    {currentTicket?.display_pic_url ? (
+                      <img
+                        src={currentTicket.display_pic_url}
+                        alt={`${currentTicket.name || "User"} profile`}
+                        className="h-12 w-12 rounded-full mr-2 object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                        }}
+                      />
+                    ) : null}
+                    <User
+                      className={`h-3 w-3 mr-2 text-primary ${
+                        currentTicket?.display_pic_url ? "hidden" : ""
+                      }`}
+                    />
+                    <div className="flex flex-col w-full gap-2">
+                      <div>
+                        <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
+                        <p className="text-xs text-muted-foreground pt-2">
+                          ID: {currentTicket?.user_id || "N/A"}
+                        </p>
+                      </div>
+                      <span className="font-medium text-sm  flex items-center gap-1">
+                        {currentTicket?.poster ? (
+                          (() => {
+                            const posterInfo = formatPosterStatus(currentTicket.poster);
+                            return (
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
+                                {posterInfo.label}
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
+                            No Poster
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {/* Removed the separate payment status row */}
+                <div 
+                  className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
+                  onClick={() => handleWhatsApp(currentTicket?.phone)}
+                >
+                  <Phone className="h-3 w-3 mr-2 text-primary" />
+                  <span className="font-medium text-sm">{formatPhoneNumber(currentTicket?.phone) || "N/A"}</span>
                 </div>
               </div>
               
