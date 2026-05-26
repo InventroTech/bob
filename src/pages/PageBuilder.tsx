@@ -112,6 +112,7 @@ import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
 import { TicketCarouselWrapper } from "@/components/page-builder/TicketCarouselWrapper";
 import { TicketBarGraphComponent } from "@/components/page-builder/TicketBarGraphComponent";
 import { LeadCardCarouselWrapper } from "@/components/page-builder/LeadCardCarouselWrapper";
+import { WorkItemCarouselWrapper } from "@/components/page-builder/WorkItemCarouselWrapper";
 import { Textarea } from "@/components/ui/textarea";
 import { debounce } from 'lodash';
 import { TemporaryLogoutComponent } from "@/components/page-builder/TemporaryLogoutComponent";
@@ -297,6 +298,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   leadProgressBar: LeadProgressBar,
   ticketTable: TicketTableComponent,
   ticketCarousel: TicketCarouselWrapper,
+  workItemCarousel: WorkItemCarouselWrapper,
   ticketBarGraph: TicketBarGraphComponent,
   temporaryLogout: TemporaryLogoutComponent,
   stackedBarChart: StackedBarChart,
@@ -1282,7 +1284,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'collapseCard','leadCarousel','workItemCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','routingRules','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1795,6 +1797,11 @@ useEffect(() => {
                           id="ticketCarousel"
                           label="Ticket Carousel"
                           icon={<AlignCenter className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="workItemCarousel"
+                          label="Work Item Carousel"
+                          icon={<Briefcase className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="ticketBarGraph"
