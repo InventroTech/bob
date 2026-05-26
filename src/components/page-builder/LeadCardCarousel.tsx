@@ -45,6 +45,9 @@ interface LeadCardCarouselProps {
     leadAssignmentWebhookUrl?: string;
     whatsappTemplatesApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
+    workItemMode?: boolean;
+    workItemRecordId?: number | null;
+    onWorkItemResolved?: () => void | Promise<void>;
   };
   initialLead?: LeadData | null;
   onLeadUpdate?: (updatedLead: LeadData | null) => void;
@@ -1102,9 +1105,15 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
             detail: { leadId: currentLead.id } 
           }));
         }
-        // Same as pending leads page: update state and move on (no extra API)
+
+        // Unified work queue: parent pulls next item or returns to "Get work item"
+        if (config?.workItemMode && config.onWorkItemResolved) {
+          await config.onWorkItemResolved();
+          return ok;
+        }
+
+        // Table/modal: keep lead updated in place
         if (initialLead && currentLead?.id) {
-          // Derive new stage from action (same as backend would set) and update local state + parent
           const stageByAction: Record<typeof action, string> = {
             "Trial Activated": "TRIAL_ACTIVATED",
             "Not Interested": "NOT_INTERESTED",
@@ -1121,14 +1130,11 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
           setCurrentLead(updatedLead);
           setLead(prev => ({ ...prev, leadStatus: newStage }));
           if (onLeadUpdate) onLeadUpdate(updatedLead);
-          // Close modal after successful action when opened from table; pass lead id and action so parent can remove from list only when not "Call Back Later"
           if (isInModal && onActionComplete && currentLead?.id != null) {
             onActionComplete(currentLead.id, action);
           }
         } else {
           persistActionButtonsState(undefined, false);
-          // Do not auto-fetch next lead after an outcome.
-          // User must click "Get Leads" manually for the next lead.
           setShowPendingCard(true);
           setCurrentLead(null);
           resetLeadState();
