@@ -120,9 +120,7 @@ export async function fetchPagesForRole(
   // First try the backend Pages API (preferred path).
   try {
     const pages = await pageService.getPagesForRole(tenantId, roleId);
-    if (pages && pages.length > 0) {
-      return pages;
-    }
+    return pages ?? [];
   } catch (err) {
     console.warn('pageService.getPagesForRole failed, falling back to Supabase REST:', err);
   }
@@ -133,6 +131,7 @@ export async function fetchPagesForRole(
   const params = new URLSearchParams({
     tenant_id: `eq.${tenantId}`,
     role: `eq.${roleId}`,
+    is_deleted: 'eq.false',
     select: 'id,name,display_order,icon_name',
     order: 'display_order.asc',
   });
