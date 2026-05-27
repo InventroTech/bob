@@ -8,7 +8,6 @@ export * from './ImageComponent';
 export { default as AddUserComponent } from './AddUserComponent';
 export { default as LeadAssignmentComponent } from './LeadAssignmentComponent';
 export { default as CallAttemptMatrixComponent } from './CallAttemptMatrixComponent';
-export { default as RoutingRulesComponent } from './RoutingRulesComponent';
 export { TicketCarouselConfig } from './component-config/TicketCarouselConfig';
 export { TicketTableConfig } from './component-config/TicketTableConfig';
 export { LeadTableComponent } from './LeadTableComponent';

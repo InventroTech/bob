@@ -1,14 +1,9 @@
 import { createApiClient } from '@/lib/api/client';
 import { 
-  UserSettings, 
-  UserSettingsCreate, 
-  UserSettingsUpdate,
   LeadTypeAssignment,
   LeadTypeAssignmentRequest,
   UserLeadTypes,
   LeadTypeAssignmentResponse,
-  RoutingRule,
-  RoutingRuleUpsertPayload,
   Group,
   GroupCreatePayload,
   UserCoreKVSetting,
@@ -36,54 +31,6 @@ export function resolveDailyFreshLeadLimitFromKv(kv: UserCoreKVSetting[]): numbe
   const limitRow = kv.find((row) => row.key === 'DAILY_LIMIT');
   return coerceNonNegativeInt(limitRow?.value);
 }
-
-// User Settings API functions
-export const userSettingsApi = {
-  // Get all user settings for the current tenant
-  async getAll(): Promise<UserSettings[]> {
-    const response = await apiClient.get('/user-settings/settings/');
-    return response.data;
-  },
-
-  // Create or update a user setting
-  async createOrUpdate(data: UserSettingsCreate): Promise<UserSettings> {
-    try {
-      const response = await apiClient.post('/user-settings/settings/', data);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(`Failed to create/update user setting: ${error.response?.status} - ${error.response?.data || error.message}`);
-    }
-  },
-
-  // Get a specific user setting
-  async get(userId: string, key: string): Promise<UserSettings> {
-    try {
-      const response = await apiClient.get(`/user-settings/settings/${userId}/${key}/`);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(`Failed to fetch user setting: ${error.response?.status} - ${error.response?.data || error.message}`);
-    }
-  },
-
-  // Update a specific user setting
-  async update(userId: string, key: string, data: UserSettingsUpdate): Promise<UserSettings> {
-    try {
-      const response = await apiClient.put(`/user-settings/settings/${userId}/${key}/`, data);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(`Failed to update user setting: ${error.response?.status} - ${error.response?.data || error.message}`);
-    }
-  },
-
-  // Delete a specific user setting
-  async delete(userId: string, key: string): Promise<void> {
-    try {
-      await apiClient.delete(`/user-settings/settings/${userId}/${key}/`);
-    } catch (error: any) {
-      throw new Error(`Failed to delete user setting: ${error.response?.statusText || error.message}`);
-    }
-  },
-};
 
 // Lead Type Assignment API functions
 export const leadTypeAssignmentApi = {
@@ -281,38 +228,6 @@ export const leadTypeAssignmentApi = {
       if (error.response?.status === 404) return [];
       console.error('Error fetching user core kv settings:', error);
       return [];
-    }
-  },
-};
-
-// Routing rules API functions
-export const routingRulesApi = {
-  // Get all routing rules for the current tenant
-  async getAll(): Promise<RoutingRule[]> {
-    try {
-      const response = await apiClient.get('/user-settings/routing-rules/');
-      return response.data;
-    } catch (error: any) {
-      throw new Error(`Failed to fetch routing rules: ${error.response?.status} - ${error.response?.data || error.message}`);
-    }
-  },
-
-  // Create or update a routing rule for a user + queue_type
-  async upsert(payload: RoutingRuleUpsertPayload): Promise<RoutingRule> {
-    try {
-      const response = await apiClient.post('/user-settings/routing-rules/', payload);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(`Failed to save routing rule: ${error.response?.status} - ${error.response?.data || error.message}`);
-    }
-  },
-
-  // Delete a routing rule by id
-  async delete(id: number): Promise<void> {
-    try {
-      await apiClient.delete(`/user-settings/routing-rules/${id}/`);
-    } catch (error: any) {
-      throw new Error(`Failed to delete routing rule: ${error.response?.status} - ${error.response?.data || error.message}`);
     }
   },
 };
