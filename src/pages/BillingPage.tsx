@@ -62,7 +62,7 @@ function formatDate(value: string) {
 }
 
 function downloadPdfBytes(bytes: ArrayBuffer | Uint8Array, filename: string) {
-  let blobPart: ArrayBuffer = bytes instanceof ArrayBuffer ? bytes : new ArrayBuffer(bytes.byteLength);
+  const blobPart: ArrayBuffer = bytes instanceof ArrayBuffer ? bytes : new ArrayBuffer(bytes.byteLength);
   if (bytes instanceof Uint8Array) {
     new Uint8Array(blobPart).set(bytes);
   }
