@@ -143,7 +143,8 @@ const CustomAppPage: React.FC = () => {
     Array.isArray(page.config) &&
     page.config.some(
       (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
-        comp.type === 'dispatchCardList' && comp.config?.hidePageHeader !== false
+        (comp.type === 'dispatchCardList' || comp.type === 'dispatchDashboard') &&
+        comp.config?.hidePageHeader !== false
     );
 
   return (
