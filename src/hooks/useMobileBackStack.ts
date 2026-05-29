@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 const ROOT_FLAG = 'pyroMobileBackRoot';
-export type MobileBackOverlay = 'detail' | 'filters';
+export type MobileBackOverlay = 'detail' | 'filters' | 'sort' | 'dispatchNav';
 
 /**
  * Sync hardware/browser back with in-app overlays (detail, bottom sheet).

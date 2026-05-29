@@ -24,7 +24,9 @@ export type DispatchCardListConfigState = {
   listTitleField?: string;
   listPoField?: string;
   listSalesOrderField?: string;
+  listDcNumberField?: string;
   listIndexField?: string;
+  listDcDateField?: string;
 };
 
 interface Props {
@@ -248,17 +250,32 @@ function ListFieldGrid({
           onChange={(e) => handleInputChange('listPoField', e.target.value)}
         />
       </Field>
-      <Field label="Sales order field">
+      <Field label="DC number field (row 2 right)">
+        <Input
+          value={localConfig.listDcNumberField ?? 'dc_number'}
+          onChange={(e) => handleInputChange('listDcNumberField', e.target.value)}
+          placeholder="dc_number"
+        />
+      </Field>
+      <Field label="Sales order field (row 3 right)">
         <Input
           value={localConfig.listSalesOrderField ?? 'sales_order_number'}
           onChange={(e) => handleInputChange('listSalesOrderField', e.target.value)}
+          placeholder="sales_order_number"
         />
       </Field>
-      <Field label="Engineer field (top-left on card)">
+      <Field label="Engineer field (row 1 left)">
         <Input
           value={localConfig.listIndexField ?? 'engineer'}
           onChange={(e) => handleInputChange('listIndexField', e.target.value)}
           placeholder="engineer"
+        />
+      </Field>
+      <Field label="DC date field (row 2 left)">
+        <Input
+          value={localConfig.listDcDateField ?? 'dc_date'}
+          onChange={(e) => handleInputChange('listDcDateField', e.target.value)}
+          placeholder="dc_date"
         />
       </Field>
     </div>

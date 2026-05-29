@@ -26,3 +26,4 @@ export { UserHierarchyConfig } from './component-config/UserHierarchyConfig';
 export { InventoryTableComponent } from './InventoryTableComponent';
 export { InventoryRequestFormComponent } from './InventoryRequestFormComponent';
 export { DispatchCardListComponent } from './DispatchCardListComponent';
+export { DispatchDashboardComponent } from './DispatchDashboardComponent';
