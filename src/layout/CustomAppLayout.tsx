@@ -97,8 +97,14 @@ function NavIcon({
 }) {
   return (
     <div
-      className={`flex h-8 w-8 items-center justify-center rounded-full ${
-        isMobile ? 'text-white' : isActive ? 'text-white' : 'text-gray-600'
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+        isMobile
+          ? isActive
+            ? 'text-white'
+            : 'text-gray-600'
+          : isActive
+            ? 'text-white'
+            : 'text-gray-600'
       }`}
     >
       <DynamicSidebarIcon iconName={iconName} customIcons={customIcons} />
@@ -285,8 +291,8 @@ const CustomAppLayout: React.FC = () => {
             } ${
               isMobile
                 ? isActive
-                  ? 'bg-gray-800 text-white'
-                  : 'bg-gray-900 text-white hover:bg-gray-800'
+                  ? 'bg-black text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 : isActive
                   ? 'bg-black text-white'
                   : 'text-gray-700 hover:bg-gray-50'
