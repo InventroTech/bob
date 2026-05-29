@@ -36,6 +36,7 @@ import {
   Database,
   Sparkles,
   Truck,
+  LayoutDashboard,
 } from "lucide-react";
 import { icons } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -142,6 +143,8 @@ import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadC
 import { CustomIcons, CUSTOM_ICON_NAMES } from "@/components/page-builder/NewCustomIcons";
 import { DispatchCardListComponent } from "@/components/page-builder/DispatchCardListComponent";
 import { DispatchCardListConfigPanel } from "@/components/page-builder/component-config/DispatchCardListConfig";
+import { DispatchDashboardComponent } from "@/components/page-builder/DispatchDashboardComponent";
+import { DispatchDashboardConfigPanel } from "@/components/page-builder/component-config/DispatchDashboardConfig";
 
 interface ComponentConfig {
   apiEndpoint?: string;
@@ -266,6 +269,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   userHierarchy: UserHierarchyComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
   dispatchCardList: DispatchCardListComponent,
+  dispatchDashboard: DispatchDashboardComponent,
 };
 
 // Add this interface near the top with other interfaces
@@ -774,6 +778,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'dispatchDashboard':
+        return (
+          <DispatchDashboardConfigPanel
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       case 'inventoryTable':
         return (
           <TableConfig
@@ -1210,7 +1222,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1792,6 +1804,11 @@ useEffect(() => {
                           id="dispatchCardList"
                           label="Dispatch Card List"
                           icon={<Truck className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="dispatchDashboard"
+                          label="Dispatch Dashboard"
+                          icon={<LayoutDashboard className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="inventoryRequestForm"
