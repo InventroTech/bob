@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Layout, Sparkles, UserPlus, Database, Users } from "lucide-react";
+import { Home, Layout, Sparkles, UserPlus, Database, Users, Receipt } from "lucide-react";
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -42,6 +42,11 @@ const sidebarItems = [
     title: "User Hierarchy",
     path: "/user-hierarchy",
     icon: Users,
+  },
+  {
+    title: "Billing",
+    path: "/billing",
+    icon: Receipt,
   },
 ];
 
