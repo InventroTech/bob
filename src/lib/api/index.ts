@@ -32,8 +32,16 @@ export type {
 
 // Services
 export { authService, linkUserUidLegacy } from './services/auth';
+export { billingService } from './services/billing';
 export { membershipService } from './services/membership';
 export { pageService } from './services/pageService';
+export type {
+  BillingMember,
+  BillingReport,
+  BillingReportParams,
+  BillingRole,
+  BillingSummary,
+} from './services/billing';
 export type {
   Role,
   User,
