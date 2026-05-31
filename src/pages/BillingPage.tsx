@@ -237,14 +237,41 @@ const BillingPage = () => {
     const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 12;
     const topMarginY = 62;
-    const bottomMarginY = 24;
-    const rowHeight = 8;
+    const bottomMarginY = 58;
+    const rowHeight = 6.5;
     let y = topMarginY;
 
     const addPageIfNeeded = () => {
       if (y <= pageHeight - bottomMarginY) return;
       doc.addPage();
       y = topMarginY;
+      drawTableHeader();
+    };
+
+    const tableColumns = {
+      name: marginX,
+      email: 37,
+      role: 88,
+      joined: 116,
+      days: 151,
+      rate: 176,
+      amount: pageWidth - marginX,
+    };
+
+    const drawTableHeader = () => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Name', tableColumns.name, y);
+      doc.text('Email', tableColumns.email, y);
+      doc.text('Role', tableColumns.role, y);
+      doc.text('Joined', tableColumns.joined, y);
+      doc.text('Days', tableColumns.days, y, { align: 'right' });
+      doc.text('Rate', tableColumns.rate, y, { align: 'right' });
+      doc.text('Amount', tableColumns.amount, y, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      y += 4;
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 5;
     };
 
     doc.setFontSize(15);
@@ -273,19 +300,11 @@ const BillingPage = () => {
     }
     y += 3;
 
-    const headers = ['Name', 'Email', 'Role', 'Joined', 'Days', 'Rate', 'Amount'];
-    const columnX = [marginX, 37, 86, 116, 139, 160, 184];
-
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    headers.forEach((header, index) => doc.text(header, columnX[index], y));
-    doc.setFont('helvetica', 'normal');
-    y += 5;
-    doc.line(marginX, y, pageWidth - marginX, y);
-    y += 5;
+    drawTableHeader();
 
     billingMembers.forEach((member) => {
       addPageIfNeeded();
+      doc.setFontSize(8);
       const roleLabel = member.billing_role_key || member.role?.name || 'Unbilled';
       const row = [
         member.name || 'Unnamed User',
@@ -297,13 +316,13 @@ const BillingPage = () => {
         formatPdfMoney(member.billing_amount),
       ];
 
-      doc.text(row[0].slice(0, 13), columnX[0], y);
-      doc.text(row[1].slice(0, 26), columnX[1], y);
-      doc.text(row[2].slice(0, 14), columnX[2], y);
-      doc.text(row[3], columnX[3], y);
-      doc.text(row[4], columnX[4], y);
-      doc.text(row[5], columnX[5], y);
-      doc.text(row[6], columnX[6], y);
+      doc.text(row[0].slice(0, 14), tableColumns.name, y);
+      doc.text(row[1].slice(0, 27), tableColumns.email, y);
+      doc.text(row[2].slice(0, 14), tableColumns.role, y);
+      doc.text(row[3], tableColumns.joined, y);
+      doc.text(row[4], tableColumns.days, y, { align: 'right' });
+      doc.text(row[5], tableColumns.rate, y, { align: 'right' });
+      doc.text(row[6], tableColumns.amount, y, { align: 'right' });
       y += rowHeight;
     });
 
