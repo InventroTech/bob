@@ -4,6 +4,7 @@ export interface BillingRole {
   id: string;
   key: string;
   name: string;
+  rate?: string;
 }
 
 export interface BillingMember {
@@ -12,8 +13,11 @@ export interface BillingMember {
   email: string;
   role: BillingRole | null;
   is_active: boolean;
+  is_deleted?: boolean;
   joined_at: string;
   joined_date: string;
+  billing_end_date?: string;
+  deleted_at?: string | null;
   billable_days: number;
   cycle_days: number;
   billing_role_key: string | null;
@@ -36,6 +40,7 @@ export interface BillingReport {
   cycle_days: number;
   excluded_email_domain?: string;
   excluded_email_addresses_count?: number;
+  billing_roles?: BillingRole[];
   role_rates: Record<string, string>;
   summary: BillingSummary;
   results: BillingMember[];
@@ -44,6 +49,7 @@ export interface BillingReport {
 export interface BillingReportParams {
   month: string;
   cycleDays?: number;
+  roleRates?: Record<string, string>;
 }
 
 export const billingService = {
@@ -52,6 +58,7 @@ export const billingService = {
       params: {
         month: params.month,
         ...(params.cycleDays ? { cycle_days: params.cycleDays } : {}),
+        ...(params.roleRates ? { role_rates: JSON.stringify(params.roleRates) } : {}),
       },
     });
 

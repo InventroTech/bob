@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import { PDFDocument } from 'pdf-lib';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { billingService, type BillingMember, type BillingReport } from '@/lib/api';
@@ -110,6 +111,8 @@ async function addLetterheadToPdf(contentBytes: ArrayBuffer) {
 
 const BillingPage = () => {
   const [month, setMonth] = useState(getCurrentMonthValue);
+  const [roleRates, setRoleRates] = useState<Record<string, string>>({});
+  const roleRatesRef = useRef<Record<string, string>>({});
   const [report, setReport] = useState<BillingReport | null>(null);
   const [removedMembershipIds, setRemovedMembershipIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -133,6 +136,10 @@ const BillingPage = () => {
     );
   }, [currentBillingPeriod.month, currentBillingPeriod.year, selectedYear]);
 
+  useEffect(() => {
+    roleRatesRef.current = roleRates;
+  }, [roleRates]);
+
   const loadBilling = useCallback(async () => {
     if (!month) {
       toast.error('Select a billing month');
@@ -154,8 +161,20 @@ const BillingPage = () => {
     try {
       const data = await billingService.getMembershipBilling({
         month,
+        roleRates: roleRatesRef.current,
       });
       setReport(data);
+      setRoleRates((currentRates) => {
+        let changed = false;
+        const nextRates = { ...currentRates };
+        (data.billing_roles || []).forEach((role) => {
+          if (nextRates[role.id] == null) {
+            nextRates[role.id] = role.rate || '0.00';
+            changed = true;
+          }
+        });
+        return changed ? nextRates : currentRates;
+      });
       setRemovedMembershipIds([]);
     } catch (error: any) {
       const message = error?.message || 'Failed to load billing report';
@@ -225,6 +244,13 @@ const BillingPage = () => {
     setMonth(`${nextYear}-${nextMonth}`);
   }, [currentBillingPeriod.month, currentBillingPeriod.year, selectedMonth]);
 
+  const handleRoleRateChange = useCallback((roleId: string, value: string) => {
+    setRoleRates((currentRates) => ({
+      ...currentRates,
+      [roleId]: value,
+    }));
+  }, []);
+
   const handleDownloadPdf = useCallback(async () => {
     if (!report) {
       toast.error('Load a billing report before downloading');
@@ -258,6 +284,16 @@ const BillingPage = () => {
       amount: pageWidth - marginX,
     };
 
+    const fitText = (value: string, maxWidth: number) => {
+      if (doc.getTextWidth(value) <= maxWidth) return value;
+
+      let fitted = value;
+      while (fitted.length > 0 && doc.getTextWidth(`${fitted}...`) > maxWidth) {
+        fitted = fitted.slice(0, -1);
+      }
+      return fitted ? `${fitted}...` : '';
+    };
+
     const drawTableHeader = () => {
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
@@ -284,11 +320,6 @@ const BillingPage = () => {
     doc.text(`Period: ${formatDate(report.period_start)} - ${formatDate(report.period_end)}`, marginX + 70, y);
     y += 7;
     doc.text(`Cycle Days: ${report.cycle_days}`, marginX, y);
-    doc.text(
-      `Rates: CSE ${formatPdfMoney(report.role_rates.CSE ?? 0)} | RM ${formatPdfMoney(report.role_rates.RM ?? 0)}`,
-      marginX + 70,
-      y
-    );
     y += 9;
     doc.text(`Members: ${billingSummary.member_count}`, marginX, y);
     doc.text(`Total billable days: ${billingSummary.total_billable_days}`, marginX + 45, y);
@@ -306,19 +337,20 @@ const BillingPage = () => {
       addPageIfNeeded();
       doc.setFontSize(8);
       const roleLabel = member.billing_role_key || member.role?.name || 'Unbilled';
+      const roleDisplay = member.is_deleted ? `${roleLabel} (Deleted)` : roleLabel;
       const row = [
         member.name || 'Unnamed User',
         member.email,
-        roleLabel,
+        roleDisplay,
         formatDate(member.joined_date),
         `${member.billable_days}/${member.cycle_days}`,
         formatPdfMoney(member.monthly_amount),
         formatPdfMoney(member.billing_amount),
       ];
 
-      doc.text(row[0].slice(0, 14), tableColumns.name, y);
-      doc.text(row[1].slice(0, 27), tableColumns.email, y);
-      doc.text(row[2].slice(0, 14), tableColumns.role, y);
+      doc.text(fitText(row[0], tableColumns.email - tableColumns.name - 2), tableColumns.name, y);
+      doc.text(fitText(row[1], tableColumns.role - tableColumns.email - 2), tableColumns.email, y);
+      doc.text(fitText(row[2], tableColumns.joined - tableColumns.role - 2), tableColumns.role, y);
       doc.text(row[3], tableColumns.joined, y);
       doc.text(row[4], tableColumns.days, y, { align: 'right' });
       doc.text(row[5], tableColumns.rate, y, { align: 'right' });
@@ -348,7 +380,7 @@ const BillingPage = () => {
         <div>
           <h5>Billing</h5>
           <p className="text-sm text-muted-foreground">
-            Date-wise prorated billing for every tenant member. CSE is billed at 1800 and RM at 2000.
+            Date-wise prorated billing for every tenant member. Add or adjust rates for each tenant role before refreshing.
           </p>
           <p className="text-xs text-muted-foreground">
             Internal testing accounts from Pyro are excluded, including {report?.excluded_email_domain ?? '@thepyro.ai'} and configured test emails.
@@ -393,11 +425,38 @@ const BillingPage = () => {
               </div>
             </div>
 
+            {report?.billing_roles?.length ? (
+              <div className="mt-5 border-t pt-4">
+                <Label>Role Rates</Label>
+                <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  {report.billing_roles.map((role) => (
+                    <div className="space-y-2" key={role.id}>
+                      <Label htmlFor={`role-rate-${role.id}`}>
+                        {role.name || role.key}
+                        {role.key ? (
+                          <span className="ml-1 text-xs text-muted-foreground">({role.key})</span>
+                        ) : null}
+                      </Label>
+                      <Input
+                        id={`role-rate-${role.id}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={roleRates[role.id] ?? role.rate ?? '0.00'}
+                        onChange={(event) => handleRoleRateChange(role.id, event.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-5 flex flex-col gap-3 border-t pt-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span>
-                  Role rates: CSE {formatMoney(report?.role_rates.CSE ?? 1800)} / RM{' '}
-                  {formatMoney(report?.role_rates.RM ?? 2000)}
+                  Role rates: {(report?.billing_roles || [])
+                    .map((role) => `${role.key || role.name} ${formatMoney(roleRates[role.id] ?? role.rate ?? 0)}`)
+                    .join(' / ') || 'load report to edit'}
                 </span>
                 <span>
                   Billing days: {report?.cycle_days ?? 'auto'} calendar days
@@ -503,7 +562,14 @@ const BillingPage = () => {
                   ) : (
                     billingMembers.map((member) => (
                       <TableRow key={member.membership_id}>
-                        <TableCell className="font-medium">{member.name || 'Unnamed User'}</TableCell>
+                        <TableCell className="font-medium">
+                          {member.name || 'Unnamed User'}
+                          {member.is_deleted ? (
+                            <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                              Deleted
+                            </span>
+                          ) : null}
+                        </TableCell>
                         <TableCell>{member.email}</TableCell>
                         <TableCell>
                           {member.role?.name || 'No role'}
