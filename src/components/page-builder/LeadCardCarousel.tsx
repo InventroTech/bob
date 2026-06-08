@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/lib/supabase";
+import { useSpoofUserId } from "@/lib/spoof";
 import { leadTypeAssignmentApi, resolveDailyFreshLeadLimitFromKv } from "@/lib/userSettingsApi";
 import { membershipService } from "@/lib/api/services/membership";
 import { crmLeadsApi } from "@/lib/crmLeadsApi";
@@ -132,6 +132,8 @@ function formatRecallAtLabel(iso: string | null): string {
 const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProps>(({ config, initialLead, onLeadUpdate, isInModal = false, hideActionBar = false, onActionButtonsVisibilityChange, onCallBackModalChange, onActionComplete }, ref) => {
   const { toast } = useToast();
   const { user: authUser, session } = useAuth();
+  const spoofUserId = useSpoofUserId();
+  const activeUserId = spoofUserId ?? authUser?.id ?? null;
   const [currentLead, setCurrentLead] = useState<LeadData | null>(initialLead || null);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -414,7 +416,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       setDailyLimitLoaded(false);
     }
     try {
-      if (!session) {
+      if (!session || !activeUserId) {
         setDailyLimit(null);
         return;
       }
@@ -444,7 +446,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     } finally {
       setDailyLimitLoaded(true);
     }
-  }, [session]);
+  }, [session, activeUserId]);
 
   useEffect(() => {
     void fetchDailyLimit();
@@ -462,8 +464,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
 
   const refreshPendingDashboard = useCallback(async () => {
     if (!session) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!activeUserId) return;
 
     setPendingDash((prev) => ({ ...prev, loading: true }));
 
@@ -476,10 +477,10 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
 
     try {
       const [nc, sz, trials, notInterested] = await Promise.all([
-        crmLeadsApi.getRecallPreviewForAssignee(user.id, 'CALL_NOT_CONNECTED'),
-        crmLeadsApi.getRecallPreviewForAssignee(user.id, 'SNOOZED'),
-        crmLeadsApi.getTrialActivationCount(user.id, dateFrom, dateTo),
-        crmLeadsApi.getLeadEventCount(user.id, 'lead.not_interested', dateFrom, dateTo),
+        crmLeadsApi.getRecallPreviewForAssignee(activeUserId, 'CALL_NOT_CONNECTED'),
+        crmLeadsApi.getRecallPreviewForAssignee(activeUserId, 'SNOOZED'),
+        crmLeadsApi.getTrialActivationCount(activeUserId, dateFrom, dateTo),
+        crmLeadsApi.getLeadEventCount(activeUserId, 'lead.not_interested', dateFrom, dateTo),
       ]);
 
       setPendingDash({
@@ -503,7 +504,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         loading: false,
       });
     }
-  }, [session]);
+  }, [session, activeUserId]);
 
   // Utility functions
   const getLeadName = (lead: LeadData | null): string => {
@@ -1060,7 +1061,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
 
     const { event, success } = eventMap[action];
 
-    const actingUserId = authUser?.id || currentLead.praja_id;
+    const actingUserId = activeUserId || currentLead.praja_id;
     const payload: Record<string, any> = {
       notes: lead.notes || "",
       remarks: currentLead.latest_remarks,

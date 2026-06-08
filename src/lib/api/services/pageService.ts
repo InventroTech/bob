@@ -43,7 +43,7 @@ export const pageService = {
 
   /**
    * Get pages for a specific tenant and role (used by custom app/spoof flows)
-   * Maps to: GET /pages/?tenant_id=&role_id=
+   * Maps to: GET /pages/?tenant_id=&role_id=&role_preview=1
    */
   async getPagesForRole(
     tenantId: string,
@@ -51,7 +51,7 @@ export const pageService = {
   ): Promise<{ id: string; name: string; display_order: number; icon_name: string }[]> {
     try {
       const response = await apiClient.get(`/pages/`, {
-        params: { tenant_id: tenantId, role_id: roleId },
+        params: { tenant_id: tenantId, role_id: roleId, role_preview: '1' },
       });
 
       const responseData = response.data;
@@ -103,11 +103,14 @@ export const pageService = {
    */
   async getPageById(
     pageId: string,
-    tenantId: string
+    tenantId: string,
+    rolePreview = false
   ): Promise<PageRecord | null> { // Changed return type to PageRecord
     try {
       const response = await apiClient.get(`/pages/${pageId}/`, {
-        params: { tenant_id: tenantId },
+        params: rolePreview
+          ? { tenant_id: tenantId, role_preview: '1' }
+          : { tenant_id: tenantId },
       });
 
       const data = response.data;
