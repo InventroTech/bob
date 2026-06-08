@@ -20,7 +20,7 @@ export const DispatchDashboardConfigPanel: React.FC<Props> = ({ localConfig, han
           id="homeTitle"
           value={localConfig.homeTitle ?? ''}
           onChange={(e) => handleInputChange('homeTitle', e.target.value)}
-          placeholder="Dispatch Dashboard"
+          placeholder="Sales Dashboard"
         />
       </div>
       <div>
@@ -29,7 +29,16 @@ export const DispatchDashboardConfigPanel: React.FC<Props> = ({ localConfig, han
           id="homeSubtitle"
           value={localConfig.homeSubtitle ?? ''}
           onChange={(e) => handleInputChange('homeSubtitle', e.target.value)}
-          placeholder="Track and browse dispatch data"
+          placeholder="Track performance for"
+        />
+      </div>
+      <div>
+        <Label htmlFor="engineerField">Engineer / rep field</Label>
+        <Input
+          id="engineerField"
+          value={localConfig.engineerField ?? ''}
+          onChange={(e) => handleInputChange('engineerField', e.target.value)}
+          placeholder="engineer"
         />
       </div>
       <div>
