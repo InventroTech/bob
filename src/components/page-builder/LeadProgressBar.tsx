@@ -1,14 +1,13 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
 import { crmLeadsApi } from '@/lib/crmLeadsApi';
+import { membershipService } from '@/lib/api/services/membership';
+import { useSpoofUserId } from '@/lib/spoof';
 import { TrophyIcon } from '@/components/icons/CustomIcons';
-import { Coffee } from 'lucide-react';
 
 interface LeadProgressBarProps {
   config?: {
@@ -33,6 +32,8 @@ interface LeadStats {
 
 export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   const { session } = useAuth();
+  const spoofUserId = useSpoofUserId();
+  const activeUserId = spoofUserId ?? session?.user?.id ?? null;
   
   const [leadStats, setLeadStats] = useState<LeadStats>({
     total: 0,
@@ -85,14 +86,18 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         return;
       }
 
-      // Get current user
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
+      const membership = await membershipService.getMyMembership();
+      const settingsUserId =
+        membership?.tenant_membership_id != null
+          ? String(membership.tenant_membership_id)
+          : activeUserId;
+
+      if (!settingsUserId) {
         return;
       }
 
       try {
-        const kvRows = await leadTypeAssignmentApi.getUserCoreKVSettings(currentUser.id);
+        const kvRows = await leadTypeAssignmentApi.getUserCoreKVSettings(settingsUserId);
         const dailyTargetRow = kvRows.find((row) => row.key === 'DAILY_TARGET');
         if (typeof dailyTargetRow?.value === 'number') {
           const savedTarget = dailyTargetRow.value;
@@ -115,7 +120,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
       console.error('[LeadProgressBar] Error fetching daily target:', error);
       setDailyTarget(0);
     }
-  }, []);
+  }, [session, activeUserId]);
 
 
   const fetchTrialStats = useCallback(async (isInitialLoad = false) => {
@@ -127,9 +132,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         return;
       }
 
-      // Get current user
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
+      if (!activeUserId) {
         if (isInitialLoad) {
           setLoading(false);
         }
@@ -147,7 +150,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
 
       // Use backend filtering - much more efficient!
       const trialActivatedCount = await crmLeadsApi.getTrialActivationCount(
-        currentUser.id,
+        activeUserId,
         dateFrom,
         dateTo
       );
@@ -167,7 +170,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [session, activeUserId]);
 
   useEffect(() => {
     if (session) {
@@ -200,8 +203,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
           try {
             if (!session) return;
             
-            const { data: { user: currentUser } } = await supabase.auth.getUser();
-            if (!currentUser) return;
+            if (!activeUserId) return;
             
             // Get today's date range in ISO format for backend filtering
             const today = new Date();
@@ -214,7 +216,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
 
             // Use backend filtering - much more efficient!
             const fetchedCount = await crmLeadsApi.getTrialActivationCount(
-              currentUser.id,
+              activeUserId,
               dateFrom,
               dateTo
             );
@@ -244,7 +246,7 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
     return () => {
       window.removeEventListener('trial-activated', handleTrialActivated as EventListener);
     };
-  }, [leadStats.trialActivated]);
+  }, [leadStats.trialActivated, session, activeUserId]);
 
   if (loading) {
     return (

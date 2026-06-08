@@ -28,7 +28,7 @@ import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 import { convertGMTtoIST } from '@/lib/timeUtils';
-import { useSpoofUserId } from '@/lib/spoof';
+import { getEffectiveToken, useSpoofUserId } from '@/lib/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
 import { getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
@@ -1036,6 +1036,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     if (col.actionApiEndpoint?.trim()) {
       try {
         const baseUrl = import.meta.env.VITE_RENDER_API_URL;
+        const token = await getEffectiveToken(session?.access_token ?? null);
         const { url, method, headers, body } = buildActionApiRequest(
           {
             endpoint: col.actionApiEndpoint,
@@ -1047,7 +1048,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           baseUrl,
           {
             'Content-Type': 'application/json',
-            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+            'Authorization': token ? `Bearer ${token}` : '',
           },
           'lead_id'
         );

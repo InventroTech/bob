@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
 import { useAuth } from "@/hooks/useAuth";
+import { getEffectiveToken } from "@/lib/spoof";
 import { Loader2 } from "lucide-react";
 
 interface WhatsAppTemplate {
@@ -65,7 +66,9 @@ export const WhatsAppTemplateModal: React.FC<WhatsAppTemplateModalProps> = ({
   }, [templates]);
 
   const fetchTemplates = async () => {
-    if (!apiEndpoint || !session?.access_token) return;
+    if (!apiEndpoint) return;
+    const token = await getEffectiveToken(session?.access_token ?? null);
+    if (!token) return;
 
     setLoading(true);
     try {
@@ -76,7 +79,7 @@ export const WhatsAppTemplateModal: React.FC<WhatsAppTemplateModalProps> = ({
       const response = await fetch(`${baseUrl}${apiEndpoint}`, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
