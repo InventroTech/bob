@@ -26,7 +26,7 @@ const TENANT_ID = 'e35e7279-d92d-4cdf-8014-98deaab639c0';
 const PUSH_API_PREFIX = (
   import.meta.env.VITE_RENDER_API_URL || 'https://pyro-backend-1.onrender.com'
 ).replace(/\/+$/, '');
-const WEBHOOK_SECRET = import.meta.env.VITE_WEBHOOK_SECRET || '';
+const WEBHOOK_SECRET = 'e6a5b2a0-7f1b-4f3b-9c1d-2b3c4d5e6f7a';
 const pushRecordsClient = createApiClient(PUSH_API_PREFIX);
 
 type PushEntityType = 'lead' | 'support_ticket';
@@ -298,10 +298,6 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
       toast.error('Please log in first');
       return;
     }
-    if (pushEntityType === 'support_ticket' && !WEBHOOK_SECRET) {
-      toast.error('Set VITE_WEBHOOK_SECRET in .env (must match backend WEBHOOK_SECRET)');
-      return;
-    }
     const path = (pushEndpoint.trim() || defaultPushEndpoint).replace(/^\/+/, '');
     if (!path) {
       toast.error('Endpoint path is required');
@@ -484,7 +480,7 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
           <p className="text-xs text-gray-500">
             {pushEntityType === 'lead'
               ? 'Sends random lead data to crm-records. Uses your session token and X-Secret-Pyro.'
-              : 'Sends random rows to support_ticket_dump via dump-ticket-webhook. Uses VITE_WEBHOOK_SECRET from .env.'}
+              : 'Sends random rows to support_ticket_dump via dump-ticket-webhook.'}
           </p>
         </CardContent>
       </Card>
