@@ -7,8 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Play, Trash2, Loader2, Plus, Zap } from 'lucide-react';
+import { Play, Plus, Zap } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/hooks/useTenant';
 import { apiClient, createApiClient } from '@/lib/api/client';
 import {
   AlertDialog,
@@ -22,8 +23,53 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const TENANT_ID = 'e35e7279-d92d-4cdf-8014-98deaab639c0';
-const PUSH_LEADS_API_PREFIX = 'https://pyro-backend-1.onrender.com';
-const pushLeadsClient = createApiClient(PUSH_LEADS_API_PREFIX);
+const PUSH_API_PREFIX = (
+  import.meta.env.VITE_RENDER_API_URL || 'https://pyro-backend-1.onrender.com'
+).replace(/\/+$/, '');
+const WEBHOOK_SECRET = 'e6a5b2a0-7f1b-4f3b-9c1d-2b3c4d5e6f7a';
+const pushRecordsClient = createApiClient(PUSH_API_PREFIX);
+
+type PushEntityType = 'lead' | 'support_ticket';
+
+const DEFAULT_ENDPOINTS: Record<PushEntityType, string> = {
+  lead: 'crm-records/records/',
+  support_ticket: 'support-ticket/dump-ticket-webhook/',
+};
+
+const PUSH_ENTITY_LABELS: Record<PushEntityType, string> = {
+  lead: 'Lead',
+  support_ticket: 'Support Ticket',
+};
+
+const LOG_PREFIX = '[OperationsPrograms]';
+
+function maskSecret(value: string): string {
+  if (!value) return '(empty)';
+  if (value.length <= 8) return '***';
+  return `${value.slice(0, 4)}...${value.slice(-4)} (${value.length} chars)`;
+}
+
+function getPushErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const axiosErr = err as {
+      message?: string;
+      response?: { status?: number; data?: unknown };
+    };
+    const status = axiosErr.response?.status;
+    const data = axiosErr.response?.data;
+    const dataStr =
+      data && typeof data === 'object'
+        ? JSON.stringify(data)
+        : data != null
+          ? String(data)
+          : '';
+    if (status) {
+      return `HTTP ${status}${dataStr ? `: ${dataStr}` : ''}`;
+    }
+    if (axiosErr.message) return axiosErr.message;
+  }
+  return String(err);
+}
 
 export interface ApiCallOperation {
   id: string;
@@ -34,16 +80,30 @@ export interface ApiCallOperation {
 }
 
 interface OperationsProgramsComponentProps {
-  config?: { 
+  config?: {
     title?: string;
-    defaultEndpoint?: string; // <-- Add this line
+    defaultEndpoint?: string;
+    defaultLeadEndpoint?: string;
+    defaultSupportTicketEndpoint?: string;
   };
+}
+
+const FIRST_NAMES = ['Rajagopalam', 'Anand', 'Sanjay', 'Meena', 'Priya', 'Vikram', 'Quincy', 'Chaitanya', 'Udyati', 'Vedika', 'Jack', 'Rahul', 'Sneha', 'Arjun', 'Kavya', 'Samba sivarao'];
+const LAST_NAMES = ['Pinninti', 'Reddy', 'Sharma', 'Kaur', 'Jain', 'Verma', 'Khatri', 'Chhabra', 'Bedi', 'Mitra', 'Mahajan', 'Patel', 'Singh', 'Kumar', 'Gupta', 'Gandrala'];
+
+function randomIndianPhone(): string {
+  const prefix = [7, 8, 9][Math.floor(Math.random() * 3)];
+  return `+91${prefix}${Math.floor(Math.random() * 900000000) + 100000000}`;
+}
+
+function randomName(): string {
+  const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+  const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  return `${firstName} ${lastName}`;
 }
 
 // Generate one random lead payload
 function generateRandomLead(): Record<string, unknown> {
-  const firstNames = ['Rajagopalam', 'Anand', 'Sanjay', 'Meena', 'Priya', 'Vikram', 'Quincy', 'Chaitanya', 'Udyati', 'Vedika', 'Jack', 'Rahul', 'Sneha', 'Arjun', 'Kavya'];
-  const lastNames = ['Pinninti', 'Reddy', 'Sharma', 'Kaur', 'Jain', 'Verma', 'Khatri', 'Chhabra', 'Bedi', 'Mitra', 'Mahajan', 'Patel', 'Singh', 'Kumar', 'Gupta'];
   const parties = ['BJP', 'INC', 'AAP', 'Congress', 'Independent'];
   const leadSources = [
     'APP_INSTALL_SINGLE_PARTY_JOINED_BJP_TG', 'MANUAL', 'APP_INSTALL_SINGLE_LEADER_CIRCLE_JOINED_YSRCP',
@@ -64,12 +124,9 @@ function generateRandomLead(): Record<string, unknown> {
     'SELF_TRIAL_DROPPED_AT_FINAL_STEP', 'APP_INSTALL_SINGLE_PARTY_JOINED_YSRCP', 'SELF_TRIAL_DROPPED_HIGH_END_DEVICE'
   ];
   const leadStatuses = ['SALES LEAD', 'SELF TRIAL'];
-  const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-  const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
-  const name = `${firstName} ${lastName}`;
+  const name = randomName();
   const states = ['Telangana', 'Andhra Pradesh', 'Tamil Nadu'];
-  const prefix = [7, 8, 9][Math.floor(Math.random() * 3)];
-  const phone = `+91${prefix}${Math.floor(Math.random() * 900000000) + 100000000}`;
+  const phone = randomIndianPhone();
   const phoneClean = phone.replace('+', '');
   const randomId = String(Math.floor(Math.random() * 9000000) + 1000000);
 
@@ -100,8 +157,43 @@ function generateRandomLead(): Record<string, unknown> {
   };
 }
 
+/** Fields accepted by DumpTicketWebhookView (support_ticket_dump table). */
+function generateRandomSupportTicket(tenantId: string): Record<string, unknown> {
+  const ticketDate = new Date().toISOString();
+  const name = randomName();
+  const phone = randomIndianPhone();
+  const userId = String(Math.floor(Math.random() * 9000000) + 1000000);
+  const prajaUserSlug = Math.random().toString(36).substring(2, 10);
+
+  const states = ['Andhra Pradesh', 'Karnataka', 'Tamil Nadu', 'Telangana'];
+  const posters = ['paid', 'in_trial', 'trial_expired', 'free', 'in_grace_period', 'autopay_setup_no_layout'];
+  const reasons = ['Others', 'Badge Change', 'Feature Request', 'Refund Issued', 'Subscription Information', 'Layout Feedback'];
+  const sources = ['Drawer', 'Webhook', 'Manual', 'App'];
+  const layoutStatuses = ['Layout created', 'No Layout', 'Layout Pending'];
+  const subscriptionStatuses = ['Paid', 'In Trial', 'Trial Expired', 'Not Paid'];
+
+  return {
+    tenant_id: tenantId,
+    ticket_date: ticketDate,
+    user_id: userId,
+    name,
+    phone,
+    reason: reasons[Math.floor(Math.random() * reasons.length)],
+    layout_status: layoutStatuses[Math.floor(Math.random() * layoutStatuses.length)],
+    state: states[Math.floor(Math.random() * states.length)],
+    badge: '',
+    poster: posters[Math.floor(Math.random() * posters.length)],
+    subscription_status: subscriptionStatuses[Math.floor(Math.random() * subscriptionStatuses.length)],
+    atleast_paid_once: Math.random() > 0.3,
+    source: sources[Math.floor(Math.random() * sources.length)],
+    praja_dashboard_user_link: `https://www.thecircleapp.in/admin/users/${prajaUserSlug}`,
+    display_pic_url: 'https://a-cdn.thecircleapp.in/cutouts-originals-nckpt/01KPSMY018EKY4P5PJP5V8AWHG.jpg',
+  };
+}
+
 export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentProps> = ({ config = {} }) => {
   const { session } = useAuth();
+  const { tenantId } = useTenant();
   const [apiOperations, setApiOperations] = useState<ApiCallOperation[]>([]);
   const [selectedOp, setSelectedOp] = useState<ApiCallOperation | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -116,12 +208,22 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
   const [formEndpoint, setFormEndpoint] = useState('');
   const [formPayload, setFormPayload] = useState('');
 
-  // Push Random Leads
-  const [leadEndpoint, setLeadEndpoint] = useState(config?.defaultEndpoint || '');
-  const [leadCount, setLeadCount] = useState(10);
-  const [isPushingLeads, setIsPushingLeads] = useState(false);
+  // Push random records (leads or support tickets)
+  const [pushEntityType, setPushEntityType] = useState<PushEntityType>('lead');
+  const [pushEndpoints, setPushEndpoints] = useState<Record<PushEntityType, string>>({
+    lead: config?.defaultLeadEndpoint || config?.defaultEndpoint || '',
+    support_ticket: config?.defaultSupportTicketEndpoint || '',
+  });
+  const [pushCount, setPushCount] = useState(10);
+  const [isPushing, setIsPushing] = useState(false);
 
   const componentTitle = config?.title || 'Operations';
+  const effectiveTenantId = tenantId || TENANT_ID;
+  const pushEndpoint = pushEndpoints[pushEntityType];
+  const defaultPushEndpoint =
+    pushEntityType === 'lead'
+      ? (config?.defaultLeadEndpoint || config?.defaultEndpoint || DEFAULT_ENDPOINTS.lead)
+      : (config?.defaultSupportTicketEndpoint || DEFAULT_ENDPOINTS.support_ticket);
 
   useEffect(() => {
     try {
@@ -221,39 +323,97 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
     }
   };
 
-  const handlePushRandomLeads = async () => {
-    if (!session?.access_token) {
+  const handlePushRandomRecords = async () => {
+    if (pushEntityType === 'lead' && !session?.access_token) {
+      console.warn(`${LOG_PREFIX} push blocked: no session token for leads`);
       toast.error('Please log in first');
       return;
     }
-    const path = (leadEndpoint.trim() || config?.defaultEndpoint || '').replace(/^\/+/, '');
+    const path = (pushEndpoint.trim() || defaultPushEndpoint).replace(/^\/+/, '');
+    if (!path) {
+      console.warn(`${LOG_PREFIX} push blocked: empty endpoint path`);
+      toast.error('Endpoint path is required');
+      return;
+    }
     const endpoint = `/${path}`;
-    const count = Math.max(1, Math.min(100, leadCount || 10));
-    setIsPushingLeads(true);
-    toast.info(`Pushing ${count} random leads...`);
+    const fullUrl = `${PUSH_API_PREFIX}${endpoint}`;
+    const count = Math.max(1, Math.min(100, pushCount || 10));
+    const entityLabel = PUSH_ENTITY_LABELS[pushEntityType].toLowerCase();
+    setIsPushing(true);
+    toast.info(`Pushing ${count} random ${entityLabel}s...`);
     let success = 0;
     let fail = 0;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
-      'X-Tenant-Slug': TENANT_ID,
-      "X-Secret-Pyro": "test",
-    };
+    let lastError = '';
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (pushEntityType === 'lead') {
+      headers.Authorization = `Bearer ${session!.access_token}`;
+      headers['X-Tenant-Slug'] = effectiveTenantId;
+      headers['X-Secret-Pyro'] = 'test';
+    } else {
+      headers['x-webhook-secret'] = WEBHOOK_SECRET;
+    }
+
+    console.log(`${LOG_PREFIX} push started`, {
+      entityType: pushEntityType,
+      count,
+      fullUrl,
+      effectiveTenantId,
+      headers: {
+        ...headers,
+        Authorization: headers.Authorization ? 'Bearer ***' : undefined,
+        'x-webhook-secret': headers['x-webhook-secret']
+          ? maskSecret(headers['x-webhook-secret'])
+          : undefined,
+      },
+    });
+
     for (let i = 0; i < count; i++) {
       try {
-        const payload = generateRandomLead();
-        await pushLeadsClient.post(endpoint, payload, { headers: headers as never });
+        const payload =
+          pushEntityType === 'lead'
+            ? generateRandomLead()
+            : generateRandomSupportTicket(effectiveTenantId);
+        console.log(`${LOG_PREFIX} push attempt ${i + 1}/${count}`, { payload });
+        const response = await pushRecordsClient.post(endpoint, payload, { headers: headers as never });
+        console.log(`${LOG_PREFIX} push success ${i + 1}/${count}`, {
+          status: response.status,
+          data: response.data,
+        });
         success++;
         if (i < count - 1) await new Promise((r) => setTimeout(r, 200));
-      } catch {
+      } catch (err) {
+        lastError = getPushErrorMessage(err);
+        console.error(`${LOG_PREFIX} push failed ${i + 1}/${count}`, {
+          error: lastError,
+          err,
+        });
         fail++;
       }
     }
-    setIsPushingLeads(false);
-    if (success === count) toast.success(`All ${count} leads pushed.`);
-    else if (success > 0) toast.warning(`${success} pushed, ${fail} failed.`);
-    else toast.error('All requests failed.');
+    setIsPushing(false);
+    console.log(`${LOG_PREFIX} push finished`, { success, fail, lastError: lastError || undefined });
+    if (success === count) toast.success(`All ${count} ${entityLabel}s pushed.`);
+    else if (success > 0) toast.warning(`${success} pushed, ${fail} failed. Last error: ${lastError}`);
+    else toast.error(`All requests failed. ${lastError || 'Check browser console for details.'}`);
   };
+
+  const canPushRecords =
+    pushEntityType === 'lead'
+      ? Boolean(session?.access_token)
+      : Boolean(WEBHOOK_SECRET);
+
+  useEffect(() => {
+    console.log(`${LOG_PREFIX} push config`, {
+      pushEntityType,
+      canPushRecords,
+      hasSession: Boolean(session?.access_token),
+      webhookSecret: maskSecret(WEBHOOK_SECRET),
+      apiBaseUrl: PUSH_API_PREFIX,
+      effectiveTenantId,
+      endpoint: pushEndpoints[pushEntityType] || defaultPushEndpoint,
+    });
+  }, [pushEntityType, canPushRecords, session?.access_token, effectiveTenantId, pushEndpoints, defaultPushEndpoint]);
 
   const openAddForm = () => {
     setFormTitle('');
@@ -340,34 +500,59 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
         </CardContent>
       </Card>
 
-      {/* 2. Push Random Leads */}
+      {/* 2. Push Random Records */}
       <Card className="w-full max-w-md flex-shrink-0">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Zap className="h-5 w-5" />
-            Push Random Leads
+            Push Random Records
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label>Endpoint path</Label>
-            <Input value={leadEndpoint} onChange={(e) => setLeadEndpoint(e.target.value)} placeholder={config?.defaultEndpoint || "/endpoint/path/"} />
-            <p className="text-xs text-gray-500 mt-1">Base URL: {PUSH_LEADS_API_PREFIX}</p>
+            <Label>Record type</Label>
+            <Select
+              value={pushEntityType}
+              onValueChange={(value) => setPushEntityType(value as PushEntityType)}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lead">Lead</SelectItem>
+                <SelectItem value="support_ticket">Support Ticket (dump table)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
-            <Label>Number of leads</Label>
-            <Input type="number" min={1} max={100} value={leadCount} onChange={(e) => setLeadCount(parseInt(e.target.value, 10) || 10)} />
+            <Label>Endpoint path</Label>
+            <Input
+              value={pushEndpoint}
+              onChange={(e) =>
+                setPushEndpoints((prev) => ({ ...prev, [pushEntityType]: e.target.value }))
+              }
+              placeholder={defaultPushEndpoint}
+            />
+            <p className="text-xs text-gray-500 mt-1">Base URL: {PUSH_API_PREFIX}</p>
+          </div>
+          <div>
+            <Label>Number of records</Label>
+            <Input type="number" min={1} max={100} value={pushCount} onChange={(e) => setPushCount(parseInt(e.target.value, 10) || 10)} />
           </div>
           <CustomButton
-            onClick={handlePushRandomLeads}
-            disabled={isPushingLeads || !session?.access_token}
-            loading={isPushingLeads}
+            onClick={handlePushRandomRecords}
+            disabled={isPushing || !canPushRecords}
+            loading={isPushing}
             icon={<Zap className="h-4 w-4" />}
             className="w-full bg-black text-white hover:bg-gray-800"
           >
-            {isPushingLeads ? 'Pushing...' : 'Push Random Leads'}
+            {isPushing
+              ? 'Pushing...'
+              : `Push Random ${PUSH_ENTITY_LABELS[pushEntityType]}s`}
           </CustomButton>
-          <p className="text-xs text-gray-500">Sends random lead data (name, phone, party, score, etc.) to the endpoint. Uses your session token.</p>
+          <p className="text-xs text-gray-500">
+            {pushEntityType === 'lead'
+              ? 'Sends random lead data to crm-records. Uses your session token and X-Secret-Pyro.'
+              : 'Sends random rows to support_ticket_dump via dump-ticket-webhook.'}
+          </p>
         </CardContent>
       </Card>
 
