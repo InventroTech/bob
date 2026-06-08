@@ -66,12 +66,7 @@ function parseFlexibleDate(value: unknown): Date | null {
 
 function getRecordActivityDate(record: CrmRecord): Date | null {
   const data = getRecordData(record);
-  return (
-    parseFlexibleDate(record.updated_at) ??
-    parseFlexibleDate(record.created_at) ??
-    parseFlexibleDate(data.dc_date) ??
-    parseFlexibleDate(data.po_date)
-  );
+  return parseFlexibleDate(data.dc_date);
 }
 
 function monthKey(d: Date): string {
@@ -89,7 +84,11 @@ function buildLastSixMonthSlots(now: Date): DispatchMonthlyBar[] {
   });
 }
 
-async function fetchRecordsForStats(entityType: string): Promise<{ records: CrmRecord[]; totalCount: number }> {
+async function fetchRecordsForStats(
+  entityType: string,
+  engineerField?: string,
+  engineerFilter?: string
+): Promise<{ records: CrmRecord[]; totalCount: number }> {
   const pageSize = 500;
   const maxPages = 20;
   let page = 1;
@@ -103,6 +102,9 @@ async function fetchRecordsForStats(entityType: string): Promise<{ records: CrmR
       page_size: String(pageSize),
       ordering: '-updated_at',
     });
+    if (engineerField && engineerFilter) {
+      params.set(engineerField, engineerFilter);
+    }
     if (page === 1) params.set('include_count', 'true');
 
     const res = await apiClient.get(`/crm-records/records/?${params.toString()}`);
@@ -140,24 +142,42 @@ function buildMonthlyBars(records: CrmRecord[], now: Date): DispatchMonthlyBar[]
 
 export async function fetchDispatchDashboardStats(
   entityType: string,
-  customerField: string
+  customerField: string,
+  options?: { engineerField?: string; engineerFilter?: string }
 ): Promise<DispatchDashboardStats> {
   const now = new Date();
   const thisMonthKey = monthKey(now);
+  const engineerField = options?.engineerField;
+  const engineerFilter = options?.engineerFilter;
 
   const [customers, { records, totalCount }] = await Promise.all([
     fetchDistinctFieldValues(entityType, customerField),
-    fetchRecordsForStats(entityType),
+    fetchRecordsForStats(entityType, engineerField, engineerFilter),
   ]);
 
   const monthlyBars = buildMonthlyBars(records, now);
   const thisMonthCount = monthlyBars.find((b) => b.monthKey === thisMonthKey)?.count ?? 0;
 
+  const filteredCustomers =
+    engineerField && engineerFilter
+      ? [
+          ...new Set(
+            records
+              .map((r) => {
+                const data = getRecordData(r);
+                const val = data[customerField];
+                return val != null && String(val).trim() ? String(val).trim() : '';
+              })
+              .filter(Boolean)
+          ),
+        ].sort((a, b) => a.localeCompare(b))
+      : customers;
+
   return {
     totalCount,
-    customerCount: customers.length,
+    customerCount: filteredCustomers.length,
     thisMonthCount,
     monthlyBars,
-    customers,
+    customers: filteredCustomers,
   };
 }
