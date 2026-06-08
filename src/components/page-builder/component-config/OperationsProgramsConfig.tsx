@@ -9,6 +9,8 @@ interface OperationsProgramsConfigProps {
     apiEndpoint?: string;
     title?: string;
     categories?: string;
+    defaultLeadEndpoint?: string;
+    defaultSupportTicketEndpoint?: string;
   };
   handleInputChange: (field: string, value: string | number | boolean) => void;
 }
@@ -37,16 +39,23 @@ export const OperationsProgramsConfig: React.FC<OperationsProgramsConfigProps> =
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="apiEndpoint">API Endpoint</Label>
+          <Label htmlFor="defaultLeadEndpoint">Default Lead Push Endpoint</Label>
           <Input
-            id="apiEndpoint"
-            value={localConfig.apiEndpoint || ''}
-            onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-            placeholder="e.g., /api/operations"
+            id="defaultLeadEndpoint"
+            value={localConfig.defaultLeadEndpoint || ''}
+            onChange={(e) => handleInputChange('defaultLeadEndpoint', e.target.value)}
+            placeholder="e.g., crm-records/records/"
           />
-          <p className="text-xs text-gray-500">
-            API endpoint for operations (optional, defaults to localStorage)
-          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="defaultSupportTicketEndpoint">Default Support Ticket Dump Endpoint</Label>
+          <Input
+            id="defaultSupportTicketEndpoint"
+            value={localConfig.defaultSupportTicketEndpoint || ''}
+            onChange={(e) => handleInputChange('defaultSupportTicketEndpoint', e.target.value)}
+            placeholder="e.g., support-ticket/dump-ticket-webhook/"
+          />
         </div>
 
         <div className="space-y-2">
