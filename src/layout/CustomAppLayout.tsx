@@ -263,7 +263,7 @@ const CustomAppLayout: React.FC = () => {
     };
 
     fetchPagesAndIcons();
-  }, [tenantId, userRoleId, session?.access_token]);
+  }, [tenantId, userRoleId, session?.access_token, spoofVersion]);
 
   const handleStopSpoofing = () => {
     try {
