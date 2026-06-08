@@ -35,6 +35,25 @@ import { fetchDispatchFilterOptions } from './fetchDispatchFilterOptions';
 import { DEFAULT_DISPATCH_SEARCH_FIELDS } from './dispatchFieldSections';
 import { DispatchSearchBox } from './DispatchSearchBox';
 import { parseRecordListTotal } from './fetchDispatchDashboardStats';
+import { getRecordData } from './formatDispatchValue';
+
+function formatDateGroupHeader(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  const d = typeof value === 'string' || typeof value === 'number' ? new Date(value) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = d.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
+function getRecordGroupDate(record: CrmRecord): string | null {
+  return (
+    formatDateGroupHeader(record.updated_at) ??
+    formatDateGroupHeader(record.created_at) ??
+    formatDateGroupHeader(getRecordData(record).dc_date)
+  );
+}
 import { Button } from '@/components/ui/button';
 import type { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 
@@ -64,6 +83,10 @@ export type DispatchRecordsPanelProps = {
   onBack?: () => void;
   /** Optional class for the list heading (e.g. purple customer name). */
   titleClassName?: string;
+  /** Group list items under date headers (for recently opened view). */
+  groupByDate?: boolean;
+  /** Use sentence case for panel title instead of uppercase. */
+  titleSentenceCase?: boolean;
 };
 
 export type DispatchRecordsPanelHandle = {
@@ -88,6 +111,8 @@ export const DispatchRecordsPanel = forwardRef<DispatchRecordsPanelHandle, Dispa
       showBackButton = false,
       onBack,
       titleClassName,
+      groupByDate = false,
+      titleSentenceCase = false,
     },
     ref
   ) {
@@ -345,7 +370,23 @@ export const DispatchRecordsPanel = forwardRef<DispatchRecordsPanelHandle, Dispa
       closeOverlay('sort');
     }, [closeOverlay]);
 
-    const listTitle = (panelTitle ?? config?.title ?? 'DISPATCH DATA').toUpperCase();
+    const rawTitle = panelTitle ?? config?.title ?? 'Dispatch Data';
+    const listTitle = titleSentenceCase ? rawTitle : rawTitle.toUpperCase();
+
+    const groupedRecords = useMemo(() => {
+      if (!groupByDate) return null;
+      const groups: { date: string; records: CrmRecord[] }[] = [];
+      const map = new Map<string, CrmRecord[]>();
+      for (const record of records) {
+        const date = getRecordGroupDate(record) ?? 'Unknown date';
+        if (!map.has(date)) map.set(date, []);
+        map.get(date)!.push(record);
+      }
+      for (const [date, recs] of map) {
+        groups.push({ date, records: recs });
+      }
+      return groups;
+    }, [records, groupByDate]);
 
     const handleApplyFilters = () => {
       const nextApplied = cloneDispatchFilterValues(draftFilters);
@@ -403,7 +444,7 @@ export const DispatchRecordsPanel = forwardRef<DispatchRecordsPanelHandle, Dispa
     };
 
     return (
-      <div className="relative mx-auto flex min-h-[calc(100dvh-56px)] max-w-lg flex-col bg-white md:max-w-2xl">
+      <div className="relative mx-auto flex min-h-[calc(100dvh-56px)] max-w-lg flex-col bg-[#F7F7F8] md:max-w-2xl">
         {selected ? (
           <div
             className="fixed inset-x-0 bottom-0 z-50 mx-auto flex h-[calc(100dvh-56px)] max-h-[calc(100dvh-56px)] w-full max-w-lg flex-col overflow-hidden bg-[#f3f4f6] md:max-w-2xl"
@@ -426,14 +467,11 @@ export const DispatchRecordsPanel = forwardRef<DispatchRecordsPanelHandle, Dispa
               </button>
             ) : null}
             {showListHeading ? (
-              <>
-                <h1
-                  className={`text-xl font-bold uppercase tracking-wide ${titleClassName ?? 'text-gray-900'}`}
-                >
-                  {listTitle}
-                </h1>
-                <div className="mt-3 h-px w-full bg-gray-300" />
-              </>
+              <h1
+                className={`text-xl font-bold ${titleSentenceCase ? '' : 'uppercase tracking-wide'} ${titleClassName ?? 'text-gray-900'}`}
+              >
+                {listTitle}
+              </h1>
             ) : null}
           </div>
         )}
@@ -556,12 +594,30 @@ export const DispatchRecordsPanel = forwardRef<DispatchRecordsPanelHandle, Dispa
               <p className="sr-only">{listBusyMessage}</p>
             ) : records.length === 0 && !loading ? (
               <p className="py-8 text-center text-sm text-gray-500">No dispatch records found.</p>
+            ) : groupedRecords ? (
+              groupedRecords.map((group) => (
+                <div key={group.date}>
+                  <p className="mb-2 text-sm font-bold text-gray-900">{group.date}</p>
+                  <div className="space-y-2">
+                    {group.records.map((record, i) => (
+                      <DispatchListCard
+                        key={String(record.id ?? i)}
+                        record={record}
+                        fields={listCardFields}
+                        index={i + 1}
+                        onClick={() => openDetail(record)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))
             ) : (
               records.map((record, i) => (
                 <DispatchListCard
                   key={String(record.id ?? i)}
                   record={record}
                   fields={listCardFields}
+                  index={i + 1}
                   onClick={() => openDetail(record)}
                 />
               ))
