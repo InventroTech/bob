@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { supabase } from "@/lib/supabase";
+import { getEffectiveToken } from "@/lib/spoof";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -397,6 +397,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const fetchLeadStats = async () => {
     try {
       if (!session) return;
+      const token = await getEffectiveToken(session.access_token);
+      if (!token) return;
 
       // Use configured status data API endpoint or fallback to default
       const statusEndpoint = config?.statusDataApiEndpoint || "/get-lead-status";
@@ -406,7 +408,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         {
           method: "GET",
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         }
@@ -471,7 +473,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   const fetchNextLead = async (currentLeadId: number) => {
     try {
       const nextLeadUrl = `${import.meta.env.VITE_API_URI}${config?.apiEndpoint || "/api/leads"}`;
-      const token = session?.access_token;
+      const token = await getEffectiveToken(session?.access_token ?? null);
 
       if (!token) {
         throw new Error("Authentication required");
@@ -629,7 +631,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         leadStartTime: lead.leadStartTime?.toISOString(),
       };
 
-      const token = session?.access_token;
+      const token = await getEffectiveToken(session?.access_token ?? null);
       if (!token) {
         throw new Error("Authentication required");
       }
@@ -670,7 +672,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       setLoading(true);
       const endpoint = config?.apiEndpoint || "/api/leads";
       const apiUrl = `${import.meta.env.VITE_API_URI}${endpoint}`;
-      const token = session?.access_token;
+      const token = await getEffectiveToken(session?.access_token ?? null);
 
       if (!token) {
         throw new Error("Authentication required");

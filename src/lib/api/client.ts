@@ -6,6 +6,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { getBaseUrl, API_CONFIG } from './config';
 import { setupRequestInterceptor, setupResponseInterceptor } from './interceptors';
+import { getAccessToken } from '@/lib/auth/accessTokenProvider';
 
 /**
  * Create and configure the main API client
@@ -53,10 +54,7 @@ export const apiFetch = async (
   url: string,
   options: RequestInit = {}
 ): Promise<Response> => {
-  // Get session token
-  const { supabase } = await import('@/lib/supabase');
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  const token = getAccessToken();
 
   // Build headers
   const headers: HeadersInit = {

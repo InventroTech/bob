@@ -4,7 +4,7 @@
  */
 
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
-import { getAccessToken } from '@/lib/auth/accessTokenProvider';
+import { getAccessToken, isUsingSpoofAccessToken } from '@/lib/auth/accessTokenProvider';
 import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
 import { 
   ApiError, 
@@ -70,6 +70,10 @@ export const setupResponseInterceptor = (instance: any) => {
       // Map HTTP status codes to custom error classes
       switch (status) {
         case 401: {
+          if (isUsingSpoofAccessToken()) {
+            return Promise.reject(new AuthenticationError(errorMessage, status, data));
+          }
+
           // Attempt to refresh token and retry request once
           const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 

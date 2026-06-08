@@ -162,7 +162,7 @@ export async function fetchPageConfig(
 ): Promise<{ name: string; config: any } | null> {
   // Preferred: backend Pages API via pageService.
   try {
-    const page = await pageService.getPageById(pageId, tenantId);
+    const page = await pageService.getPageById(pageId, tenantId, true);
     if (page) {
       return { name: page.name ?? '', config: page.config };
     }
