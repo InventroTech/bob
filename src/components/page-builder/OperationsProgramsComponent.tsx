@@ -26,7 +26,7 @@ const TENANT_ID = 'e35e7279-d92d-4cdf-8014-98deaab639c0';
 const PUSH_API_PREFIX = (
   import.meta.env.VITE_RENDER_API_URL || 'https://pyro-backend-1.onrender.com'
 ).replace(/\/+$/, '');
-const WEBHOOK_SECRET = import.meta.env.VITE_WEBHOOK_SECRET || '';
+const WEBHOOK_SECRET = 'e6a5b2a0-7f1b-4f3b-9c1d-2b3c4d5e6f7a';
 const pushRecordsClient = createApiClient(PUSH_API_PREFIX);
 
 type PushEntityType = 'lead' | 'support_ticket';
@@ -40,6 +40,36 @@ const PUSH_ENTITY_LABELS: Record<PushEntityType, string> = {
   lead: 'Lead',
   support_ticket: 'Support Ticket',
 };
+
+const LOG_PREFIX = '[OperationsPrograms]';
+
+function maskSecret(value: string): string {
+  if (!value) return '(empty)';
+  if (value.length <= 8) return '***';
+  return `${value.slice(0, 4)}...${value.slice(-4)} (${value.length} chars)`;
+}
+
+function getPushErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const axiosErr = err as {
+      message?: string;
+      response?: { status?: number; data?: unknown };
+    };
+    const status = axiosErr.response?.status;
+    const data = axiosErr.response?.data;
+    const dataStr =
+      data && typeof data === 'object'
+        ? JSON.stringify(data)
+        : data != null
+          ? String(data)
+          : '';
+    if (status) {
+      return `HTTP ${status}${dataStr ? `: ${dataStr}` : ''}`;
+    }
+    if (axiosErr.message) return axiosErr.message;
+  }
+  return String(err);
+}
 
 export interface ApiCallOperation {
   id: string;
@@ -295,25 +325,25 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
 
   const handlePushRandomRecords = async () => {
     if (pushEntityType === 'lead' && !session?.access_token) {
+      console.warn(`${LOG_PREFIX} push blocked: no session token for leads`);
       toast.error('Please log in first');
-      return;
-    }
-    if (pushEntityType === 'support_ticket' && !WEBHOOK_SECRET) {
-      toast.error('Set VITE_WEBHOOK_SECRET in .env (must match backend WEBHOOK_SECRET)');
       return;
     }
     const path = (pushEndpoint.trim() || defaultPushEndpoint).replace(/^\/+/, '');
     if (!path) {
+      console.warn(`${LOG_PREFIX} push blocked: empty endpoint path`);
       toast.error('Endpoint path is required');
       return;
     }
     const endpoint = `/${path}`;
+    const fullUrl = `${PUSH_API_PREFIX}${endpoint}`;
     const count = Math.max(1, Math.min(100, pushCount || 10));
     const entityLabel = PUSH_ENTITY_LABELS[pushEntityType].toLowerCase();
     setIsPushing(true);
     toast.info(`Pushing ${count} random ${entityLabel}s...`);
     let success = 0;
     let fail = 0;
+    let lastError = '';
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (pushEntityType === 'lead') {
@@ -324,29 +354,66 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
       headers['x-webhook-secret'] = WEBHOOK_SECRET;
     }
 
+    console.log(`${LOG_PREFIX} push started`, {
+      entityType: pushEntityType,
+      count,
+      fullUrl,
+      effectiveTenantId,
+      headers: {
+        ...headers,
+        Authorization: headers.Authorization ? 'Bearer ***' : undefined,
+        'x-webhook-secret': headers['x-webhook-secret']
+          ? maskSecret(headers['x-webhook-secret'])
+          : undefined,
+      },
+    });
+
     for (let i = 0; i < count; i++) {
       try {
         const payload =
           pushEntityType === 'lead'
             ? generateRandomLead()
             : generateRandomSupportTicket(effectiveTenantId);
-        await pushRecordsClient.post(endpoint, payload, { headers: headers as never });
+        console.log(`${LOG_PREFIX} push attempt ${i + 1}/${count}`, { payload });
+        const response = await pushRecordsClient.post(endpoint, payload, { headers: headers as never });
+        console.log(`${LOG_PREFIX} push success ${i + 1}/${count}`, {
+          status: response.status,
+          data: response.data,
+        });
         success++;
         if (i < count - 1) await new Promise((r) => setTimeout(r, 200));
-      } catch {
+      } catch (err) {
+        lastError = getPushErrorMessage(err);
+        console.error(`${LOG_PREFIX} push failed ${i + 1}/${count}`, {
+          error: lastError,
+          err,
+        });
         fail++;
       }
     }
     setIsPushing(false);
+    console.log(`${LOG_PREFIX} push finished`, { success, fail, lastError: lastError || undefined });
     if (success === count) toast.success(`All ${count} ${entityLabel}s pushed.`);
-    else if (success > 0) toast.warning(`${success} pushed, ${fail} failed.`);
-    else toast.error('All requests failed.');
+    else if (success > 0) toast.warning(`${success} pushed, ${fail} failed. Last error: ${lastError}`);
+    else toast.error(`All requests failed. ${lastError || 'Check browser console for details.'}`);
   };
 
   const canPushRecords =
     pushEntityType === 'lead'
       ? Boolean(session?.access_token)
       : Boolean(WEBHOOK_SECRET);
+
+  useEffect(() => {
+    console.log(`${LOG_PREFIX} push config`, {
+      pushEntityType,
+      canPushRecords,
+      hasSession: Boolean(session?.access_token),
+      webhookSecret: maskSecret(WEBHOOK_SECRET),
+      apiBaseUrl: PUSH_API_PREFIX,
+      effectiveTenantId,
+      endpoint: pushEndpoints[pushEntityType] || defaultPushEndpoint,
+    });
+  }, [pushEntityType, canPushRecords, session?.access_token, effectiveTenantId, pushEndpoints, defaultPushEndpoint]);
 
   const openAddForm = () => {
     setFormTitle('');
@@ -484,7 +551,7 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
           <p className="text-xs text-gray-500">
             {pushEntityType === 'lead'
               ? 'Sends random lead data to crm-records. Uses your session token and X-Secret-Pyro.'
-              : 'Sends random rows to support_ticket_dump via dump-ticket-webhook. Uses VITE_WEBHOOK_SECRET from .env.'}
+              : 'Sends random rows to support_ticket_dump via dump-ticket-webhook.'}
           </p>
         </CardContent>
       </Card>
