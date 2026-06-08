@@ -42,6 +42,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsCard";
 import { apiClient } from "@/lib/api";
+import {
+  formatTicketSaveErrorMessage,
+  isExpectedTicketSaveError,
+  isStaleTicketSaveError,
+} from "@/lib/api/errors";
 
 
 interface Ticket {
@@ -198,6 +203,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const { user, session } = useAuth();
 
   const isInitialized = React.useRef(false);
+  const PERSIST_MAX_AGE_MS = 4 * 60 * 60 * 1000;
 
   //getting the persisted state from the session storage
   const getPersistedState = () => {
@@ -212,7 +218,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //persisting the state to the session storage
   const persistState = (state: any) => {
     try {
-      sessionStorage.setItem("ticketCarouselState", JSON.stringify(state));
+      sessionStorage.setItem(
+        "ticketCarouselState",
+        JSON.stringify({ ...state, persistedAt: Date.now() })
+      );
     } catch (error) {
       console.error("Error persisting state:", error);
     }
@@ -254,7 +263,22 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
     const persisted = getPersistedState();
     if (persisted) {
-      return persisted;
+      const age = Date.now() - Number(persisted.persistedAt ?? 0);
+      const sessionExpired = !persisted.persistedAt || age > PERSIST_MAX_AGE_MS;
+      if (sessionExpired) {
+        return {
+          currentTicket: null,
+          showPendingCard: true,
+          resolutionStatus: "Pending" as const,
+          callStatus: "Connected" as const,
+          cseRemarks: "",
+          selectedOtherReasons: [],
+        };
+      }
+      return {
+        ...persisted,
+        showPendingCard: persisted.showPendingCard ?? !persisted.currentTicket,
+      };
     }
 
     return {
@@ -303,6 +327,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       });
     }
   }, [currentTicket, showPendingCard, ticket.resolutionStatus, ticket.callStatus, ticket.cseRemarks, ticket.selectedOtherReasons]);
+
+  useEffect(() => {
+    if (initialTicket || !currentTicket?.id || showPendingCard) return;
+    setTicket((prev) => ({
+      ...prev,
+      ticketStartTime: prev.ticketStartTime ?? new Date(),
+    }));
+    isInitialized.current = true;
+  }, [initialTicket, currentTicket?.id, showPendingCard]);
 
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
@@ -366,6 +399,18 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       ticketStartTime: null,
       reviewRequested: false,
     });
+  };
+
+  const resetToPendingQueue = async (toastMessage?: string) => {
+    setShowPendingCard(true);
+    setCurrentTicket(null);
+    resetTicketState();
+    isInitialized.current = false;
+    clearPersistedState();
+    await fetchTicketStats();
+    if (toastMessage) {
+      toast.info(toastMessage);
+    }
   };
 
   // Helper function to set ticket from API response
@@ -519,15 +564,15 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //handling the action buttons
   const handleActionButton = async (action: "Not Connected" | "Can't Resolve" | "Call Later" | "Resolve") => {
     try {
-      if (!currentTicket?.id) {
+      const ticketId = Number(currentTicket?.id);
+      if (!Number.isFinite(ticketId)) {
         toast.error("No ticket ID available");
+        await resetToPendingQueue();
         return;
       }
 
-
-
       setUpdating(true);
-      if (!session) {
+      if (!session?.access_token) {
         throw new Error("Authentication required");
       }
 
@@ -560,45 +605,48 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         callStatus
       }));
 
-      // Use renderer URL for save and continue
       let endpoint = "/support-ticket/save-and-continue/";
-      let payload: any = {
-        ticketId: currentTicket?.id,
+      let payload: Record<string, unknown> = {
+        ticketId,
         resolutionStatus,
         callStatus,
-        cseRemarks: ticket.cseRemarks,
+        cseRemarks: ticket.cseRemarks ?? "",
         resolutionTime: calculateResolutionTime(),
-        otherReasons: ticket.selectedOtherReasons,
-        ticketStartTime: ticket.ticketStartTime?.toISOString(),
-        reviewRequested: ticket.reviewRequested,
-
+        otherReasons: Array.isArray(ticket.selectedOtherReasons) ? ticket.selectedOtherReasons : [],
+        reviewRequested: Boolean(ticket.reviewRequested),
       };
 
-      // If Not Connected, use original Supabase not-connected endpoint and adjust payload
+      if (ticket.ticketStartTime) {
+        payload.ticketStartTime = ticket.ticketStartTime.toISOString();
+      }
+
       if (action === "Not Connected") {
         endpoint = "/support-ticket/update-call-status/";
         payload = {
-          ticketId: currentTicket?.id,
+          ticketId,
           callStatus,
-          cseRemarks: ticket.cseRemarks,
-          otherReasons: ticket.selectedOtherReasons,
-          reviewRequested: ticket.reviewRequested,
+          cseRemarks: ticket.cseRemarks ?? "",
+          otherReasons: Array.isArray(ticket.selectedOtherReasons) ? ticket.selectedOtherReasons : [],
         };
       }
 
-      if (!session?.access_token) {
-        throw new Error("Authentication required");
+      await apiClient.post(endpoint, payload);
+
+      await fetchNextTicket(ticketId);
+
+    } catch (error: unknown) {
+      const message = formatTicketSaveErrorMessage(error);
+      if (isStaleTicketSaveError(error)) {
+        console.warn("[TicketCarousel] Stale ticket on save:", message);
+        await resetToPendingQueue(message);
+        return;
       }
-
-      await apiClient.post(endpoint, payload, {
-      });
-
-      // After successful API call, fetch next ticket
-      await fetchNextTicket(currentTicket?.id);
-
-    } catch (error: any) {
-      console.error("Error in handleActionButton:", error);
-      toast.error(error.message || "Failed to process action");
+      if (isExpectedTicketSaveError(error)) {
+        console.warn("[TicketCarousel] Expected save error:", message);
+      } else {
+        console.error("Error in handleActionButton:", error);
+      }
+      toast.error(message);
     } finally {
       setUpdating(false);
     }
