@@ -7,7 +7,7 @@ import * as Sentry from "@sentry/react";
 import { SentrySpanProcessor, SentrySampler } from "@sentry/opentelemetry";
 import { browserTracingIntegration, replayIntegration } from "@sentry/react";
 import type { SentryConfig } from "./config";
-import { AuthorizationError } from "@/lib/api/errors";
+import { AuthorizationError, ValidationError, isExpectedTicketSaveError } from "@/lib/api/errors";
 
 /**
  * Common errors that should be ignored (not actionable)
@@ -61,6 +61,21 @@ const DENIED_URLS = [
  */
 const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null => {
   if (hint.originalException instanceof AuthorizationError) {
+    return null;
+  }
+
+  if (
+    hint.originalException instanceof ValidationError &&
+    isExpectedTicketSaveError(hint.originalException)
+  ) {
+    return null;
+  }
+
+  const exceptionMessage = event.exception?.values?.[0]?.value ?? '';
+  if (
+    exceptionMessage.includes('Error in handleActionButton') &&
+    /ticket not found|Invalid request data/i.test(exceptionMessage)
+  ) {
     return null;
   }
 
