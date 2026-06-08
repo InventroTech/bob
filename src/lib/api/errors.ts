@@ -99,3 +99,49 @@ export function isExpectedAuthWall(error: unknown): boolean {
   return st === 401 || st === 403;
 }
 
+function readValidationDetails(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as { details?: unknown; error?: unknown };
+  if (d.details && typeof d.details === 'object' && !Array.isArray(d.details)) {
+    return d.details as Record<string, unknown>;
+  }
+  return null;
+}
+
+/** Stale session / ticket already closed — save-and-continue returns 400 with ticketId errors. */
+export function isStaleTicketSaveError(error: unknown): boolean {
+  const data =
+    error instanceof ValidationError || error instanceof ApiError ? error.data : null;
+  const blob = typeof data === 'string' ? data : JSON.stringify(data ?? '');
+  if (/ticket not found/i.test(blob)) return true;
+
+  const details = readValidationDetails(data);
+  if (!details?.ticketId) return false;
+  const msgs = Array.isArray(details.ticketId) ? details.ticketId : [details.ticketId];
+  return msgs.some((m) => /ticket not found/i.test(String(m)));
+}
+
+export function isExpectedTicketSaveError(error: unknown): boolean {
+  return isStaleTicketSaveError(error);
+}
+
+export function formatTicketSaveErrorMessage(error: unknown): string {
+  if (isStaleTicketSaveError(error)) {
+    return 'This ticket is no longer available. Use “Get Tickets” to load a new one.';
+  }
+  const data =
+    error instanceof ValidationError || error instanceof ApiError ? error.data : null;
+  const details = readValidationDetails(data);
+  if (details) {
+    const parts = Object.entries(details).flatMap(([key, value]) => {
+      const msgs = Array.isArray(value) ? value : [value];
+      return msgs.filter(Boolean).map((m) => `${key}: ${m}`);
+    });
+    if (parts.length) return parts.join(' · ');
+  }
+  if (error instanceof Error && error.message && error.message !== 'Invalid request data') {
+    return error.message;
+  }
+  return 'Failed to process action. Please try again.';
+}
+
