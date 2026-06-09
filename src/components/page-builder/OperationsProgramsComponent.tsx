@@ -102,6 +102,24 @@ function randomName(): string {
   return `${firstName} ${lastName}`;
 }
 
+const TASK_NAMES = [
+  'Sending a Demo',
+  'App Installation',
+  'Create/Update Layout',
+  'Layout Feedback',
+  'Trial Subscription',
+  'Premium Poster/ Video Poster Share',
+];
+
+const TASK_STATUSES = ['Yes', 'No', 'Null'];
+
+function generateRandomTasks(): Array<{ task: string; status: string }> {
+  return TASK_NAMES.map((task) => ({
+    task,
+    status: TASK_STATUSES[Math.floor(Math.random() * TASK_STATUSES.length)],
+  }));
+}
+
 // Generate one random lead payload
 function generateRandomLead(): Record<string, unknown> {
   const parties = ['BJP', 'INC', 'AAP', 'Congress', 'Independent'];
@@ -137,14 +155,7 @@ function generateRandomLead(): Record<string, unknown> {
       praja_id: randomId,
       name,
       state: states[Math.floor(Math.random() * states.length)],
-      tasks: [
-        { task: 'Sending a Demo', status: 'Yes' },
-        { task: 'App Installation', status: 'Yes' },
-        { task: 'Create/Update Layout', status: 'Null' },
-        { task: 'Layout Feedback', status: 'Null' },
-        { task: 'Trial Subscription', status: 'Null' },
-        { task: 'Premium Poster/ Video Poster Share', status: 'Null' },
-      ],
+      tasks: generateRandomTasks(),
       lead_score: parseFloat((Math.random() * 65 + 30).toFixed(2)),
       lead_source: leadSources[Math.floor(Math.random() * leadSources.length)],
       lead_status: leadStatuses[Math.floor(Math.random() * leadStatuses.length)],
@@ -188,6 +199,7 @@ function generateRandomSupportTicket(tenantId: string): Record<string, unknown> 
     source: sources[Math.floor(Math.random() * sources.length)],
     praja_dashboard_user_link: `https://www.thecircleapp.in/admin/users/${prajaUserSlug}`,
     display_pic_url: 'https://a-cdn.thecircleapp.in/cutouts-originals-nckpt/01KPSMY018EKY4P5PJP5V8AWHG.jpg',
+    tasks: generateRandomTasks(),
   };
 }
 
