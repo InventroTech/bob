@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -440,7 +440,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   };
 
   //fetching the ticket stats
-  const fetchTicketStats = async () => {
+  const fetchTicketStats = useCallback(async () => {
     try {
       if (!session) return;
 
@@ -479,7 +479,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         pendingByPoster: [],
       });
     }
-  };
+  }, [session]);
 
   // Helper function to reset ticket state
   const resetTicketState = () => {
@@ -553,7 +553,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      let nextTicket = extractTicketFromApiResponse(ticketData);
+      const nextTicket = extractTicketFromApiResponse(ticketData);
 
       if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
@@ -617,7 +617,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the ticket stats (initially)
   useEffect(() => {
     fetchTicketStats();
-  }, []);
+  }, [fetchTicketStats]);
 
   //fetching the ticket stats (interval)
   useEffect(() => {
@@ -626,7 +626,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       fetchTicketStats();
     }, 30000);
     return () => clearInterval(interval);
-  }, [showPendingCard]);
+  }, [showPendingCard, fetchTicketStats]);
 
   //handling the other reason change
   const handleOtherReasonChange = (reason: string, checked: boolean) => {
@@ -760,7 +760,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      let nextTicket = extractTicketFromApiResponse(ticketData);
+      const nextTicket = extractTicketFromApiResponse(ticketData);
 
       if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
