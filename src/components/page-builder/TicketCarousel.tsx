@@ -64,7 +64,9 @@ interface Ticket {
   reason: string;
   other_reasons: string[] | string | null;
   badge: string | null;
-  poster: string | null;
+  poster?: string | null;
+  support_ticket_type?: string | null;
+  Jatra_link?: string | null;
   tenant_id: string;
   assigned_to: string | null;
   layout_status: string;
@@ -110,6 +112,7 @@ const OTHER_REASONS_OPTIONS = [
   "User Photo Background Change",
   "User Photo Change",
   "User photo/Protocal Size Issue",
+  "Self Trial Completion",
 ];
 
 const parseOtherReasons = (otherReasons: any): string[] => {
@@ -186,10 +189,16 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
       return { label: 'Auto-pay No Layout', color: 'text-amber-600', bgColor: 'bg-amber-50' };
     case 'free':
       return { label: 'Free', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+    case 'Self_Trial':
+      return { label: 'Self Trial', color: 'text-cyan-600', bgColor: 'bg-cyan-50' };
     default:
       return { label: poster || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
   }
 };
+
+function getSupportTicketType(ticket: Ticket | null | undefined): string | null {
+  return ticket?.support_ticket_type ?? ticket?.poster ?? null;
+}
 
 interface TicketCarouselProps {
   config?: {
@@ -779,9 +788,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     : "N/A";
 
   const isCompact = !!initialTicket;
-  const posterInfo = currentTicket?.poster
-    ? formatPosterStatus(currentTicket.poster)
-    : null;
+  const supportTicketType = getSupportTicketType(currentTicket);
+  const posterInfo = supportTicketType ? formatPosterStatus(supportTicketType) : null;
   const displayTicketId =
     currentTicket?.record_id ||
     currentTicket?.support_ticket_id ||
@@ -882,18 +890,30 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           )}
 
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-6">
-            {currentTicket?.praja_dashboard_user_link ? (
-              <a
-                href={currentTicket.praja_dashboard_user_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-0 flex-1 transition-opacity hover:opacity-90"
-              >
-                {userProfile}
-              </a>
-            ) : (
-              <div className="min-w-0 flex-1">{userProfile}</div>
-            )}
+            <div className="min-w-0 flex-1 space-y-2">
+              {currentTicket?.praja_dashboard_user_link ? (
+                <a
+                  href={currentTicket.praja_dashboard_user_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block transition-opacity hover:opacity-90"
+                >
+                  {userProfile}
+                </a>
+              ) : (
+                userProfile
+              )}
+              {currentTicket?.Jatra_link ? (
+                <a
+                  href={currentTicket.Jatra_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex pl-[4.5rem] text-sm font-medium text-blue-600 hover:underline"
+                >
+                  Open Jatra link
+                </a>
+              ) : null}
+            </div>
             <CustomButton
               type="button"
               icon={<Phone className="h-4 w-4" />}
