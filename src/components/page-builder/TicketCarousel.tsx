@@ -156,14 +156,16 @@ const getCleanPhoneNumber = (phone: string): string => {
 };
 
 
-// Function to handle WhatsApp action
-const handleWhatsApp = (phone: string) => {
-  const cleanNumber = getCleanPhoneNumber(phone);
-  if (cleanNumber) {
-    const message = `Hi, I'm calling regarding your support ticket.`;
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+const getPhoneDialLink = (phone: string): string => {
+  const cleaned = getCleanPhoneNumber(phone);
+  if (!cleaned) return "";
+  if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+    return `tel:+91${cleaned}`;
   }
+  if (cleaned.startsWith("91") && cleaned.length >= 12) {
+    return `tel:+${cleaned}`;
+  }
+  return `tel:+${cleaned}`;
 };
 
 // Function to format poster status with better UI
@@ -198,6 +200,49 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
 
 function getSupportTicketType(ticket: Ticket | null | undefined): string | null {
   return ticket?.support_ticket_type ?? ticket?.poster ?? null;
+}
+
+function flattenTicketFields(raw: any): any {
+  if (!raw || typeof raw !== "object") return raw;
+  const nested =
+    raw.data && typeof raw.data === "object" && !Array.isArray(raw.data)
+      ? raw.data
+      : {};
+  return { ...nested, ...raw };
+}
+
+function getJatraLink(ticket: Ticket | null | undefined): string | null {
+  if (!ticket) return null;
+  const flat = flattenTicketFields(ticket);
+  const candidates = [flat.Jatra_link, flat.jatra_link, flat.jatraLink];
+  for (const link of candidates) {
+    if (typeof link === "string" && link.trim()) {
+      return link.trim();
+    }
+  }
+  return null;
+}
+
+function normalizeTicketFromApi(raw: any): any {
+  if (!raw || typeof raw !== "object") return raw;
+  const unwrapped = raw.ticket?.id != null ? raw.ticket : raw;
+  const flat = flattenTicketFields(unwrapped);
+  const jatraLink = getJatraLink(flat);
+  return {
+    ...flat,
+    ...(jatraLink ? { Jatra_link: jatraLink } : {}),
+  };
+}
+
+function extractTicketFromApiResponse(ticketData: any): any | null {
+  if (!ticketData || typeof ticketData !== "object") return null;
+  if (ticketData.ticket?.id) return normalizeTicketFromApi(ticketData.ticket);
+  if (ticketData.data?.id) return normalizeTicketFromApi(ticketData.data);
+  if (ticketData.id) return normalizeTicketFromApi(ticketData);
+  if (Array.isArray(ticketData) && ticketData.length > 0) {
+    return normalizeTicketFromApi(ticketData[0]);
+  }
+  return null;
 }
 
 interface TicketCarouselProps {
@@ -255,8 +300,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //getting the initial state from the initial ticket
   const getInitialState = () => {
     if (initialTicket) {
+      const normalizedTicket = normalizeTicketFromApi(initialTicket);
       return {
-        currentTicket: initialTicket,
+        currentTicket: normalizedTicket,
         showPendingCard: false,
         resolutionStatus:
           initialTicket.resolution_status === "Resolved"
@@ -293,6 +339,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
       return {
         ...persisted,
+        currentTicket: persisted.currentTicket
+          ? normalizeTicketFromApi(persisted.currentTicket)
+          : null,
         showPendingCard: persisted.showPendingCard ?? !persisted.currentTicket,
       };
     }
@@ -352,6 +401,33 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }));
     isInitialized.current = true;
   }, [initialTicket, currentTicket?.id, showPendingCard]);
+
+  useEffect(() => {
+    const ticketId = Number(currentTicket?.id);
+    if (!Number.isFinite(ticketId) || getJatraLink(currentTicket) || !session?.access_token) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
+        if (cancelled) return;
+        const hydrated = normalizeTicketFromApi(response.data);
+        const link = getJatraLink(hydrated);
+        if (!link) return;
+        setCurrentTicket((prev: any) =>
+          prev?.id === ticketId ? normalizeTicketFromApi({ ...prev, ...hydrated }) : prev
+        );
+      } catch (error) {
+        console.warn("[TicketCarousel] Failed to hydrate Jatra link:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTicket?.id, session?.access_token]);
 
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
@@ -431,24 +507,25 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   // Helper function to set ticket from API response
   const setTicketFromResponse = (nextTicket: any) => {
-    setCurrentTicket(nextTicket);
+    const normalizedTicket = normalizeTicketFromApi(nextTicket);
+    setCurrentTicket(normalizedTicket);
     setTicket({
-      resolutionStatus: nextTicket.resolution_status === "Resolved"
+      resolutionStatus: normalizedTicket.resolution_status === "Resolved"
         ? "Resolved"
-        : nextTicket.resolution_status === "WIP"
+        : normalizedTicket.resolution_status === "WIP"
         ? "WIP"
-        : nextTicket.resolution_status === "Can't Resolve"
+        : normalizedTicket.resolution_status === "Can't Resolve"
         ? "Can't Resolve"
         : "Pending",
-      callStatus: nextTicket.call_status === "Connected"
+      callStatus: normalizedTicket.call_status === "Connected"
         ? "Connected"
-        : nextTicket.call_status === "Not Connected"
+        : normalizedTicket.call_status === "Not Connected"
         ? "Not Connected"
         : "Connected",
-      cseRemarks: nextTicket.cse_remarks || "",
-      selectedOtherReasons: parseOtherReasons(nextTicket.other_reasons),
+      cseRemarks: normalizedTicket.cse_remarks || "",
+      selectedOtherReasons: parseOtherReasons(normalizedTicket.other_reasons),
       ticketStartTime: new Date(),
-      reviewRequested: Boolean(nextTicket.review_requested),
+      reviewRequested: Boolean(normalizedTicket.review_requested),
     });
     setShowPendingCard(false);
     isInitialized.current = true;
@@ -476,20 +553,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      let nextTicket = null;
-      if (ticketData && typeof ticketData === "object") {
-        if (ticketData.id) {
-          nextTicket = ticketData;
-        } else if (ticketData.ticket && ticketData.ticket.id) {
-          nextTicket = ticketData.ticket;
-        } else if (ticketData.data && ticketData.data.id) {
-          nextTicket = ticketData.data;
-        } else if (Array.isArray(ticketData) && ticketData.length > 0) {
-          nextTicket = ticketData[0];
-        }
-      }
+      let nextTicket = extractTicketFromApiResponse(ticketData);
 
-      if (nextTicket && nextTicket.id) {
+      if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
       } else {
         setShowPendingCard(true);
@@ -694,20 +760,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      let nextTicket = null;
-      if (ticketData && typeof ticketData === "object") {
-        if (ticketData.id) {
-          nextTicket = ticketData;
-        } else if (ticketData.ticket && ticketData.ticket.id) {
-          nextTicket = ticketData.ticket;
-        } else if (ticketData.data && ticketData.data.id) {
-          nextTicket = ticketData.data;
-        } else if (Array.isArray(ticketData) && ticketData.length > 0) {
-          nextTicket = ticketData[0];
-        }
-      }
+      let nextTicket = extractTicketFromApiResponse(ticketData);
 
-      if (nextTicket && nextTicket.id) {
+      if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
       } else {
         setShowPendingCard(true);
@@ -794,6 +849,17 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     currentTicket?.record_id ||
     currentTicket?.support_ticket_id ||
     currentTicket?.id;
+  const jatraLink = getJatraLink(currentTicket);
+  const phoneDialLink = currentTicket?.phone ? getPhoneDialLink(currentTicket.phone) : "";
+
+  const openJatraLink = (event?: React.MouseEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (jatraLink) {
+      window.open(jatraLink, "_blank", "noopener,noreferrer");
+    }
+  };
+
   const userProfile = (
     <div className="flex min-w-0 items-center gap-4">
       <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100">
@@ -811,7 +877,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         )}
       </div>
       <div className="min-w-0 space-y-1">
-        <p className="truncate text-xl font-semibold text-slate-900">
+        <p
+          className={cn(
+            "truncate text-xl font-semibold text-slate-900",
+            jatraLink && "group-hover:text-blue-600 group-hover:underline"
+          )}
+        >
           {currentTicket?.name || "N/A"}
         </p>
         {currentTicket?.state ? (
@@ -890,39 +961,43 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           )}
 
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-6">
-            <div className="min-w-0 flex-1 space-y-2">
-              {currentTicket?.praja_dashboard_user_link ? (
+            <div className="relative z-0 min-w-0 flex-1">
+              {jatraLink ? (
                 <a
-                  href={currentTicket.praja_dashboard_user_link}
+                  href={jatraLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block transition-opacity hover:opacity-90"
+                  onClick={openJatraLink}
+                  className="group relative z-0 block cursor-pointer rounded-lg transition-opacity hover:opacity-90"
                 >
                   {userProfile}
                 </a>
               ) : (
                 userProfile
               )}
-              {currentTicket?.Jatra_link ? (
-                <a
-                  href={currentTicket.Jatra_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex pl-[4.5rem] text-sm font-medium text-blue-600 hover:underline"
-                >
-                  Open Jatra link
-                </a>
-              ) : null}
             </div>
-            <CustomButton
-              type="button"
-              icon={<Phone className="h-4 w-4" />}
-              className="rounded-xl bg-[#1D2939] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
-              onClick={() => handleWhatsApp(currentTicket?.phone)}
-              disabled={!currentTicket?.phone || updating}
-            >
-              {formatPhoneNumber(currentTicket?.phone) || "N/A"}
-            </CustomButton>
+            {phoneDialLink ? (
+              <a
+                href={phoneDialLink}
+                className={cn(
+                  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D2939] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#111827]",
+                  updating && "pointer-events-none opacity-50"
+                )}
+                aria-disabled={updating}
+              >
+                <Phone className="h-4 w-4" />
+                {formatPhoneNumber(currentTicket?.phone) || "N/A"}
+              </a>
+            ) : (
+              <CustomButton
+                type="button"
+                icon={<Phone className="h-4 w-4" />}
+                className="rounded-xl bg-[#1D2939] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                disabled
+              >
+                N/A
+              </CustomButton>
+            )}
           </div>
 
           <div
