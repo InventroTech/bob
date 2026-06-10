@@ -120,6 +120,25 @@ function generateRandomTasks(): Array<{ task: string; status: string }> {
   }));
 }
 
+const SUPPORT_TICKET_TYPES = [
+  'paid',
+  'in_trial',
+  'in_trial_extension',
+  'in_premium_extension',
+  'trial_expired',
+  'premium_expired',
+  'in_grace_period',
+  'auto_pay_not_set_up',
+  'autopay_setup_no_layout',
+  'free',
+  'Self_Trial',
+];
+
+function randomJatraLink(): string {
+  const slug = Math.random().toString(36).substring(2, 12);
+  return `https://www.thecircleapp.in/jatra/${slug}`;
+}
+
 // Generate one random lead payload
 function generateRandomLead(): Record<string, unknown> {
   const parties = ['BJP', 'INC', 'AAP', 'Congress', 'Independent'];
@@ -177,7 +196,6 @@ function generateRandomSupportTicket(tenantId: string): Record<string, unknown> 
   const prajaUserSlug = Math.random().toString(36).substring(2, 10);
 
   const states = ['Andhra Pradesh', 'Karnataka', 'Tamil Nadu', 'Telangana'];
-  const posters = ['paid', 'in_trial', 'trial_expired', 'free', 'in_grace_period', 'autopay_setup_no_layout'];
   const reasons = ['Others', 'Badge Change', 'Feature Request', 'Refund Issued', 'Subscription Information', 'Layout Feedback'];
   const sources = ['Drawer', 'Webhook', 'Manual', 'App'];
   const layoutStatuses = ['Layout created', 'No Layout', 'Layout Pending'];
@@ -193,7 +211,9 @@ function generateRandomSupportTicket(tenantId: string): Record<string, unknown> 
     layout_status: layoutStatuses[Math.floor(Math.random() * layoutStatuses.length)],
     state: states[Math.floor(Math.random() * states.length)],
     badge: '',
-    poster: posters[Math.floor(Math.random() * posters.length)],
+    support_ticket_type:
+      SUPPORT_TICKET_TYPES[Math.floor(Math.random() * SUPPORT_TICKET_TYPES.length)],
+    Jatra_link: randomJatraLink(),
     subscription_status: subscriptionStatuses[Math.floor(Math.random() * subscriptionStatuses.length)],
     atleast_paid_once: Math.random() > 0.3,
     source: sources[Math.floor(Math.random() * sources.length)],
