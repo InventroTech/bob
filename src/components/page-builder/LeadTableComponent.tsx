@@ -1302,7 +1302,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         ? getInventoryStatusToneClass(displayValue)
         : getStatusColor(displayValue, config?.statusColors);
       return (
-        <Badge className={`${chipToneClass} text-sm px-2 py-0.5`} title={displayValue}>
+        <Badge className={`${chipToneClass} hover:bg-gray-500 hover:text-white text-xs px-2 py-0.5`}>
           {truncateText(displayValue, columnIndex)}
         </Badge>
       );
@@ -2179,8 +2179,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
               <div className="flex items-center space-x-2">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <span className="text-gray-600">Loading...</span>
+                <span className="text-gray-600"></span>
               </div>
             </div>
           )}
