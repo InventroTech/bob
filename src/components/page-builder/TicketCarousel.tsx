@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -41,6 +41,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsCard";
+import { SupportTicketTaskProgress } from "@/components/page-builder/SupportTicketTaskProgress";
+import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import {
   formatTicketSaveErrorMessage,
@@ -62,10 +64,17 @@ interface Ticket {
   reason: string;
   other_reasons: string[] | string | null;
   badge: string | null;
-  poster: string | null;
+  poster?: string | null;
+  support_ticket_type?: string | null;
+  Jatra_link?: string | null;
   tenant_id: string;
   assigned_to: string | null;
   layout_status: string;
+  state?: string | null;
+  tasks?: Array<{ task?: string; title?: string; status?: string; id?: string }>;
+  task_progress?: Array<{ id: string; label: string; status: "completed" | "current" | "pending" }>;
+  record_id?: number;
+  support_ticket_id?: number;
   resolution_status: "Resolved" | "WIP" | "Pending" | "Already Resolved" | "No Issue" | "Not Possible" | "Feature Requested" | "Can't Resolve";
   resolution_time: string | null;
   cse_name: string | null;
@@ -103,6 +112,7 @@ const OTHER_REASONS_OPTIONS = [
   "User Photo Background Change",
   "User Photo Change",
   "User photo/Protocal Size Issue",
+  "Self Trial Completion",
 ];
 
 const parseOtherReasons = (otherReasons: any): string[] => {
@@ -146,14 +156,16 @@ const getCleanPhoneNumber = (phone: string): string => {
 };
 
 
-// Function to handle WhatsApp action
-const handleWhatsApp = (phone: string) => {
-  const cleanNumber = getCleanPhoneNumber(phone);
-  if (cleanNumber) {
-    const message = `Hi, I'm calling regarding your support ticket.`;
-    const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+const getPhoneDialLink = (phone: string): string => {
+  const cleaned = getCleanPhoneNumber(phone);
+  if (!cleaned) return "";
+  if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+    return `tel:+91${cleaned}`;
   }
+  if (cleaned.startsWith("91") && cleaned.length >= 12) {
+    return `tel:+${cleaned}`;
+  }
+  return `tel:+${cleaned}`;
 };
 
 // Function to format poster status with better UI
@@ -179,10 +191,59 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
       return { label: 'Auto-pay No Layout', color: 'text-amber-600', bgColor: 'bg-amber-50' };
     case 'free':
       return { label: 'Free', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+    case 'Self_Trial':
+      return { label: 'Self Trial', color: 'text-cyan-600', bgColor: 'bg-cyan-50' };
     default:
       return { label: poster || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
   }
 };
+
+function getSupportTicketType(ticket: Ticket | null | undefined): string | null {
+  return ticket?.support_ticket_type ?? ticket?.poster ?? null;
+}
+
+function flattenTicketFields(raw: any): any {
+  if (!raw || typeof raw !== "object") return raw;
+  const nested =
+    raw.data && typeof raw.data === "object" && !Array.isArray(raw.data)
+      ? raw.data
+      : {};
+  return { ...nested, ...raw };
+}
+
+function getJatraLink(ticket: Ticket | null | undefined): string | null {
+  if (!ticket) return null;
+  const flat = flattenTicketFields(ticket);
+  const candidates = [flat.Jatra_link, flat.jatra_link, flat.jatraLink];
+  for (const link of candidates) {
+    if (typeof link === "string" && link.trim()) {
+      return link.trim();
+    }
+  }
+  return null;
+}
+
+function normalizeTicketFromApi(raw: any): any {
+  if (!raw || typeof raw !== "object") return raw;
+  const unwrapped = raw.ticket?.id != null ? raw.ticket : raw;
+  const flat = flattenTicketFields(unwrapped);
+  const jatraLink = getJatraLink(flat);
+  return {
+    ...flat,
+    ...(jatraLink ? { Jatra_link: jatraLink } : {}),
+  };
+}
+
+function extractTicketFromApiResponse(ticketData: any): any | null {
+  if (!ticketData || typeof ticketData !== "object") return null;
+  if (ticketData.ticket?.id) return normalizeTicketFromApi(ticketData.ticket);
+  if (ticketData.data?.id) return normalizeTicketFromApi(ticketData.data);
+  if (ticketData.id) return normalizeTicketFromApi(ticketData);
+  if (Array.isArray(ticketData) && ticketData.length > 0) {
+    return normalizeTicketFromApi(ticketData[0]);
+  }
+  return null;
+}
 
 interface TicketCarouselProps {
   config?: {
@@ -239,8 +300,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //getting the initial state from the initial ticket
   const getInitialState = () => {
     if (initialTicket) {
+      const normalizedTicket = normalizeTicketFromApi(initialTicket);
       return {
-        currentTicket: initialTicket,
+        currentTicket: normalizedTicket,
         showPendingCard: false,
         resolutionStatus:
           initialTicket.resolution_status === "Resolved"
@@ -277,6 +339,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
       return {
         ...persisted,
+        currentTicket: persisted.currentTicket
+          ? normalizeTicketFromApi(persisted.currentTicket)
+          : null,
         showPendingCard: persisted.showPendingCard ?? !persisted.currentTicket,
       };
     }
@@ -337,6 +402,33 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     isInitialized.current = true;
   }, [initialTicket, currentTicket?.id, showPendingCard]);
 
+  useEffect(() => {
+    const ticketId = Number(currentTicket?.id);
+    if (!Number.isFinite(ticketId) || getJatraLink(currentTicket) || !session?.access_token) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
+        if (cancelled) return;
+        const hydrated = normalizeTicketFromApi(response.data);
+        const link = getJatraLink(hydrated);
+        if (!link) return;
+        setCurrentTicket((prev: any) =>
+          prev?.id === ticketId ? normalizeTicketFromApi({ ...prev, ...hydrated }) : prev
+        );
+      } catch (error) {
+        console.warn("[TicketCarousel] Failed to hydrate Jatra link:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTicket?.id, session?.access_token]);
+
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
     if (!ticket.ticketStartTime) return "";
@@ -348,7 +440,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   };
 
   //fetching the ticket stats
-  const fetchTicketStats = async () => {
+  const fetchTicketStats = useCallback(async () => {
     try {
       if (!session) return;
 
@@ -387,7 +479,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         pendingByPoster: [],
       });
     }
-  };
+  }, [session]);
 
   // Helper function to reset ticket state
   const resetTicketState = () => {
@@ -415,24 +507,25 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   // Helper function to set ticket from API response
   const setTicketFromResponse = (nextTicket: any) => {
-    setCurrentTicket(nextTicket);
+    const normalizedTicket = normalizeTicketFromApi(nextTicket);
+    setCurrentTicket(normalizedTicket);
     setTicket({
-      resolutionStatus: nextTicket.resolution_status === "Resolved"
+      resolutionStatus: normalizedTicket.resolution_status === "Resolved"
         ? "Resolved"
-        : nextTicket.resolution_status === "WIP"
+        : normalizedTicket.resolution_status === "WIP"
         ? "WIP"
-        : nextTicket.resolution_status === "Can't Resolve"
+        : normalizedTicket.resolution_status === "Can't Resolve"
         ? "Can't Resolve"
         : "Pending",
-      callStatus: nextTicket.call_status === "Connected"
+      callStatus: normalizedTicket.call_status === "Connected"
         ? "Connected"
-        : nextTicket.call_status === "Not Connected"
+        : normalizedTicket.call_status === "Not Connected"
         ? "Not Connected"
         : "Connected",
-      cseRemarks: nextTicket.cse_remarks || "",
-      selectedOtherReasons: parseOtherReasons(nextTicket.other_reasons),
+      cseRemarks: normalizedTicket.cse_remarks || "",
+      selectedOtherReasons: parseOtherReasons(normalizedTicket.other_reasons),
       ticketStartTime: new Date(),
-      reviewRequested: Boolean(nextTicket.review_requested),
+      reviewRequested: Boolean(normalizedTicket.review_requested),
     });
     setShowPendingCard(false);
     isInitialized.current = true;
@@ -460,20 +553,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      let nextTicket = null;
-      if (ticketData && typeof ticketData === "object") {
-        if (ticketData.id) {
-          nextTicket = ticketData;
-        } else if (ticketData.ticket && ticketData.ticket.id) {
-          nextTicket = ticketData.ticket;
-        } else if (ticketData.data && ticketData.data.id) {
-          nextTicket = ticketData.data;
-        } else if (Array.isArray(ticketData) && ticketData.length > 0) {
-          nextTicket = ticketData[0];
-        }
-      }
+      const nextTicket = extractTicketFromApiResponse(ticketData);
 
-      if (nextTicket && nextTicket.id) {
+      if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
       } else {
         setShowPendingCard(true);
@@ -535,7 +617,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //fetching the ticket stats (initially)
   useEffect(() => {
     fetchTicketStats();
-  }, []);
+  }, [fetchTicketStats]);
 
   //fetching the ticket stats (interval)
   useEffect(() => {
@@ -544,7 +626,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       fetchTicketStats();
     }, 30000);
     return () => clearInterval(interval);
-  }, [showPendingCard]);
+  }, [showPendingCard, fetchTicketStats]);
 
   //handling the other reason change
   const handleOtherReasonChange = (reason: string, checked: boolean) => {
@@ -678,20 +760,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         return;
       }
 
-      let nextTicket = null;
-      if (ticketData && typeof ticketData === "object") {
-        if (ticketData.id) {
-          nextTicket = ticketData;
-        } else if (ticketData.ticket && ticketData.ticket.id) {
-          nextTicket = ticketData.ticket;
-        } else if (ticketData.data && ticketData.data.id) {
-          nextTicket = ticketData.data;
-        } else if (Array.isArray(ticketData) && ticketData.length > 0) {
-          nextTicket = ticketData[0];
-        }
-      }
+      const nextTicket = extractTicketFromApiResponse(ticketData);
 
-      if (nextTicket && nextTicket.id) {
+      if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
       } else {
         setShowPendingCard(true);
@@ -760,349 +831,353 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     );
   }
 
-  //formatting the ticket date in IST
-  const formattedDate = currentTicket?.dumped_at
-    ? convertGMTtoIST(currentTicket.dumped_at, 'date', {
+  const ticketTimestamp = currentTicket?.dumped_at || currentTicket?.ticket_date || currentTicket?.created_at;
+  const formattedTicketDate = ticketTimestamp
+    ? convertGMTtoIST(ticketTimestamp, "date", {
         year: "numeric",
         month: "short",
         day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       })
     : "N/A";
 
   const isCompact = !!initialTicket;
+  const supportTicketType = getSupportTicketType(currentTicket);
+  const posterInfo = supportTicketType ? formatPosterStatus(supportTicketType) : null;
+  const displayTicketId =
+    currentTicket?.record_id ||
+    currentTicket?.support_ticket_id ||
+    currentTicket?.id;
+  const jatraLink = getJatraLink(currentTicket);
+  const phoneDialLink = currentTicket?.phone ? getPhoneDialLink(currentTicket.phone) : "";
 
-  //showing the ticket card
-  return (
-    <div className={`font-body mainCard w-full flex flex-col justify-center items-center gap-2 ${isCompact ? '' : 'border'}`}>
-      <div className={`mt-4 flex justify-end ${isCompact ? 'w-full' : 'w-[70%]'}`}>
-        <CustomButton
-          onClick={handleTakeBreak}
-          variant="outline"
-          size="sm"
-          icon={<Coffee className="h-3 w-3" />}
-          disabled={updating || isCompact}
-        >
-          Take a Break
-        </CustomButton>
-      </div>
-      <div className={`relative h-full ${isCompact ? 'w-full' : 'w-[70%]'}`}>
-      <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
-        {fetchingNext && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-xl">
-            <div className="flex flex-col items-center gap-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <p className="text-sm text-muted-foreground">Loading next ticket...</p>
-            </div>
-          </div>
+  const openJatraLink = (event?: React.MouseEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (jatraLink) {
+      window.open(jatraLink, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const userProfile = (
+    <div className="flex min-w-0 items-center gap-4">
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100">
+        {currentTicket?.display_pic_url ? (
+          <img
+            src={currentTicket.display_pic_url}
+            alt={`${currentTicket.name || "User"} profile`}
+            className="h-full w-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        ) : (
+          <User className="h-6 w-6 text-slate-500" />
         )}
-        <div className="space-y-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="flex items-center gap-4 mt-1">
-                {currentTicket?.badge && currentTicket.badge !== "N/A" && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Badge:</span>
-                    <span className="text-xs font-medium">{currentTicket.badge}</span>
-                  </div>
+      </div>
+      <div className="min-w-0 space-y-1">
+        <p
+          className={cn(
+            "truncate text-xl font-semibold text-slate-900",
+            jatraLink && "group-hover:text-blue-600 group-hover:underline"
+          )}
+        >
+          {currentTicket?.name || "N/A"}
+        </p>
+        {currentTicket?.state ? (
+          <p className="text-sm font-medium uppercase tracking-wide text-slate-600">
+            {currentTicket.state}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="text-xs text-slate-500">
+            ID: {currentTicket?.user_id || "N/A"}
+          </span>
+          {posterInfo ? (
+            <span
+              className={cn(
+                "rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
+                posterInfo.color,
+                posterInfo.bgColor
+              )}
+            >
+              {posterInfo.label}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className={cn(
+        "font-body mainCard flex w-full flex-col",
+        isCompact ? "gap-4" : "mx-auto max-w-6xl gap-5 px-2 py-2 md:px-4"
+      )}
+    >
+      {!isCompact && (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600">
+            {currentTicket?.badge && currentTicket.badge !== "N/A" && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">Badge:</span>
+                <span className="font-medium text-slate-800">{currentTicket.badge}</span>
+              </div>
+            )}
+            {currentTicket?.subscription_status &&
+              currentTicket.subscription_status !== "N/A" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">Subscription:</span>
+                  <span className="font-medium text-slate-800">
+                    {currentTicket.subscription_status}
+                  </span>
+                </div>
+              )}
+          </div>
+          <CustomButton
+            onClick={handleTakeBreak}
+            variant="outline"
+            size="sm"
+            icon={<Coffee className="h-4 w-4" />}
+            disabled={updating}
+            className="rounded-xl border-slate-200 bg-white px-4 py-2 shadow-sm"
+          >
+            Take a Break
+          </CustomButton>
+        </div>
+      )}
+
+      <div className="relative w-full">
+        <div className="relative flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+          {fetchingNext && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/80 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+                <p className="text-sm text-muted-foreground">Loading next ticket...</p>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-6">
+            <div className="relative z-0 min-w-0 flex-1">
+              {jatraLink ? (
+                <a
+                  href={jatraLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={openJatraLink}
+                  className="group relative z-0 block cursor-pointer rounded-lg transition-opacity hover:opacity-90"
+                >
+                  {userProfile}
+                </a>
+              ) : (
+                userProfile
+              )}
+            </div>
+            {phoneDialLink ? (
+              <a
+                href={phoneDialLink}
+                className={cn(
+                  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D2939] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#111827]",
+                  updating && "pointer-events-none opacity-50"
                 )}
-                {currentTicket?.subscription_status &&
-                  currentTicket.subscription_status !== "N/A" && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Subscription:</span>
-                      <span className="text-xs font-medium">
-                        {currentTicket.subscription_status}
-                      </span>
+                aria-disabled={updating}
+              >
+                <Phone className="h-4 w-4" />
+                {formatPhoneNumber(currentTicket?.phone) || "N/A"}
+              </a>
+            ) : (
+              <CustomButton
+                type="button"
+                icon={<Phone className="h-4 w-4" />}
+                className="rounded-xl bg-[#1D2939] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                disabled
+              >
+                N/A
+              </CustomButton>
+            )}
+          </div>
+
+          <div
+            className={cn(
+              "grid gap-6",
+              isCompact ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]"
+            )}
+          >
+            <SupportTicketTaskProgress taskProgress={currentTicket?.task_progress} />
+
+            <div className="space-y-4">
+              <div className="rounded-xl bg-violet-50 p-4 md:p-5">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-lg font-semibold text-slate-900">
+                      {currentTicket?.reason || "No reason provided"}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      {currentTicket?.source || "N/A"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-slate-500">
+                    {formattedTicketDate}
+                  </span>
+                </div>
+                <div className="flex items-center justify-end gap-1 text-xs text-slate-500">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>ID: {displayTicketId}</span>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "grid gap-4",
+                  isCompact ? "grid-cols-1" : "md:grid-cols-2"
+                )}
+              >
+                <div className="space-y-3">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="h-11 w-full justify-between rounded-xl border-slate-200 bg-white"
+                        disabled={updating}
+                      >
+                        <span className="text-sm">
+                          {ticket.selectedOtherReasons.length > 0
+                            ? `${ticket.selectedOtherReasons.length} reason(s) selected`
+                            : "Select other reasons"}
+                        </span>
+                        <ChevronDown className="h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-4" align="start">
+                      <div className="space-y-3">
+                        <h4 className="font-medium">Select Other Reasons</h4>
+                        <div className="max-h-60 space-y-2 overflow-y-auto">
+                          {OTHER_REASONS_OPTIONS.map((reason) => (
+                            <div key={reason} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`reason-${reason}`}
+                                checked={ticket.selectedOtherReasons.includes(reason)}
+                                onCheckedChange={(checked) =>
+                                  handleOtherReasonChange(reason, checked as boolean)
+                                }
+                                disabled={updating}
+                              />
+                              <label
+                                htmlFor={`reason-${reason}`}
+                                className="cursor-pointer text-sm leading-none"
+                              >
+                                {reason}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  {ticket.selectedOtherReasons.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {ticket.selectedOtherReasons.map((reason) => (
+                        <Badge key={reason} variant="secondary" className="text-xs">
+                          {reason}
+                        </Badge>
+                      ))}
                     </div>
                   )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-4 ">
-            <div className="space-y-2 flex flex-col gap-2">
-             
-                <div className="space-y-2">
-                  <div className="space-y-1">
-                    <div className="text-sm bg-muted/50 p-2 rounded-md flex flex-col justify-between gap-4">
-                    <span className="font-medium text-sm">
-                  {currentTicket?.dumped_at ? convertGMTtoIST(currentTicket.dumped_at, 'date', {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  }) : "N/A"}
-                </span>
-                <div className="flex flex-col">
-                      <span className="font-medium text-lg">{currentTicket?.reason || "No reason provided"}</span>
-                      <span className=" text-sm pt-2">{currentTicket?.source || "N/A"}</span>
-                </div>
-                      
-                    </div>
-                  </div>
-                 
-                </div>
-                
-                
-            
-           
-              <div className="">
-                {currentTicket?.praja_dashboard_user_link ? (
-                  <a
-                    href={currentTicket.praja_dashboard_user_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <div className="flex items-center text-sm bg-muted/50 p-4 rounded-md cursor-pointer hover:bg-muted/70 transition-colors">
-                      {currentTicket?.display_pic_url ? (
-                        <img
-                          src={currentTicket.display_pic_url}
-                          alt={`${currentTicket.name || "User"} profile`}
-                          className="h-12 w-12 rounded-full mr-2 object-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                            e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                          }}
-                        />
-                      ) : null}
-                      <User
-                        className={`h-3 w-3 mr-2 text-primary ${
-                          currentTicket?.display_pic_url ? "hidden" : ""
-                        }`}
-                      />
-                      <div className="flex flex-col w-full gap-2">
-                        <div>
-                          <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
-                          <p className="text-xs text-muted-foreground pt-2">
-                            ID: {currentTicket?.user_id || "N/A"}
-                          </p>
-                        </div>
-                        <span className="font-medium text-sm  flex items-center gap-1">
-                          {currentTicket?.poster ? (
-                            (() => {
-                              const posterInfo = formatPosterStatus(currentTicket.poster);
-                              return (
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
-                                  {posterInfo.label}
-                                </span>
-                              );
-                            })()
-                          ) : (
-                            <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
-                              No Poster
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </a>
-                ) : (
-                  <div className="flex items-center text-sm bg-muted/50 p-4 rounded-md">
-                    {currentTicket?.display_pic_url ? (
-                      <img
-                        src={currentTicket.display_pic_url}
-                        alt={`${currentTicket.name || "User"} profile`}
-                        className="h-12 w-12 rounded-full mr-2 object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                        }}
-                      />
-                    ) : null}
-                    <User
-                      className={`h-3 w-3 mr-2 text-primary ${
-                        currentTicket?.display_pic_url ? "hidden" : ""
-                      }`}
-                    />
-                    <div className="flex flex-col w-full gap-2">
-                      <div>
-                        <p className="font-medium text-lg">{currentTicket?.name || "N/A"}</p>
-                        <p className="text-xs text-muted-foreground pt-2">
-                          ID: {currentTicket?.user_id || "N/A"}
-                        </p>
-                      </div>
-                      <span className="font-medium text-sm  flex items-center gap-1">
-                        {currentTicket?.poster ? (
-                          (() => {
-                            const posterInfo = formatPosterStatus(currentTicket.poster);
-                            return (
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${posterInfo.color} ${posterInfo.bgColor} border`}>
-                                {posterInfo.label}
-                              </span>
-                            );
-                          })()
-                        ) : (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium text-gray-500 bg-gray-100 border">
-                            No Poster
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {/* Removed the separate payment status row */}
-                <div 
-                  className="flex items-center text-sm bg-muted/50 p-2 rounded-md cursor-pointer hover:bg-muted/70 transition-colors"
-                  onClick={() => handleWhatsApp(currentTicket?.phone)}
-                >
-                  <Phone className="h-3 w-3 mr-2 text-primary" />
-                  <span className="font-medium text-sm">{formatPhoneNumber(currentTicket?.phone) || "N/A"}</span>
-                </div>
-              </div>
-              
-          
-              
-            </div>
-
-            <div className="flex flex-row gap-2 w-full items-start">
-              <div className="w-full">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-between"
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="review-requested"
+                      checked={ticket.reviewRequested}
+                      onCheckedChange={(checked) =>
+                        setTicket((prev) => ({
+                          ...prev,
+                          reviewRequested: Boolean(checked),
+                        }))
+                      }
                       disabled={updating}
+                    />
+                    <label
+                      htmlFor="review-requested"
+                      className="cursor-pointer text-sm font-medium leading-none"
                     >
-                      <span className="text-sm">
-                        {ticket.selectedOtherReasons.length > 0
-                          ? `${ticket.selectedOtherReasons.length} reason(s) selected`
-                          : "Select other reasons"}
-                      </span>
-                      <ChevronDown className="h-3 w-3 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 p-4" align="start">
-                    <div className="space-y-3">
-                      <h4>Select Other Reasons</h4>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {OTHER_REASONS_OPTIONS.map((reason) => (
-                          <div key={reason} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`reason-${reason}`}
-                              checked={ticket.selectedOtherReasons.includes(reason)}
-                              onCheckedChange={(checked) =>
-                                handleOtherReasonChange(reason, checked as boolean)
-                              }
-                              disabled={updating}
-                            />
-                            <label
-                              htmlFor={`reason-${reason}`}
-                              className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                            >
-                              {reason}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                      {ticket.selectedOtherReasons.length > 0 && (
-                        <div className="pt-2 border-t">
-                          <CustomButton
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setTicket(prev => ({
-                              ...prev,
-                              selectedOtherReasons: []
-                            }))}
-                            disabled={updating}
-                            className="text-xs"
-                          >
-                            Clear All
-                          </CustomButton>
-                        </div>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                {ticket.selectedOtherReasons.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {ticket.selectedOtherReasons.map((reason) => (
-                      <Badge key={reason} variant="secondary" className="text-xs">
-                        {reason}
-                      </Badge>
-                    ))}
+                      Customer review submitted
+                    </label>
                   </div>
-                )}
-              <div className="flex items-center gap-2 mt-3">
-                <Checkbox
-                  id="review-requested"
-                  checked={ticket.reviewRequested}
-                  onCheckedChange={(checked) =>
-                    setTicket(prev => ({ ...prev, reviewRequested: Boolean(checked) }))
-                  }
-                  disabled={updating}
-                />
-                <label
-                  htmlFor="review-requested"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  Customer review submitted
-                </label>
-              </div>
-              </div>
-              <div className="w-full space-y-2">
+                </div>
+
                 <Textarea
                   value={ticket.cseRemarks}
-                  onChange={(e) => setTicket(prev => ({
-                    ...prev,
-                    cseRemarks: e.target.value
-                  }))}
+                  onChange={(e) =>
+                    setTicket((prev) => ({
+                      ...prev,
+                      cseRemarks: e.target.value,
+                    }))
+                  }
                   placeholder="Add your remarks about this ticket..."
-                  className="min-h-[100px]"
+                  className="min-h-[140px] rounded-xl border-slate-200"
                   disabled={updating}
                 />
               </div>
             </div>
           </div>
-        </div>
-  <div className={`buttons flex flex-row items-center justify-center w-full ${isCompact ? 'gap-3 mt-6 pt-4 border-t border-gray-200 flex-wrap' : 'gap-[200px] mt-4 pt-3'}`}>
-        <div className="flex justify-center items-center gap-3">
-          <CustomButton
-            onClick={() => handleActionButton("Not Connected")}
-            size="sm"
-            variant="outline"
-            className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating}
+
+          <div
+            className={cn(
+              "mt-6 grid w-full gap-3 border-t border-slate-100 pt-6",
+              isCompact ? "grid-cols-2 pb-2" : "grid-cols-2 sm:grid-cols-4"
+            )}
           >
-            Not Connected
-          </CustomButton>
-          <CustomButton
-            onClick={() => handleActionButton("Call Later")}
-            size="sm"
-            variant="outline"
-            className="w-32 bg-white text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating}
-          >
-            Call Later
-          </CustomButton>
-        </div>
-        <div className="flex justify-center items-center gap-3">
-          <CustomButton
-            onClick={() => handleActionButton("Can't Resolve")}
-            size="sm"
-            variant="outline"
-            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating}
-          >
-            Can't Resolve
-          </CustomButton>
-          <CustomButton
-            onClick={() => handleActionButton("Resolve")}
-            size="sm"
-            variant="outline"
-            className="w-32 bg-white text-primary border-primary hover:bg-primary hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={updating || fetchingNext}
-            loading={updating || fetchingNext}
-          >
-            {updating ? 'Updating...' : fetchingNext ? 'Loading Next Ticket...' : 'Resolve'}
-          </CustomButton>
+            <CustomButton
+              onClick={() => handleActionButton("Not Connected")}
+              variant="outline"
+              className="h-11 w-full rounded-xl border-red-300 bg-white text-red-600 hover:border-red-400 hover:bg-red-50"
+              disabled={updating}
+            >
+              Not Connected
+            </CustomButton>
+            <CustomButton
+              onClick={() => handleActionButton("Call Later")}
+              variant="outline"
+              className="h-11 w-full rounded-xl border-red-300 bg-white text-red-600 hover:border-red-400 hover:bg-red-50"
+              disabled={updating}
+            >
+              Call Later
+            </CustomButton>
+            <CustomButton
+              onClick={() => handleActionButton("Can't Resolve")}
+              variant="outline"
+              className="h-11 w-full rounded-xl border-slate-900 bg-white text-slate-900 hover:bg-slate-50"
+              disabled={updating}
+            >
+              Can&apos;t Resolve
+            </CustomButton>
+            <CustomButton
+              onClick={() => handleActionButton("Resolve")}
+              className="h-11 w-full rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+              disabled={updating || fetchingNext}
+              loading={updating || fetchingNext}
+            >
+              {updating ? "Updating..." : fetchingNext ? "Loading..." : "Resolve"}
+            </CustomButton>
+          </div>
         </div>
       </div>
-      </div>
-      
-      {/* Take a Break button outside the main card at bottom */}
-    </div>
+
+      {isCompact && (
+        <div className="flex justify-end">
+          <CustomButton
+            onClick={handleTakeBreak}
+            variant="outline"
+            size="sm"
+            icon={<Coffee className="h-4 w-4" />}
+            disabled={updating}
+          >
+            Take a Break
+          </CustomButton>
+        </div>
+      )}
     </div>
   );
 };
