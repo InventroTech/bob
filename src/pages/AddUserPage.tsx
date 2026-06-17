@@ -493,7 +493,7 @@ const AddUserPage = () => {
               No users found
             </div>
           ) : (
-            <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
+            <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-black hover:!bg-black text-white hover:text-white border-b border-gray-200">
