@@ -121,6 +121,18 @@ export function isStaleTicketSaveError(error: unknown): boolean {
   return msgs.some((m) => /ticket not found/i.test(String(m)));
 }
 
+const SUPPORT_TICKET_WRITE_PATH =
+  /\/support-ticket\/(save-and-continue|update-call-status)\/?/i;
+
+/** HTTP client integration errors for expected stale-ticket writes (not actionable in Sentry). */
+export function isExpectedSupportTicketHttpClientError(
+  url: string | undefined,
+  status: number | undefined,
+): boolean {
+  if (!url || status !== 400) return false;
+  return SUPPORT_TICKET_WRITE_PATH.test(url);
+}
+
 export function isExpectedTicketSaveError(error: unknown): boolean {
   return isStaleTicketSaveError(error);
 }

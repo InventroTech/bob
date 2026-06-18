@@ -521,6 +521,19 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [whatsappPhone, setWhatsappPhone] = useState<string>("");
   const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
 
+  const abandonStaleTicket = useCallback(() => {
+    clearPersistedState();
+    setCurrentTicket(null);
+    setShowPendingCard(true);
+    setTicket({
+      resolutionStatus: "Pending",
+      callStatus: "Connected",
+      cseRemarks: "",
+      selectedOtherReasons: [],
+      ticketStartTime: null,
+      reviewRequested: false,
+    });
+  }, []);
 
   useEffect(() => {
     if (isInitialized.current) {
@@ -562,6 +575,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           prev?.id === ticketId ? normalizeTicketFromApi({ ...prev, ...hydrated }) : prev
         );
       } catch (error) {
+        if (isExpectedTicketRecordNotFound(error)) {
+          if (!cancelled) {
+            abandonStaleTicket();
+          }
+          return;
+        }
         console.warn("[TicketCarousel] Failed to hydrate Jatra link:", error);
       }
     })();
@@ -569,7 +588,30 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [currentTicket?.id, session?.access_token]);
+  }, [currentTicket?.id, session?.access_token, abandonStaleTicket]);
+
+  // Drop session-persisted ticket if the CRM record no longer exists (prevents repeat 404s).
+  useEffect(() => {
+    const ticketId = Number(currentTicket?.id);
+    if (!Number.isFinite(ticketId) || !session?.access_token || showPendingCard) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await apiClient.get(`/crm-records/records/${ticketId}/`);
+      } catch (error) {
+        if (!cancelled && isExpectedTicketRecordNotFound(error)) {
+          abandonStaleTicket();
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token, showPendingCard, currentTicket?.id, abandonStaleTicket]);
 
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
@@ -780,9 +822,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
       return normalizeTicketFromApi(response.data);
     } catch (error) {
-      if (!isExpectedTicketRecordNotFound(error)) {
-        console.error("Error fetching current ticket:", error);
+      if (isExpectedTicketRecordNotFound(error)) {
+        return "NOT_FOUND" as const;
       }
+      console.error("Error fetching current ticket:", error);
       return null;
     }
   };
@@ -841,6 +884,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     try {
       setUpdating(true);
       const refreshedTicket = await fetchCurrentTicket();
+
+      if (refreshedTicket === "NOT_FOUND") {
+        abandonStaleTicket();
+        toast.info("This ticket is no longer available. Use Get Tickets to load a new one.");
+        return;
+      }
 
       if (refreshedTicket) {
         setCurrentTicket((prev) => mergeRefreshedTicket(prev, refreshedTicket));
@@ -971,9 +1020,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
       if (isExpectedTicketSaveError(error)) {
         console.warn("[TicketCarousel] Expected save error:", message);
-      } else {
-        console.error("Error in handleActionButton:", error);
+        await resetToPendingQueue(message);
+        return;
       }
+      console.error("Error in handleActionButton:", error);
       toast.error(message);
     } finally {
       setUpdating(false);
