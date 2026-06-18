@@ -11,6 +11,7 @@ import {
   AuthorizationError,
   NotFoundError,
   ValidationError,
+  isExpectedSupportTicketHttpClientError,
   isExpectedTicketRecordNotFound,
   isExpectedTicketSaveError,
 } from "@/lib/api/errors";
@@ -61,11 +62,57 @@ const DENIED_URLS = [
   /^about:/i,
 ] as const;
 
+function eventRequestUrl(event: Sentry.ErrorEvent): string {
+  return (
+    event.request?.url ??
+    (event.contexts?.response as { url?: string } | undefined)?.url ??
+    ""
+  );
+}
+
+function eventHttpStatus(event: Sentry.ErrorEvent): number | undefined {
+  const fromContext = (event.contexts?.response as { status_code?: number } | undefined)
+    ?.status_code;
+  if (typeof fromContext === "number") return fromContext;
+
+  const msg = event.exception?.values?.map((v) => v.value).join(" ") ?? "";
+  const match = msg.match(/status code:\s*(\d{3})/i);
+  return match ? Number(match[1]) : undefined;
+}
+
+function shouldDropHttpClientError(event: Sentry.ErrorEvent): boolean {
+  const msg = event.exception?.values?.map((v) => v.value).join(" ") ?? "";
+  if (!/HTTP Client Error with status code:/i.test(msg)) {
+    return false;
+  }
+
+  const url = eventRequestUrl(event);
+  const status = eventHttpStatus(event);
+
+  if (status === 403 || status === 404) {
+    return true;
+  }
+
+  if (isExpectedSupportTicketHttpClientError(url, status)) {
+    return true;
+  }
+
+  if (status === 404 && /\/crm-records\/records\/\d+/i.test(url)) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Sanitize error event before sending to Sentry
  * Removes sensitive data and filters unwanted errors
  */
 const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null => {
+  if (shouldDropHttpClientError(event)) {
+    return null;
+  }
+
   if (hint.originalException instanceof AuthorizationError) {
     return null;
   }
@@ -94,18 +141,34 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
 
   // Filter ignored errors
   if (event.exception) {
-    const errorMessage = event.exception.values?.[0]?.value || '';
-    const errorType = event.exception.values?.[0]?.type || '';
-    
-    // Check error message
-    if (IGNORED_ERRORS.some(ignored => errorMessage.includes(ignored))) {
-      return null; // Drop the event
+    const values = event.exception.values ?? [];
+    for (const entry of values) {
+      const errorMessage = entry?.value || '';
+      const errorType = entry?.type || '';
+
+      if (errorType === 'NotFoundError' || /status code: 404/i.test(errorMessage)) {
+        return null;
+      }
+
+      if (errorType === 'ValidationError' && /ticket not found/i.test(errorMessage)) {
+        return null;
+      }
+
+      if (/status code: 400/i.test(errorMessage) && /save-and-continue|update-call-status/i.test(eventRequestUrl(event))) {
+        return null;
+      }
+
+      if (IGNORED_ERRORS.some((ignored) => errorMessage.includes(ignored))) {
+        return null;
+      }
+
+      if (errorType.includes('Abort') || errorType.includes('Cancel')) {
+        return null;
+      }
     }
-    
-    // Check error type (AbortError, CanceledError, etc.)
-    if (errorType.includes('Abort') || errorType.includes('Cancel')) {
-      return null; // Drop the event
-    }
+
+    const errorMessage = values[0]?.value || '';
+    const errorType = values[0]?.type || '';
     
     // Check for abort-related error codes
     if (hint.originalException && typeof hint.originalException === 'object') {
@@ -129,6 +192,13 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
 
   if (event.exception?.values?.[0]?.value?.includes('status code: 404')) {
     return null;
+  }
+
+  if (event.exception?.values?.[0]?.value?.includes('status code: 400')) {
+    const url = eventRequestUrl(event);
+    if (/save-and-continue|update-call-status/i.test(url)) {
+      return null;
+    }
   }
 
   // Filter by URL
@@ -188,9 +258,8 @@ export function initSentry(config: SentryConfig): void {
       levels: ['error'], // Only capture console.error, not warnings/info
     }),
     Sentry.httpClientIntegration({
-      // Omit 403/404: stale session, missing permission, or record already gone (carousel refresh)
+      // Omit 400/403/404 on expected client paths; validation + stale tickets are handled in UI
       failedRequestStatusCodes: [
-        [400, 402],
         [405, 599],
       ],
       failedRequestTargets: [/.*/],
@@ -241,6 +310,9 @@ export function initSentry(config: SentryConfig): void {
     ignoreErrors: [
       ...IGNORED_ERRORS,
       /^AuthorizationError/i,
+      /^NotFoundError/i,
+      /HTTP Client Error with status code: 404/i,
+      /status code: 404/i,
       // AbortError patterns
       /^AbortError/i,
       /signal is aborted/i,
