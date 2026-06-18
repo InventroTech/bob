@@ -91,6 +91,7 @@ const AddUserComponent: React.FC = () => {
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [editManagerSearch, setEditManagerSearch] = useState('');
   const [showEditManagerDropdown, setShowEditManagerDropdown] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
   const managerDropdownRef = useRef<HTMLDivElement>(null);
   const editManagerDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -277,6 +278,18 @@ const AddUserComponent: React.FC = () => {
       }),
     [users, coreSettingsMap, availableLeadGroups]
   );
+
+  const filteredUsersWithSettings = useMemo(() => {
+    const term = userSearchTerm.toLowerCase().trim();
+    const validUsers = usersWithSettings.filter((user) => user.name && user.email);
+    if (!term) return validUsers;
+
+    return validUsers.filter(
+      (user) =>
+        user.name.toLowerCase().includes(term) ||
+        user.email.toLowerCase().includes(term)
+    );
+  }, [usersWithSettings, userSearchTerm]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -913,7 +926,18 @@ const AddUserComponent: React.FC = () => {
 
         {/* Users List */}
         <div className="space-y-4">
-          <h5 className="text-2xl font-semibold">Users</h5>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <h5 className="text-2xl font-semibold">Users</h5>
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={userSearchTerm}
+                onChange={(e) => setUserSearchTerm(e.target.value)}
+                placeholder="Search by name or email..."
+                className="h-11 pl-9"
+              />
+            </div>
+          </div>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
@@ -921,6 +945,10 @@ const AddUserComponent: React.FC = () => {
           ) : users.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               No users found
+            </div>
+          ) : filteredUsersWithSettings.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              No users match your search
             </div>
           ) : (
             <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
@@ -939,9 +967,7 @@ const AddUserComponent: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {usersWithSettings
-                    .filter(user => user.name && user.email) // Only show users with name and email
-                    .map((user, index) => (
+                  {filteredUsersWithSettings.map((user, index) => (
                       <TableRow key={`${user.uid}-${index}`}>
                         <TableCell className="text-body-medium">
                           {user.name}
