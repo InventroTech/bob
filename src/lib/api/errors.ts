@@ -125,6 +125,17 @@ export function isExpectedTicketSaveError(error: unknown): boolean {
   return isStaleTicketSaveError(error);
 }
 
+/** Stale carousel / refresh — record was resolved, deleted, or no longer visible to this user. */
+export function isExpectedTicketRecordNotFound(error: unknown): boolean {
+  if (error instanceof NotFoundError) {
+    return true;
+  }
+  if (error == null || typeof error !== 'object') return false;
+  const e = error as { name?: string; status?: number; response?: { status?: number } };
+  if (e.name === 'NotFoundError') return true;
+  return (e.response?.status ?? e.status) === 404;
+}
+
 export function formatTicketSaveErrorMessage(error: unknown): string {
   if (isStaleTicketSaveError(error)) {
     return 'This ticket is no longer available. Use “Get Tickets” to load a new one.';
