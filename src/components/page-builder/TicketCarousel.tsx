@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { convertGMTtoIST } from "@/lib/timeUtils";
 import { Badge } from "@/components/ui/badge";
+import { FaWhatsapp } from "react-icons/fa";
 import {
   Calendar,
   User,
@@ -23,6 +24,7 @@ import {
   Coffee,
   Waypoints,
   MoreVertical,
+  RefreshCw,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -49,6 +51,7 @@ import {
   isExpectedTicketSaveError,
   isStaleTicketSaveError,
 } from "@/lib/api/errors";
+import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
 
 
 interface Ticket {
@@ -223,15 +226,149 @@ function getJatraLink(ticket: Ticket | null | undefined): string | null {
   return null;
 }
 
+function getWhatsappLink(ticket: Ticket | null | undefined): string | undefined {
+  if (!ticket) return undefined;
+  const flat = flattenTicketFields(ticket);
+  const link = flat.whatsapp_link;
+  if (typeof link === "string" && link.trim()) {
+    return link.trim();
+  }
+  return undefined;
+}
+
+type TicketTaskProgressStep = {
+  id: string;
+  label: string;
+  status: "completed" | "current" | "pending";
+};
+
+function parseTicketTasks(raw: any): Array<{ id: string; label: string; statusText: string }> {
+  const flat = flattenTicketFields(raw);
+  const source = flat.tasks;
+  if (!source) return [];
+
+  let tasks: any[] = [];
+  if (Array.isArray(source)) {
+    tasks = source;
+  } else if (typeof source === "string") {
+    try {
+      const parsed = JSON.parse(source);
+      tasks = Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      tasks = source.split(",").map((task: string) => task.trim()).filter(Boolean);
+    }
+  } else if (typeof source === "object") {
+    tasks = Object.entries(source).map(([key, value]) => ({
+      id: key,
+      task: key,
+      title: key,
+      status: value,
+    }));
+  }
+
+  return tasks.map((task, index) => {
+    if (typeof task === "string") {
+      return { id: `task-${index}`, label: task, statusText: "" };
+    }
+    if (typeof task === "object" && task !== null) {
+      const statusValue = task.status ?? task.rawStatus;
+      const statusText =
+        statusValue === null || statusValue === undefined || statusValue === "Null"
+          ? ""
+          : String(statusValue);
+      const label = task.task || task.title || task.name || `Task ${index + 1}`;
+      return {
+        id: String(task.id ?? task.task ?? task.title ?? task.name ?? `task-${index}`),
+        label,
+        statusText,
+      };
+    }
+    return { id: `task-${index}`, label: `Task ${index + 1}`, statusText: "" };
+  });
+}
+
+function buildTaskProgressFromTasks(raw: any): TicketTaskProgressStep[] {
+  const rawSteps = parseTicketTasks(raw);
+  if (!rawSteps.length) return [];
+
+  let currentMarked = false;
+  const steps = rawSteps.map((step, index) => {
+    const normalizedStatus = step.statusText.toLowerCase().trim();
+    let status: TicketTaskProgressStep["status"] = "pending";
+
+    if (!normalizedStatus && index === 0) {
+      status = "current";
+      currentMarked = true;
+    } else if (
+      normalizedStatus.includes("done") ||
+      normalizedStatus.includes("yes") ||
+      normalizedStatus.includes("complete")
+    ) {
+      status = "completed";
+    } else if (
+      normalizedStatus.includes("current") ||
+      normalizedStatus.includes("progress") ||
+      normalizedStatus.includes("ongoing")
+    ) {
+      status = "current";
+      currentMarked = true;
+    }
+
+    return { id: step.id, label: step.label, status };
+  });
+
+  if (!currentMarked) {
+    const firstPendingIndex = steps.findIndex((step) => step.status === "pending");
+    if (firstPendingIndex >= 0) {
+      steps[firstPendingIndex].status = "current";
+    }
+  }
+
+  return steps;
+}
+
+function enrichTicketWithTaskProgress(ticket: any): any {
+  if (!ticket || typeof ticket !== "object") return ticket;
+  if (Array.isArray(ticket.task_progress) && ticket.task_progress.length > 0) {
+    return ticket;
+  }
+
+  const taskProgress = buildTaskProgressFromTasks(ticket);
+  if (!taskProgress.length) return ticket;
+
+  return { ...ticket, task_progress: taskProgress };
+}
+
+function mergeRefreshedTicket(prev: any, refreshed: any): any {
+  const merged = normalizeTicketFromApi({ ...prev, ...refreshed });
+  const hasExplicitTaskProgress =
+    Array.isArray(refreshed?.task_progress) && refreshed.task_progress.length > 0;
+
+  if (hasExplicitTaskProgress) {
+    return merged;
+  }
+
+  const rebuiltProgress = buildTaskProgressFromTasks(merged);
+  if (rebuiltProgress.length) {
+    return { ...merged, task_progress: rebuiltProgress };
+  }
+
+  if (Array.isArray(prev?.task_progress) && prev.task_progress.length > 0) {
+    return { ...merged, task_progress: prev.task_progress };
+  }
+
+  return merged;
+}
+
 function normalizeTicketFromApi(raw: any): any {
   if (!raw || typeof raw !== "object") return raw;
   const unwrapped = raw.ticket?.id != null ? raw.ticket : raw;
   const flat = flattenTicketFields(unwrapped);
   const jatraLink = getJatraLink(flat);
-  return {
+  return enrichTicketWithTaskProgress({
     ...flat,
     ...(jatraLink ? { Jatra_link: jatraLink } : {}),
-  };
+  });
 }
 
 function extractTicketFromApiResponse(ticketData: any): any | null {
@@ -251,6 +388,7 @@ interface TicketCarouselProps {
     statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
     title?: string;
+    whatsappTemplatesApiEndpoint?: string;
   };
   initialTicket?: any;
   onUpdate?: (updatedTicket: any) => void;
@@ -378,6 +516,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
+  const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
 
 
   useEffect(() => {
@@ -628,6 +769,106 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     return () => clearInterval(interval);
   }, [showPendingCard, fetchTicketStats]);
 
+  const fetchCurrentTicket = async () => {
+    const ticketId = Number(currentTicket?.id);
+    if (!Number.isFinite(ticketId) || !session?.access_token) {
+      return null;
+    }
+
+    try {
+      const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
+      return normalizeTicketFromApi(response.data);
+    } catch (error) {
+      console.error("Error fetching current ticket:", error);
+      return null;
+    }
+  };
+
+  const handleWhatsAppTicket = (phone?: string, link?: string) => {
+    setWhatsappPhone(phone || "");
+    setWhatsappLink(link);
+    setShowWhatsAppModal(true);
+  };
+
+  const handleTemplateSelected = (templateText: string | null) => {
+    let whatsappUrl: string;
+
+    if (whatsappLink) {
+      if (templateText) {
+        const separator = whatsappLink.includes("?") ? "&" : "?";
+        whatsappUrl = `${whatsappLink}${separator}text=${encodeURIComponent(templateText)}`;
+      } else {
+        whatsappUrl = whatsappLink;
+      }
+    } else {
+      const clean = getCleanPhoneNumber(whatsappPhone);
+      if (!clean) {
+        toast.error("Invalid phone number");
+        return;
+      }
+
+      if (templateText) {
+        whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(templateText)}`;
+      } else {
+        whatsappUrl = `https://wa.me/${clean}`;
+      }
+    }
+
+    const link = document.createElement("a");
+    link.href = whatsappUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCallTicket = (phone?: string) => {
+    if (!phone) return;
+    const dialLink = getPhoneDialLink(phone);
+    if (!dialLink) return;
+    window.open(dialLink);
+  };
+
+  const handleRefresh = async () => {
+    if (!currentTicket?.id) {
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      const refreshedTicket = await fetchCurrentTicket();
+
+      if (refreshedTicket) {
+        setCurrentTicket((prev) => mergeRefreshedTicket(prev, refreshedTicket));
+        setTicket((prev) => ({
+          ...prev,
+          resolutionStatus:
+            refreshedTicket.resolution_status === "Resolved"
+              ? "Resolved"
+              : refreshedTicket.resolution_status === "WIP"
+              ? "WIP"
+              : refreshedTicket.resolution_status === "Can't Resolve"
+              ? "Can't Resolve"
+              : "Pending",
+          callStatus:
+            refreshedTicket.call_status === "Connected"
+              ? "Connected"
+              : refreshedTicket.call_status === "Not Connected"
+              ? "Not Connected"
+              : prev.callStatus,
+          cseRemarks: refreshedTicket.cse_remarks || prev.cseRemarks,
+          selectedOtherReasons: parseOtherReasons(refreshedTicket.other_reasons),
+          reviewRequested: Boolean(refreshedTicket.review_requested),
+        }));
+      }
+    } catch (error) {
+      console.error("Error refreshing ticket:", error);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   //handling the other reason change
   const handleOtherReasonChange = (reason: string, checked: boolean) => {
     if (checked) {
@@ -850,7 +1091,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     currentTicket?.support_ticket_id ||
     currentTicket?.id;
   const jatraLink = getJatraLink(currentTicket);
-  const phoneDialLink = currentTicket?.phone ? getPhoneDialLink(currentTicket.phone) : "";
+  const primaryPhone = currentTicket?.phone || "";
+  const ticketWhatsappLink = getWhatsappLink(currentTicket);
+  const formattedPhoneNumber = formatPhoneNumber(primaryPhone);
 
   const openJatraLink = (event?: React.MouseEvent) => {
     event?.preventDefault();
@@ -976,28 +1219,35 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                 userProfile
               )}
             </div>
-            {phoneDialLink ? (
-              <a
-                href={phoneDialLink}
-                className={cn(
-                  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D2939] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#111827]",
-                  updating && "pointer-events-none opacity-50"
-                )}
-                aria-disabled={updating}
+            <div className="flex flex-wrap items-center gap-3">
+              <CustomButton
+                type="button"
+                variant="outline"
+                icon={<RefreshCw className="h-4 w-4 text-gray-500" />}
+                className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
+                onClick={handleRefresh}
+                disabled={updating || !currentTicket}
+              />
+              <CustomButton
+                type="button"
+                variant="outline"
+                icon={<FaWhatsapp className="h-4 w-4 text-[#344054]" />}
+                className="rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                onClick={() => handleWhatsAppTicket(primaryPhone, ticketWhatsappLink)}
+                disabled={!primaryPhone || updating || fetchingNext}
               >
-                <Phone className="h-4 w-4" />
-                {formatPhoneNumber(currentTicket?.phone) || "N/A"}
-              </a>
-            ) : (
+                WhatsApp
+              </CustomButton>
               <CustomButton
                 type="button"
                 icon={<Phone className="h-4 w-4" />}
-                className="rounded-xl bg-[#1D2939] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
-                disabled
+                className="rounded-xl bg-[#1D2939] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111827]"
+                onClick={() => handleCallTicket(primaryPhone)}
+                disabled={!primaryPhone || updating || fetchingNext}
               >
-                N/A
+                {formattedPhoneNumber || "N/A"}
               </CustomButton>
-            )}
+            </div>
           </div>
 
           <div
@@ -1178,6 +1428,16 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           </CustomButton>
         </div>
       )}
+
+      <WhatsAppTemplateModal
+        open={showWhatsAppModal}
+        onOpenChange={setShowWhatsAppModal}
+        phone={whatsappPhone}
+        whatsappLink={whatsappLink}
+        apiEndpoint={config?.whatsappTemplatesApiEndpoint}
+        apiPrefix={config?.apiPrefix || "renderer"}
+        onSelectTemplate={handleTemplateSelected}
+      />
     </div>
   );
 };

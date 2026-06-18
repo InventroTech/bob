@@ -6,7 +6,8 @@ interface TicketCarouselWrapperProps {
     apiEndpoint?: string;
     statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
-    title?: string; 
+    title?: string;
+    whatsappTemplatesApiEndpoint?: string;
   };
 }
 
