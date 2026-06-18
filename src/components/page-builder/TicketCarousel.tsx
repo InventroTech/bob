@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import {
   formatTicketSaveErrorMessage,
+  isExpectedTicketRecordNotFound,
   isExpectedTicketSaveError,
   isStaleTicketSaveError,
 } from "@/lib/api/errors";
@@ -779,7 +780,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
       return normalizeTicketFromApi(response.data);
     } catch (error) {
-      console.error("Error fetching current ticket:", error);
+      if (!isExpectedTicketRecordNotFound(error)) {
+        console.error("Error fetching current ticket:", error);
+      }
       return null;
     }
   };
@@ -863,7 +866,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         }));
       }
     } catch (error) {
-      console.error("Error refreshing ticket:", error);
+      if (!isExpectedTicketRecordNotFound(error)) {
+        console.error("Error refreshing ticket:", error);
+      }
     } finally {
       setUpdating(false);
     }

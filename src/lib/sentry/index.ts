@@ -7,7 +7,13 @@ import * as Sentry from "@sentry/react";
 import { SentrySpanProcessor, SentrySampler } from "@sentry/opentelemetry";
 import { browserTracingIntegration, replayIntegration } from "@sentry/react";
 import type { SentryConfig } from "./config";
-import { AuthorizationError, ValidationError, isExpectedTicketSaveError } from "@/lib/api/errors";
+import {
+  AuthorizationError,
+  NotFoundError,
+  ValidationError,
+  isExpectedTicketRecordNotFound,
+  isExpectedTicketSaveError,
+} from "@/lib/api/errors";
 
 /**
  * Common errors that should be ignored (not actionable)
@@ -65,6 +71,13 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
   }
 
   if (
+    hint.originalException instanceof NotFoundError ||
+    isExpectedTicketRecordNotFound(hint.originalException)
+  ) {
+    return null;
+  }
+
+  if (
     hint.originalException instanceof ValidationError &&
     isExpectedTicketSaveError(hint.originalException)
   ) {
@@ -111,6 +124,10 @@ const sanitizeEvent = (event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry
 
   // Console / HTTP integrations sometimes stringify as "HTTP Client Error with status code: 403"
   if (event.exception?.values?.[0]?.value?.includes('status code: 403')) {
+    return null;
+  }
+
+  if (event.exception?.values?.[0]?.value?.includes('status code: 404')) {
     return null;
   }
 
@@ -171,10 +188,10 @@ export function initSentry(config: SentryConfig): void {
       levels: ['error'], // Only capture console.error, not warnings/info
     }),
     Sentry.httpClientIntegration({
-      // Omit 403: expected when session is stale or user lacks tenant permission (noisy in Sentry)
+      // Omit 403/404: stale session, missing permission, or record already gone (carousel refresh)
       failedRequestStatusCodes: [
         [400, 402],
-        [404, 599],
+        [405, 599],
       ],
       failedRequestTargets: [/.*/],
     }),
