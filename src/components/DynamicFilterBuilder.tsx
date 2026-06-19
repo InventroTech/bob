@@ -125,22 +125,47 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-60 p-0" align="start">
-              <div className="p-3 border-b">
-                <Label className="text-sm font-medium">Select {filter.label}</Label>
-                <Input
-                  value={selectSearchTerms[filter.key] ?? ''}
-                  onChange={(e) =>
-                    setSelectSearchTerms((prev) => ({
-                      ...prev,
-                      [filter.key]: e.target.value,
-                    }))
-                  }
-                  placeholder="Search options..."
-                  className="mt-2 h-8 text-xs"
-                />
-              </div>
-              <div className="max-h-60 overflow-y-auto p-1">
+            <PopoverContent className="w-[355px] p-0" align="start">
+            <div className="px-1 py-3 border-b">
+    <Label className="text-sm font-medium">Select {filter.label}</Label>
+    <Input
+      value={selectSearchTerms[filter.key] ?? ''}
+      onChange={(e) =>
+        setSelectSearchTerms((prev) => ({
+          ...prev,
+          [filter.key]: e.target.value,
+        }))
+      }
+      placeholder="Search options..."
+      className="mt-2 h-8 text-sm w-full"
+    />
+  </div>
+
+  {/* ADD THIS BLOCK */}
+  <div className="flex items-center justify-between px-3 py-2 border-b">
+    <button
+      type="button"
+      className="text-xs text-blue-600"
+      onClick={() =>
+        handleFilterChange(
+          filter.key,
+          filteredOptions.map((option) => option.value)
+        )
+      }
+    >
+      Select all matching ({filteredOptions.length})
+    </button>
+
+    <button
+      type="button"
+      className="text-xs text-red-600"
+      onClick={() => handleFilterChange(filter.key, [])}
+    >
+      Clear matching
+    </button>
+  </div>
+
+  <div className="max-h-60 overflow-y-auto p-1">
                 {filteredOptions.map((option) => {
                   const isSelected = Array.isArray(value) ? value.includes(option.value) : value === option.value;
                   return (
