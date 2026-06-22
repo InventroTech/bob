@@ -1096,7 +1096,10 @@ const AddUserComponent: React.FC = () => {
                           ) : user.managerEmail}
                         </TableCell>
                         <TableCell>
-                          {format(new Date(user.created_at), 'MMM d, yyyy h:mm a')}
+                        {format(
+  new Date(new Date(user.created_at).getTime() + 5.5 * 60 * 60 * 1000),
+  'MMM d, yyyy h:mm a'
+)}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="inline-flex items-center justify-end gap-2">
