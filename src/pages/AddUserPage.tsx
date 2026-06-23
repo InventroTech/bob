@@ -53,6 +53,7 @@ const AddUserPage = () => {
   const [formData, setFormData] = useState({ name: '', email: '', department: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Extract tenant ID from JWT token
   useEffect(() => {
@@ -480,7 +481,17 @@ const AddUserPage = () => {
         </div>
 
         <div className="mt-8">
-          <h5>Users</h5>
+  <div className="flex items-center justify-between mb-4">
+    <h5 className="mb-0">Users</h5>
+
+    <Input
+      type="text"
+      placeholder="Search users..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      className="w-80"
+    />
+  </div>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
@@ -503,9 +514,20 @@ const AddUserPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users
-                    .filter(user => user.name && user.email) // Only show users with name and email
-                    .map((user, index) => (
+                {users
+  .filter((user) => {
+    if (!user.name || !user.email) return false;
+
+    const search = searchTerm.toLowerCase().trim();
+
+    return (
+      user.name.toLowerCase().includes(search) ||
+      user.email.toLowerCase().includes(search) ||
+      (user.department || '').toLowerCase().includes(search) ||
+      (user.role?.name || '').toLowerCase().includes(search)
+    );
+  })
+  .map((user, index) => (
                       <TableRow key={`${user.uid}-${index}`}>
                         <TableCell className="font-medium">{user.name}</TableCell>
                         <TableCell>{user.email}</TableCell>
