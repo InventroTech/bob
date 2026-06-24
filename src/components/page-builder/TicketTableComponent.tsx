@@ -7,7 +7,7 @@ import ShortProfileCard from '../ui/ShortProfileCard';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { TicketCarousel } from './TicketCarousel';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { X, Filter, Calendar, Clock, Search } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,20 @@ import { buildActionApiRequest } from '@/lib/actionApiUtils';
 
 // Use renderer API for ticket search
 const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
+
+function transformTicketForCarousel(row: any) {
+  return {
+    ...row,
+    id: row.record_id ?? row.id ?? row.support_ticket_id,
+    record_id: row.record_id ?? row.id ?? row.support_ticket_id,
+    support_ticket_id: row.support_ticket_id ?? row.id,
+    support_ticket_type: row.support_ticket_type ?? row.poster ?? null,
+    phone: row.phone ?? row.phone_number ?? row.mobile ?? "",
+    poster: row.poster && row.poster !== "No Poster" ? row.poster : row.support_ticket_type ?? row.poster,
+    resolution_status:
+      row.resolution_status === "Open" ? "Pending" : row.resolution_status,
+  };
+}
 
 interface Column {
   header: string;
@@ -927,7 +941,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
 
   // Memoized row click handler
   const handleRowClick = useCallback((row: any) => {
-    setSelectedTicket(row);
+    setSelectedTicket(transformTicketForCarousel(row));
     setIsTicketModalOpen(true);
   }, []);
 
@@ -935,7 +949,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
   const handleActionClick = useCallback(async (row: any, col: Column) => {
     const openCard = col.openCard === true || col.openCard === 'true';
     if (openCard) {
-      setSelectedTicket(row);
+      setSelectedTicket(transformTicketForCarousel(row));
       setIsTicketModalOpen(true);
     }
     if (col.actionApiEndpoint?.trim()) {
@@ -2037,18 +2051,35 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
       </div>
 
       {/* Ticket Modal */}
-      <Dialog open={isTicketModalOpen} onOpenChange={setIsTicketModalOpen}>
-        <DialogContent className="font-body max-w-3xl max-h-[85vh] overflow-y-auto p-6">
-          <DialogHeader className="pb-4">
-            <DialogTitle className="text-lg font-semibold text-foreground">Ticket Details</DialogTitle>
+      <Dialog
+        open={isTicketModalOpen}
+        onOpenChange={(open) => {
+          setIsTicketModalOpen(open);
+          if (!open) {
+            setSelectedTicket(null);
+          }
+        }}
+      >
+        <DialogContent className="font-body max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>
+              {selectedTicket?.name
+                ? `Ticket - ${selectedTicket.name}`
+                : `Ticket #${selectedTicket?.id ?? ""}`}
+            </DialogTitle>
+            <DialogDescription>View and manage support ticket details</DialogDescription>
           </DialogHeader>
           {selectedTicket && (
-            <div className="mt-2 -mx-2">
-              <TicketCarousel 
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
+              <TicketCarousel
+                key={selectedTicket.record_id ?? selectedTicket.id ?? selectedTicket.support_ticket_id}
                 config={{
-                  title: `Ticket #${selectedTicket.id}`
+                  apiPrefix: config?.apiPrefix || "renderer",
+                  title: `Ticket #${selectedTicket.support_ticket_id ?? selectedTicket.id}`,
+                  whatsappTemplatesApiEndpoint: (config as any)?.whatsappTemplatesApiEndpoint,
                 }}
                 initialTicket={selectedTicket}
+                isInModal
                 onUpdate={handleTicketUpdate}
               />
             </div>

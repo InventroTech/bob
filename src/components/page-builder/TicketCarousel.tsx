@@ -383,6 +383,15 @@ function extractTicketFromApiResponse(ticketData: any): any | null {
   return null;
 }
 
+function resolveTicketRecordId(ticket: { id?: unknown; record_id?: unknown; support_ticket_id?: unknown } | null | undefined): number | null {
+  if (!ticket) return null;
+  for (const candidate of [ticket.record_id, ticket.id, ticket.support_ticket_id]) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 interface TicketCarouselProps {
   config?: {
     apiEndpoint?: string;
@@ -393,12 +402,14 @@ interface TicketCarouselProps {
   };
   initialTicket?: any;
   onUpdate?: (updatedTicket: any) => void;
+  isInModal?: boolean;
 }
 
 export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   config,
   initialTicket,
   onUpdate,
+  isInModal = false,
 }) => {
   const { user, session } = useAuth();
 
@@ -436,6 +447,30 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
+  const buildTicketFormState = (ticketSource: any): {
+    resolutionStatus: "WIP" | "Resolved" | "Can't Resolve" | "Pending";
+    callStatus: "Connected" | "Not Connected";
+    cseRemarks: string;
+    selectedOtherReasons: string[];
+  } => ({
+    resolutionStatus:
+      ticketSource.resolution_status === "Resolved"
+        ? "Resolved"
+        : ticketSource.resolution_status === "WIP"
+        ? "WIP"
+        : ticketSource.resolution_status === "Can't Resolve"
+        ? "Can't Resolve"
+        : "Pending",
+    callStatus:
+      ticketSource.call_status === "Connected"
+        ? "Connected"
+        : ticketSource.call_status === "Not Connected"
+        ? "Not Connected"
+        : "Connected",
+    cseRemarks: ticketSource.cse_remarks || "",
+    selectedOtherReasons: parseOtherReasons(ticketSource.other_reasons),
+  });
+
   //getting the initial state from the initial ticket
   const getInitialState = () => {
     if (initialTicket) {
@@ -443,22 +478,18 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       return {
         currentTicket: normalizedTicket,
         showPendingCard: false,
-        resolutionStatus:
-          initialTicket.resolution_status === "Resolved"
-            ? "Resolved"
-            : initialTicket.resolution_status === "WIP"
-            ? "WIP"
-            : initialTicket.resolution_status === "Can't Resolve"
-            ? "Can't Resolve"
-            : "Pending",
-        callStatus:
-          initialTicket.call_status === "Connected"
-            ? "Connected"
-            : initialTicket.call_status === "Not Connected"
-            ? "Not Connected"
-            : "Connected",
-        cseRemarks: initialTicket.cse_remarks || "",
-        selectedOtherReasons: parseOtherReasons(initialTicket.other_reasons),
+        ...buildTicketFormState(initialTicket),
+      };
+    }
+
+    if (isInModal) {
+      return {
+        currentTicket: null,
+        showPendingCard: true,
+        resolutionStatus: "Pending" as const,
+        callStatus: "Connected" as const,
+        cseRemarks: "",
+        selectedOtherReasons: [],
       };
     }
 
@@ -522,6 +553,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
 
   const abandonStaleTicket = useCallback(() => {
+    if (isInModal) return;
     clearPersistedState();
     setCurrentTicket(null);
     setShowPendingCard(true);
@@ -533,33 +565,80 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       ticketStartTime: null,
       reviewRequested: false,
     });
-  }, []);
+  }, [isInModal]);
 
-  useEffect(() => {
-    if (isInitialized.current) {
-      persistState({
-        currentTicket,
-        showPendingCard,
-        resolutionStatus: ticket.resolutionStatus,
-        callStatus: ticket.callStatus,
-        cseRemarks: ticket.cseRemarks,
-        selectedOtherReasons: ticket.selectedOtherReasons,
-      });
+  const lastFetchedTicketIdRef = React.useRef<number | null>(null);
+
+  const fetchFreshTicketForCard = useCallback(async (ticketId: number) => {
+    if (!session?.access_token) return;
+    try {
+      const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
+      const normalized = normalizeTicketFromApi(response.data);
+      setCurrentTicket(normalized);
+      setShowPendingCard(false);
+      setTicket((prev) => ({
+        ...prev,
+        ...buildTicketFormState(normalized),
+        ticketStartTime: prev.ticketStartTime ?? new Date(),
+        reviewRequested: Boolean(normalized.review_requested),
+      }));
+    } catch (error) {
+      if (!isExpectedTicketRecordNotFound(error)) {
+        console.warn("[TicketCarousel] Failed to fetch fresh ticket by ID:", error);
+      }
     }
-  }, [currentTicket, showPendingCard, ticket.resolutionStatus, ticket.callStatus, ticket.cseRemarks, ticket.selectedOtherReasons]);
+  }, [session?.access_token]);
 
   useEffect(() => {
-    if (initialTicket || !currentTicket?.id || showPendingCard) return;
+    if (!initialTicket) {
+      lastFetchedTicketIdRef.current = null;
+      return;
+    }
+
+    const normalizedTicket = normalizeTicketFromApi(initialTicket);
+    const ticketId = resolveTicketRecordId(normalizedTicket);
+    const isNewTicket =
+      ticketId != null && lastFetchedTicketIdRef.current !== ticketId;
+
+    setCurrentTicket(normalizedTicket);
+    setShowPendingCard(false);
+    setTicket((prev) => ({
+      ...prev,
+      ...buildTicketFormState(initialTicket),
+      ticketStartTime: prev.ticketStartTime ?? new Date(),
+      reviewRequested: Boolean(initialTicket.review_requested),
+    }));
+
+    if (isInModal && ticketId != null && isNewTicket) {
+      lastFetchedTicketIdRef.current = ticketId;
+      void fetchFreshTicketForCard(ticketId);
+    }
+  }, [initialTicket, isInModal, fetchFreshTicketForCard]);
+
+  useEffect(() => {
+    if (isInModal || !isInitialized.current) return;
+    persistState({
+      currentTicket,
+      showPendingCard,
+      resolutionStatus: ticket.resolutionStatus,
+      callStatus: ticket.callStatus,
+      cseRemarks: ticket.cseRemarks,
+      selectedOtherReasons: ticket.selectedOtherReasons,
+    });
+  }, [currentTicket, showPendingCard, ticket.resolutionStatus, ticket.callStatus, ticket.cseRemarks, ticket.selectedOtherReasons, isInModal]);
+
+  useEffect(() => {
+    if (isInModal || initialTicket || !currentTicket?.id || showPendingCard) return;
     setTicket((prev) => ({
       ...prev,
       ticketStartTime: prev.ticketStartTime ?? new Date(),
     }));
     isInitialized.current = true;
-  }, [initialTicket, currentTicket?.id, showPendingCard]);
+  }, [isInModal, initialTicket, currentTicket?.id, showPendingCard]);
 
   useEffect(() => {
-    const ticketId = Number(currentTicket?.id);
-    if (!Number.isFinite(ticketId) || getJatraLink(currentTicket) || !session?.access_token) {
+    const ticketId = resolveTicketRecordId(currentTicket);
+    if (ticketId == null || getJatraLink(currentTicket) || !session?.access_token) {
       return;
     }
 
@@ -572,10 +651,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         const link = getJatraLink(hydrated);
         if (!link) return;
         setCurrentTicket((prev: any) =>
-          prev?.id === ticketId ? normalizeTicketFromApi({ ...prev, ...hydrated }) : prev
+          resolveTicketRecordId(prev) === ticketId
+            ? normalizeTicketFromApi({ ...prev, ...hydrated })
+            : prev
         );
       } catch (error) {
-        if (isExpectedTicketRecordNotFound(error)) {
+        if (!isInModal && isExpectedTicketRecordNotFound(error)) {
           if (!cancelled) {
             abandonStaleTicket();
           }
@@ -588,12 +669,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [currentTicket?.id, session?.access_token, abandonStaleTicket]);
+  }, [currentTicket, session?.access_token, abandonStaleTicket, isInModal]);
 
   // Drop session-persisted ticket if the CRM record no longer exists (prevents repeat 404s).
   useEffect(() => {
-    const ticketId = Number(currentTicket?.id);
-    if (!Number.isFinite(ticketId) || !session?.access_token || showPendingCard) {
+    if (isInModal) return;
+
+    const ticketId = resolveTicketRecordId(currentTicket);
+    if (ticketId == null || !session?.access_token || showPendingCard) {
       return;
     }
 
@@ -611,7 +694,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [session?.access_token, showPendingCard, currentTicket?.id, abandonStaleTicket]);
+  }, [session?.access_token, showPendingCard, currentTicket, abandonStaleTicket, isInModal]);
 
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
@@ -678,6 +761,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   };
 
   const resetToPendingQueue = async (toastMessage?: string) => {
+    if (isInModal) {
+      if (toastMessage) {
+        toast.info(toastMessage);
+      }
+      return;
+    }
     setShowPendingCard(true);
     setCurrentTicket(null);
     resetTicketState();
@@ -813,8 +902,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   }, [showPendingCard, fetchTicketStats]);
 
   const fetchCurrentTicket = async () => {
-    const ticketId = Number(currentTicket?.id);
-    if (!Number.isFinite(ticketId) || !session?.access_token) {
+    const ticketId = resolveTicketRecordId(currentTicket);
+    if (ticketId == null || !session?.access_token) {
       return null;
     }
 
@@ -886,8 +975,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       const refreshedTicket = await fetchCurrentTicket();
 
       if (refreshedTicket === "NOT_FOUND") {
-        abandonStaleTicket();
-        toast.info("This ticket is no longer available. Use Get Tickets to load a new one.");
+        if (isInModal) {
+          toast.info("This ticket is no longer available.");
+        } else {
+          abandonStaleTicket();
+          toast.info("This ticket is no longer available. Use Get Tickets to load a new one.");
+        }
         return;
       }
 
@@ -941,8 +1034,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   //handling the action buttons
   const handleActionButton = async (action: "Not Connected" | "Can't Resolve" | "Call Later" | "Resolve") => {
     try {
-      const ticketId = Number(currentTicket?.id);
-      if (!Number.isFinite(ticketId)) {
+      const ticketId = resolveTicketRecordId(currentTicket);
+      if (ticketId == null) {
         toast.error("No ticket ID available");
         await resetToPendingQueue();
         return;
@@ -1008,6 +1101,19 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       }
 
       await apiClient.post(endpoint, payload);
+
+      if (isInModal && onUpdate) {
+        onUpdate(
+          normalizeTicketFromApi({
+            ...currentTicket,
+            resolution_status: resolutionStatus,
+            call_status: callStatus,
+            cse_remarks: ticket.cseRemarks,
+            other_reasons: ticket.selectedOtherReasons,
+          })
+        );
+        return;
+      }
 
       await fetchNextTicket(ticketId);
 
@@ -1138,7 +1244,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       })
     : "N/A";
 
-  const isCompact = !!initialTicket;
+  const isCompact = !!initialTicket && !isInModal;
   const supportTicketType = getSupportTicketType(currentTicket);
   const posterInfo = supportTicketType ? formatPosterStatus(supportTicketType) : null;
   const displayTicketId =
@@ -1356,10 +1462,18 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-80 p-4" align="start">
+                    <PopoverContent
+                      portalled={!isInModal}
+                      className={cn("w-80 p-4", isInModal && "z-[100]")}
+                      align="start"
+                      onWheel={(event) => event.stopPropagation()}
+                    >
                       <div className="space-y-3">
                         <h4 className="font-medium">Select Other Reasons</h4>
-                        <div className="max-h-60 space-y-2 overflow-y-auto">
+                        <div
+                          className="max-h-60 space-y-2 overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
+                          onWheel={(event) => event.stopPropagation()}
+                        >
                           {OTHER_REASONS_OPTIONS.map((reason) => (
                             <div key={reason} className="flex items-center space-x-2">
                               <Checkbox
