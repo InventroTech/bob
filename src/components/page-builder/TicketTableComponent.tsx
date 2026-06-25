@@ -26,6 +26,15 @@ import { buildActionApiRequest } from '@/lib/actionApiUtils';
 const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
 
 function transformTicketForCarousel(row: any) {
+  const nestedData =
+    row?.data && typeof row.data === "object" && !Array.isArray(row.data) ? row.data : null;
+  const userInput =
+    row.user_input ??
+    row.userInput ??
+    nestedData?.user_input ??
+    nestedData?.userInput ??
+    null;
+
   return {
     ...row,
     id: row.record_id ?? row.id ?? row.support_ticket_id,
@@ -36,6 +45,7 @@ function transformTicketForCarousel(row: any) {
     poster: row.poster && row.poster !== "No Poster" ? row.poster : row.support_ticket_type ?? row.poster,
     resolution_status:
       row.resolution_status === "Open" ? "Pending" : row.resolution_status,
+    ...(userInput ? { user_input: userInput } : {}),
   };
 }
 
