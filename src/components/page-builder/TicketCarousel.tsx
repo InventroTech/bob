@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -25,6 +25,8 @@ import {
   Waypoints,
   MoreVertical,
   RefreshCw,
+  Play,
+  Pause,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -90,6 +92,7 @@ interface Ticket {
   snooze_until: string | null;
   praja_dashboard_user_link: string | null;
   display_pic_url: string | null;
+  user_input?: string | null;
 }
 
 const OTHER_REASONS_OPTIONS = [
@@ -208,11 +211,15 @@ function getSupportTicketType(ticket: Ticket | null | undefined): string | null 
 
 function flattenTicketFields(raw: any): any {
   if (!raw || typeof raw !== "object") return raw;
-  const nested =
-    raw.data && typeof raw.data === "object" && !Array.isArray(raw.data)
-      ? raw.data
-      : {};
-  return { ...nested, ...raw };
+
+  let current: Record<string, unknown> = { ...raw };
+  for (let depth = 0; depth < 3; depth++) {
+    const nested = current.data;
+    if (!nested || typeof nested !== "object" || Array.isArray(nested)) break;
+    const { data: _drop, ...rest } = current;
+    current = { ...(nested as Record<string, unknown>), ...rest };
+  }
+  return current;
 }
 
 function getJatraLink(ticket: Ticket | null | undefined): string | null {
@@ -235,6 +242,158 @@ function getWhatsappLink(ticket: Ticket | null | undefined): string | undefined 
     return link.trim();
   }
   return undefined;
+}
+
+function getRawUserInput(ticket: Ticket | null | undefined): string | null {
+  if (!ticket) return null;
+  const flat = flattenTicketFields(ticket);
+  const candidates = [flat.user_input, flat.userInput];
+  for (const userInput of candidates) {
+    if (typeof userInput === "string" && userInput.trim()) {
+      return userInput.trim();
+    }
+  }
+  return null;
+}
+
+const USER_INPUT_URL_PATTERN = /https?:\/\/[^\s,]+/i;
+
+function parseUserInput(raw: string): { values: string[]; audioUrl: string | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { values: [], audioUrl: null };
+
+  const urlMatch = trimmed.match(USER_INPUT_URL_PATTERN);
+  const audioUrl = urlMatch?.[0]?.replace(/[.,;]+$/, "") ?? null;
+
+  const textPart = urlMatch
+    ? trimmed.replace(urlMatch[0], "").replace(/^[\s,]+|[\s,]+$/g, "").trim()
+    : trimmed;
+
+  const values = textPart
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return { values, audioUrl };
+}
+
+function getParsedUserInput(
+  ticket: Ticket | null | undefined
+): { raw: string; values: string[]; audioUrl: string | null } | null {
+  const raw = getRawUserInput(ticket);
+  if (!raw) return null;
+  return { raw, ...parseUserInput(raw) };
+}
+
+function getUserInputAudioUrl(ticket: Ticket | null | undefined): string | null {
+  const raw = getRawUserInput(ticket);
+  if (!raw) return null;
+  return parseUserInput(raw).audioUrl;
+}
+
+function UserInputDisplay({
+  values,
+  audioUrl,
+}: {
+  values: string[];
+  audioUrl: string | null;
+}) {
+  if (!values.length && !audioUrl) return null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {values.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((value, index) => (
+            <Badge
+              key={`${value}-${index}`}
+              variant="secondary"
+              className="text-xs font-medium"
+            >
+              {value}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+      {audioUrl ? <UserInputAudioPlayer url={audioUrl} /> : null}
+    </div>
+  );
+}
+
+function UserInputAudioPlayer({ url }: { url: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handlePlay = () => {
+      setPlaying(true);
+      setLoading(false);
+    };
+    const handlePause = () => setPlaying(false);
+    const handleEnded = () => setPlaying(false);
+    const handleWaiting = () => setLoading(true);
+    const handleCanPlay = () => setLoading(false);
+
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("waiting", handleWaiting);
+    audio.addEventListener("canplay", handleCanPlay);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("waiting", handleWaiting);
+      audio.removeEventListener("canplay", handleCanPlay);
+    };
+  }, [url]);
+
+  const togglePlayback = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    try {
+      if (playing) {
+        audio.pause();
+      } else {
+        setLoading(true);
+        await audio.play();
+      }
+    } catch {
+      setLoading(false);
+      setPlaying(false);
+      toast.error("Unable to play audio");
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <audio ref={audioRef} src={url} preload="metadata" />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 rounded-lg border-violet-200 bg-white px-3 text-violet-700 hover:bg-violet-100"
+        onClick={() => void togglePlayback()}
+        disabled={loading && !playing}
+      >
+        {loading && !playing ? (
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+        ) : playing ? (
+          <Pause className="mr-1.5 h-3.5 w-3.5" />
+        ) : (
+          <Play className="mr-1.5 h-3.5 w-3.5" />
+        )}
+        {playing ? "Pause" : "Play"} voice message
+      </Button>
+    </div>
+  );
 }
 
 type TicketTaskProgressStep = {
@@ -342,33 +501,44 @@ function enrichTicketWithTaskProgress(ticket: any): any {
 
 function mergeRefreshedTicket(prev: any, refreshed: any): any {
   const merged = normalizeTicketFromApi({ ...prev, ...refreshed });
+  const userInput = getRawUserInput(merged) ?? getRawUserInput(prev);
   const hasExplicitTaskProgress =
     Array.isArray(refreshed?.task_progress) && refreshed.task_progress.length > 0;
 
+  const result =
+    userInput != null ? { ...merged, user_input: userInput } : merged;
+
   if (hasExplicitTaskProgress) {
-    return merged;
+    return result;
   }
 
-  const rebuiltProgress = buildTaskProgressFromTasks(merged);
+  const rebuiltProgress = buildTaskProgressFromTasks(result);
   if (rebuiltProgress.length) {
-    return { ...merged, task_progress: rebuiltProgress };
+    return { ...result, task_progress: rebuiltProgress };
   }
 
   if (Array.isArray(prev?.task_progress) && prev.task_progress.length > 0) {
-    return { ...merged, task_progress: prev.task_progress };
+    return { ...result, task_progress: prev.task_progress };
   }
 
-  return merged;
+  return result;
 }
 
 function normalizeTicketFromApi(raw: any): any {
   if (!raw || typeof raw !== "object") return raw;
-  const unwrapped = raw.ticket?.id != null ? raw.ticket : raw;
+  const unwrapped =
+    raw.ticket?.id != null
+      ? raw.ticket
+      : raw.data?.id != null
+      ? raw.data
+      : raw;
   const flat = flattenTicketFields(unwrapped);
   const jatraLink = getJatraLink(flat);
+  const userInput = getRawUserInput(flat);
   return enrichTicketWithTaskProgress({
     ...flat,
     ...(jatraLink ? { Jatra_link: jatraLink } : {}),
+    ...(userInput ? { user_input: userInput } : {}),
   });
 }
 
@@ -574,7 +744,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     try {
       const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
       const normalized = normalizeTicketFromApi(response.data);
-      setCurrentTicket(normalized);
+      setCurrentTicket((prev) => mergeRefreshedTicket(prev, normalized));
       setShowPendingCard(false);
       setTicket((prev) => ({
         ...prev,
@@ -638,7 +808,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   useEffect(() => {
     const ticketId = resolveTicketRecordId(currentTicket);
-    if (ticketId == null || getJatraLink(currentTicket) || !session?.access_token) {
+    const hasJatra = Boolean(getJatraLink(currentTicket));
+    const hasUserInput = Boolean(getRawUserInput(currentTicket));
+    if (ticketId == null || (hasJatra && hasUserInput) || !session?.access_token) {
       return;
     }
 
@@ -649,10 +821,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         if (cancelled) return;
         const hydrated = normalizeTicketFromApi(response.data);
         const link = getJatraLink(hydrated);
-        if (!link) return;
+        const userInput = getRawUserInput(hydrated);
+        if (!link && !userInput) return;
         setCurrentTicket((prev: any) =>
           resolveTicketRecordId(prev) === ticketId
-            ? normalizeTicketFromApi({ ...prev, ...hydrated })
+            ? mergeRefreshedTicket(prev, hydrated)
             : prev
         );
       } catch (error) {
@@ -662,7 +835,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
           }
           return;
         }
-        console.warn("[TicketCarousel] Failed to hydrate Jatra link:", error);
+        console.warn("[TicketCarousel] Failed to hydrate ticket fields:", error);
       }
     })();
 
@@ -1254,6 +1427,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const jatraLink = getJatraLink(currentTicket);
   const primaryPhone = currentTicket?.phone || "";
   const ticketWhatsappLink = getWhatsappLink(currentTicket);
+  const parsedUserInput = getParsedUserInput(currentTicket);
   const formattedPhoneNumber = formatPhoneNumber(primaryPhone);
 
   const openJatraLink = (event?: React.MouseEvent) => {
@@ -1429,6 +1603,12 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                     <p className="text-sm text-slate-600">
                       {currentTicket?.source || "N/A"}
                     </p>
+                    {parsedUserInput ? (
+                      <UserInputDisplay
+                        values={parsedUserInput.values}
+                        audioUrl={parsedUserInput.audioUrl}
+                      />
+                    ) : null}
                   </div>
                   <span className="shrink-0 text-xs font-medium text-slate-500">
                     {formattedTicketDate}
