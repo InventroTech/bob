@@ -505,7 +505,7 @@ function mergeRefreshedTicket(prev: any, refreshed: any): any {
   const hasExplicitTaskProgress =
     Array.isArray(refreshed?.task_progress) && refreshed.task_progress.length > 0;
 
-  let result =
+  const result =
     userInput != null ? { ...merged, user_input: userInput } : merged;
 
   if (hasExplicitTaskProgress) {
