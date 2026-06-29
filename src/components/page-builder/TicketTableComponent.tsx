@@ -652,7 +652,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         // Use reason field
         reason: ticket.reason || ticket.Description || 'No reason provided',
         // Use resolution_status with proper formatting
-        resolution_status: ticket.resolution_status || ticket.status || 'Open',
+        resolution_status: ticket.resolution_status || ticket.status || 'OPEN',
         // Use poster field directly
         poster: ticket.poster || 'No Poster',
         // Generate Praja dashboard user link
@@ -1240,7 +1240,7 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           ? `${ticket.first_name} ${ticket.last_name}`
           : ticket.name || 'N/A',
         reason: ticket.reason || ticket.Description || 'No reason provided',
-        resolution_status: ticket.resolution_status || ticket.status || 'Open',
+        resolution_status: ticket.resolution_status || ticket.status || 'OPEN',
         poster: ticket.poster || 'No Poster',
         praja_dashboard_user_link: ticket.praja_user_id 
           ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
