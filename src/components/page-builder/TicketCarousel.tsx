@@ -67,6 +67,7 @@ interface Ticket {
   source: string;
   subscription_status: string | null;
   atleast_paid_once: boolean | null;
+  has_given_referral?: boolean | null;
   reason: string;
   other_reasons: string[] | string | null;
   badge: string | null;
@@ -207,6 +208,14 @@ const formatPosterStatus = (poster: string): { label: string; color: string; bgC
 
 function getSupportTicketType(ticket: Ticket | null | undefined): string | null {
   return ticket?.support_ticket_type ?? ticket?.poster ?? null;
+}
+
+function getHasGivenReferral(ticket: Ticket | null | undefined): boolean | null {
+  if (!ticket) return null;
+  const flat = flattenTicketFields(ticket);
+  const value = flat.has_given_referral ?? flat.hasGivenReferral;
+  if (value === null || value === undefined) return null;
+  return Boolean(value);
 }
 
 function flattenTicketFields(raw: any): any {
@@ -1420,6 +1429,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const isCompact = !!initialTicket && !isInModal;
   const supportTicketType = getSupportTicketType(currentTicket);
   const posterInfo = supportTicketType ? formatPosterStatus(supportTicketType) : null;
+  const hasGivenReferral = getHasGivenReferral(currentTicket);
   const displayTicketId =
     currentTicket?.record_id ||
     currentTicket?.support_ticket_id ||
@@ -1437,6 +1447,34 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
       window.open(jatraLink, "_blank", "noopener,noreferrer");
     }
   };
+
+  const ticketMetadata = (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600">
+      {currentTicket?.badge && currentTicket.badge !== "N/A" && (
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Badge:</span>
+          <span className="font-medium text-slate-800">{currentTicket.badge}</span>
+        </div>
+      )}
+      {currentTicket?.subscription_status &&
+        currentTicket.subscription_status !== "N/A" && (
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500">Subscription:</span>
+            <span className="font-medium text-slate-800">
+              {currentTicket.subscription_status}
+            </span>
+          </div>
+        )}
+      {hasGivenReferral !== null && (
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Given Referral:</span>
+          <span className="font-medium text-slate-800">
+            {hasGivenReferral ? "Yes" : "No"}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 
   const userProfile = (
     <div className="flex min-w-0 items-center gap-4">
@@ -1495,25 +1533,9 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         isCompact ? "gap-4" : "mx-auto max-w-6xl gap-5 px-2 py-2 md:px-4"
       )}
     >
-      {!isCompact && (
+      {!isCompact ? (
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600">
-            {currentTicket?.badge && currentTicket.badge !== "N/A" && (
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">Badge:</span>
-                <span className="font-medium text-slate-800">{currentTicket.badge}</span>
-              </div>
-            )}
-            {currentTicket?.subscription_status &&
-              currentTicket.subscription_status !== "N/A" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-500">Subscription:</span>
-                  <span className="font-medium text-slate-800">
-                    {currentTicket.subscription_status}
-                  </span>
-                </div>
-              )}
-          </div>
+          {ticketMetadata}
           <CustomButton
             onClick={handleTakeBreak}
             variant="outline"
@@ -1525,7 +1547,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             Take a Break
           </CustomButton>
         </div>
-      )}
+      ) : (
+        hasGivenReferral !== null ||
+        (currentTicket?.badge && currentTicket.badge !== "N/A") ||
+        (currentTicket?.subscription_status &&
+          currentTicket.subscription_status !== "N/A")
+      ) ? (
+        ticketMetadata
+      ) : null}
 
       <div className="relative w-full">
         <div className="relative flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
