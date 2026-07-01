@@ -351,13 +351,17 @@ export const membershipService = {
    *
    * @returns Promise with membership info (tenant_id, role_id, role_key, etc.) or null if not found
    */
-  async getMyMembership(): Promise<MyMembershipResponse | null> {
+  async getMyMembership(tenantSlug?: string): Promise<MyMembershipResponse | null> {
     try {
       if (import.meta.env.DEV) {
         console.log('[membershipService] getMyMembership: GET /membership/me/role/');
       }
 
-      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/');
+      const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/', {
+        ...(tenantSlug
+          ? { headers: { 'X-Tenant-Slug': tenantSlug } as Record<string, string> }
+          : {}),
+      });
 
       if (import.meta.env.DEV) {
         const d = response.data;
