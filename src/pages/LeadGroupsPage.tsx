@@ -372,6 +372,13 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
     });
   };
 
+  const formatFreshLeadsCount = (group: Group) => {
+    if (typeof group.fresh_leads_count === "number") {
+      return group.fresh_leads_count.toLocaleString();
+    }
+    return "—";
+  };
+
   const getConditionsLabel = (group: Group) => {
     const states = group.group_data?.states || [];
     if (!Array.isArray(states) || states.length === 0) {
@@ -708,6 +715,7 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                     <TableHead className="text-white font-medium">Party</TableHead>
                     <TableHead className="text-white font-medium">State</TableHead>
                     <TableHead className="text-white font-medium">Lead Sources</TableHead>
+                    <TableHead className="text-white font-medium text-right">Fresh Leads Available</TableHead>
                     <TableHead className="text-white font-medium">Lead Status</TableHead>
                     <TableHead className="text-white font-medium text-right"></TableHead>
                   </TableRow>
@@ -829,6 +837,9 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                             renderCompactChipList(leadSources, `${group.id}-source`)
                           )}
                         </TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">
+                          {formatFreshLeadsCount(group)}
+                        </TableCell>
                         <TableCell>
                           {isEditing && editingGroup ? (
                             renderEditMultiSelect(
@@ -926,6 +937,10 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                 <p className="text-sm"><span className="font-medium">Party:</span> {toList(selectedGroupForDrawer.group_data?.party).join(", ") || "-"}</p>
                 <p className="text-sm"><span className="font-medium">States:</span> {toList(selectedGroupForDrawer.group_data?.states).join(", ") || "-"}</p>
                 <p className="text-sm"><span className="font-medium">Lead Sources:</span> {toList(selectedGroupForDrawer.group_data?.lead_sources).join(", ") || "-"}</p>
+                <p className="text-sm">
+                  <span className="font-medium">Fresh Leads Available:</span>{" "}
+                  {formatFreshLeadsCount(selectedGroupForDrawer)}
+                </p>
                 <p className="text-sm"><span className="font-medium">Lead Statuses:</span> {toList(selectedGroupForDrawer.group_data?.lead_statuses).join(", ") || "-"}</p>
               </div>
 
