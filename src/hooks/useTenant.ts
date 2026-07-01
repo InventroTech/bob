@@ -6,6 +6,10 @@ export interface TenantContext {
   tenantId: string | null;
   role: 'owner' | 'editor' | 'viewer' | null;
   customRole: string | null;
+  /** Tenant membership id for API placeholders (pyro_user_id, etc.). */
+  membershipId: string | null;
+  /** True after the first membership/role fetch attempt finishes (success or failure). */
+  membershipLoaded: boolean;
   /** Refetch custom role from backend. Call when role may have changed (e.g. after promotion to GM) so users don't need to re-login. */
   refetchCustomRole: () => Promise<void>;
 }
@@ -15,6 +19,8 @@ export function useTenant(): TenantContext {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [role, setRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
   const [customRole, setCustomRole] = useState<string | null>(null);
+  const [membershipId, setMembershipId] = useState<string | null>(null);
+  const [membershipLoaded, setMembershipLoaded] = useState(false);
 
   const fetchCustomRole = useCallback(async () => {
     if (!session?.access_token) return;
@@ -22,6 +28,8 @@ export function useTenant(): TenantContext {
       const data = await membershipService.getMyMembership();
       if (data?.role_key) setCustomRole(data.role_key);
       else setCustomRole(null);
+      const id = data?.tenant_membership_id;
+      if (id != null) setMembershipId(String(id));
     } catch {
       setCustomRole(null);
     }
@@ -32,22 +40,34 @@ export function useTenant(): TenantContext {
       if (!user || !session?.access_token) {
         setTenantId(null);
         setRole(null);
+        setCustomRole(null);
+        setMembershipId(null);
+        setMembershipLoaded(true);
         return;
       }
-      const membership = await membershipService.getMyMembership();
-      if (membership?.tenant_id) {
-        setTenantId(membership.tenant_id);
-        setRole('owner');
-        if (membership.role_key) setCustomRole(membership.role_key);
-        else await fetchCustomRole();
-        if (membership.tenant_slug && typeof window !== 'undefined') {
-          localStorage.setItem('tenant_slug', membership.tenant_slug);
+      try {
+        const membership = await membershipService.getMyMembership();
+        if (membership?.tenant_id) {
+          setTenantId(membership.tenant_id);
+          setRole('owner');
+          if (membership.role_key) setCustomRole(membership.role_key);
+          else await fetchCustomRole();
+          const id = membership.tenant_membership_id;
+          if (id != null) setMembershipId(String(id));
+          if (membership.tenant_slug && typeof window !== 'undefined') {
+            localStorage.setItem('tenant_slug', membership.tenant_slug);
+          }
+        } else {
+          setTenantId(null);
+          setRole(null);
+          setCustomRole(null);
+          setMembershipId(null);
         }
-      } else {
-        setTenantId(null);
-        setRole(null);
+      } finally {
+        setMembershipLoaded(true);
       }
     }
+    setMembershipLoaded(false);
     fetchTenant();
   }, [user, session?.access_token, fetchCustomRole]);
 
@@ -63,5 +83,5 @@ export function useTenant(): TenantContext {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [user, session?.access_token, fetchCustomRole]);
 
-  return { tenantId, role, customRole, refetchCustomRole: fetchCustomRole };
+  return { tenantId, role, customRole, membershipId, membershipLoaded, refetchCustomRole: fetchCustomRole };
 } 

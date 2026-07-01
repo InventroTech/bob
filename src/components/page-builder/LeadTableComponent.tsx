@@ -23,7 +23,7 @@ import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConf
 import { useFilters } from '@/hooks/useFilters';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
-import { apiClient, membershipService } from '@/lib/api';
+import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
@@ -558,15 +558,13 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const lastFetchedConfigRef = useRef<string>(''); // Track last fetched config/filter combination
   const { session, user } = useAuth();
   const spoofUserId = useSpoofUserId();
-  const { customRole } = useTenant();
+  const { customRole, membershipLoaded, membershipId } = useTenant();
   const sessionUser = session?.user ?? null;
   const activeUser = user ?? sessionUser ?? null;
   // Spoof JWT `sub` when active; otherwise Supabase user id (aligns with API `{{current_user}}`).
   const activeUserId = spoofUserId ?? activeUser?.id ?? null;
   const activeUserMetadata = activeUser?.user_metadata ?? null;
   const activeAppMetadata = activeUser?.app_metadata ?? null;
-  const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
-  
   // Check if user is GM (General Manager) - GM should see all leads
   const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
 
@@ -590,38 +588,15 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       });
     }
 
-    if (currentMembershipId) {
+    if (membershipId) {
       adapters.push({
         tokens: ['pyro_user_id', 'current_membership_id', 'current_membership', 'current_user_membership_id'],
-        resolve: () => currentMembershipId,
+        resolve: () => membershipId,
       });
     }
 
     return adapters;
-  }, [activeUserId, currentMembershipId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadMembership = async () => {
-      if (!activeUserId) {
-        setCurrentMembershipId(null);
-        return;
-      }
-      try {
-        const membership = await membershipService.getMyMembership();
-        const id = (membership as any)?.tenant_membership_id;
-        if (!cancelled && id != null) {
-          setCurrentMembershipId(String(id));
-        }
-      } catch {
-        if (!cancelled) setCurrentMembershipId(null);
-      }
-    };
-    loadMembership();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeUserId]);
+  }, [activeUserId, membershipId]);
 
   // Resolve placeholder tokens to user/session claim values right before fetch time
   const resolvePlaceholderValue = useCallback((rawToken: string) => {
@@ -2045,13 +2020,17 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       }
     };
 
-    if (session?.access_token) {
-      fetchLeads();
-    } else {
-      // Reset refs when session is lost
+    if (!session?.access_token) {
       lastFetchedConfigRef.current = '';
+      setLoading(false);
+      return;
     }
-  }, [session?.access_token, effectiveApiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, hasActiveFilters]);
+    // Wait until role is known so GM users don't fetch twice (assigned_to vs all leads).
+    if (!membershipLoaded) {
+      return;
+    }
+    fetchLeads();
+  }, [session?.access_token, membershipLoaded, effectiveApiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, hasActiveFilters]);
 
   // Cleanup on unmount
   useEffect(() => {
