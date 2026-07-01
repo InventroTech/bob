@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { forceLogoutIfDeletedSelf } from '@/lib/auth/deletedUserSession';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -62,6 +64,8 @@ interface RowEditState {
 
 const AddUserComponent: React.FC = () => {
   const { user, session } = useAuth();
+  const navigate = useNavigate();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { tenantId } = useTenant();
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -501,10 +505,19 @@ const AddUserComponent: React.FC = () => {
       const responseData = await response.json();
       console.log('User deletion response:', responseData);
 
+      const selfLoggedOut = await forceLogoutIfDeletedSelf(email, session?.user?.email);
+      if (selfLoggedOut) {
+        toast.success('Your account was deleted. You have been signed out.');
+        const slug =
+          tenantSlug || window.location.pathname.match(/^\/app\/([^/]+)/)?.[1];
+        navigate(slug ? `/app/${slug}/login` : '/auth', { replace: true });
+        return;
+      }
+
       // Refresh the users list after successful deletion
       await fetchUsers();
       await fetchCoreSettings();
-      toast.success('User deleted successfully');
+      toast.success('User deleted successfully. They have been signed out everywhere.');
     } catch (error: any) {
       console.error('Error deleting user:', error);
       toast.error(error.message || 'Failed to delete user');

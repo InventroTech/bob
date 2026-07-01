@@ -51,7 +51,11 @@ const CustomAppAuthPage: React.FC = () => {
         data: { user },
       } = await supabase.auth.getUser();
       if (user?.id && user?.email) {
-        await linkCustomAppUserIfNeeded(session, user.id, user.email);
+        const linkError = await linkCustomAppUserIfNeeded(session, user.id, user.email);
+        if (linkError) {
+          setError(linkError);
+          return;
+        }
       }
 
       toast.success('Login successful! Redirecting…');
@@ -101,7 +105,11 @@ const CustomAppAuthPage: React.FC = () => {
       }
 
       if (data.user?.id && data.user?.email) {
-        await linkCustomAppUserIfNeeded(session, data.user.id, data.user.email);
+        const linkError = await linkCustomAppUserIfNeeded(session, data.user.id, data.user.email);
+        if (linkError) {
+          setError(linkError);
+          return;
+        }
       }
 
       toast.success('Signup successful! Redirecting…');

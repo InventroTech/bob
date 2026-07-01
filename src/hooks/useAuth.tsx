@@ -5,7 +5,16 @@ import { Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { setSentryUser, clearSentryUser } from '../lib/sentry';
 import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider';
-import { refreshAccessToken } from '@/lib/auth/authSessionService';
+import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
+import {
+  clearLocalAuthCaches,
+  forceSignOutRevokedUser,
+  getTenantSlugFromPath,
+  SESSION_CHECK_MS,
+  SESSION_WATCHDOG_INITIAL_DELAY_MS,
+  shouldRunSessionWatchdog,
+  validateServerSession,
+} from '@/lib/auth/deletedUserSession';
 
 interface AuthContextType {
   session: Session | null;
@@ -45,32 +54,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(async () => {
     try {
       console.log('Starting logout process...');
-
-      localStorage.removeItem('user_email');
-      localStorage.removeItem('tenant_id');
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      if (supabaseUrl) {
-        try {
-          const url = new URL(supabaseUrl);
-          const projectRef = url.hostname.split('.')[0];
-          localStorage.removeItem(`sb-${projectRef}-auth-token`);
-        } catch {
-          Object.keys(localStorage).forEach((key) => {
-            if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-              localStorage.removeItem(key);
-            }
-          });
-        }
-      }
-
-      sessionStorage.removeItem('ticketCarouselState');
-      sessionStorage.removeItem('pyro_access_check');
+      clearLocalAuthCaches();
       clearAccessToken();
       clearSentryUser();
       setSession(null);
       setUser(null);
-
+      await signOutAndClearSession();
       toast.success('Logged out successfully');
     } catch (error) {
       console.error('Unexpected logout error:', error);
@@ -102,6 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           clearAccessToken();
           setUser(null);
           clearSentryUser();
+          clearLocalAuthCaches();
           setLoading(false);
           const loginUrl = getLoginUrl();
           toast.error('Your session has expired. Please login again.');
@@ -114,6 +104,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           clearAccessToken();
           setUser(null);
           clearSentryUser();
+          clearLocalAuthCaches();
           setLoading(false);
           const loginUrl = getLoginUrl();
           toast.error('Your session has expired. Please login again.');
@@ -160,6 +151,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     return () => clearInterval(intervalId);
   }, [session?.user?.id]);
+
+  // Detect admin delete / revoked sessions without waiting for JWT expiry
+  useEffect(() => {
+    if (!session?.access_token) return;
+
+    let cancelled = false;
+    let consecutivePending = 0;
+
+    const check = async () => {
+      if (!shouldRunSessionWatchdog()) return;
+
+      const status = await validateServerSession(getTenantSlugFromPath());
+      if (cancelled) return;
+
+      if (status === 'valid') {
+        consecutivePending = 0;
+        return;
+      }
+
+      if (status === 'pending') {
+        consecutivePending += 1;
+        // First-time login: link-user-uid may still be in progress
+        if (consecutivePending < 4) return;
+        await forceSignOutRevokedUser(
+          'Your access to this organization was removed. Please log in again.'
+        );
+        return;
+      }
+
+      consecutivePending = 0;
+      const message =
+        status === 'auth_invalid'
+          ? 'Your session has ended. Please log in again.'
+          : 'Your access to this organization was removed. Please log in again.';
+
+      await forceSignOutRevokedUser(message);
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void check();
+      }
+    };
+
+    const initialDelayId = window.setTimeout(() => void check(), SESSION_WATCHDOG_INITIAL_DELAY_MS);
+    const intervalId = window.setInterval(() => void check(), SESSION_CHECK_MS);
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initialDelayId);
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [session?.user?.id, session?.access_token]);
 
   const value = useMemo(() => ({
     session,
