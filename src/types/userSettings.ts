@@ -55,6 +55,7 @@ export interface Group {
   tenant?: string;
   name: string;
   group_data: Record<string, any>;
+  fresh_leads_count?: number | null;
   created_at: string;
   updated_at: string;
 }
