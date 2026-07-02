@@ -6,11 +6,12 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Trash2, UserPlus, Pencil, Check, X, Search } from 'lucide-react';
+import { Trash2, UserPlus, Pencil, Check, X, Search, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
 import { leadTypeAssignmentApi, groupsApi } from '@/lib/userSettingsApi';
+import { downloadUsersReportPdf } from '@/lib/usersReportPdf';
 
 interface Role {
   id: string;
@@ -87,6 +88,7 @@ const AddUserComponent: React.FC = () => {
   const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<RowEditState | null>(null);
   const [isUpdatingRow, setIsUpdatingRow] = useState(false);
+  const [usersPdfLoading, setUsersPdfLoading] = useState(false);
   const [managerSearch, setManagerSearch] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [editManagerSearch, setEditManagerSearch] = useState('');
@@ -290,6 +292,20 @@ const AddUserComponent: React.FC = () => {
         user.email.toLowerCase().includes(term)
     );
   }, [usersWithSettings, userSearchTerm]);
+
+  const handleDownloadUsersPdf = async () => {
+    if (filteredUsersWithSettings.length === 0) {
+      toast.error('No users to download');
+      return;
+    }
+
+    setUsersPdfLoading(true);
+    try {
+      await downloadUsersReportPdf(filteredUsersWithSettings);
+    } finally {
+      setUsersPdfLoading(false);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -928,14 +944,26 @@ const AddUserComponent: React.FC = () => {
         <div className="space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <h5 className="text-2xl font-semibold">Users</h5>
-            <div className="relative w-full sm:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                value={userSearchTerm}
-                onChange={(e) => setUserSearchTerm(e.target.value)}
-                placeholder="Search by name or email..."
-                className="h-11 pl-9"
-              />
+            <div className="flex w-full flex-col gap-3 sm:max-w-md sm:flex-row sm:items-center">
+              <div className="relative w-full sm:flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={userSearchTerm}
+                  onChange={(e) => setUserSearchTerm(e.target.value)}
+                  placeholder="Search by name or email..."
+                  className="h-11 pl-9"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleDownloadUsersPdf()}
+                disabled={isLoading || usersPdfLoading || filteredUsersWithSettings.length === 0}
+                className="h-11 shrink-0 border-black text-black hover:bg-black hover:text-white"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {usersPdfLoading ? 'Generating…' : 'Download PDF'}
+              </Button>
             </div>
           </div>
           {isLoading ? (
