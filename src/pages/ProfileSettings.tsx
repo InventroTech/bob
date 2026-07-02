@@ -18,6 +18,7 @@ import {
   BellRing,
   Camera,
   Database,
+  Download,
   Palette,
   Settings2,
   Shield,
@@ -30,6 +31,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { membershipService } from "@/lib/api/services/membership";
+import { downloadUsersReportPdf } from "@/lib/usersReportPdf";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 function readRoleDepartmentFromMetadata(user: SupabaseUser): { role: string; department: string } {
@@ -68,6 +70,7 @@ const ProfileSettings = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const [usersPdfLoading, setUsersPdfLoading] = useState(false);
 
   const resetProfileForm = useCallback(() => {
     if (!user) {
@@ -130,6 +133,20 @@ const ProfileSettings = () => {
     setRole(rd.role);
     setDepartment(rd.department);
   }, [user?.user_metadata, roleDeptFromWorkspace, user]);
+
+  const handleDownloadUsersPdf = async () => {
+    setUsersPdfLoading(true);
+    try {
+      const users = await membershipService.getUsers();
+      await downloadUsersReportPdf(users);
+    } catch (error: unknown) {
+      console.error('Failed to fetch users for PDF:', error);
+      const message = error instanceof Error ? error.message : 'Failed to fetch users';
+      toast.error(message);
+    } finally {
+      setUsersPdfLoading(false);
+    }
+  };
 
   const handleDatabaseSetup = async () => {
     setIsSettingUp(true);
@@ -679,6 +696,18 @@ const ProfileSettings = () => {
                   implications.
                 </div>
                 <div className="flex flex-col gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleDownloadUsersPdf()}
+                    disabled={usersPdfLoading}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {usersPdfLoading ? 'Generating PDF…' : 'Download users PDF'}
+                  </Button>
+                  <p className="text-body-xs text-muted-foreground leading-relaxed">
+                    Export all tenant users (name, email, department, role, created date) with Pyro letterhead.
+                  </p>
                   <Button onClick={handleDatabaseSetup} disabled={isSettingUp}>
                     <Database className="mr-2 h-4 w-4" />
                     {isSettingUp ? "Setting Up Database..." : "Run Initial DB Setup"}
