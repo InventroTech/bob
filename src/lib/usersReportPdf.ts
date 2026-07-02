@@ -19,6 +19,24 @@ export interface UsersReportRow {
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
+/** Internal/test accounts omitted from exported users PDF. */
+const PDF_EXCLUDED_EMAILS = new Set([
+  'bibhab1208@gmail.com',
+  'bibhabindia2@gmail.com',
+  'bibhabindia@gmail.com',
+  'bibhab.pyro@thecircleapp.in',
+  'bibhab@thepyro.ai',
+  'ritamvlog@gmail.com',
+  'ritam.pyro@circleapp.in',
+  'harisudhan@thepyro.ai',
+  'anirudh@thepyro.ai',
+]);
+
+function isExcludedFromUsersPdf(email: string | undefined | null): boolean {
+  if (!email) return true;
+  return PDF_EXCLUDED_EMAILS.has(email.trim().toLowerCase());
+}
+
 function formatCreatedAt(value: string) {
   return format(
     new Date(new Date(value).getTime() + IST_OFFSET_MS),
@@ -27,7 +45,9 @@ function formatCreatedAt(value: string) {
 }
 
 export async function downloadUsersReportPdf(users: UsersReportRow[]) {
-  const rows = users.filter((user) => user.name && user.email);
+  const rows = users.filter(
+    (user) => user.name && user.email && !isExcludedFromUsersPdf(user.email),
+  );
   if (rows.length === 0) {
     toast.error('No users to download');
     return;
