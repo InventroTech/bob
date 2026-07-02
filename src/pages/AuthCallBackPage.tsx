@@ -105,6 +105,7 @@ const AuthCallbackPage = () => {
         return;
       }
 
+      let linkBlocked = false;
       try {
         const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
 
@@ -116,15 +117,21 @@ const AuthCallbackPage = () => {
             const errorCode = (result as { code?: string }).code;
             const errorMessageText = result.error || '';
 
-            const isExpectedError =
-              errorCode === 'NO_TENANT_MEMBERSHIP' ||
-              errorMessageText.includes('No TenantMembership found') ||
-              errorMessageText.includes('already has a linked UID') ||
-              errorMessageText.includes('already linked');
+            if (errorCode === 'UID_CONFLICT') {
+              console.error('[AuthCallBackPage] UID conflict:', errorMessageText);
+              redirectToLogin(navigate, tenantSlug, errorMessageText);
+              linkBlocked = true;
+            } else {
+              const isExpectedError =
+                errorCode === 'NO_TENANT_MEMBERSHIP' ||
+                errorMessageText.includes('No TenantMembership found') ||
+                errorMessageText.includes('already has a linked UID') ||
+                errorMessageText.includes('already linked');
 
-            if (!isExpectedError) {
-              console.error('[AuthCallBackPage] Error linking user UID:', result.error);
-              toast.error('Warning: User linking failed, but login will continue');
+              if (!isExpectedError) {
+                console.error('[AuthCallBackPage] Error linking user UID:', result.error);
+                toast.error('Warning: User linking failed, but login will continue');
+              }
             }
           } else if (result.success === true) {
             console.log('[AuthCallBackPage] User UID linked successfully, refreshing session...');
@@ -155,6 +162,8 @@ const AuthCallbackPage = () => {
         console.error('[AuthCallBackPage] Error during user linking:', error);
         toast.error('Warning: User linking failed, but login will continue');
       }
+
+      if (linkBlocked) return;
 
       localStorage.setItem('user_email', user.email);
       toast.success('Login successful!', { duration: 2000 });

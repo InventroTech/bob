@@ -59,24 +59,33 @@ export function formatOAuthLoginError(raw: string): string {
   return msg;
 }
 
-/** Link Supabase user to tenant membership after login/signup for custom apps. */
+/**
+ * Link Supabase user to tenant membership after login/signup for custom apps.
+ * Returns null on success or a blocking error message string on UID_CONFLICT.
+ */
 export async function linkCustomAppUserIfNeeded(
   session: Session | null,
   uid: string,
   userEmail: string
-): Promise<void> {
+): Promise<string | null> {
   localStorage.setItem('user_email', userEmail);
 
   try {
     const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
 
-    if (isAlreadyLinked) return;
+    if (isAlreadyLinked) return null;
 
     const result = await authService.linkUserUid({ uid, email: userEmail });
 
     if (result.success === false || result.error) {
       const errorCode = (result as { code?: string }).code;
       const errorMessage = result.error || '';
+
+      if (errorCode === 'UID_CONFLICT') {
+        console.error('[CustomAppAuth] UID conflict:', errorMessage);
+        return errorMessage;
+      }
+
       const isExpectedError =
         errorCode === 'NO_TENANT_MEMBERSHIP' ||
         errorMessage.includes('No TenantMembership found') ||
@@ -87,15 +96,17 @@ export async function linkCustomAppUserIfNeeded(
         console.error('[CustomAppAuth] Error linking user UID:', result.error);
         toast.error('Warning: User linking failed, but login will continue');
       }
-      return;
+      return null;
     }
 
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) {
       console.warn('[CustomAppAuth] Session refresh failed after linking:', refreshError);
     }
+    return null;
   } catch (linkError) {
     console.error('[CustomAppAuth] Error during user linking:', linkError);
     toast.error('Warning: User linking failed, but login will continue');
+    return null;
   }
 }

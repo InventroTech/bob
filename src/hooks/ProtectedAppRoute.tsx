@@ -5,6 +5,10 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
 import { authService, membershipService } from '@/lib/api';
+import {
+  forceSignOutRevokedUser,
+  validateServerSession,
+} from '@/lib/auth/deletedUserSession';
 
 interface PublicPage {
   id: string;
@@ -152,19 +156,8 @@ const ProtectedAppRoute: React.FC = () => {
     };
   }, []);
 
-  // Restore access from sessionStorage so remounts don't flash "Access Denied"
-  const [allowed, setAllowed] = useState<boolean | null>(() => {
-    if (!tenantSlug) return null;
-    // We don't have session.user.id yet during initial state, so peek at storage loosely
-    const raw = sessionStorage.getItem(ACCESS_CACHE_KEY);
-    if (raw) {
-      try {
-        const cached = JSON.parse(raw);
-        if (cached.tenantSlug === tenantSlug && cached.allowed === true) return true;
-      } catch { /* ignore */ }
-    }
-    return null;
-  });
+  // Do not restore allowed=true from cache before session is verified (avoids stale UI after delete)
+  const [allowed, setAllowed] = useState<boolean | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -179,14 +172,22 @@ const ProtectedAppRoute: React.FC = () => {
         return;
       }
 
-      // Skip if sessionStorage says we already passed (survives remounts)
+      // Session cache may speed up UI but must be re-validated (admin may have deleted the user)
       const cached = getCachedAccess(session.user.id, tenantSlug);
       if (cached === true) {
         if (isMounted) {
-          console.log('[ProtectedAppRoute] Restored access from session cache (fast path)');
+          console.log('[ProtectedAppRoute] Cache hit — verifying session with server');
           setAllowed(true);
           accessCheckedRef.current = checkKey;
         }
+        validateServerSession(tenantSlug).then((status) => {
+          if (!isMounted || status === 'valid' || status === 'pending') return;
+          void forceSignOutRevokedUser(
+            status === 'auth_invalid'
+              ? 'Your session has ended. Please log in again.'
+              : 'Your access to this organization was removed. Please log in again.'
+          );
+        });
         return;
       }
 
