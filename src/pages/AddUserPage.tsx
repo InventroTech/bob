@@ -12,6 +12,14 @@ import { format } from "date-fns";
 import { Trash2, Eye } from 'lucide-react';
 import { membershipService } from '@/lib/api';
 import { getEffectiveToken, dispatchSpoofChanged } from '@/lib/spoof';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import {
+  addLetterheadToPdf,
+  downloadPdfBytes,
+  PDF_LETTERHEAD_BOTTOM_MARGIN_MM,
+  PDF_LETTERHEAD_TOP_MARGIN_MM,
+} from '@/lib/pdfLetterhead';
 
 interface Role {
   id: string;
@@ -357,6 +365,80 @@ const AddUserPage = () => {
     }
   };
 
+  const filteredUsers = users.filter((user) => {
+    if (!user.name || !user.email) return false;
+    const search = searchTerm.toLowerCase().trim();
+    if (!search) return true;
+    return (
+      user.name.toLowerCase().includes(search) ||
+      user.email.toLowerCase().includes(search) ||
+      (user.department || '').toLowerCase().includes(search) ||
+      (user.role?.name || '').toLowerCase().includes(search)
+    );
+  });
+
+  const downloadPDF = async () => {
+    if (filteredUsers.length === 0) {
+      toast.error('No users to download');
+      return;
+    }
+
+    const marginX = 12;
+    const topMarginY = PDF_LETTERHEAD_TOP_MARGIN_MM;
+    const bottomMarginY = PDF_LETTERHEAD_BOTTOM_MARGIN_MM;
+    const filename = `Users_Report_${format(new Date(), 'dd_MMM_yyyy')}.pdf`;
+
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      doc.setFontSize(16);
+      doc.text('Users Report', marginX, topMarginY);
+
+      doc.setFontSize(10);
+      doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy h:mm a')}`, marginX, topMarginY + 8);
+      doc.text(`Total users: ${filteredUsers.length}`, marginX, topMarginY + 16);
+
+      const head = [['Name', 'Email', 'Department', 'Role', 'Created At']];
+      const body = filteredUsers.map((user) => [
+        user.name,
+        user.email,
+        user.department || '—',
+        user.role?.name || 'No Role',
+        format(
+          new Date(new Date(user.created_at).getTime() + 5.5 * 60 * 60 * 1000),
+          'MMM d, yyyy h:mm a'
+        ),
+      ]);
+
+      autoTable(doc, {
+        head,
+        body,
+        startY: topMarginY + 24,
+        margin: {
+          top: topMarginY,
+          bottom: bottomMarginY,
+          left: marginX,
+          right: marginX,
+        },
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [0, 0, 0] },
+      });
+
+      const contentBytes = doc.output('arraybuffer');
+      const { bytes, usedLetterhead } = await addLetterheadToPdf(contentBytes);
+      downloadPdfBytes(bytes, filename);
+
+      if (!usedLetterhead) {
+        toast.warning('Letterhead PDF not found, downloaded without letterhead');
+      } else {
+        toast.success('PDF downloaded');
+      }
+    } catch (error) {
+      console.error('PDF download failed:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-6 max-w-4xl mx-auto space-y-8">
@@ -501,6 +583,7 @@ const AddUserPage = () => {
               No users found
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white">
               <Table>
                 <TableHeader>
@@ -565,6 +648,19 @@ const AddUserPage = () => {
                 </TableBody>
               </Table>
             </div>
+
+            <div className="flex justify-end mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void downloadPDF()}
+                disabled={isLoading || filteredUsers.length === 0}
+                className="border-black text-black hover:bg-black hover:text-white active:bg-gray-900 active:text-white"
+              >
+                Download PDF
+              </Button>
+            </div>
+            </>
           )}
         </div>
       </div>
