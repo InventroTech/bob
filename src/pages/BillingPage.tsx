@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
-import { PDFDocument } from 'pdf-lib';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,9 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { billingService, type BillingMember, type BillingReport } from '@/lib/api';
+import {
+  addLetterheadToPdf,
+  downloadPdfBytes,
+  PDF_LETTERHEAD_BOTTOM_MARGIN_MM,
+  PDF_LETTERHEAD_TOP_MARGIN_MM,
+} from '@/lib/pdfLetterhead';
 import { toast } from 'sonner';
-
-const LETTERHEAD_PDF_PATH = '/pyro-letterhead.pdf';
 const MONTH_OPTIONS = [
   { value: '01', label: 'January' },
   { value: '02', label: 'February' },
@@ -60,53 +63,6 @@ function formatDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return format(parsed, 'MMM d, yyyy');
-}
-
-function downloadPdfBytes(bytes: ArrayBuffer | Uint8Array, filename: string) {
-  const blobPart: ArrayBuffer = bytes instanceof ArrayBuffer ? bytes : new ArrayBuffer(bytes.byteLength);
-  if (bytes instanceof Uint8Array) {
-    new Uint8Array(blobPart).set(bytes);
-  }
-
-  const blob = new Blob([blobPart], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function addLetterheadToPdf(contentBytes: ArrayBuffer) {
-  try {
-    const letterheadResponse = await fetch(LETTERHEAD_PDF_PATH);
-    if (!letterheadResponse.ok) {
-      return { bytes: contentBytes, usedLetterhead: false };
-    }
-
-    const letterheadBytes = await letterheadResponse.arrayBuffer();
-    const contentPdf = await PDFDocument.load(contentBytes);
-    const outputPdf = await PDFDocument.create();
-    const [letterheadPage] = await outputPdf.embedPdf(letterheadBytes, [0]);
-    const embeddedContentPages = await outputPdf.embedPdf(
-      contentBytes,
-      contentPdf.getPageIndices()
-    );
-
-    contentPdf.getPages().forEach((sourcePage, index) => {
-      const { width, height } = sourcePage.getSize();
-      const page = outputPdf.addPage([width, height]);
-      page.drawPage(letterheadPage, { x: 0, y: 0, width, height });
-      page.drawPage(embeddedContentPages[index], { x: 0, y: 0, width, height });
-    });
-
-    return { bytes: await outputPdf.save(), usedLetterhead: true };
-  } catch (error) {
-    console.warn('Billing letterhead could not be applied:', error);
-    return { bytes: contentBytes, usedLetterhead: false };
-  }
 }
 
 const BillingPage = () => {
@@ -262,8 +218,8 @@ const BillingPage = () => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 12;
-    const topMarginY = 62;
-    const bottomMarginY = 58;
+    const topMarginY = PDF_LETTERHEAD_TOP_MARGIN_MM;
+    const bottomMarginY = PDF_LETTERHEAD_BOTTOM_MARGIN_MM;
     const rowHeight = 6.5;
     let y = topMarginY;
 
