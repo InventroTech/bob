@@ -3,7 +3,6 @@ import type { Provider } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/lib/api/services/auth';
-import { getRoleIdFromJWT } from '@/lib/jwt';
 
 export type AppOAuthProvider = 'google' | 'custom:zoho';
 
@@ -71,10 +70,9 @@ export async function linkCustomAppUserIfNeeded(
   localStorage.setItem('user_email', userEmail);
 
   try {
-    const isAlreadyLinked = session?.access_token && getRoleIdFromJWT(session.access_token);
-
-    if (isAlreadyLinked) return null;
-
+    // Always call link-user-uid — backend is idempotent.
+    // Skipping when JWT has role_id breaks delete+re-add: old JWT has role_id cached
+    // but the new TenantMembership has user_id=NULL, causing wrong-tenant or access denied.
     const result = await authService.linkUserUid({ uid, email: userEmail });
 
     if (result.success === false || result.error) {
