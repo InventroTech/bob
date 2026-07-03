@@ -8,6 +8,7 @@ import { authService, membershipService } from '@/lib/api';
 import {
   forceSignOutRevokedUser,
   validateServerSession,
+  SESSION_WATCHDOG_INITIAL_DELAY_MS,
 } from '@/lib/auth/deletedUserSession';
 
 interface PublicPage {
@@ -180,14 +181,18 @@ const ProtectedAppRoute: React.FC = () => {
           setAllowed(true);
           accessCheckedRef.current = checkKey;
         }
-        validateServerSession(tenantSlug).then((status) => {
-          if (!isMounted || status === 'valid' || status === 'pending') return;
-          void forceSignOutRevokedUser(
-            status === 'auth_invalid'
-              ? 'Your session has ended. Please log in again.'
-              : 'Your access to this organization was removed. Please log in again.'
-          );
-        });
+        // Delay so page-load session restore and JWT refresh finish first
+        setTimeout(() => {
+          if (!isMounted) return;
+          validateServerSession(tenantSlug, { attemptLink: true }).then((status) => {
+            if (!isMounted || status === 'valid' || status === 'pending') return;
+            void forceSignOutRevokedUser(
+              status === 'auth_invalid'
+                ? 'Your session has ended. Please log in again.'
+                : 'Your access to this organization was removed. Please log in again.'
+            );
+          });
+        }, SESSION_WATCHDOG_INITIAL_DELAY_MS);
         return;
       }
 
