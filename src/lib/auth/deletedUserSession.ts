@@ -77,14 +77,30 @@ async function linkMembershipIfNeeded(user: User, tenantSlug?: string | null): P
 /**
  * Ask Supabase + backend whether this browser session is still allowed.
  * Catches: deleted auth user, revoked refresh tokens, removed tenant membership.
+ *
+ * attemptLink=true is only for the initial page-load check (ProtectedAppRoute).
+ * The recurring watchdog passes false to avoid spamming link-user-uid every 15s.
  */
 export async function validateServerSession(
-  tenantSlug?: string | null
+  tenantSlug?: string | null,
+  { attemptLink = false }: { attemptLink?: boolean } = {}
 ): Promise<SessionValidity> {
   const slug = tenantSlug ?? getTenantSlugFromPath();
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData.user) {
+  if (userError) {
+    // Network/transient errors (fetch failed, Supabase timeout) should NOT log out
+    // an otherwise valid session. Only genuine auth rejections (401 from Supabase)
+    // indicate a revoked or deleted session.
+    const isNetworkError =
+      userError.name === 'AuthRetryableFetchError' ||
+      userError.message?.toLowerCase().includes('fetch') ||
+      userError.message?.toLowerCase().includes('network') ||
+      userError.message?.toLowerCase().includes('timeout');
+    if (isNetworkError) return 'valid';
+    return 'auth_invalid';
+  }
+  if (!userData.user) {
     return 'auth_invalid';
   }
 
@@ -96,20 +112,28 @@ export async function validateServerSession(
     return 'valid';
   }
 
-  // First-time login path: link uid to admin-created membership, then re-check
-  await linkMembershipIfNeeded(userData.user, slug);
-  membership = await fetchMembership(slug ?? undefined);
+  // First-time login path: link uid to admin-created membership, then re-check.
+  // Only do this on the initial page-load check — NOT on the recurring watchdog
+  // (which would spam link-user-uid every 15s for every user with a missing membership).
+  if (attemptLink) {
+    await linkMembershipIfNeeded(userData.user, slug);
+    membership = await fetchMembership(slug ?? undefined);
 
-  if (!membership?.role_id || !membership?.tenant_id) {
-    // Auth ok but membership still missing — may still be linking; don't sign out yet
-    return 'pending';
+    if (!membership?.role_id || !membership?.tenant_id) {
+      // Auth ok but membership still missing — may still be linking; don't sign out yet
+      return 'pending';
+    }
+
+    if (slug && membership.tenant_slug && membership.tenant_slug !== slug) {
+      return 'membership_invalid';
+    }
+
+    return 'valid';
   }
 
-  if (slug && membership.tenant_slug && membership.tenant_slug !== slug) {
-    return 'membership_invalid';
-  }
-
-  return 'valid';
+  // Watchdog path: membership missing but Supabase auth is valid.
+  // Could be a transient backend error — don't sign out immediately.
+  return 'pending';
 }
 
 export async function forceSignOutRevokedUser(
@@ -118,7 +142,10 @@ export async function forceSignOutRevokedUser(
 ): Promise<void> {
   clearLocalAuthCaches();
   try {
-    await supabase.auth.signOut({ scope: 'global' });
+    // Use 'local' scope: for genuine deletions the backend already revoked sessions
+    // globally via revoke_supabase_sessions_globally(). Using 'global' here races
+    // with any active OAuth callback in another tab and causes AuthCallBackPage failures.
+    await supabase.auth.signOut({ scope: 'local' });
   } catch {
     await signOutAndClearSession();
   }

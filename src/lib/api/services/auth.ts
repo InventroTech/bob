@@ -160,14 +160,14 @@ export const authService = {
       const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to link user UID';
       const errorCode = error.response?.data?.code;
       
-      // Don't log expected errors (they're handled gracefully)
-      if (!errorMessage.includes('No TenantMembership found') && 
-          !errorMessage.includes('already has a linked UID') &&
-          !errorMessage.includes('already linked')) {
-        console.error('Error linking user UID:', errorMessage);
+      // Don't log expected errors (they're handled gracefully by callers)
+      const isExpected =
+        errorMessage.includes('No TenantMembership found') ||
+        errorMessage.includes('already has a linked UID') ||
+        errorMessage.includes('already linked');
+      if (!isExpected) {
+        console.error('Error linking user UID:', error);
       }
-      // Log error but don't throw - this is a non-blocking operation
-      console.error('Error linking user UID:', error);
       
       // Return error info in a way that doesn't break the flow
       return {
