@@ -40,7 +40,14 @@ export const PostLoginTenantSetup = () => {
         setStatus('Redirecting...');
         window.location.replace('/');
       } catch (e: any) {
-        setStatus(`Error: ${e?.response?.data?.error || e?.message || 'Setup failed'}`);
+        if (e?.response?.status === 409) {
+          setStatus(e?.response?.data?.error || "Organization slug is already taken.");
+          return;
+        }
+      
+        setStatus(
+          `Error: ${e?.response?.data?.error || e?.message || "Setup failed"}`
+        );
       }
     })();
   }, [session]);
