@@ -135,6 +135,9 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
           }
         }
 
+        const separator = url.includes('?') ? '&' : '?';
+        url = `${url}${separator}entity_type=${encodeURIComponent(entityType)}`;
+
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         };
