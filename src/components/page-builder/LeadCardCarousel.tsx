@@ -7,6 +7,7 @@ import { useSpoofUserId } from "@/lib/spoof";
 import { leadTypeAssignmentApi, resolveDailyFreshLeadLimitFromKv } from "@/lib/userSettingsApi";
 import { membershipService } from "@/lib/api/services/membership";
 import { crmLeadsApi } from "@/lib/crmLeadsApi";
+import { useRecordUpdated } from "@/hooks/useRecordUpdated";
 import { FaWhatsapp } from "react-icons/fa";
 import {
   User,
@@ -18,7 +19,6 @@ import {
   Clock,
   MessageSquare,
   X,
-  RefreshCw,
   Target,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1161,44 +1161,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     return await handleActionButton("Not Interested", { reason });
   };
 
-  const handleRefresh = async () => {
-    if (!currentLead?.id) {
-      return;
-    }
-    
-    try {
-      setUpdating(true);
-      // Preserve the current actionButtonsVisible state
-      const currentButtonsVisible = actionButtonsVisible;
-      
-      // Fetch the current lead again to refresh the data
-      const refreshedLead = await fetchCurrentLead();
-      
-      if (refreshedLead) {
-        // Update the lead data but preserve actionButtonsVisible state
-        setCurrentLead(refreshedLead);
-        // Restore actionButtonsVisible state if it was visible before or if this lead had buttons visible
-        const shouldShowButtons = currentButtonsVisible || restoreActionButtonsState(refreshedLead?.id);
-        setActionButtonsVisible(shouldShowButtons);
-        if (shouldShowButtons) {
-          persistActionButtonsState(refreshedLead?.id, true);
-        }
-        setLead(prev => ({
-          ...prev,
-          leadStatus: refreshedLead.status || prev.leadStatus,
-          notes: (refreshedLead?.data?.notes as string) || refreshedLead?.notes || prev.notes,
-          selectedTags: parseTags(refreshedLead?.tags || []),
-          nextFollowUp: refreshedLead.next_follow_up || prev.nextFollowUp,
-          // Keep leadStartTime unchanged
-        }));
-      }
-    } catch (error: any) {
-      console.error("Error refreshing lead:", error);
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   const handleCloseProfile = () => {
     setShowProfileModal(false);
   };
@@ -1394,6 +1356,25 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     return () => clearInterval(interval);
   }, [showPendingCard, session, refreshPendingDashboard]);
 
+  useRecordUpdated(
+    useCallback(
+      (payload) => {
+        const recordId = Number(payload.record_id);
+        const currentId =
+          currentLead?.id != null ? Number(currentLead.id) : Number.NaN;
+        if (!Number.isNaN(recordId) && recordId === currentId) {
+          void fetchFreshLeadForCard(recordId);
+          return;
+        }
+        if (showPendingCard) {
+          void refreshPendingDashboard();
+        }
+      },
+      [currentLead?.id, showPendingCard, fetchFreshLeadForCard, refreshPendingDashboard],
+    ),
+    { entityType: "lead" },
+  );
+
   // Pending card
   if (showPendingCard) {
     const recallSkeleton = (
@@ -1575,17 +1556,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   if (loading) {
     return (
       <div className="mainCard w-full border flex flex-col justify-center items-center gap-2">
-        <div className="mt-4 flex w-full md:w-[90%] lg:w-[70%] justify-end px-4 md:px-0 gap-2">
-          <CustomButton
-            onClick={handleRefresh}
-            variant="outline"
-            size="sm"
-            icon={<RefreshCw className="h-3 w-3" />}
-            disabled={updating || !currentLead}
-          >
-            Refresh
-          </CustomButton>
-        </div>
         <div className="relative w-full md:w-[90%] lg:w-[70%] h-full">
           <div className="transition-all duration-500 ease-in-out opacity-100 flex flex-col justify-between border rounded-xl bg-white p-4">
             <div className="flex flex-col items-center justify-center h-64 space-y-4">
@@ -1736,14 +1706,6 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <CustomButton
-                  type="button"
-                  variant="outline"
-                  icon={<RefreshCw className="h-4 w-4 text-gray-500" />}
-                  className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
-                  onClick={handleRefresh}
-                  disabled={updating || !currentLead}
-                />
                 <CustomButton
                   type="button"
                   variant="outline"
