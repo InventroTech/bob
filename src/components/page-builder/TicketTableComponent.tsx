@@ -20,6 +20,7 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { convertGMTtoIST } from '@/lib/timeUtils';
+import { useRecordUpdated } from '@/hooks/useRecordUpdated';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
 
 // Use renderer API for ticket search
@@ -1269,6 +1270,12 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     }
   };
 
+  const refreshTicketsFromRealtime = useCallback(() => {
+    if (!session?.access_token) return;
+    void applyFilters();
+  }, [session?.access_token, applyFilters]);
+
+  useRecordUpdated(refreshTicketsFromRealtime, { entityType: 'support_ticket' });
 
   const handleTicketUpdate = (updatedTicket: any) => {
     // Update the local data with the updated ticket

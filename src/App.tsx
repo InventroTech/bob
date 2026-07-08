@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from './hooks/useAuth';
+import { RealtimeProvider } from './hooks/useRealtime';
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import PageBuilder from "./pages/PageBuilder";
@@ -45,6 +46,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <Router>
       <AuthProvider>
+        <RealtimeProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -101,6 +103,7 @@ const App = () => (
           {/* <Route path="*" element={<NotFoundPage />} /> */}
         </Routes>
         </TooltipProvider>
+        </RealtimeProvider>
       </AuthProvider>
     </Router>
   </QueryClientProvider>
