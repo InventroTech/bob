@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
+import { useRecordUpdated } from "@/hooks/useRecordUpdated";
 import {
   Popover,
   PopoverContent,
@@ -1101,6 +1102,64 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     }
   };
 
+  const handleRealtimeTicketUpdate = useCallback(
+    async (payload) => {
+      const recordId = payload.record_id;
+      const currentId = resolveTicketRecordId(currentTicket);
+      if (currentId != null && String(currentId) === recordId) {
+        const refreshed = await fetchCurrentTicket();
+        if (refreshed === "NOT_FOUND") {
+          if (isInModal) {
+            toast.info("This ticket is no longer available.");
+          } else {
+            abandonStaleTicket();
+            toast.info(
+              "This ticket is no longer available. Use Get Tickets to load a new one.",
+            );
+          }
+          return;
+        }
+        if (refreshed) {
+          setCurrentTicket((prev) => mergeRefreshedTicket(prev, refreshed));
+          setTicket((prev) => ({
+            ...prev,
+            resolutionStatus:
+              refreshed.resolution_status === "Resolved"
+                ? "Resolved"
+                : refreshed.resolution_status === "WIP"
+                ? "WIP"
+                : refreshed.resolution_status === "Can't Resolve"
+                ? "Can't Resolve"
+                : "Pending",
+            callStatus:
+              refreshed.call_status === "Connected"
+                ? "Connected"
+                : refreshed.call_status === "Not Connected"
+                ? "Not Connected"
+                : prev.callStatus,
+            cseRemarks: refreshed.cse_remarks || prev.cseRemarks,
+            selectedOtherReasons: parseOtherReasons(refreshed.other_reasons),
+            reviewRequested: Boolean(refreshed.review_requested),
+          }));
+        }
+        return;
+      }
+      if (showPendingCard) {
+        void fetchTicketStats();
+      }
+    },
+    [
+      currentTicket,
+      showPendingCard,
+      fetchCurrentTicket,
+      abandonStaleTicket,
+      isInModal,
+      fetchTicketStats,
+    ],
+  );
+
+  useRecordUpdated(handleRealtimeTicketUpdate, { entityType: "support_ticket" });
+
   const handleWhatsAppTicket = (phone?: string, link?: string) => {
     setWhatsappPhone(phone || "");
     setWhatsappLink(link);
@@ -1145,57 +1204,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
     const dialLink = getPhoneDialLink(phone);
     if (!dialLink) return;
     window.open(dialLink);
-  };
-
-  const handleRefresh = async () => {
-    if (!currentTicket?.id) {
-      return;
-    }
-
-    try {
-      setUpdating(true);
-      const refreshedTicket = await fetchCurrentTicket();
-
-      if (refreshedTicket === "NOT_FOUND") {
-        if (isInModal) {
-          toast.info("This ticket is no longer available.");
-        } else {
-          abandonStaleTicket();
-          toast.info("This ticket is no longer available. Use Get Tickets to load a new one.");
-        }
-        return;
-      }
-
-      if (refreshedTicket) {
-        setCurrentTicket((prev) => mergeRefreshedTicket(prev, refreshedTicket));
-        setTicket((prev) => ({
-          ...prev,
-          resolutionStatus:
-            refreshedTicket.resolution_status === "Resolved"
-              ? "Resolved"
-              : refreshedTicket.resolution_status === "WIP"
-              ? "WIP"
-              : refreshedTicket.resolution_status === "Can't Resolve"
-              ? "Can't Resolve"
-              : "Pending",
-          callStatus:
-            refreshedTicket.call_status === "Connected"
-              ? "Connected"
-              : refreshedTicket.call_status === "Not Connected"
-              ? "Not Connected"
-              : prev.callStatus,
-          cseRemarks: refreshedTicket.cse_remarks || prev.cseRemarks,
-          selectedOtherReasons: parseOtherReasons(refreshedTicket.other_reasons),
-          reviewRequested: Boolean(refreshedTicket.review_requested),
-        }));
-      }
-    } catch (error) {
-      if (!isExpectedTicketRecordNotFound(error)) {
-        console.error("Error refreshing ticket:", error);
-      }
-    } finally {
-      setUpdating(false);
-    }
   };
 
   //handling the other reason change
@@ -1584,14 +1592,6 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
               )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <CustomButton
-                type="button"
-                variant="outline"
-                icon={<RefreshCw className="h-4 w-4 text-gray-500" />}
-                className="rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 via-white to-gray-50 px-3 py-2 text-sm font-semibold text-gray-500 shadow-sm hover:bg-gray-100"
-                onClick={handleRefresh}
-                disabled={updating || !currentTicket}
-              />
               <CustomButton
                 type="button"
                 variant="outline"

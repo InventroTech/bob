@@ -21,6 +21,7 @@ import ShortProfileCard from '../ui/ShortProfileCard';
 import { Input } from '@/components/ui/input';
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
+import { useRecordUpdated } from '@/hooks/useRecordUpdated';
 import { FilterService } from '@/services/filterService';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
 import { apiClient } from '@/lib/api';
@@ -1787,6 +1788,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       }
     }, 1000);
   }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
+
+  const refreshLeadsFromRealtime = useCallback(() => {
+    if (!session?.access_token) return;
+    void fetchFilteredData();
+  }, [session?.access_token, fetchFilteredData]);
+
+  useRecordUpdated(refreshLeadsFromRealtime, {
+    entityType: 'lead',
+    enabled: !config?.entityType || config.entityType === 'lead',
+  });
 
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
