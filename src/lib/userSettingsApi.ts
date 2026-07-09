@@ -7,6 +7,7 @@ import {
   Group,
   GroupCreatePayload,
   UserCoreKVSetting,
+  LeadFilterOptions,
 } from '../types/userSettings';
 
 const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
@@ -130,6 +131,32 @@ export const leadTypeAssignmentApi = {
       }
       console.error('Error in getUserLeadTypes:', error);
       throw error;
+    }
+  },
+
+  // All lead filter dropdown values in one request (faster than 4 separate calls).
+  async getLeadFilterOptions(endpoint?: string): Promise<LeadFilterOptions> {
+    const empty: LeadFilterOptions = {
+      lead_types: [],
+      lead_sources: [],
+      lead_statuses: [],
+      lead_states: [],
+    };
+
+    try {
+      const filterOptionsEndpoint = endpoint || '/user-settings/lead-filter-options/';
+      const response = await apiClient.get(filterOptionsEndpoint);
+      const responseData = response.data;
+
+      return {
+        lead_types: Array.isArray(responseData.lead_types) ? responseData.lead_types : [],
+        lead_sources: Array.isArray(responseData.lead_sources) ? responseData.lead_sources : [],
+        lead_statuses: Array.isArray(responseData.lead_statuses) ? responseData.lead_statuses : [],
+        lead_states: Array.isArray(responseData.lead_states) ? responseData.lead_states : [],
+      };
+    } catch (error: any) {
+      console.error('Error fetching lead filter options:', error);
+      return empty;
     }
   },
 
