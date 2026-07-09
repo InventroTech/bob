@@ -156,21 +156,18 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
 
   const loadData = async () => {
     try {
-      const [groupsData, usersData, sourcesData, statusesData, statesData, partiesData, queueTypesData] = await Promise.all([
+      const [groupsData, usersData, filterOptions, queueTypesData] = await Promise.all([
         groupsApi.getAll(),
         leadTypeAssignmentApi.getAll(),
-        leadTypeAssignmentApi.getAvailableLeadSources(),
-        leadTypeAssignmentApi.getAvailableLeadStatuses(),
-        leadTypeAssignmentApi.getAvailableLeadStates(),
-        leadTypeAssignmentApi.getAvailableLeadTypes(),
+        leadTypeAssignmentApi.getLeadFilterOptions(),
         leadTypeAssignmentApi.getAvailableQueueTypes(),
       ]);
       setGroups(groupsData);
       setUsers(usersData);
-      setLeadSources(sourcesData);
-      setLeadStatuses(statusesData);
-      setLeadStates(statesData);
-      setParties(partiesData);
+      setLeadSources(filterOptions.lead_sources);
+      setLeadStatuses(filterOptions.lead_statuses);
+      setLeadStates(filterOptions.lead_states);
+      setParties(filterOptions.lead_types);
       setQueueTypes(queueTypesData);
     } catch (error: any) {
       toast.error(`Failed to load lead groups data: ${error.message}`);
