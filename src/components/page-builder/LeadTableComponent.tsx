@@ -558,7 +558,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
   const lastInitialFetchKeyRef = useRef<string>('');
-  const initialFetchAbortRef = useRef<AbortController | null>(null);
+  const initialFetchInFlightKeyRef = useRef<string | null>(null);
   const filterServiceRef = useRef<FilterService | null>(null);
   const { session, user } = useAuth();
   const spoofUserId = useSpoofUserId();
@@ -1995,25 +1995,28 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     if (lastInitialFetchKeyRef.current === initialRecordsFetchKey) {
       return;
     }
-    lastInitialFetchKeyRef.current = initialRecordsFetchKey;
+    if (initialFetchInFlightKeyRef.current === initialRecordsFetchKey) {
+      return;
+    }
+    initialFetchInFlightKeyRef.current = initialRecordsFetchKey;
 
     const built = buildInitialRecordsParams();
     if (!built) {
+      initialFetchInFlightKeyRef.current = null;
       setLoading(false);
       return;
     }
 
-    const controller = new AbortController();
-    initialFetchAbortRef.current?.abort();
-    initialFetchAbortRef.current = controller;
+    let stale = false;
 
     const fetchLeads = async () => {
       try {
         setLoading(true);
         updateURL(built.params);
-        const response = await apiClient.get(initialRecordsFetchKey, {
-          signal: controller.signal,
-        });
+        const response = await apiClient.get(initialRecordsFetchKey);
+        if (stale) {
+          return;
+        }
         const responseData = response.data;
         let leads = [];
         let pageMeta = null;
@@ -2050,8 +2053,16 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           ...prev,
           sources: uniqueSources as string[],
         }));
+        lastInitialFetchKeyRef.current = initialRecordsFetchKey;
       } catch (error: any) {
-        if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') {
+        if (
+          stale ||
+          error?.name === 'AbortError' ||
+          error?.code === 'ERR_CANCELED' ||
+          error?.message?.includes('cancelled') ||
+          error?.message?.includes('canceled') ||
+          error?.message?.includes('aborted')
+        ) {
           return;
         }
         console.error('Error fetching leads:', error);
@@ -2059,15 +2070,21 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         setFilteredData([]);
         toast({ title: 'Error', description: 'Failed to fetch leads', variant: 'destructive' });
       } finally {
-        if (!controller.signal.aborted) {
+        if (!stale) {
           setLoading(false);
+        }
+        if (initialFetchInFlightKeyRef.current === initialRecordsFetchKey) {
+          initialFetchInFlightKeyRef.current = null;
         }
       }
     };
 
     void fetchLeads();
     return () => {
-      controller.abort();
+      stale = true;
+      if (initialFetchInFlightKeyRef.current === initialRecordsFetchKey) {
+        initialFetchInFlightKeyRef.current = null;
+      }
     };
   }, [
     initialRecordsFetchKey,
