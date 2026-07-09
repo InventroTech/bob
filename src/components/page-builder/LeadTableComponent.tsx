@@ -551,12 +551,15 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const [apiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'renderer');
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
+  const [filterOptionsReady, setFilterOptionsReady] = useState(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef<number>(0);
-  const lastFetchedConfigRef = useRef<string>(''); // Track last fetched config/filter combination
+  const lastInitialFetchKeyRef = useRef<string>('');
+  const initialFetchAbortRef = useRef<AbortController | null>(null);
+  const filterServiceRef = useRef<FilterService | null>(null);
   const { session, user } = useAuth();
   const spoofUserId = useSpoofUserId();
   const { customRole, membershipLoaded, membershipId } = useTenant();
@@ -734,8 +737,10 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     );
     if (apiSelectFilters.length === 0) {
       setResolvedFilterOptions({});
+      setFilterOptionsReady(true);
       return;
     }
+    setFilterOptionsReady(false);
     let cancelled = false;
     const fetchOne = async (filter: (typeof apiSelectFilters)[0]) => {
       try {
@@ -778,7 +783,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         }
       }
     };
-    apiSelectFilters.forEach(fetchOne);
+    void Promise.all(apiSelectFilters.map(fetchOne)).finally(() => {
+      if (!cancelled) {
+        setFilterOptionsReady(true);
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -825,6 +834,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
     return null;
   }, [effectiveFilters, effectiveApiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, config?.searchFields]);
+
+  filterServiceRef.current = filterService;
 
   // Initialize filter hooks with proper reset when no filters are configured
   const {
@@ -1905,82 +1916,104 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     setIsLeadModalOpen(false);
   };
 
+  const buildInitialRecordsParams = useCallback(() => {
+    if (!effectiveApiEndpoint) {
+      return null;
+    }
+
+    const endpoint = effectiveApiEndpoint;
+    const service = filterServiceRef.current;
+    const useDynamicFilters =
+      normalizedFilters.length > 0 && !config?.showFallbackOnly && service;
+
+    let params: URLSearchParams;
+    if (useDynamicFilters) {
+      params = service.generateQueryParams(filterState.values);
+      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+        params.append('entity_type', config.entityType);
+      }
+    } else {
+      params = new URLSearchParams();
+      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+        params.append('entity_type', config.entityType);
+      }
+      if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
+        params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
+      }
+    }
+
+    params.append('page', '1');
+    params.append('page_size', '10');
+    removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
+    return { endpoint, params };
+  }, [
+    effectiveApiEndpoint,
+    normalizedFilters.length,
+    config?.showFallbackOnly,
+    config?.entityType,
+    config?.defaultFilters,
+    filterState.values,
+    effectiveFilters,
+    removeAssignedToForGM,
+  ]);
+
+  const initialRecordsFetchKey = useMemo(() => {
+    if (!session?.access_token || !membershipLoaded || !filterOptionsReady || config?.showFallbackOnly) {
+      return null;
+    }
+    const built = buildInitialRecordsParams();
+    if (!built) {
+      return null;
+    }
+    return buildUrlWithParams(built.endpoint, built.params);
+  }, [
+    session?.access_token,
+    membershipLoaded,
+    filterOptionsReady,
+    config?.showFallbackOnly,
+    buildInitialRecordsParams,
+    buildUrlWithParams,
+  ]);
+
   useEffect(() => {
+    if (config?.showFallbackOnly) {
+      setData([]);
+      setFilteredData([]);
+      setLoading(false);
+      lastInitialFetchKeyRef.current = '';
+      return;
+    }
+
+    if (!initialRecordsFetchKey) {
+      if (!session?.access_token) {
+        lastInitialFetchKeyRef.current = '';
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (lastInitialFetchKeyRef.current === initialRecordsFetchKey) {
+      return;
+    }
+    lastInitialFetchKeyRef.current = initialRecordsFetchKey;
+
+    const built = buildInitialRecordsParams();
+    if (!built) {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    initialFetchAbortRef.current?.abort();
+    initialFetchAbortRef.current = controller;
+
     const fetchLeads = async () => {
       try {
         setLoading(true);
-        
-        // If showFallbackOnly is true, skip API call and show empty state
-        if (config?.showFallbackOnly) {
-          setData([]);
-          setFilteredData([]);
-          setLoading(false);
-          return;
-        }
-        
-        // Prevent redundant fetches: check if we've already fetched with this config
-        const currentConfigKey = JSON.stringify({
-          apiEndpoint: effectiveApiEndpoint ?? null,
-          defaultFilters: config?.defaultFilters,
-          normalizedFilters: normalizedFilters.map(f => f.key),
-          entityType: config?.entityType,
-          hasActiveFilters
+        updateURL(built.params);
+        const response = await apiClient.get(initialRecordsFetchKey, {
+          signal: controller.signal,
         });
-        
-        // Only skip if config hasn't changed and we have data
-        if (lastFetchedConfigRef.current === currentConfigKey && data.length > 0) {
-          console.log('Skipping redundant fetch - same config');
-          setLoading(false);
-          return;
-        }
-        
-        if (!effectiveApiEndpoint) {
-          console.warn('LeadTableComponent: apiEndpoint is not configured.');
-          setLoading(false);
-          return;
-        }
-
-        const endpoint = effectiveApiEndpoint;
-
-        // Build initial query parameters
-        let params: URLSearchParams;
-
-        if (hasActiveFilters) {
-          // Use dynamic filter system
-          params = filterService.generateQueryParams(filterState.values);
-
-          // Only add entity_type if using generic records endpoint and entityType is configured
-          if (endpoint.includes('/crm-records/records') && config?.entityType) {
-            params.append('entity_type', config.entityType);
-          }
-        } else {
-          // Fallback to legacy filter system
-          params = new URLSearchParams();
-
-          // Only add entity_type if using generic records endpoint and entityType is configured
-          if (endpoint.includes('/crm-records/records') && config?.entityType) {
-            params.append('entity_type', config.entityType);
-          }
-
-          // Apply default filters if provided
-          if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
-            params.append('lead_stage', config.defaultFilters.lead_stage.join(','));
-          }
-        }
-
-        // Add pagination parameters for both systems
-        params.append('page', '1');
-        params.append('page_size', '10');
-
-        // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
-        removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
-
-        // Update URL with current parameters (including URL-restored filters)
-        updateURL(params);
-
-        const url = buildUrlWithParams(endpoint, params);
-
-        const response = await apiClient.get(url);
         const responseData = response.data;
         let leads = [];
         let pageMeta = null;
@@ -1995,9 +2028,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           leads = responseData;
         }
 
-        // Transform the data
         const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
-
         setData(transformedData);
         setFilteredData(transformedData);
 
@@ -2008,40 +2039,44 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
             currentPage: pageMeta.current_page || 1,
             pageSize: pageMeta.page_size || 10,
             nextPageLink: pageMeta.next_page_link || null,
-            previousPageLink: pageMeta.previous_page_link || null
+            previousPageLink: pageMeta.previous_page_link || null,
           });
         }
 
-        // Extract unique sources for filter
-        const uniqueSources = [...new Set(transformedData.map((lead: any) => lead.lead_source || lead.source).filter(Boolean))];
-        setFilterOptions(prev => ({
+        const uniqueSources = [
+          ...new Set(transformedData.map((lead: any) => lead.lead_source || lead.source).filter(Boolean)),
+        ];
+        setFilterOptions((prev) => ({
           ...prev,
-          sources: uniqueSources as string[]
+          sources: uniqueSources as string[],
         }));
-        
-        // Update refs to track what we've fetched
-        lastFetchedConfigRef.current = currentConfigKey;
-      } catch (error) {
+      } catch (error: any) {
+        if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') {
+          return;
+        }
         console.error('Error fetching leads:', error);
         setData([]);
         setFilteredData([]);
         toast({ title: 'Error', description: 'Failed to fetch leads', variant: 'destructive' });
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
-    if (!session?.access_token) {
-      lastFetchedConfigRef.current = '';
-      setLoading(false);
-      return;
-    }
-    // Wait until role is known so GM users don't fetch twice (assigned_to vs all leads).
-    if (!membershipLoaded) {
-      return;
-    }
-    fetchLeads();
-  }, [session?.access_token, membershipLoaded, effectiveApiEndpoint, config?.defaultFilters, normalizedFilters, filterService, updateURL, config?.showFallbackOnly, config?.entityType, hasActiveFilters]);
+    void fetchLeads();
+    return () => {
+      controller.abort();
+    };
+  }, [
+    initialRecordsFetchKey,
+    buildInitialRecordsParams,
+    config?.showFallbackOnly,
+    session?.access_token,
+    updateURL,
+    toast,
+  ]);
 
   // Cleanup on unmount
   useEffect(() => {
