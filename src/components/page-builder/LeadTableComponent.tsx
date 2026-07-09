@@ -551,7 +551,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const [apiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'renderer');
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
-  const [filterOptionsReady, setFilterOptionsReady] = useState(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -737,10 +736,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     );
     if (apiSelectFilters.length === 0) {
       setResolvedFilterOptions({});
-      setFilterOptionsReady(true);
       return;
     }
-    setFilterOptionsReady(false);
     let cancelled = false;
     const fetchOne = async (filter: (typeof apiSelectFilters)[0]) => {
       try {
@@ -783,11 +780,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         }
       }
     };
-    void Promise.all(apiSelectFilters.map(fetchOne)).finally(() => {
-      if (!cancelled) {
-        setFilterOptionsReady(true);
-      }
-    });
+    void Promise.all(apiSelectFilters.map(fetchOne));
     return () => {
       cancelled = true;
     };
@@ -1958,7 +1951,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   ]);
 
   const initialRecordsFetchKey = useMemo(() => {
-    if (!session?.access_token || !membershipLoaded || !filterOptionsReady || config?.showFallbackOnly) {
+    if (!session?.access_token || !membershipLoaded || config?.showFallbackOnly) {
       return null;
     }
     const built = buildInitialRecordsParams();
@@ -1969,7 +1962,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   }, [
     session?.access_token,
     membershipLoaded,
-    filterOptionsReady,
     config?.showFallbackOnly,
     buildInitialRecordsParams,
     buildUrlWithParams,
