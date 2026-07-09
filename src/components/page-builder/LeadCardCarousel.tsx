@@ -44,6 +44,7 @@ interface LeadCardCarouselProps {
     apiEndpoint?: string;
     leadAssignmentWebhookUrl?: string;
     whatsappTemplatesApiEndpoint?: string;
+    statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
   };
   initialLead?: LeadData | null;
