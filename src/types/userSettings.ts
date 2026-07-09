@@ -30,6 +30,13 @@ export interface UserLeadTypes {
 // No hardcoded lead types - they are fetched from the backend
 export type LeadType = string;
 
+export interface LeadFilterOptions {
+  lead_types: string[];
+  lead_sources: string[];
+  lead_statuses: string[];
+  lead_states: string[];
+}
+
 // API Response Types
 export interface ApiResponse<T> {
   success: boolean;
