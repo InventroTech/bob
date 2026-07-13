@@ -4,8 +4,7 @@ import { CustomButton } from "@/components/ui/CustomButton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useSpoofUserId } from "@/lib/spoof";
-import { leadTypeAssignmentApi, resolveDailyFreshLeadLimitFromKv } from "@/lib/userSettingsApi";
-import { membershipService } from "@/lib/api/services/membership";
+import { groupsApi } from "@/lib/userSettingsApi";
 import { crmLeadsApi } from "@/lib/crmLeadsApi";
 import { useRecordUpdated } from "@/hooks/useRecordUpdated";
 import { FaWhatsapp } from "react-icons/fa";
@@ -20,6 +19,7 @@ import {
   MessageSquare,
   X,
   Target,
+  Users,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -192,6 +192,13 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const [dailyLimit, setDailyLimit] = useState<number | null>(null);
   const [dailyLimitLoaded, setDailyLimitLoaded] = useState(false);
   const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
+  /** RM's assigned group — same fresh pool as Lead Source Group List */
+  const [assignedGroupId, setAssignedGroupId] = useState<number | null>(null);
+  const [groupFreshLeads, setGroupFreshLeads] = useState<{
+    name: string;
+    count: number | null;
+    loaded: boolean;
+  }>({ name: "", count: null, loaded: false });
 
   const isInitialized = useRef(false);
   // Store latest handlers in ref so useImperativeHandle always calls current versions
@@ -411,39 +418,40 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   };
 
 
-  // Load daily fresh-lead cap from core KV (`DAILY_LIMIT`) for this membership
+  // Load daily fresh-lead cap + assigned group summary for the current user
   const fetchDailyLimit = useCallback(async () => {
     if (session) {
       setDailyLimitLoaded(false);
+      setGroupFreshLeads((prev) => ({ ...prev, loaded: false }));
     }
     try {
       if (!session || !activeUserId) {
         setDailyLimit(null);
+        setAssignedGroupId(null);
+        setGroupFreshLeads({ name: "", count: null, loaded: true });
         return;
       }
 
-      const membership = await membershipService.getMyMembership();
-      const membershipId = membership?.tenant_membership_id;
-      if (membershipId == null || !Number.isFinite(Number(membershipId))) {
-        setDailyLimit(null);
-        return;
-      }
-
-      try {
-        const kvRows = await leadTypeAssignmentApi.getUserCoreKVSettings(String(membershipId));
-        const limit = resolveDailyFreshLeadLimitFromKv(kvRows);
-        setDailyLimit(limit);
-      } catch (error: any) {
-        if (error.message?.includes('404') || error.message?.includes('Not found')) {
-          setDailyLimit(null);
-        } else {
-          console.error('[LeadCardCarousel] Error loading daily limit from core KV:', error);
-          setDailyLimit(null);
-        }
-      }
+      const summary = await groupsApi.getMyLeadGroupSummary();
+      setDailyLimit(
+        typeof summary.daily_limit === "number" ? summary.daily_limit : null,
+      );
+      setAssignedGroupId(
+        typeof summary.group_id === "number" ? summary.group_id : null,
+      );
+      setGroupFreshLeads({
+        name: summary.group_name || "",
+        count:
+          typeof summary.fresh_leads_count === "number"
+            ? summary.fresh_leads_count
+            : null,
+        loaded: true,
+      });
     } catch (error) {
-      console.error('[LeadCardCarousel] Error fetching daily limit:', error);
+      console.error('[LeadCardCarousel] Error fetching lead group summary:', error);
       setDailyLimit(null);
+      setAssignedGroupId(null);
+      setGroupFreshLeads({ name: "", count: null, loaded: true });
     } finally {
       setDailyLimitLoaded(true);
     }
@@ -462,6 +470,30 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
       return null;
     }
   };
+
+  const refreshGroupFreshLeads = useCallback(async () => {
+    try {
+      const summary = await groupsApi.getMyLeadGroupSummary();
+      setDailyLimit(
+        typeof summary.daily_limit === "number" ? summary.daily_limit : null,
+      );
+      setAssignedGroupId(
+        typeof summary.group_id === "number" ? summary.group_id : null,
+      );
+      setGroupFreshLeads({
+        name: summary.group_name || "",
+        count:
+          typeof summary.fresh_leads_count === "number"
+            ? summary.fresh_leads_count
+            : null,
+        loaded: true,
+      });
+      setDailyLimitLoaded(true);
+    } catch (error) {
+      console.error("[LeadCardCarousel] Error loading group fresh leads:", error);
+      setGroupFreshLeads({ name: "", count: null, loaded: true });
+    }
+  }, []);
 
   const refreshPendingDashboard = useCallback(async () => {
     if (!session) return;
@@ -482,6 +514,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         crmLeadsApi.getRecallPreviewForAssignee(activeUserId, 'SNOOZED'),
         crmLeadsApi.getTrialActivationCount(activeUserId, dateFrom, dateTo),
         crmLeadsApi.getLeadEventCount(activeUserId, 'lead.not_interested', dateFrom, dateTo),
+        refreshGroupFreshLeads(),
       ]);
 
       setPendingDash({
@@ -505,7 +538,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
         loading: false,
       });
     }
-  }, [session, activeUserId]);
+  }, [session, activeUserId, refreshGroupFreshLeads]);
 
   // Utility functions
   const getLeadName = (lead: LeadData | null): string => {
@@ -1404,9 +1437,9 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
               </p>
             </div>
 
-            {freshRemainingToday !== null ? (
-              <div className="mb-6 flex justify-center">
-                <div className="inline-flex flex-col items-center gap-2 rounded-xl border border-sky-200/90 bg-gradient-to-br from-sky-50 via-white to-cyan-50/80 px-5 py-4 shadow-sm max-w-full">
+            <div className="mb-6 grid gap-4 sm:grid-cols-2">
+              {freshRemainingToday !== null ? (
+                <div className="inline-flex flex-col items-center gap-2 rounded-xl border border-sky-200/90 bg-gradient-to-br from-sky-50 via-white to-cyan-50/80 px-5 py-4 shadow-sm w-full">
                   <div className="flex items-center gap-2 text-sky-900/90">
                     <Target className="h-4 w-4 shrink-0" aria-hidden />
                     <span className="text-xs font-semibold uppercase tracking-wide">
@@ -1421,22 +1454,53 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                     <span className="text-lg font-semibold tabular-nums text-slate-800">
                       {dailyLimit}
                     </span>
-                    <span className="block sm:inline sm:ml-1 text-slate-600">
-                      still available against your daily limit.
+                    <span className="block text-slate-600 mt-1">
+                      against your daily limit
                     </span>
                   </p>
                 </div>
-              </div>
-            ) : dailyLimitLoaded ? (
-              <p className="mb-6 text-center text-xs text-muted-foreground px-4">
-                Daily limit isn&apos;t configured — ask your admin to set{' '}
-                <span className="font-mono">DAILY_LIMIT</span> in core settings for your user.
-              </p>
-            ) : (
-              <div className="mb-6 flex justify-center" aria-hidden>
-                <div className="h-16 w-full max-w-sm rounded-xl bg-muted/50 animate-pulse" />
-              </div>
-            )}
+              ) : dailyLimitLoaded ? (
+                <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-4">
+                  <p className="text-center text-xs text-muted-foreground">
+                    Daily limit isn&apos;t configured — ask your admin to set{' '}
+                    <span className="font-mono">DAILY_LIMIT</span> in core settings.
+                  </p>
+                </div>
+              ) : (
+                <div className="h-28 w-full rounded-xl bg-muted/50 animate-pulse" aria-hidden />
+              )}
+
+              {!groupFreshLeads.loaded ? (
+                <div className="h-28 w-full rounded-xl bg-muted/50 animate-pulse" aria-hidden />
+              ) : groupFreshLeads.count !== null ? (
+                <div className="inline-flex flex-col items-center gap-2 rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50 via-white to-teal-50/80 px-5 py-4 shadow-sm w-full">
+                  <div className="flex items-center gap-2 text-emerald-900/90">
+                    <Users className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="text-xs font-semibold uppercase tracking-wide">
+                      Fresh leads available
+                    </span>
+                  </div>
+                  <p className="text-center text-sm text-slate-700 leading-snug">
+                    <span className="text-3xl font-bold tabular-nums text-emerald-950">
+                      {groupFreshLeads.count.toLocaleString()}
+                    </span>
+                    <span className="block text-slate-600 mt-1">
+                      {groupFreshLeads.name
+                        ? `in ${groupFreshLeads.name}`
+                        : "in your lead group"}
+                    </span>
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-4">
+                  <p className="text-center text-xs text-muted-foreground">
+                    {assignedGroupId == null && dailyLimitLoaded
+                      ? "No lead group assigned — ask your admin to set your group in core settings."
+                      : "Fresh leads available count unavailable."}
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div className="grid md:grid-cols-2 gap-4 mb-6">
               <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-amber-50/90 to-white p-5 space-y-3">
