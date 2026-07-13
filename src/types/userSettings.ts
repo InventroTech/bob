@@ -72,6 +72,15 @@ export interface GroupCreatePayload {
   group_data: Record<string, any>;
 }
 
+export interface LeadGroupSummary {
+  tenant_membership_id: number | null;
+  group_id: number | null;
+  group_name: string | null;
+  fresh_leads_count: number | null;
+  daily_limit: number | null;
+  daily_target: number | null;
+}
+
 export interface UserCoreKVSetting {
   id: number;
   tenant: string;
