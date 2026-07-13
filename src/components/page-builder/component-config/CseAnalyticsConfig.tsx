@@ -8,6 +8,7 @@ interface CseAnalyticsConfigProps {
   localConfig: {
     title?: string;
     showDatePicker?: boolean;
+    analyticsType?: string;
   };
   handleInputChange: (field: string, value: string | number | boolean) => void;
 }
@@ -19,7 +20,7 @@ export const CseAnalyticsConfig: React.FC<CseAnalyticsConfigProps> = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>CSE Analytics Configuration</CardTitle>
+        <CardTitle>Analytics Board Configuration</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -28,8 +29,21 @@ export const CseAnalyticsConfig: React.FC<CseAnalyticsConfigProps> = ({
             id="title"
             value={localConfig.title || ""}
             onChange={(e) => handleInputChange("title", e.target.value)}
-            placeholder="CSE Analytics"
+            placeholder="Analytics Board"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="analyticsType">Analytics Type</Label>
+          <Input
+            id="analyticsType"
+            value={localConfig.analyticsType || ""}
+            onChange={(e) => handleInputChange("analyticsType", e.target.value)}
+            placeholder="cse"
+          />
+          <p className="text-xs text-muted-foreground">
+            Which analytics this board saves under (e.g. cse, rm). Defaults to cse.
+          </p>
         </div>
 
         <div className="flex items-center justify-between">

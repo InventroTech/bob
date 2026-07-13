@@ -42,10 +42,17 @@ export interface CseTimeSeriesPoint {
   stacked_unresolved: number;
 }
 
+export interface CseAttributeOption {
+  key: string;
+  label: string;
+  values: string[];
+}
+
 export interface CseFilterOptions {
   ticket_types: string[];
   cse_names: string[];
   handling_time_statuses: string[];
+  attributes?: CseAttributeOption[];
 }
 
 type DateParams = { date?: string; from?: string; to?: string };
@@ -54,6 +61,7 @@ export type CseFilterParams = DateParams & {
   ticket_type?: string;
   handling_status?: string;
   cse_name?: string;
+  af?: string;
 };
 
 function buildParams(params: CseFilterParams): Record<string, string> {
@@ -64,13 +72,51 @@ function buildParams(params: CseFilterParams): Record<string, string> {
   if (params.ticket_type) query.ticket_type = params.ticket_type;
   if (params.handling_status) query.handling_status = params.handling_status;
   if (params.cse_name) query.cse_name = params.cse_name;
+  if (params.af) query.af = params.af;
   return query;
+}
+
+export interface AnalyticsBoardsResponse<T = unknown> {
+  board_type: string;
+  boards: T[];
 }
 
 export const cseAnalyticsApi = {
   async getFilterOptions(): Promise<CseFilterOptions> {
     const response = await apiClient.get('/analytics/cse/filter-options/');
     return response.data;
+  },
+
+  // Each board is one row. List / create / update / delete individually.
+  async getBoards<T = unknown>(type: string): Promise<T[]> {
+    const response = await apiClient.get<AnalyticsBoardsResponse<T>>(
+      '/analytics/board/',
+      { params: { type } }
+    );
+    return response.data?.boards || [];
+  },
+
+  async createBoard<T = unknown>(type: string, config: T): Promise<T> {
+    const response = await apiClient.post('/analytics/board/', { type, config });
+    return response.data?.config;
+  },
+
+  async updateBoard<T = unknown>(
+    type: string,
+    reportId: string,
+    config: T
+  ): Promise<T> {
+    const response = await apiClient.put(
+      `/analytics/board/${encodeURIComponent(reportId)}/`,
+      { type, config }
+    );
+    return response.data?.config;
+  },
+
+  async deleteBoard(type: string, reportId: string): Promise<void> {
+    await apiClient.delete(`/analytics/board/${encodeURIComponent(reportId)}/`, {
+      params: { type },
+    });
   },
 
   async getOverview(params: CseFilterParams): Promise<CseOverviewData> {

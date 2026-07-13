@@ -266,7 +266,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   dynamicScoring: DynamicScoringComponent,
   whatsappTemplate: WhatsAppTemplateComponent,
   teamDashboard: TeamDashboardComponent,
-  cseAnalytics: CseAnalyticsComponent,
+  analyticsBoard: CseAnalyticsComponent,
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
@@ -945,7 +945,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
-      case 'cseAnalytics':
+      case 'analyticsBoard':
         return (
           <CseAnalyticsConfig
             localConfig={localConfig as any}
@@ -1232,7 +1232,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','cseAnalytics','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1951,8 +1951,8 @@ useEffect(() => {
                           icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
-                          id="cseAnalytics"
-                          label="CSE Analytics"
+                          id="analyticsBoard"
+                          label="Analytics Board"
                           icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
