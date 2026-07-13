@@ -8,6 +8,7 @@ import {
   GroupCreatePayload,
   UserCoreKVSetting,
   LeadFilterOptions,
+  LeadGroupSummary,
 } from '../types/userSettings';
 
 const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
@@ -31,6 +32,12 @@ function coerceNonNegativeInt(value: unknown): number | null {
 export function resolveDailyFreshLeadLimitFromKv(kv: UserCoreKVSetting[]): number | null {
   const limitRow = kv.find((row) => row.key === 'DAILY_LIMIT');
   return coerceNonNegativeInt(limitRow?.value);
+}
+
+/** Assigned lead-group id from TenantMemberSetting core KV key `GROUP`. */
+export function resolveGroupIdFromKv(kv: UserCoreKVSetting[]): number | null {
+  const groupRow = kv.find((row) => row.key === 'GROUP');
+  return coerceNonNegativeInt(groupRow?.value);
 }
 
 // Lead Type Assignment API functions
@@ -262,6 +269,17 @@ export const leadTypeAssignmentApi = {
 export const groupsApi = {
   async getAll(): Promise<Group[]> {
     const response = await apiClient.get('/user-settings/groups/');
+    return response.data;
+  },
+
+  async getById(id: number): Promise<Group> {
+    const response = await apiClient.get(`/user-settings/groups/${id}/`);
+    return response.data;
+  },
+
+  /** Current user's assigned group + fresh leads pool (for RM pending page). */
+  async getMyLeadGroupSummary(): Promise<LeadGroupSummary> {
+    const response = await apiClient.get('/user-settings/me/lead-group-summary/');
     return response.data;
   },
 
