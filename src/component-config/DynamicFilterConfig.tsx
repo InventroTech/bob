@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { apiClient } from "@/lib/api";
 
 export interface FilterOption {
   label: string;
@@ -76,6 +77,67 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
   handleRemoveFilterOption,
   handleFilterOptionChange
 }) => {
+  const [directFetchModes, setDirectFetchModes] = useState<Set<number>>(new Set());
+  const [directFetchInputs, setDirectFetchInputs] = useState<Record<number, string>>({});
+  const [directFetchLoading, setDirectFetchLoading] = useState<Record<number, boolean>>({});
+  const [directFetchError, setDirectFetchError] = useState<Record<number, string>>({});
+  const [directFetchSuccess, setDirectFetchSuccess] = useState<Record<number, string>>({});
+
+  const handleDirectFetch = async (filterIndex: number) => {
+    if (directFetchLoading[filterIndex]) return;
+
+    const raw = (directFetchInputs[filterIndex] || '').trim();
+    const field = raw.startsWith('data.') ? raw.slice(5) : raw.trim();
+    if (!field) {
+      setDirectFetchError(prev => ({ ...prev, [filterIndex]: 'Enter a field name, e.g. data.engineer or just engineer' }));
+      return;
+    }
+
+    const entityTypeMatch = (localConfig.apiEndpoint || '').match(/[?&]entity_type=([^&]+)/);
+    const entityType = entityTypeMatch ? decodeURIComponent(entityTypeMatch[1]) : '';
+    if (!entityType) {
+      setDirectFetchError(prev => ({ ...prev, [filterIndex]: 'No entity_type found in the API Endpoint configured above. Add ?entity_type=your_type to it first.' }));
+      return;
+    }
+
+    setDirectFetchLoading(prev => ({ ...prev, [filterIndex]: true }));
+    setDirectFetchError(prev => ({ ...prev, [filterIndex]: '' }));
+    setDirectFetchSuccess(prev => ({ ...prev, [filterIndex]: '' }));
+    try {
+      const response = await apiClient.get('/crm-records/records/distinct-values/', {
+        params: { entity_type: entityType, field },
+      });
+      const rawValues = response.data?.values;
+      const values: string[] = Array.isArray(rawValues) && rawValues.length > 0
+        ? rawValues
+        : (response.data?.results ?? []).map((r: { value: string }) => r.value);
+
+      if (values.length === 0) {
+        setDirectFetchError(prev => ({
+          ...prev,
+          [filterIndex]: `No values found for field "${field}" in "${entityType}". Check that the field name matches exactly what's stored in the data column.`,
+        }));
+        return;
+      }
+
+      const options: FilterOption[] = values.map(v => ({ label: String(v), value: String(v) }));
+      handleFilterFieldChange(filterIndex, 'options', options);
+      setDirectFetchSuccess(prev => ({ ...prev, [filterIndex]: `${values.length} option${values.length !== 1 ? 's' : ''} loaded` }));
+      setDirectFetchModes(prev => { const next = new Set(prev); next.delete(filterIndex); return next; });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string; detail?: string } } };
+      const status = axiosErr?.response?.status;
+      const serverMsg = axiosErr?.response?.data?.error || axiosErr?.response?.data?.detail;
+      let msg = 'Fetch failed';
+      if (status) msg += ` (HTTP ${status})`;
+      if (serverMsg) msg += `: ${serverMsg}`;
+      else msg += ' — check the browser console for details';
+      setDirectFetchError(prev => ({ ...prev, [filterIndex]: msg }));
+    } finally {
+      setDirectFetchLoading(prev => ({ ...prev, [filterIndex]: false }));
+    }
+  };
+
   return (
     <div className="space-y-4">
 
@@ -295,22 +357,31 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                   </div>
                 )}
 
-                {/* Select options: Manual or fetch from API */}
+                {/* Select options: Manual, fetch from API, or direct fetch */}
                 {filter.type === 'select' && (
                   <div className="col-span-2 space-y-2">
                     <div>
                       <Label className="block mb-2">Options source</Label>
                       <Select
-                        value={filter.optionsApiUrl ? 'api' : 'manual'}
+                        value={directFetchModes.has(index) ? 'direct' : (filter.optionsApiUrl ? 'api' : 'manual')}
                         onValueChange={(value: string) => {
-                          if (handleFilterOptionsSourceChange) {
-                            handleFilterOptionsSourceChange(index, value as 'manual' | 'api');
-                          } else {
-                            if (value === 'api') {
+                          if (value === 'direct') {
+                            setDirectFetchModes(prev => new Set([...prev, index]));
+                            setDirectFetchError(prev => ({ ...prev, [index]: '' }));
+                          } else if (value === 'api') {
+                            setDirectFetchModes(prev => { const next = new Set(prev); next.delete(index); return next; });
+                            if (handleFilterOptionsSourceChange) {
+                              handleFilterOptionsSourceChange(index, 'api');
+                            } else {
                               handleFilterFieldChange(index, 'optionsApiUrl', '/membership/roles');
                               handleFilterFieldChange(index, 'optionsDisplayKey', 'name');
                               handleFilterFieldChange(index, 'optionsValueKey', 'id');
                               handleFilterFieldChange(index, 'options', []);
+                            }
+                          } else {
+                            setDirectFetchModes(prev => { const next = new Set(prev); next.delete(index); return next; });
+                            if (handleFilterOptionsSourceChange) {
+                              handleFilterOptionsSourceChange(index, 'manual');
                             } else {
                               handleFilterFieldChange(index, 'optionsApiUrl', '');
                               handleFilterFieldChange(index, 'optionsDisplayKey', '');
@@ -326,11 +397,47 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                         <SelectContent>
                           <SelectItem value="manual">Manual (add options below)</SelectItem>
                           <SelectItem value="api">Fetch from API</SelectItem>
+                          <SelectItem value="direct">Direct Fetch (auto-fill from DB)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {filter.optionsApiUrl ? (
+                    {directFetchModes.has(index) ? (
+                      <div className="space-y-2 p-3 bg-muted/50 rounded-md">
+                        <Label className="text-xs text-muted-foreground">Type the data field to fetch unique values from</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="data.engineer"
+                            value={directFetchInputs[index] ?? ''}
+                            onChange={(e) => {
+                              setDirectFetchInputs(prev => ({ ...prev, [index]: e.target.value }));
+                              setDirectFetchError(prev => ({ ...prev, [index]: '' }));
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleDirectFetch(index);
+                              }
+                            }}
+                            className="font-mono text-sm"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => handleDirectFetch(index)}
+                            disabled={!!directFetchLoading[index]}
+                          >
+                            {directFetchLoading[index] ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Fetch'}
+                          </Button>
+                        </div>
+                        {directFetchError[index] && (
+                          <p className="text-xs text-red-500">{directFetchError[index]}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Fetches all unique values for <code className="bg-muted px-1 rounded">data.&lt;field&gt;</code> from the database and autofills the options list.
+                        </p>
+                      </div>
+                    ) : filter.optionsApiUrl ? (
                       <div className="space-y-2 p-3 bg-muted/50 rounded-md">
                         <Label className="text-xs text-muted-foreground">API configuration</Label>
                         <Input
@@ -391,6 +498,9 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       </div>
                     ) : (
                       <>
+                        {directFetchSuccess[index] && (
+                          <p className="text-xs text-green-600 font-medium">{directFetchSuccess[index]} — edit below if needed</p>
+                        )}
                         <div className="flex items-center justify-between">
                           <Label>Options</Label>
                           <Button
