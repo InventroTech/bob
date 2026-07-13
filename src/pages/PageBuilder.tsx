@@ -119,6 +119,7 @@ import { StackedBarChart } from "@/components/AnalyticalComponent/StackedBarChar
 import { LineChart } from "@/components/AnalyticalComponent/LineChart";
 import { BarGraph } from "@/components/AnalyticalComponent/BarGraph";
 import { TeamDashboardComponent, TeamDashboardConfig } from "@/components/page-builder";
+import { CseAnalyticsComponent, CseAnalyticsConfig } from "@/components/page-builder";
 import { OperationsProgramsComponent, OperationsProgramsConfig } from "@/components/page-builder";
 import { UserHierarchyComponent, UserHierarchyConfig } from "@/components/page-builder";
 // Import configuration components
@@ -265,6 +266,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   dynamicScoring: DynamicScoringComponent,
   whatsappTemplate: WhatsAppTemplateComponent,
   teamDashboard: TeamDashboardComponent,
+  analyticsBoard: CseAnalyticsComponent,
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
@@ -943,6 +945,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'analyticsBoard':
+        return (
+          <CseAnalyticsConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       case 'operationsPrograms':
         return (
           <OperationsProgramsConfig
@@ -1222,7 +1232,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1938,6 +1948,11 @@ useEffect(() => {
                         <DraggableSidebarItem
                           id="teamDashboard"
                           label="Team Dashboard"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="analyticsBoard"
+                          label="Analytics Board"
                           icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
