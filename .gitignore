@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cursor local noise (keep .cursor/BUGBOT.md tracked)
+.cursor/*.log
+.cursor/**/*.log
