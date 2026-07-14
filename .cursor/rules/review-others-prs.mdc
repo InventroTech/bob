@@ -1,0 +1,16 @@
+---
+description: How to review other people's PRs in this repo with Cursor Agent
+alwaysApply: false
+---
+
+# Reviewing others' PRs
+
+When asked to review a teammate's PR:
+
+1. Check out with `gh pr checkout <n>` (or fetch `pull/<n>/head`).
+2. Diff against the PR base branch (`main` as applicable).
+3. Apply `.cursor/BUGBOT.md` (auth, tenant routing, apiClient, secrets, spoof JWT).
+4. Return a structured review; only post to GitHub if asked.
+
+Trigger Agent Review locally with `/agent-review` or `/review-bugbot` after checkout.
+Prefer deep review for auth, tenant switching, API client, and spoofing changes.
