@@ -1531,11 +1531,11 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
                                 }}
                               />
                               <label
-                                htmlFor={`resolution-${status}`}
-                                className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                              >
-                                {status === null ? 'Open' : status}
-                              </label>
+  htmlFor={`resolution-${status}`}
+  className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+>
+  {status === null ? "OPEN" : status.toUpperCase()}
+</label>
                             </div>
                           ))}
                         </div>
