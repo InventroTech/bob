@@ -20,6 +20,7 @@ import {
   X,
   Target,
   Users,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -139,6 +140,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
+  const [refreshingLead, setRefreshingLead] = useState(false);
   const [showPendingCard, setShowPendingCard] = useState(true);
   const [hasCheckedForLeads, setHasCheckedForLeads] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -1771,6 +1773,36 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
+                <CustomButton
+                  type="button"
+                  variant="outline"
+                  icon={
+                    <RefreshCw
+                      className={cn(
+                        "h-4 w-4 text-[#344054]",
+                        refreshingLead && "animate-spin"
+                      )}
+                    />
+                  }
+                  className="rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                  onClick={() => {
+                    const leadId =
+                      currentLead?.id != null ? Number(currentLead.id) : NaN;
+                    if (Number.isNaN(leadId)) return;
+                    setRefreshingLead(true);
+                    void fetchFreshLeadForCard(leadId).finally(() => {
+                      setRefreshingLead(false);
+                    });
+                  }}
+                  disabled={
+                    refreshingLead ||
+                    updating ||
+                    fetchingNext ||
+                    currentLead?.id == null
+                  }
+                >
+                  Refresh
+                </CustomButton>
                 <CustomButton
                   type="button"
                   variant="outline"
