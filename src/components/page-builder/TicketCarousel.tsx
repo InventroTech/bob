@@ -728,6 +728,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
+  const [refreshingTicket, setRefreshingTicket] = useState(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [whatsappPhone, setWhatsappPhone] = useState<string>("");
   const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
@@ -1592,6 +1593,35 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
               )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              <CustomButton
+                type="button"
+                variant="outline"
+                icon={
+                  <RefreshCw
+                    className={cn(
+                      "h-4 w-4 text-[#344054]",
+                      refreshingTicket && "animate-spin"
+                    )}
+                  />
+                }
+                className="rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
+                onClick={() => {
+                  const ticketId = resolveTicketRecordId(currentTicket);
+                  if (ticketId == null) return;
+                  setRefreshingTicket(true);
+                  void fetchFreshTicketForCard(ticketId).finally(() => {
+                    setRefreshingTicket(false);
+                  });
+                }}
+                disabled={
+                  refreshingTicket ||
+                  updating ||
+                  fetchingNext ||
+                  resolveTicketRecordId(currentTicket) == null
+                }
+              >
+                Refresh
+              </CustomButton>
               <CustomButton
                 type="button"
                 variant="outline"
