@@ -63,7 +63,7 @@ export const TicketTableConfig: React.FC<TicketTableConfigProps> = ({
         <div className="space-y-2">
           <Label htmlFor="apiPrefix">API Prefix</Label>
           <Select
-            value={localConfig.apiPrefix || "supabase"}
+            value={localConfig.apiPrefix || "renderer"}
             onValueChange={(value) => handleInputChange("apiPrefix", value)}
           >
             <SelectTrigger>
@@ -75,7 +75,7 @@ export const TicketTableConfig: React.FC<TicketTableConfigProps> = ({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Choose the API service to use for fetching data
+            Use Renderer for pyro-backend routes (e.g. get-wip-tickets, get-not-connected-tickets)
           </p>
         </div>
 
