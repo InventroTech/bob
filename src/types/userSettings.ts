@@ -85,8 +85,21 @@ export interface UserCoreKVSetting {
   id: number;
   tenant: string;
   tenant_membership: number;
-  key: 'GROUP' | 'DAILY_TARGET' | 'DAILY_LIMIT' | string;
+  key:
+    | 'GROUP'
+    | 'DAILY_TARGET'
+    | 'DAILY_LIMIT'
+    | 'SUPPORT_DAILY_LIMIT_SELF_TRIAL'
+    | 'SUPPORT_DAILY_LIMIT_OTHER'
+    | 'SUPPORT_RESOLVE_RATE_GOAL'
+    | string;
   value: any;
   created_at: string;
   updated_at: string;
+}
+
+export interface PatchSupportDailyLimitsPayload {
+  support_daily_limit_self_trial?: number | null;
+  support_daily_limit_other?: number | null;
+  support_resolve_rate_goal?: number | null;
 }

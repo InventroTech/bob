@@ -9,7 +9,12 @@ import {
   UserCoreKVSetting,
   LeadFilterOptions,
   LeadGroupSummary,
+  PatchSupportDailyLimitsPayload,
 } from '../types/userSettings';
+
+export const SUPPORT_DAILY_LIMIT_SELF_TRIAL_KEY = 'SUPPORT_DAILY_LIMIT_SELF_TRIAL';
+export const SUPPORT_DAILY_LIMIT_OTHER_KEY = 'SUPPORT_DAILY_LIMIT_OTHER';
+export const SUPPORT_RESOLVE_RATE_GOAL_KEY = 'SUPPORT_RESOLVE_RATE_GOAL';
 
 const API_BASE_URL = (import.meta.env.VITE_RENDER_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
@@ -38,6 +43,23 @@ export function resolveDailyFreshLeadLimitFromKv(kv: UserCoreKVSetting[]): numbe
 export function resolveGroupIdFromKv(kv: UserCoreKVSetting[]): number | null {
   const groupRow = kv.find((row) => row.key === 'GROUP');
   return coerceNonNegativeInt(groupRow?.value);
+}
+
+export function resolveSupportDailyLimitsFromKv(kv: UserCoreKVSetting[]): {
+  self_trial: number | null;
+  other: number | null;
+} {
+  const stRow = kv.find((row) => row.key === SUPPORT_DAILY_LIMIT_SELF_TRIAL_KEY);
+  const otherRow = kv.find((row) => row.key === SUPPORT_DAILY_LIMIT_OTHER_KEY);
+  return {
+    self_trial: coerceNonNegativeInt(stRow?.value),
+    other: coerceNonNegativeInt(otherRow?.value),
+  };
+}
+
+export function resolveSupportResolveRateGoalFromKv(kv: UserCoreKVSetting[]): number | null {
+  const row = kv.find((row) => row.key === SUPPORT_RESOLVE_RATE_GOAL_KEY);
+  return coerceNonNegativeInt(row?.value);
 }
 
 // Lead Type Assignment API functions
@@ -263,6 +285,17 @@ export const leadTypeAssignmentApi = {
       console.error('Error fetching user core kv settings:', error);
       return [];
     }
+  },
+
+  async patchSupportDailyLimits(
+    userId: string,
+    data: PatchSupportDailyLimitsPayload
+  ): Promise<UserCoreKVSetting[]> {
+    const response = await apiClient.patch(
+      `/user-settings/users/${userId}/core-kv-settings/`,
+      data
+    );
+    return Array.isArray(response.data) ? response.data : [];
   },
 };
 
