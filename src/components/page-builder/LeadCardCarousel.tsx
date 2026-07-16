@@ -21,8 +21,14 @@ import {
   Target,
   Users,
   RefreshCw,
+Info,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+Tooltip,
+TooltipContent,
+TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
@@ -85,6 +91,7 @@ interface LeadData {
   position: string;
   source?: string;
   lead_source?: string;
+  lead_source_description?: string;
   status: string;
   notes: string;
   budget: number;
@@ -1731,23 +1738,40 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                   )}
                 </div>
                 <div className="space-y-1">
-                  <div className="flex flex-col gap-0.5">
-                  {currentLead?.user_profile_link ? (
-                    <a
-                      href={currentLead.user_profile_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-2xl font-semibold text-slate-900 hover:text-primary"
-                      style={titleFont}
-                    >
-                      {getLeadName(currentLead)}
-                    </a>
-                  ) : (
-                    <h5>
-                      {getLeadName(currentLead)}
-                    </h5>
-                  )}
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                <div className="flex flex-col gap-0.5">
+  <div className="flex items-center gap-2">
+    {currentLead?.user_profile_link ? (
+      <a
+        href={currentLead.user_profile_link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-2xl font-semibold text-slate-900 hover:text-primary"
+        style={titleFont}
+      >
+        {getLeadName(currentLead)}
+      </a>
+    ) : (
+      <h5>{getLeadName(currentLead)}</h5>
+    )}
+
+    {currentLead?.lead_source && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Info
+            className="h-4 w-4 cursor-pointer text-slate-400 hover:text-slate-700"
+          />
+        </TooltipTrigger>
+
+        <TooltipContent side="right">
+          <p className="max-w-xs break-words">
+            {currentLead.lead_source_description}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    )}
+  </div>
+  
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                       {currentLead?.affiliated_party && (
                         <span className="font-medium text-slate-700">
                           {currentLead.affiliated_party}
@@ -1763,6 +1787,7 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
                       )}
                     </div>
                   </div>
+    
                   <div className="flex flex-wrap items-center gap-2">
                     {currentLead?.status && (
                       <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
