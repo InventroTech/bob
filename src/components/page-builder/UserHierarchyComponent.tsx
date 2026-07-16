@@ -391,8 +391,13 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
 
   useEffect(() => {
     if (!flowReady || nodes.length === 0) return;
+  
     requestAnimationFrame(() => {
-      reactFlow.fitView({ padding: 0.2, duration: 250 });
+      reactFlow.setViewport({
+        x: 0,
+        y: 0,
+        zoom: 1,
+      });
     });
   }, [flowReady, nodes, reactFlow]);
 
@@ -533,6 +538,10 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
                 onNodeMouseLeave={onNodeMouseLeave}
                 isValidConnection={isValidConnection}
                 fitView
+fitViewOptions={{
+  padding: 0.01,
+  maxZoom: 1,
+}}
                 minZoom={0.08}
                 maxZoom={1.5}
                 connectionLineType={ConnectionLineType.Bezier}
@@ -549,10 +558,6 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
                 <Background />
                 <Controls />
                 <MiniMap className="!bg-background/90 !border-border" maskColor="rgba(0,0,0,0.1)" />
-                <Panel position="top-center" className="text-xs text-muted-foreground text-center max-w-md px-2">
-                  Drag from a card&apos;s bottom edge to another card&apos;s top edge. Scroll on chart to pan;
-                  ⌘ or Ctrl + scroll to zoom. You can also use each card&apos;s “Set manager” dropdown.
-                </Panel>
                 {isConnecting && (
                   <Panel
                     position="top-left"
