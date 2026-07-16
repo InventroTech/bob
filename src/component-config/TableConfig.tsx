@@ -76,6 +76,8 @@ export interface ColumnConfig {
 interface TableConfigProps {
   localConfig: {
     apiEndpoint: string;
+    /** Base host: supabase edge functions vs pyro-backend renderer. */
+    apiPrefix?: 'supabase' | 'renderer';
     showFilters: boolean;
     searchFields?: string;
     entityType?: string;
@@ -154,6 +156,24 @@ export const TableConfig: React.FC<TableConfigProps> = ({
 
   return (
     <div className="space-y-4">
+      <div>
+        <Label>API Prefix</Label>
+        <Select
+          value={localConfig.apiPrefix || 'renderer'}
+          onValueChange={(value) => handleInputChange('apiPrefix', value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select API Prefix" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="supabase">Supabase</SelectItem>
+            <SelectItem value="renderer">Renderer</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground mt-1">
+          Use Renderer for pyro-backend routes (e.g. /support-ticket/…)
+        </p>
+      </div>
       <div>
         <Label>API Endpoint</Label>
         <Input

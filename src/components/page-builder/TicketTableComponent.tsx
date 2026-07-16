@@ -295,7 +295,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
     startTime: '00:00',
     endTime: '23:59'
   });
-  const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(config?.apiPrefix || 'supabase');
+  const [apiPrefix, setApiPrefix] = useState<'supabase' | 'renderer'>(
+    config?.apiPrefix || 'renderer'
+  );
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>(''); // Separate state for display
@@ -1305,8 +1307,13 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
         const authToken = session?.access_token;
 
         const endpoint = config?.apiEndpoint || '/api/tickets';
-        const baseUrl = apiPrefix === 'renderer' 
-          ? TICKET_API_BASE 
+        // Page builder uses TableConfig for ticketTable (no apiPrefix UI). Support
+        // ticket APIs live on the renderer backend, not Supabase edge functions.
+        const useRenderer =
+          apiPrefix === 'renderer' ||
+          endpoint.includes('/support-ticket/');
+        const baseUrl = useRenderer
+          ? TICKET_API_BASE
           : import.meta.env.VITE_API_URI;
         const apiUrl = `${baseUrl}${endpoint}?page=1&page_size=50`;
         console.log('API URL:', apiUrl);
@@ -1402,7 +1409,16 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           console.log('Reapplying filters after data fetch...');
           setTimeout(() => applyFilters(), 100); // Small delay to ensure state is updated
         }
-      } catch (error) {
+      } catch (error: any) {
+        // Effect re-runs (token/config) abort the previous fetch — not a real failure.
+        if (
+          error?.name === 'AbortError' ||
+          abortController.signal.aborted ||
+          (typeof error?.message === 'string' &&
+            error.message.toLowerCase().includes('aborted'))
+        ) {
+          return;
+        }
         console.error('Error fetching tickets:', error);
         // Set empty data on error instead of using demo data
         setData([]);
@@ -1413,7 +1429,9 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           console.log('Filters were applied but data fetch failed');
         }
       } finally {
-        setLoading(false);
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
