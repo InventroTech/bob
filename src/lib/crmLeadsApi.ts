@@ -152,6 +152,8 @@ export const crmLeadsApi = {
       const response = await apiClient.get(apiEndpoint);
       const leadData = response.data;
 
+      console.log("API Response:", response.data);
+
       // Backend returns empty object {} with 200 status when no lead is found
       if (!leadData || (typeof leadData === 'object' && !Array.isArray(leadData) && Object.keys(leadData).length === 0)) {
         return null;
