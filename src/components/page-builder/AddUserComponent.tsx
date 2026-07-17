@@ -435,7 +435,8 @@ const AddUserComponent: React.FC = () => {
     return validUsers.filter(
       (user) =>
         user.name.toLowerCase().includes(term) ||
-        user.email.toLowerCase().includes(term)
+        user.email.toLowerCase().includes(term) ||
+        (user.role?.name || '').toLowerCase().includes(term)
     );
   }, [usersWithSettings, userSearchTerm]);
 
@@ -1237,7 +1238,7 @@ const AddUserComponent: React.FC = () => {
                 <Input
                   value={userSearchTerm}
                   onChange={(e) => setUserSearchTerm(e.target.value)}
-                  placeholder="Search by name or email..."
+                  placeholder="Search by name, email or role..."
                   className="h-11 pl-9"
                 />
               </div>
