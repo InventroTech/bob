@@ -15,6 +15,26 @@ export interface UsersReportRow {
   department?: string;
   role?: { name?: string } | null;
   created_at: string;
+  /** CSE daily target is a resolve-rate goal (%); others use a count-based daily target. */
+  supportResolveRateGoal?: string | number;
+  dailyTarget?: string | number;
+}
+
+function isCseRoleName(name?: string): boolean {
+  const upper = (name ?? '').toUpperCase();
+  return upper.includes('CSE') || upper.includes('CUSTOMER SUPPORT');
+}
+
+function isBlankValue(value?: string | number): boolean {
+  return value === undefined || value === null || value === '—' || value === '';
+}
+
+/** CSE rows show the resolve-rate goal as a percentage; everyone else the daily target. */
+function formatTargetForReport(row: UsersReportRow): string {
+  if (isCseRoleName(row.role?.name)) {
+    return isBlankValue(row.supportResolveRateGoal) ? '—' : `${row.supportResolveRateGoal}%`;
+  }
+  return isBlankValue(row.dailyTarget) ? '—' : String(row.dailyTarget);
 }
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -69,12 +89,13 @@ export async function downloadUsersReportPdf(users: UsersReportRow[]) {
     doc.text(`Total users: ${rows.length}`, marginX, topMarginY + 16);
 
     autoTable(doc, {
-      head: [['Name', 'Email', 'Department', 'Role', 'Created At']],
+      head: [['Name', 'Email', 'Department', 'Role', 'Target', 'Created At']],
       body: rows.map((user) => [
         user.name,
         user.email,
         user.department || '—',
         user.role?.name || 'No Role',
+        formatTargetForReport(user),
         formatCreatedAt(user.created_at),
       ]),
       startY: topMarginY + 24,

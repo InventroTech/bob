@@ -33,6 +33,9 @@ interface User {
   leadGroup?: string;
   dailyTarget?: string | number;
   dailyLimit?: string | number;
+  supportResolveRateGoal?: string | number;
+  supportDailyLimitSelfTrial?: string | number;
+  supportDailyLimitOther?: string | number;
   user_parent_id?: number | null;
   managerEmail?: string;
 }
@@ -41,6 +44,9 @@ interface UserCoreSettingsSummary {
   group_id?: number;
   daily_target?: number;
   daily_limit?: number;
+  support_resolve_rate_goal?: number;
+  support_daily_limit_self_trial?: number;
+  support_daily_limit_other?: number;
 }
 
 interface LeadGroupOption {
@@ -60,7 +66,121 @@ interface RowEditState {
   leadGroup: string;
   dailyTarget: string;
   dailyLimit: string;
+  supportResolveRateGoal: string;
+  supportDailyLimitSelfTrial: string;
+  supportDailyLimitOther: string;
   managerEmail: string;
+}
+
+/** CSE daily target is a resolve-rate goal expressed as a percentage. */
+function formatResolveRateGoal(value?: string | number): string {
+  if (value === undefined || value === null || value === '—' || value === '') {
+    return '—';
+  }
+  return `${value}%`;
+}
+
+function SupportDailyDualDisplay({
+  selfTrial,
+  other,
+}: {
+  selfTrial?: string | number;
+  other?: string | number;
+}) {
+  const st = selfTrial === undefined || selfTrial === '—' ? null : selfTrial;
+  const ot = other === undefined || other === '—' ? null : other;
+  if (st === null && ot === null) return <>—</>;
+  return (
+    <div className="text-sm leading-snug space-y-0.5">
+      <div>
+        <span className="text-gray-500">ST:</span> {st ?? '—'}
+      </div>
+      <div>
+        <span className="text-gray-500">Other:</span> {ot ?? '—'}
+      </div>
+    </div>
+  );
+}
+
+function SupportDailyDualInputs({
+  selfTrial,
+  other,
+  onSelfTrialChange,
+  onOtherChange,
+  inputClassName = 'h-8',
+  max,
+}: {
+  selfTrial: string;
+  other: string;
+  onSelfTrialChange: (value: string) => void;
+  onOtherChange: (value: string) => void;
+  inputClassName?: string;
+  max?: number;
+}) {
+  return (
+    <div className="space-y-1 min-w-[7rem]">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-gray-500 w-9 shrink-0">ST</span>
+        <Input
+          className={inputClassName}
+          type="number"
+          min="0"
+          max={max}
+          step="1"
+          value={selfTrial}
+          onChange={(e) => onSelfTrialChange(e.target.value)}
+          placeholder="—"
+        />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-gray-500 w-9 shrink-0">Other</span>
+        <Input
+          className={inputClassName}
+          type="number"
+          min="0"
+          max={max}
+          step="1"
+          value={other}
+          onChange={(e) => onOtherChange(e.target.value)}
+          placeholder="—"
+        />
+      </div>
+    </div>
+  );
+}
+
+async function patchSupportDailyKv(
+  membershipId: string | number,
+  {
+    resolveRateGoal,
+    limitSelfTrial,
+    limitOther,
+  }: {
+    resolveRateGoal?: string;
+    limitSelfTrial?: string;
+    limitOther?: string;
+  }
+): Promise<void> {
+  const payload: Record<string, number | null> = {};
+  if (resolveRateGoal !== undefined) {
+    payload.support_resolve_rate_goal =
+      resolveRateGoal !== '' ? Number(resolveRateGoal) : null;
+  }
+  if (limitSelfTrial !== undefined) {
+    payload.support_daily_limit_self_trial =
+      limitSelfTrial !== '' ? Number(limitSelfTrial) : null;
+  }
+  if (limitOther !== undefined) {
+    payload.support_daily_limit_other =
+      limitOther !== '' ? Number(limitOther) : null;
+  }
+  if (Object.keys(payload).length === 0) return;
+  await leadTypeAssignmentApi.patchSupportDailyLimits(String(membershipId), payload);
+}
+
+function isCseRole(role?: Role): boolean {
+  const name = role?.name?.toUpperCase() ?? '';
+  return name.includes('CSE') || name.includes('CUSTOMER SUPPORT');
 }
 
 const AddUserComponent: React.FC = () => {
@@ -80,6 +200,9 @@ const AddUserComponent: React.FC = () => {
     leadGroup: '',
     dailyTarget: '',
     dailyLimit: '',
+    supportResolveRateGoal: '',
+    supportDailyLimitSelfTrial: '',
+    supportDailyLimitOther: '',
     managerEmail: '',
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -218,10 +341,19 @@ const AddUserComponent: React.FC = () => {
         const groupRow = kv.find((r) => r.key === 'GROUP');
         const targetRow = kv.find((r) => r.key === 'DAILY_TARGET');
         const limitRow = kv.find((r) => r.key === 'DAILY_LIMIT');
+        const resolveGoalRow = kv.find((r) => r.key === 'SUPPORT_RESOLVE_RATE_GOAL');
+        const stLimitRow = kv.find((r) => r.key === 'SUPPORT_DAILY_LIMIT_SELF_TRIAL');
+        const otherLimitRow = kv.find((r) => r.key === 'SUPPORT_DAILY_LIMIT_OTHER');
         mapped[emailKey] = {
           group_id: typeof groupRow?.value === 'number' ? groupRow.value : undefined,
           daily_target: typeof targetRow?.value === 'number' ? targetRow.value : undefined,
           daily_limit: typeof limitRow?.value === 'number' ? limitRow.value : undefined,
+          support_resolve_rate_goal:
+            typeof resolveGoalRow?.value === 'number' ? resolveGoalRow.value : undefined,
+          support_daily_limit_self_trial:
+            typeof stLimitRow?.value === 'number' ? stLimitRow.value : undefined,
+          support_daily_limit_other:
+            typeof otherLimitRow?.value === 'number' ? otherLimitRow.value : undefined,
         };
       });
       setCoreSettingsMap(mapped);
@@ -274,11 +406,21 @@ const AddUserComponent: React.FC = () => {
         const parentUser = usr.user_parent_id
           ? users.find((u) => u.tenant_membership_id === usr.user_parent_id)
           : null;
+        const isCse = isCseRole(usr.role);
         return {
           ...usr,
           leadGroup: groupFromKv || usr.lead_group_name || '—',
-          dailyTarget: config?.daily_target ?? '—',
-          dailyLimit: config?.daily_limit ?? '—',
+          dailyTarget: isCse ? '—' : (config?.daily_target ?? '—'),
+          dailyLimit: isCse ? '—' : (config?.daily_limit ?? '—'),
+          supportResolveRateGoal: isCse
+            ? (config?.support_resolve_rate_goal ?? '—')
+            : '—',
+          supportDailyLimitSelfTrial: isCse
+            ? (config?.support_daily_limit_self_trial ?? '—')
+            : '—',
+          supportDailyLimitOther: isCse
+            ? (config?.support_daily_limit_other ?? '—')
+            : '—',
           managerEmail: parentUser?.email || '—',
         };
       }),
@@ -361,6 +503,18 @@ const AddUserComponent: React.FC = () => {
       return;
     }
 
+    const selectedRole = roles.find((r) => r.id === selectedRoleId);
+    if (
+      selectedQueueType === 'ticket' &&
+      (formData.supportDailyLimitSelfTrial !== '' ||
+        formData.supportDailyLimitOther !== '' ||
+        formData.supportResolveRateGoal !== '') &&
+      !isCseRole(selectedRole)
+    ) {
+      toast.error('Support daily targets/limits can only be set for users with the CSE role');
+      return;
+    }
+
     try{
       setIsCreatingUser(true);
       const token = session?.access_token;
@@ -384,8 +538,10 @@ const AddUserComponent: React.FC = () => {
       };
       if (formData.department?.trim()) payload.department = formData.department.trim();
       if (formData.leadGroup?.trim()) payload.lead_group_name = formData.leadGroup.trim();
-      if (formData.dailyTarget !== '') payload.daily_target = Number(formData.dailyTarget);
-      if (formData.dailyLimit !== '') payload.daily_limit = Number(formData.dailyLimit);
+      if (selectedQueueType !== 'ticket' || !isCseRole(selectedRole)) {
+        if (formData.dailyTarget !== '') payload.daily_target = Number(formData.dailyTarget);
+        if (formData.dailyLimit !== '') payload.daily_limit = Number(formData.dailyLimit);
+      }
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -443,6 +599,9 @@ const AddUserComponent: React.FC = () => {
       const selectedLeadGroup = formData.leadGroup;
       const selectedDailyTarget = formData.dailyTarget;
       const selectedDailyLimit = formData.dailyLimit;
+      const selectedSupportResolveGoal = formData.supportResolveRateGoal;
+      const selectedSupportStLimit = formData.supportDailyLimitSelfTrial;
+      const selectedSupportOtherLimit = formData.supportDailyLimitOther;
 
       setFormData({
         name: '',
@@ -451,6 +610,9 @@ const AddUserComponent: React.FC = () => {
         leadGroup: '',
         dailyTarget: '',
         dailyLimit: '',
+        supportResolveRateGoal: '',
+        supportDailyLimitSelfTrial: '',
+        supportDailyLimitOther: '',
         managerEmail: '',
       });
       setSelectedQueueType('lead');
@@ -459,6 +621,30 @@ const AddUserComponent: React.FC = () => {
       // Refresh the users list
       await fetchUsers();
       await fetchCoreSettings();
+
+      if (
+        selectedQueueType === 'ticket' &&
+        createdMembershipId &&
+        isCseRole(selectedRole) &&
+        (selectedSupportStLimit !== '' ||
+          selectedSupportOtherLimit !== '' ||
+          selectedSupportResolveGoal !== '')
+      ) {
+        try {
+          await patchSupportDailyKv(createdMembershipId, {
+            resolveRateGoal: selectedSupportResolveGoal,
+            limitSelfTrial: selectedSupportStLimit,
+            limitOther: selectedSupportOtherLimit,
+          });
+          await fetchCoreSettings();
+        } catch (patchError: any) {
+          toast.error(
+            patchError?.response?.data?.detail ||
+              patchError?.message ||
+              'User created but failed to save support resolve goals/limits'
+          );
+        }
+      }
 
       // Group and user-level limits are now saved by backend create/update endpoint.
       if (selectedLeadGroup || selectedDailyTarget || selectedDailyLimit) {
@@ -543,6 +729,8 @@ const AddUserComponent: React.FC = () => {
   const getRowKey = (usr: User) => `${usr.uid}-${usr.email}-${usr.role_id}`;
 
   const handleEditUser = (usr: User) => {
+    const config = coreSettingsMap[(usr.email || '').toLowerCase()];
+    const cse = isCseRole(usr.role);
     setEditingRowKey(getRowKey(usr));
     setEditingRow({
       originalEmail: usr.email || '',
@@ -552,8 +740,25 @@ const AddUserComponent: React.FC = () => {
       department: usr.department || '',
       roleId: usr.role_id || '',
       leadGroup: usr.leadGroup && usr.leadGroup !== '—' ? usr.leadGroup : '',
-      dailyTarget: usr.dailyTarget && usr.dailyTarget !== '—' ? String(usr.dailyTarget) : '',
-      dailyLimit: usr.dailyLimit && usr.dailyLimit !== '—' ? String(usr.dailyLimit) : '',
+      dailyTarget: cse
+        ? ''
+        : usr.dailyTarget && usr.dailyTarget !== '—'
+          ? String(usr.dailyTarget)
+          : '',
+      dailyLimit:
+        usr.dailyLimit && usr.dailyLimit !== '—' ? String(usr.dailyLimit) : '',
+      supportResolveRateGoal:
+        config?.support_resolve_rate_goal !== undefined
+          ? String(config.support_resolve_rate_goal)
+          : '',
+      supportDailyLimitSelfTrial:
+        config?.support_daily_limit_self_trial !== undefined
+          ? String(config.support_daily_limit_self_trial)
+          : '',
+      supportDailyLimitOther:
+        config?.support_daily_limit_other !== undefined
+          ? String(config.support_daily_limit_other)
+          : '',
       managerEmail: usr.managerEmail && usr.managerEmail !== '—' ? usr.managerEmail : '',
     });
   };
@@ -593,6 +798,7 @@ const AddUserComponent: React.FC = () => {
 
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
       const apiUrl = `${baseUrl}/accounts/users/update/`;
+      const editedRole = roles.find((r) => r.id === editingRow.roleId);
       const payload: Record<string, string | number> = {
         name: editingRow.name.trim(),
         email: editingRow.email.trim(),
@@ -602,8 +808,10 @@ const AddUserComponent: React.FC = () => {
       };
       if (editingRow.department.trim()) payload.department = editingRow.department.trim();
       if (editingRow.leadGroup.trim()) payload.lead_group_name = editingRow.leadGroup.trim();
-      if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
-      if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
+      if (!isCseRole(editedRole)) {
+        if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
+        if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
+      }
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -650,6 +858,23 @@ const AddUserComponent: React.FC = () => {
           });
         } catch {
           toast.error('User updated but failed to update manager hierarchy');
+        }
+
+        const editedRoleForLimits = roles.find((r) => r.id === editingRow.roleId);
+        if (isCseRole(editedRoleForLimits)) {
+          try {
+            await patchSupportDailyKv(editedUser.tenant_membership_id, {
+              resolveRateGoal: editingRow.supportResolveRateGoal,
+              limitSelfTrial: editingRow.supportDailyLimitSelfTrial,
+              limitOther: editingRow.supportDailyLimitOther,
+            });
+          } catch (patchError: any) {
+            toast.error(
+              patchError?.response?.data?.detail ||
+                patchError?.message ||
+                'User updated but failed to save support daily targets/limits'
+            );
+          }
         }
       }
 
@@ -742,7 +967,14 @@ const AddUserComponent: React.FC = () => {
                   const nextType = e.target.value === 'ticket' ? 'ticket' : 'lead';
                   setSelectedQueueType(nextType);
                   if (nextType === 'ticket') {
-                    setFormData((prev) => ({ ...prev, dailyTarget: '', dailyLimit: '' }));
+                    setFormData((prev) => ({ ...prev, dailyTarget: '' }));
+                  } else {
+                    setFormData((prev) => ({
+                      ...prev,
+                      supportResolveRateGoal: '',
+                      supportDailyLimitSelfTrial: '',
+                      supportDailyLimitOther: '',
+                    }));
                   }
                 }}
               >
@@ -842,7 +1074,15 @@ const AddUserComponent: React.FC = () => {
                   setFormData((prev) => ({ ...prev, leadGroup: selectedName }));
                   if (selectedGroup?.queue_type === 'ticket') {
                     setSelectedQueueType('ticket');
-                    setFormData((prev) => ({ ...prev, dailyTarget: '', dailyLimit: '' }));
+                    setFormData((prev) => ({ ...prev, dailyTarget: '' }));
+                  } else if (selectedGroup?.queue_type === 'lead') {
+                    setSelectedQueueType('lead');
+                    setFormData((prev) => ({
+                      ...prev,
+                      supportResolveRateGoal: '',
+                      supportDailyLimitSelfTrial: '',
+                      supportDailyLimitOther: '',
+                    }));
                   }
                 }}
               >
@@ -855,7 +1095,41 @@ const AddUserComponent: React.FC = () => {
                   ))}
               </select>
             </div>
-            {selectedQueueType !== 'ticket' && (
+            {selectedQueueType === 'ticket' ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="resolveRateGoal">Resolve Goal %</Label>
+                  <Input
+                    id="resolveRateGoal"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={formData.supportResolveRateGoal}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, supportResolveRateGoal: e.target.value }))
+                    }
+                    placeholder="80"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Daily Limit</Label>
+                  <div className="rounded-md border border-gray-200 p-3">
+                    <SupportDailyDualInputs
+                      selfTrial={formData.supportDailyLimitSelfTrial}
+                      other={formData.supportDailyLimitOther}
+                      onSelfTrialChange={(value) =>
+                        setFormData((prev) => ({ ...prev, supportDailyLimitSelfTrial: value }))
+                      }
+                      onOtherChange={(value) =>
+                        setFormData((prev) => ({ ...prev, supportDailyLimitOther: value }))
+                      }
+                      inputClassName="h-10"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="dailyTarget">Daily Target</Label>
@@ -1000,7 +1274,7 @@ const AddUserComponent: React.FC = () => {
                     <TableHead className="text-white font-medium">Email</TableHead>
                     <TableHead className="text-white font-medium">Role</TableHead>
                     <TableHead className="text-white font-medium">Group</TableHead>
-                    <TableHead className="text-white font-medium">Daily Target</TableHead>
+                    <TableHead className="text-white font-medium">Target</TableHead>
                     <TableHead className="text-white font-medium">Daily Limit</TableHead>
                     <TableHead className="text-white font-medium">Manager Email</TableHead>
                     <TableHead className="text-white font-medium">Created at</TableHead>
@@ -1008,7 +1282,12 @@ const AddUserComponent: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsersWithSettings.map((user, index) => (
+                  {filteredUsersWithSettings.map((user, index) => {
+                    const rowIsCse =
+                      editingRowKey === getRowKey(user) && editingRow
+                        ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
+                        : isCseRole(user.role);
+                    return (
                       <TableRow key={`${user.uid}-${index}`}>
                         <TableCell className="text-body-medium">
                           {user.name}
@@ -1038,27 +1317,79 @@ const AddUserComponent: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           {editingRowKey === getRowKey(user) && editingRow ? (
-                            <Input
-                              className="h-9"
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={editingRow.dailyTarget}
-                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, dailyTarget: e.target.value }) : prev)}
-                            />
-                          ) : user.dailyTarget}
+                            rowIsCse ? (
+                              <Input
+                                className="h-9"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                value={editingRow.supportResolveRateGoal}
+                                onChange={(e) =>
+                                  setEditingRow((prev) =>
+                                    prev ? ({ ...prev, supportResolveRateGoal: e.target.value }) : prev
+                                  )
+                                }
+                              />
+                            ) : (
+                              <Input
+                                className="h-9"
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={editingRow.dailyTarget}
+                                onChange={(e) =>
+                                  setEditingRow((prev) =>
+                                    prev ? ({ ...prev, dailyTarget: e.target.value }) : prev
+                                  )
+                                }
+                              />
+                            )
+                          ) : rowIsCse ? (
+                            <>{formatResolveRateGoal(user.supportResolveRateGoal)}</>
+                          ) : (
+                            user.dailyTarget
+                          )}
                         </TableCell>
                         <TableCell>
                           {editingRowKey === getRowKey(user) && editingRow ? (
-                            <Input
-                              className="h-9"
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={editingRow.dailyLimit}
-                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, dailyLimit: e.target.value }) : prev)}
+                            rowIsCse ? (
+                              <SupportDailyDualInputs
+                                selfTrial={editingRow.supportDailyLimitSelfTrial}
+                                other={editingRow.supportDailyLimitOther}
+                                onSelfTrialChange={(value) =>
+                                  setEditingRow((prev) =>
+                                    prev ? ({ ...prev, supportDailyLimitSelfTrial: value }) : prev
+                                  )
+                                }
+                                onOtherChange={(value) =>
+                                  setEditingRow((prev) =>
+                                    prev ? ({ ...prev, supportDailyLimitOther: value }) : prev
+                                  )
+                                }
+                              />
+                            ) : (
+                              <Input
+                                className="h-9"
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={editingRow.dailyLimit}
+                                onChange={(e) =>
+                                  setEditingRow((prev) =>
+                                    prev ? ({ ...prev, dailyLimit: e.target.value }) : prev
+                                  )
+                                }
+                              />
+                            )
+                          ) : rowIsCse ? (
+                            <SupportDailyDualDisplay
+                              selfTrial={user.supportDailyLimitSelfTrial}
+                              other={user.supportDailyLimitOther}
                             />
-                          ) : user.dailyLimit}
+                          ) : (
+                            user.dailyLimit
+                          )}
                         </TableCell>
                         <TableCell>
                           {editingRowKey === getRowKey(user) && editingRow ? (
@@ -1191,7 +1522,8 @@ const AddUserComponent: React.FC = () => {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

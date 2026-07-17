@@ -106,6 +106,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { OeLeadsTable } from "@/components/page-builder/OeLeadsTable";
 import { ProgressBar } from "@/components/ui/progressBar";
 import { LeadProgressBar } from "@/components/page-builder/LeadProgressBar";
+import { CseProgressBar } from "@/components/page-builder/CseProgressBar";
 import { HeaderComponent } from "@/components/page-builder/HeaderComponent";
 import { TicketTableComponent } from "@/components/page-builder/TicketTableComponent";
 import { TicketCarousel } from "@/components/page-builder/TicketCarousel";
@@ -137,6 +138,7 @@ import {
 } from "@/component-config";
 import { TicketTableConfig } from "@/components/page-builder/component-config/TicketTableConfig";
 import { LeadProgressBarConfig } from "@/components/page-builder/component-config/LeadProgressBarConfig";
+import { CseProgressBarConfig } from "@/components/page-builder/component-config/CseProgressBarConfig";
 import { WhatsAppTemplateComponent } from "@/components/page-builder/WhatsAppTemplateComponent";
 import { WhatsAppTemplateConfig } from "@/components/page-builder/component-config/WhatsAppTemplateConfig";
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
@@ -248,6 +250,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   oeLeadsTable: OeLeadsTable,
   progressBar: ProgressBar,
   leadProgressBar: LeadProgressBar,
+  cseProgressBar: CseProgressBar,
   ticketTable: TicketTableComponent,
   ticketCarousel: TicketCarouselWrapper,
   ticketBarGraph: TicketBarGraphComponent,
@@ -927,6 +930,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
+      case 'cseProgressBar':
+        return (
+          <CseProgressBarConfig
+            config={localConfig as any}
+            onConfigChange={(newConfig) => {
+              Object.entries(newConfig).forEach(([key, value]) => {
+                handleInputChange(key as keyof LocalConfigType, value);
+              });
+            }}
+          />
+        );
+
       case 'whatsappTemplate':
         return (
           <WhatsAppTemplateConfig
@@ -1232,7 +1247,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1759,6 +1774,11 @@ useEffect(() => {
                         <DraggableSidebarItem
                           id="leadProgressBar"
                           label="Lead Progress Bar"
+                          icon={<Target className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="cseProgressBar"
+                          label="CSE Progress Bar"
                           icon={<Target className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
