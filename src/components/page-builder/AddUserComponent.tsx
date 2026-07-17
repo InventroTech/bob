@@ -72,6 +72,14 @@ interface RowEditState {
   managerEmail: string;
 }
 
+/** CSE daily target is a resolve-rate goal expressed as a percentage. */
+function formatResolveRateGoal(value?: string | number): string {
+  if (value === undefined || value === null || value === '—' || value === '') {
+    return '—';
+  }
+  return `${value}%`;
+}
+
 function SupportDailyDualDisplay({
   selfTrial,
   other,
@@ -1338,7 +1346,7 @@ const AddUserComponent: React.FC = () => {
                               />
                             )
                           ) : rowIsCse ? (
-                            <>{user.supportResolveRateGoal ?? '—'}</>
+                            <>{formatResolveRateGoal(user.supportResolveRateGoal)}</>
                           ) : (
                             user.dailyTarget
                           )}
