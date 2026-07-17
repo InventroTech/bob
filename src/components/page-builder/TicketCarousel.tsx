@@ -1014,6 +1014,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
+        window.dispatchEvent(new CustomEvent('support-ticket-assigned'));
       } else {
         setShowPendingCard(true);
         setCurrentTicket(null);
@@ -1357,6 +1358,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
       if (nextTicket?.id) {
         setTicketFromResponse(nextTicket);
+        window.dispatchEvent(new CustomEvent('support-ticket-assigned'));
       } else {
         setShowPendingCard(true);
         setCurrentTicket(null);
