@@ -33,19 +33,6 @@ export const CseAnalyticsConfig: React.FC<CseAnalyticsConfigProps> = ({
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="analyticsType">Analytics Type</Label>
-          <Input
-            id="analyticsType"
-            value={localConfig.analyticsType || ""}
-            onChange={(e) => handleInputChange("analyticsType", e.target.value)}
-            placeholder="cse"
-          />
-          <p className="text-xs text-muted-foreground">
-            Which analytics this board saves under (e.g. cse, rm). Defaults to cse.
-          </p>
-        </div>
-
         <div className="flex items-center justify-between">
           <Label htmlFor="showDatePicker">Show Date Picker</Label>
           <Switch

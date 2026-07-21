@@ -2,6 +2,14 @@ import { createApiClient } from '@/lib/api/client';
 
 const BASE_URL = import.meta.env.VITE_RENDER_API_URL?.replace(/\/+$/, '') || import.meta.env.VITE_API_URI?.replace(/\/+$/, '');
 
+export interface UnassignedLeadsBreakdown {
+  total: number;
+  by_source: Array<{ lead_source: string; count: number }>;
+  by_status: Array<{ lead_stage: string; count: number }>;
+  available_sources: string[];
+  available_stages: string[];
+}
+
 // Create API client for this service
 const apiClient = createApiClient(BASE_URL || '');
 
@@ -91,13 +99,7 @@ export const teamAnalyticsApi = {
   async getUnassignedLeadsBreakdown(params?: {
     lead_source?: string;  // comma-separated for multi-select
     lead_stage?: string;
-  }): Promise<{
-    total: number;
-    by_source: Array<{ lead_source: string; count: number }>;
-    by_status: Array<{ lead_stage: string; count: number }>;
-    available_sources: string[];
-    available_stages: string[];
-  }> {
+  }): Promise<UnassignedLeadsBreakdown> {
     try {
       const response = await apiClient.get('/analytics/team/unassigned-leads/', { params });
       return response.data;
