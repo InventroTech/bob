@@ -1756,18 +1756,21 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
 
     {currentLead?.lead_source && (
       <Tooltip>
-        <TooltipTrigger asChild>
-          <Info
-            className="h-4 w-4 cursor-pointer text-slate-400 hover:text-slate-700"
-          />
-        </TooltipTrigger>
-
-        <TooltipContent side="right">
-          <p className="max-w-xs break-words">
-            {currentLead.lead_source_description}
-          </p>
-        </TooltipContent>
-      </Tooltip>
+      <TooltipTrigger asChild>
+        <Info
+          className="h-4 w-4 cursor-pointer text-slate-400 hover:text-slate-700"
+        />
+      </TooltipTrigger>
+    
+      <TooltipContent
+        side="bottom"
+  className="w-56 rounded-xl border bg-white p-4 shadow-lg"
+      >
+        <p className="text-sm">
+          {currentLead.data?.lead_source_description}
+        </p>
+      </TooltipContent>
+    </Tooltip>
     )}
   </div>
   
