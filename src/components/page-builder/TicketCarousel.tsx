@@ -729,6 +729,7 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
   const [updating, setUpdating] = useState(false);
   const [fetchingNext, setFetchingNext] = useState(false);
   const [refreshingTicket, setRefreshingTicket] = useState(false);
+  const [takingBreak, setTakingBreak] = useState(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [whatsappPhone, setWhatsappPhone] = useState<string>("");
   const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
@@ -1049,6 +1050,8 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
 
   //taking a break
   const handleTakeBreak = async () => {
+    if (takingBreak) return;
+    setTakingBreak(true);
     try {
       if (!session?.access_token) {
         throw new Error("Authentication required");
@@ -1058,17 +1061,19 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
         ticketId: currentTicket?.id,
       });
 
-      // Navigate to pending card
+      toast.info("Taking a break. Click 'Get Tickets' when ready to continue.");
+    } catch (error) {
+      console.error("Error taking break:", error);
+      toast.error("Error taking break. Please try again.");
+    } finally {
+      // Always navigate away — backend may have already unassigned the ticket
+      setTakingBreak(false);
       setShowPendingCard(true);
       setCurrentTicket(null);
       resetTicketState();
       isInitialized.current = false;
       clearPersistedState();
-      await fetchTicketStats();
-      toast.info("Taking a break. Click 'Get Tickets' when ready to continue.");
-    } catch (error) {
-      console.error("Error taking break:", error);
-      toast.error("Error taking break. Please try again.");
+      void fetchTicketStats();
     }
   };
 
@@ -1552,10 +1557,11 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             variant="outline"
             size="sm"
             icon={<Coffee className="h-4 w-4" />}
-            disabled={updating}
+            disabled={updating || takingBreak}
+            loading={takingBreak}
             className="rounded-xl border-slate-200 bg-white px-4 py-2 shadow-sm"
           >
-            Take a Break
+            {takingBreak ? "Taking break..." : "Take a Break"}
           </CustomButton>
         </div>
       ) : (
@@ -1574,6 +1580,14 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
               <div className="flex flex-col items-center gap-3">
                 <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
                 <p className="text-sm text-muted-foreground">Loading next ticket...</p>
+              </div>
+            </div>
+          )}
+          {takingBreak && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/90 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+                <p className="text-sm text-muted-foreground">Taking a break...</p>
               </div>
             </div>
           )}
@@ -1832,9 +1846,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
             variant="outline"
             size="sm"
             icon={<Coffee className="h-4 w-4" />}
-            disabled={updating}
+            disabled={updating || takingBreak}
+            loading={takingBreak}
           >
-            Take a Break
+            {takingBreak ? "Taking break..." : "Take a Break"}
           </CustomButton>
         </div>
       )}
