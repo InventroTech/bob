@@ -20,10 +20,32 @@ import {
   type CseFilterParams,
   type CseMemberData,
   type CseOverviewData,
+  type CseSupportTicketBreakdown,
   type CseTimeSeriesPoint,
 } from '@/lib/cseAnalyticsApi';
+import {
+  rmAnalyticsApi,
+  type RmFilterParams,
+  type RmMemberData,
+  type RmOverviewData,
+  type RmTimeSeriesPoint,
+} from '@/lib/rmAnalyticsApi';
+import {
+  teamAnalyticsApi,
+  type UnassignedLeadsBreakdown,
+} from '@/lib/teamAnalyticsApi';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Calendar, ChevronDown, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Calendar,
+  ChevronDown,
+  Plus,
+  RotateCcw,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -65,6 +87,10 @@ interface CseAnalyticsComponentProps {
     /** Analytics type this board belongs to (e.g. 'cse', 'rm'). */
     analyticsType?: string;
   };
+}
+
+interface AnalyticsBoardViewProps extends CseAnalyticsComponentProps {
+  analyticsTypeSelector: React.ReactNode;
 }
 
 type DatePreset = 'last7days' | 'last30days' | 'custom';
@@ -113,7 +139,7 @@ type ChartType =
   | 'table'
   | 'metric';
 
-type BreakdownType = 'date' | 'cse';
+type BreakdownType = 'date' | 'cse' | 'rm' | 'manager';
 
 type MetricFormat = 'number' | 'percent' | 'time';
 
@@ -122,9 +148,11 @@ interface MetricDef {
   label: string;
   color: string;
   format: MetricFormat;
-  fromTs?: (p: CseTimeSeriesPoint) => number;
+  fromTs?: (p: CseTimeSeriesPoint | RmTimeSeriesPoint) => number;
   fromCse?: (m: CseMemberData) => number;
+  fromRm?: (m: RmMemberData) => number;
   fromOverview?: (o: CseOverviewData) => number;
+  fromOverviewRm?: (o: RmOverviewData) => number;
 }
 
 const METRIC_DEFS: MetricDef[] = [
@@ -133,7 +161,7 @@ const METRIC_DEFS: MetricDef[] = [
     label: 'Assigned',
     color: '#3b82f6',
     format: 'number',
-    fromTs: (p) => p.assigned,
+    fromTs: (p) => (p as CseTimeSeriesPoint).assigned,
     fromCse: (m) => m.leads_assigned,
     fromOverview: (o) => o.leads_assigned,
   },
@@ -142,7 +170,7 @@ const METRIC_DEFS: MetricDef[] = [
     label: 'Resolved',
     color: '#22c55e',
     format: 'number',
-    fromTs: (p) => p.resolved,
+    fromTs: (p) => (p as CseTimeSeriesPoint).resolved,
     fromCse: (m) => m.resolved,
     fromOverview: (o) => o.resolved,
   },
@@ -151,7 +179,7 @@ const METRIC_DEFS: MetricDef[] = [
     label: 'Resolve Rate',
     color: '#a855f7',
     format: 'percent',
-    fromTs: (p) => Math.round((p.resolve_rate || 0) * 100),
+    fromTs: (p) => Math.round(((p as CseTimeSeriesPoint).resolve_rate || 0) * 100),
     fromCse: (m) => Math.round((m.resolve_rate || 0) * 100),
     fromOverview: (o) => Math.round((o.resolve_rate || 0) * 100),
   },
@@ -160,16 +188,25 @@ const METRIC_DEFS: MetricDef[] = [
     label: 'Avg Handling Time',
     color: '#fb923c',
     format: 'time',
-    fromTs: (p) => Math.round(p.average_handling_time_seconds || 0),
+    fromTs: (p) => Math.round((p as CseTimeSeriesPoint).average_handling_time_seconds || 0),
     fromCse: (m) => Math.round(m.average_handling_time_seconds || 0),
     fromOverview: (o) => Math.round(o.average_handling_time_seconds || 0),
+  },
+  {
+    key: 'handling_time_ticket_count',
+    label: 'Tickets in Avg',
+    color: '#0ea5e9',
+    format: 'number',
+    fromTs: (p) => (p as CseTimeSeriesPoint).handling_time_ticket_count,
+    fromCse: (m) => m.handling_time_ticket_count,
+    fromOverview: (o) => o.handling_time_ticket_count,
   },
   {
     key: 'not_connected',
     label: 'Not Connected',
     color: '#ef4444',
     format: 'number',
-    fromTs: (p) => p.not_connected,
+    fromTs: (p) => (p as CseTimeSeriesPoint).not_connected,
     fromOverview: (o) => o.not_connected,
   },
   {
@@ -177,7 +214,7 @@ const METRIC_DEFS: MetricDef[] = [
     label: 'Call Back',
     color: '#f59e0b',
     format: 'number',
-    fromTs: (p) => p.call_later,
+    fromTs: (p) => (p as CseTimeSeriesPoint).call_later,
     fromOverview: (o) => o.call_later,
   },
   {
@@ -195,6 +232,105 @@ const METRIC_DEFS: MetricDef[] = [
     format: 'number',
     fromCse: (m) => m.open_not_connected,
     fromOverview: (o) => o.open_not_connected,
+  },
+];
+
+const RM_METRIC_DEFS: MetricDef[] = [
+  {
+    key: 'calls_made',
+    label: 'Calls Made',
+    color: '#3b82f6',
+    format: 'number',
+    fromTs: (p) => (p as RmTimeSeriesPoint).calls_made,
+    fromRm: (m) => m.calls_made,
+    fromOverviewRm: (o) => o.calls_made,
+  },
+  {
+    key: 'calls_connected',
+    label: 'Calls Connected',
+    color: '#14b8a6',
+    format: 'number',
+    fromTs: (p) => (p as RmTimeSeriesPoint).calls_connected,
+    fromRm: (m) => m.calls_connected,
+    fromOverviewRm: (o) => o.calls_connected,
+  },
+  {
+    key: 'trials_activated',
+    label: 'Trials Activated',
+    color: '#22c55e',
+    format: 'number',
+    fromTs: (p) => (p as RmTimeSeriesPoint).trials_activated,
+    fromRm: (m) => m.trials_activated,
+    fromOverviewRm: (o) => o.trials_activated,
+  },
+  {
+    key: 'connected_to_trial_ratio',
+    label: 'Connected to Trial Ratio',
+    color: '#a855f7',
+    format: 'percent',
+    fromTs: (p) => Math.round(((p as RmTimeSeriesPoint).connected_to_trial_ratio || 0) * 100),
+    fromRm: (m) => Math.round((m.connected_to_trial_ratio || 0) * 100),
+    fromOverviewRm: (o) => Math.round((o.connected_to_trial_ratio || 0) * 100),
+  },
+  {
+    key: 'attendance',
+    label: 'Attendance',
+    color: '#6366f1',
+    format: 'number',
+    fromTs: (p) => (p as RmTimeSeriesPoint).attendance,
+    fromRm: (m) => m.attendance,
+    fromOverviewRm: (o) => o.attendance,
+  },
+  {
+    key: 'average_time_spent_seconds',
+    label: 'Avg Handling Time',
+    color: '#fb923c',
+    format: 'time',
+    fromTs: (p) => Math.round((p as RmTimeSeriesPoint).average_time_spent_seconds || 0),
+    fromRm: (m) => Math.round(m.average_time_spent_seconds || 0),
+    fromOverviewRm: (o) => Math.round(o.average_time_spent_seconds || 0),
+  },
+  {
+    key: 'handling_time_volume',
+    label: 'Leads in Avg',
+    color: '#0ea5e9',
+    format: 'number',
+    fromTs: (p) => (p as RmTimeSeriesPoint).handling_time_volume,
+    fromRm: (m) => m.handling_time_volume,
+    fromOverviewRm: (o) => o.handling_time_volume,
+  },
+  {
+    key: 'take_break_count',
+    label: 'Take Break',
+    color: '#f59e0b',
+    format: 'number',
+    fromTs: (p) => (p as RmTimeSeriesPoint).take_break_count,
+    fromRm: (m) => m.take_break_count,
+    fromOverviewRm: (o) => o.take_break_count,
+  },
+  {
+    key: 'not_interested_count',
+    label: 'Not Interested',
+    color: '#ef4444',
+    format: 'number',
+    fromTs: (p) => (p as RmTimeSeriesPoint).not_interested_count,
+    fromRm: (m) => m.not_interested_count,
+    fromOverviewRm: (o) => o.not_interested_count,
+  },
+  {
+    key: 'allotted_leads',
+    label: 'Allotted Leads',
+    color: '#84cc16',
+    format: 'number',
+    fromRm: (m) => m.allotted_leads,
+    fromOverviewRm: (o) => o.allotted_leads,
+  },
+  {
+    key: 'unassigned_leads',
+    label: 'Unassigned Leads',
+    color: '#dc2626',
+    format: 'number',
+    fromOverviewRm: (o) => o.unassigned_leads,
   },
 ];
 
@@ -239,12 +375,23 @@ const formatMetricValue = (format: MetricFormat, value: number): string => {
   return `${value}`;
 };
 
-const getAvailableMetrics = (breakdown: BreakdownType): MetricDef[] =>
-  METRIC_DEFS.filter((m) => (breakdown === 'date' ? !!m.fromTs : !!m.fromCse));
+const getAvailableMetrics = (
+  breakdown: BreakdownType,
+  catalog: MetricDef[],
+  chartType?: ChartType
+): MetricDef[] =>
+  catalog.filter((m) => {
+    if (breakdown === 'date') {
+      return !!m.fromTs || (chartType === 'metric' && !!m.fromOverviewRm);
+    }
+    if (breakdown === 'cse') return !!m.fromCse;
+    if (breakdown === 'manager') return !!m.fromCse || !!m.fromRm;
+    return !!m.fromRm || (chartType === 'metric' && !!m.fromOverviewRm);
+  });
 
-const getMetricLabels = (metricKeys: string[]): string =>
+const getMetricLabels = (metricKeys: string[], catalog: MetricDef[]): string =>
   metricKeys
-    .map((k) => METRIC_DEFS.find((m) => m.key === k)?.label)
+    .map((k) => catalog.find((m) => m.key === k)?.label)
     .filter(Boolean)
     .join(', ');
 
@@ -300,6 +447,11 @@ const filtersToParams = (filters: ReportFilters): CseFilterParams => {
   };
 };
 
+/** Manager I chip added but no manager chosen yet — must not show unfiltered tenant data. */
+const isManagerIFilterPending = (filters: ReportFilters): boolean =>
+  Object.prototype.hasOwnProperty.call(filters.attributes || {}, 'manager_i') &&
+  (filters.attributes.manager_i || []).length === 0;
+
 // ---- Saved board report ----
 interface BoardReport {
   id: string;
@@ -310,14 +462,70 @@ interface BoardReport {
   filters: ReportFilters;
 }
 
+const isChartType = (value: unknown): value is ChartType =>
+  typeof value === 'string' &&
+  [
+    'line',
+    'stackedLine',
+    'column',
+    'stackedColumn',
+    'bar',
+    'stackedBar',
+    'pie',
+    'table',
+    'metric',
+  ].includes(value);
+
+/** Migrates/validates a persisted board row into the current Mixpanel report shape. */
+const normalizeBoardReport = (
+  raw: any,
+  variant: 'cse' | 'rm',
+  defaultMetrics: string[],
+  validMetricKeys: Set<string>
+): BoardReport | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = String(raw.id || '').trim();
+  if (!id) return null;
+
+  // Drop interim RM unassigned-leads boards (source/status tabs, no metrics).
+  if (raw.breakdown === 'source' || raw.breakdown === 'status') return null;
+  if (!Array.isArray(raw.metrics) && !isChartType(raw.chartType)) return null;
+
+  let breakdown: BreakdownType =
+    raw.breakdown === 'cse' ||
+    raw.breakdown === 'rm' ||
+    raw.breakdown === 'manager' ||
+    raw.breakdown === 'date'
+      ? raw.breakdown
+      : 'date';
+  if (variant === 'rm' && breakdown === 'cse') breakdown = 'date';
+  if (variant === 'cse' && breakdown === 'rm') breakdown = 'date';
+
+  const metrics = Array.isArray(raw.metrics)
+    ? raw.metrics.map(String).filter((metric) => validMetricKeys.has(metric))
+    : [...defaultMetrics];
+  if (metrics.length === 0) metrics.push(...defaultMetrics);
+
+  return {
+    id,
+    title: String(raw.title || (variant === 'rm' ? 'RM Report' : 'CSE Report')),
+    chartType: isChartType(raw.chartType) ? raw.chartType : 'column',
+    breakdown,
+    metrics,
+    filters: normalizeFilters(raw.filters),
+  };
+};
+
 /** Multi-select value picker for a single attribute. */
 const AttributeValuePicker: React.FC<{
   label: string;
   values: string[];
   selected: string[];
   onToggle: (value: string) => void;
-  onRemove: () => void;
-}> = ({ label, values, selected, onToggle, onRemove }) => {
+  onRemove?: () => void;
+  /** When set, shown instead of "All …" when nothing is selected. */
+  emptySelectionLabel?: string;
+}> = ({ label, values, selected, onToggle, onRemove, emptySelectionLabel }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -331,19 +539,26 @@ const AttributeValuePicker: React.FC<{
   }, []);
 
   const filtered = values.filter((v) => v.toLowerCase().includes(search.toLowerCase()));
+  const selectionText =
+    selected.length > 0
+      ? `${selected.length} selected`
+      : emptySelectionLabel ||
+        (values.length === 0 ? `No ${label.toLowerCase()} found` : `All ${label.toLowerCase()}`);
 
   return (
     <div className="relative" ref={ref}>
       <label className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
         {label}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="text-muted-foreground hover:text-red-600"
-          title={`Remove ${label} filter`}
-        >
-          <X className="h-3 w-3" />
-        </button>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-muted-foreground hover:text-red-600"
+            title={`Remove ${label} filter`}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
       </label>
       <button
         type="button"
@@ -353,9 +568,7 @@ const AttributeValuePicker: React.FC<{
         }}
         className="h-9 text-sm border rounded-lg px-3 bg-background min-w-[160px] text-left flex items-center justify-between gap-2"
       >
-        <span className="truncate">
-          {selected.length === 0 ? `All ${label.toLowerCase()}` : `${selected.length} selected`}
-        </span>
+        <span className="truncate">{selectionText}</span>
         <ChevronDown className="h-3 w-3 shrink-0" />
       </button>
       {open && (
@@ -507,6 +720,9 @@ const ReportFilterBar: React.FC<{
             selected={attributes[key] || []}
             onToggle={(value) => toggleAttributeValue(key, value)}
             onRemove={() => removeAttribute(key)}
+            emptySelectionLabel={
+              key === 'manager_i' ? 'Select Manager I…' : undefined
+            }
           />
         );
       })}
@@ -599,26 +815,204 @@ const ReportFilterBar: React.FC<{
  * selected metrics and the already-fetched data, it draws the visualization.
  * Fills its parent, so wrap it in a sized container.
  */
+const aggregateMembersByManager = (
+  members: CseMemberData[] | RmMemberData[]
+): Array<CseMemberData | RmMemberData> => {
+  const isRm = members.some((member) => 'rm_name' in member);
+
+  if (isRm) {
+    const groups = new Map<string, RmMemberData>();
+    const handlingWeightedSum = new Map<string, number>();
+    const handlingWeight = new Map<string, number>();
+    for (const member of members as RmMemberData[]) {
+      const manager = (member.manager_i_name || '').trim();
+      // Skip people with no Manager I — do not invent an "Unassigned" bucket.
+      if (!manager) continue;
+      const current = groups.get(manager) || {
+        rm_name: manager,
+        manager_i_name: manager,
+        user_id: `manager:${manager}`,
+        attendance: 0,
+        calls_made: 0,
+        calls_connected: 0,
+        trials_activated: 0,
+        connected_to_trial_ratio: null,
+        average_time_spent_seconds: null,
+        handling_time_volume: 0,
+        take_break_count: 0,
+        not_interested_count: 0,
+        allotted_leads: 0,
+      };
+      current.attendance += member.attendance;
+      current.calls_made += member.calls_made;
+      current.calls_connected += member.calls_connected;
+      current.trials_activated += member.trials_activated;
+      current.take_break_count += member.take_break_count;
+      current.not_interested_count += member.not_interested_count;
+      current.allotted_leads += member.allotted_leads;
+      current.handling_time_volume += member.handling_time_volume;
+      const weight = member.handling_time_volume;
+      handlingWeightedSum.set(
+        manager,
+        (handlingWeightedSum.get(manager) || 0) +
+          (member.average_time_spent_seconds || 0) * weight
+      );
+      handlingWeight.set(manager, (handlingWeight.get(manager) || 0) + weight);
+      groups.set(manager, current);
+    }
+    for (const [manager, group] of groups) {
+      group.connected_to_trial_ratio =
+        group.calls_connected > 0
+          ? group.trials_activated / group.calls_connected
+          : null;
+      const weight = handlingWeight.get(manager) || 0;
+      group.average_time_spent_seconds =
+        weight > 0 ? (handlingWeightedSum.get(manager) || 0) / weight : null;
+    }
+    return Array.from(groups.values()).sort((a, b) =>
+      a.rm_name.localeCompare(b.rm_name)
+    );
+  }
+
+  const groups = new Map<string, CseMemberData>();
+  const handlingWeightedSum = new Map<string, number>();
+  for (const member of members as CseMemberData[]) {
+    const manager = (member.manager_i_name || '').trim();
+    if (!manager) continue;
+    const current = groups.get(manager) || {
+      cse_name: manager,
+      manager_i_name: manager,
+      open_call_back: 0,
+      open_not_connected: 0,
+      leads_assigned: 0,
+      resolved: 0,
+      resolve_rate: null,
+      average_handling_time_seconds: null,
+      handling_time_ticket_count: 0,
+    };
+    current.open_call_back += member.open_call_back;
+    current.open_not_connected += member.open_not_connected;
+    current.leads_assigned += member.leads_assigned;
+    current.resolved += member.resolved;
+    current.handling_time_ticket_count += member.handling_time_ticket_count;
+    handlingWeightedSum.set(
+      manager,
+      (handlingWeightedSum.get(manager) || 0) +
+        (member.average_handling_time_seconds || 0) *
+          member.handling_time_ticket_count
+    );
+    groups.set(manager, current);
+  }
+  for (const [manager, group] of groups) {
+    group.resolve_rate =
+      group.leads_assigned > 0 ? group.resolved / group.leads_assigned : null;
+    group.average_handling_time_seconds =
+      group.handling_time_ticket_count > 0
+        ? (handlingWeightedSum.get(manager) || 0) /
+          group.handling_time_ticket_count
+        : null;
+  }
+  return Array.from(groups.values()).sort((a, b) =>
+    a.cse_name.localeCompare(b.cse_name)
+  );
+};
+
 const ReportChart: React.FC<{
   chartType: ChartType;
   breakdown: BreakdownType;
   metrics: string[];
-  timeSeries: CseTimeSeriesPoint[];
-  members: CseMemberData[];
-  overview: CseOverviewData | null;
-}> = ({ chartType, breakdown, metrics, timeSeries, members, overview }) => {
-  const availableMetrics = getAvailableMetrics(breakdown);
-  const activeMetricDefs = metrics
+  metricCatalog: MetricDef[];
+  timeSeries: CseTimeSeriesPoint[] | RmTimeSeriesPoint[];
+  members: CseMemberData[] | RmMemberData[];
+  overview: CseOverviewData | RmOverviewData | null;
+  /** When a Manager I filter is applied, show each team member instead of one rollup row. */
+  expandManagerTeam?: boolean;
+}> = ({
+  chartType,
+  breakdown,
+  metrics,
+  metricCatalog,
+  timeSeries,
+  members,
+  overview,
+  expandManagerTeam = false,
+}) => {
+  const [tableSort, setTableSort] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  }>({ key: 'dimension', direction: 'asc' });
+  const availableMetrics = getAvailableMetrics(breakdown, metricCatalog, chartType);
+  const requestedMetricDefs = metrics
     .map((k) => availableMetrics.find((m) => m.key === k))
     .filter((m): m is MetricDef => Boolean(m));
+  const activeMetricDefs = [...requestedMetricDefs];
 
-  const labels =
-    breakdown === 'date' ? timeSeries.map((p) => p.date) : members.map((m) => m.cse_name);
+  // Always show the sample volume that mathematically backs a handling average.
+  if (chartType !== 'pie') {
+    const companionKey = requestedMetricDefs.some(
+      (metric) => metric.key === 'avg_handling_time'
+    )
+      ? 'handling_time_ticket_count'
+      : requestedMetricDefs.some(
+          (metric) => metric.key === 'average_time_spent_seconds'
+        )
+      ? 'handling_time_volume'
+      : null;
+    const companion = companionKey
+      ? availableMetrics.find((metric) => metric.key === companionKey)
+      : undefined;
+    if (companion && !activeMetricDefs.some((metric) => metric.key === companion.key)) {
+      activeMetricDefs.push(companion);
+    }
+  }
+
+  // Selecting a Manager I filter should list every CSE/RM under that manager.
+  const showTeamMembers = breakdown === 'manager' && expandManagerTeam;
+  const chartMembers =
+    breakdown === 'manager' && !expandManagerTeam
+      ? aggregateMembersByManager(members)
+      : members;
+  const memberLabels =
+    breakdown === 'cse' || showTeamMembers
+      ? chartMembers.map((m) =>
+          'cse_name' in m ? (m as CseMemberData).cse_name : (m as RmMemberData).rm_name
+        )
+      : breakdown === 'rm'
+      ? (chartMembers as RmMemberData[]).map((m) => m.rm_name)
+      : breakdown === 'manager'
+      ? chartMembers.map((member) => member.manager_i_name || '')
+      : [];
+
+  const labels = breakdown === 'date' ? timeSeries.map((p) => p.date) : memberLabels;
 
   const getValues = (md: MetricDef): number[] =>
     breakdown === 'date'
       ? timeSeries.map((p) => (md.fromTs ? md.fromTs(p) : 0))
-      : members.map((m) => (md.fromCse ? md.fromCse(m) : 0));
+      : chartMembers.map((m) => {
+          if ((breakdown === 'cse' || showTeamMembers) && md.fromCse && 'cse_name' in m) {
+            return md.fromCse(m as CseMemberData);
+          }
+          if ((breakdown === 'rm' || showTeamMembers) && md.fromRm && 'rm_name' in m) {
+            return md.fromRm(m as RmMemberData);
+          }
+          if (breakdown === 'manager' && md.fromRm && 'rm_name' in m) {
+            return md.fromRm(m as RmMemberData);
+          }
+          if (breakdown === 'manager' && md.fromCse && 'cse_name' in m) {
+            return md.fromCse(m as CseMemberData);
+          }
+          return 0;
+        });
+
+  const overviewMetricValue = (md: MetricDef): number => {
+    if (md.fromOverview && overview && 'resolve_rate' in overview) {
+      return md.fromOverview(overview as CseOverviewData);
+    }
+    if (md.fromOverviewRm && overview && 'calls_made' in overview) {
+      return md.fromOverviewRm(overview as RmOverviewData);
+    }
+    return 0;
+  };
 
   const isStacked = chartType.startsWith('stacked');
   const isLineChart = chartType === 'line' || chartType === 'stackedLine';
@@ -651,49 +1045,148 @@ const ReportChart: React.FC<{
   }
 
   if (chartType === 'metric') {
+    const count = activeMetricDefs.length;
+    const gridCols =
+      count <= 1
+        ? 'grid-cols-1'
+        : count === 2
+        ? 'grid-cols-1 sm:grid-cols-2'
+        : count === 3
+        ? 'grid-cols-1 sm:grid-cols-3'
+        : 'grid-cols-2 lg:grid-cols-4';
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 h-full items-center">
-        {activeMetricDefs.map((md) => {
-          const total =
-            md.format === 'percent' || md.format === 'time'
-              ? overview && md.fromOverview
-                ? md.fromOverview(overview)
+      <div className="h-full overflow-y-auto">
+        <div className={`grid ${gridCols} gap-4 h-full content-center`}>
+          {activeMetricDefs.map((md) => {
+            // Averages (time/percent) must never be summed across rows — use overview.
+            const useOverview =
+              md.format === 'percent' ||
+              md.format === 'time' ||
+              (!!md.fromOverviewRm && !md.fromTs && !md.fromRm && !md.fromCse) ||
+              (!!md.fromOverview && !md.fromTs && !md.fromCse && !md.fromRm);
+            const total = useOverview
+              ? overview
+                ? overviewMetricValue(md)
                 : 0
               : getValues(md).reduce((sum, v) => sum + v, 0);
-          return (
-            <div key={md.key} className="text-center">
-              <div className="text-sm text-muted-foreground mb-2">{md.label}</div>
-              <div className="text-3xl font-bold" style={{ color: md.color }}>
-                {formatMetricValue(md.format, total)}
+            const display =
+              md.format === 'number'
+                ? total.toLocaleString()
+                : formatMetricValue(md.format, total);
+            return (
+              <div
+                key={md.key}
+                className="relative overflow-hidden rounded-xl border bg-background p-5 shadow-sm"
+              >
+                <span
+                  className="absolute inset-y-0 left-0 w-1 rounded-l-xl"
+                  style={{ backgroundColor: md.color }}
+                />
+                <div className="flex items-center gap-2 mb-3">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: md.color }}
+                  />
+                  <span className="text-sm font-medium text-muted-foreground truncate">
+                    {md.label}
+                  </span>
+                </div>
+                <div
+                  className="text-4xl font-bold tracking-tight tabular-nums"
+                  style={{ color: md.color }}
+                >
+                  {display}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     );
   }
 
   if (chartType === 'table') {
+    const rows = labels
+      .map((label, rowIdx) => ({
+        label,
+        rowIdx,
+        values: Object.fromEntries(
+          activeMetricDefs.map((metric) => [
+            metric.key,
+            getValues(metric)[rowIdx] ?? 0,
+          ])
+        ) as Record<string, number>,
+      }))
+      .sort((a, b) => {
+        const comparison =
+          tableSort.key === 'dimension'
+            ? a.label.localeCompare(b.label, undefined, {
+                numeric: true,
+                sensitivity: 'base',
+              })
+            : (a.values[tableSort.key] ?? 0) - (b.values[tableSort.key] ?? 0);
+        return tableSort.direction === 'asc' ? comparison : -comparison;
+      });
+
+    const toggleSort = (key: string) => {
+      setTableSort((current) => ({
+        key,
+        direction:
+          current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+      }));
+    };
+
+    const SortIcon = ({ columnKey }: { columnKey: string }) =>
+      tableSort.key !== columnKey ? (
+        <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+      ) : tableSort.direction === 'asc' ? (
+        <ArrowUp className="h-3.5 w-3.5" />
+      ) : (
+        <ArrowDown className="h-3.5 w-3.5" />
+      );
+
     return (
       <div className="overflow-auto h-full border rounded-lg">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-background">
             <tr className="border-b text-left text-muted-foreground">
-              <th className="py-2 px-3">{breakdown === 'date' ? 'Date' : 'CSE'}</th>
+              <th className="py-2 px-3">
+                <button
+                  type="button"
+                  onClick={() => toggleSort('dimension')}
+                  className="inline-flex items-center gap-1.5 hover:text-foreground"
+                >
+                  {breakdown === 'date'
+                    ? 'Date'
+                    : breakdown === 'cse'
+                    ? 'CSE'
+                    : breakdown === 'rm'
+                    ? 'RM'
+                    : 'Manager I'}
+                  <SortIcon columnKey="dimension" />
+                </button>
+              </th>
               {activeMetricDefs.map((md) => (
                 <th key={md.key} className="py-2 px-3 text-right">
-                  {md.label}
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(md.key)}
+                    className="ml-auto inline-flex items-center gap-1.5 hover:text-foreground"
+                  >
+                    {md.label}
+                    <SortIcon columnKey={md.key} />
+                  </button>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {labels.map((label, rowIdx) => (
-              <tr key={label} className="border-b border-muted/40">
-                <td className="py-2 px-3 font-medium">{label}</td>
+            {rows.map((row) => (
+              <tr key={`${row.label}-${row.rowIdx}`} className="border-b border-muted/40">
+                <td className="py-2 px-3 font-medium">{row.label}</td>
                 {activeMetricDefs.map((md) => (
                   <td key={md.key} className="py-2 px-3 text-right">
-                    {formatMetricValue(md.format, getValues(md)[rowIdx] ?? 0)}
+                    {formatMetricValue(md.format, row.values[md.key] ?? 0)}
                   </td>
                 ))}
               </tr>
@@ -879,15 +1372,80 @@ const useCseReportData = (
   return { overview, members, timeSeries, loading, error };
 };
 
-const computeReportNeed = (report: BoardReport) => {
-  const hasPctOrTime = report.metrics.some((k) => {
-    const md = METRIC_DEFS.find((m) => m.key === k);
+const useRmReportData = (
+  params: RmFilterParams,
+  need: { overview: boolean; members: boolean; timeSeries: boolean },
+  refreshNonce: number
+) => {
+  const [overview, setOverview] = useState<RmOverviewData | null>(null);
+  const [members, setMembers] = useState<RmMemberData[]>([]);
+  const [timeSeries, setTimeSeries] = useState<RmTimeSeriesPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const key = JSON.stringify({ params, need, refreshNonce });
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [ov, mem, ts] = await Promise.all([
+          need.overview ? rmAnalyticsApi.getOverview(params) : Promise.resolve(null),
+          need.members ? rmAnalyticsApi.getMembers(params) : Promise.resolve([]),
+          need.timeSeries ? rmAnalyticsApi.getTimeSeries(params) : Promise.resolve([]),
+        ]);
+        if (cancelled) return;
+        setOverview(ov);
+        setMembers(mem);
+        setTimeSeries(ts);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(
+          e?.response?.data?.error ||
+            e?.response?.data?.detail ||
+            e?.message ||
+            'Failed to load report'
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return { overview, members, timeSeries, loading, error };
+};
+
+const computeReportNeed = (report: BoardReport, metricCatalog: MetricDef[]) => {
+  const metrics = Array.isArray(report.metrics) ? report.metrics : [];
+  const hasPctOrTime = metrics.some((k) => {
+    const md = metricCatalog.find((m) => m.key === k);
     return md && (md.format === 'percent' || md.format === 'time');
+  });
+  const needsOverviewOnlyMetric = metrics.some((k) => {
+    const md = metricCatalog.find((m) => m.key === k);
+    return (
+      md &&
+      (md.fromOverview || md.fromOverviewRm) &&
+      !md.fromTs &&
+      !md.fromCse &&
+      !md.fromRm
+    );
   });
   return {
     timeSeries: report.breakdown === 'date',
-    members: report.breakdown === 'cse',
-    overview: report.chartType === 'metric' && hasPctOrTime,
+    members:
+      report.breakdown === 'cse' ||
+      report.breakdown === 'rm' ||
+      report.breakdown === 'manager',
+    overview:
+      report.chartType === 'metric' && (hasPctOrTime || needsOverviewOnlyMetric),
   };
 };
 
@@ -896,13 +1454,34 @@ const BoardReportCard: React.FC<{
   options: FilterOptions;
   showDatePicker: boolean;
   refreshNonce: number;
+  metricCatalog: MetricDef[];
   onRemove: (id: string) => void;
   onFiltersChange: (id: string, filters: ReportFilters) => void;
-}> = ({ report, options, showDatePicker, refreshNonce, onRemove, onFiltersChange }) => {
-  const need = useMemo(() => computeReportNeed(report), [report]);
+  useReportData: (
+    params: CseFilterParams | RmFilterParams,
+    need: { overview: boolean; members: boolean; timeSeries: boolean },
+    refreshNonce: number
+  ) => {
+    overview: CseOverviewData | RmOverviewData | null;
+    members: CseMemberData[] | RmMemberData[];
+    timeSeries: CseTimeSeriesPoint[] | RmTimeSeriesPoint[];
+    loading: boolean;
+    error: string | null;
+  };
+}> = ({
+  report,
+  options,
+  showDatePicker,
+  refreshNonce,
+  metricCatalog,
+  onRemove,
+  onFiltersChange,
+  useReportData,
+}) => {
+  const need = useMemo(() => computeReportNeed(report, metricCatalog), [report, metricCatalog]);
   const params = useMemo(() => filtersToParams(report.filters), [report.filters]);
 
-  const { overview, members, timeSeries, loading, error } = useCseReportData(
+  const { overview, members, timeSeries, loading, error } = useReportData(
     params,
     need,
     refreshNonce
@@ -912,10 +1491,15 @@ const BoardReportCard: React.FC<{
     report.chartType === 'bar' ||
     report.chartType === 'stackedBar' ||
     report.chartType === 'table';
+  const memberCount = members.length;
   const height =
-    report.breakdown === 'cse' && isBarOrTable
-      ? Math.max(300, members.length * 38 || 300)
+    (report.breakdown === 'cse' ||
+      report.breakdown === 'rm' ||
+      report.breakdown === 'manager') &&
+    isBarOrTable
+      ? Math.max(300, memberCount * 38 || 300)
       : 320;
+  const managerFilterPending = isManagerIFilterPending(report.filters);
 
   return (
     <Card>
@@ -964,7 +1548,11 @@ const BoardReportCard: React.FC<{
       </CardHeader>
       <CardContent>
         <div style={{ height: `${height}px` }}>
-          {loading ? (
+          {managerFilterPending ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm text-center px-4">
+              Select a Manager I to view that team’s data
+            </div>
+          ) : loading ? (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               Loading…
             </div>
@@ -977,12 +1565,422 @@ const BoardReportCard: React.FC<{
               chartType={report.chartType}
               breakdown={report.breakdown}
               metrics={report.metrics}
+              metricCatalog={metricCatalog}
               timeSeries={timeSeries}
               members={members}
               overview={overview}
+              expandManagerTeam={(report.filters.attributes?.manager_i || []).length > 0}
             />
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+
+type RmUnassignedTab = 'source' | 'status';
+
+const SortableCountTable: React.FC<{
+  dimensionLabel: string;
+  rows: Array<{ label: string; count: number }>;
+}> = ({ dimensionLabel, rows }) => {
+  const [sort, setSort] = useState<{
+    key: 'label' | 'count';
+    direction: 'asc' | 'desc';
+  }>({ key: 'label', direction: 'asc' });
+  const sortedRows = [...rows].sort((a, b) => {
+    const comparison =
+      sort.key === 'label'
+        ? a.label.localeCompare(b.label, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+          })
+        : a.count - b.count;
+    return sort.direction === 'asc' ? comparison : -comparison;
+  });
+  const toggleSort = (key: 'label' | 'count') => {
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+  const sortIcon = (key: 'label' | 'count') =>
+    sort.key !== key ? (
+      <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+    ) : sort.direction === 'asc' ? (
+      <ArrowUp className="h-3.5 w-3.5" />
+    ) : (
+      <ArrowDown className="h-3.5 w-3.5" />
+    );
+
+  return (
+    <div className="overflow-auto max-h-[360px] border rounded-lg">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-background">
+          <tr className="border-b text-muted-foreground">
+            <th className="text-left py-2 px-3 font-medium">
+              <button
+                type="button"
+                onClick={() => toggleSort('label')}
+                className="inline-flex items-center gap-1.5 hover:text-foreground"
+              >
+                {dimensionLabel}
+                {sortIcon('label')}
+              </button>
+            </th>
+            <th className="text-right py-2 px-3 font-medium">
+              <button
+                type="button"
+                onClick={() => toggleSort('count')}
+                className="ml-auto inline-flex items-center gap-1.5 hover:text-foreground"
+              >
+                Count
+                {sortIcon('count')}
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedRows.map((row) => (
+            <tr
+              key={row.label}
+              className="border-b border-muted/40 hover:bg-muted/30"
+            >
+              <td className="py-2 px-3 font-medium">{row.label}</td>
+              <td className="py-2 px-3 text-right font-semibold">
+                {row.count.toLocaleString()}
+              </td>
+            </tr>
+          ))}
+          {sortedRows.length === 0 && (
+            <tr>
+              <td colSpan={2} className="py-8 text-center text-muted-foreground">
+                No results
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const RmUnassignedLeadsPanel: React.FC<{ refreshNonce: number }> = ({ refreshNonce }) => {
+  const [tab, setTab] = useState<RmUnassignedTab>('source');
+  const [leadSources, setLeadSources] = useState<string[]>([]);
+  const [leadStage, setLeadStage] = useState('');
+  const [data, setData] = useState<UnassignedLeadsBreakdown | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await teamAnalyticsApi.getUnassignedLeadsBreakdown({
+          lead_source: leadSources.length ? leadSources.join(',') : undefined,
+          lead_stage: leadStage || undefined,
+        });
+        if (!cancelled) setData(result);
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(
+            e?.response?.data?.error ||
+              e?.response?.data?.detail ||
+              e?.message ||
+              'Failed to load unassigned leads'
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [leadSources, leadStage, refreshNonce]);
+
+  const sourceOptions = Array.from(
+    new Set([...(data?.available_sources || []), ...leadSources])
+  ).sort();
+  const stageOptions = Array.from(
+    new Set([...(data?.available_stages || []), ...(leadStage ? [leadStage] : [])])
+  ).sort();
+  const rows =
+    tab === 'source'
+      ? (data?.by_source || []).map((item) => ({
+          label: item.lead_source || 'Unknown',
+          count: item.count,
+        }))
+      : (data?.by_status || []).map((item) => ({
+          label: item.lead_stage || 'Unknown',
+          count: item.count,
+        }));
+  const hasFilters = leadSources.length > 0 || !!leadStage;
+
+  return (
+    <Card className="border border-gray-200">
+      <CardHeader className="pb-2 space-y-3">
+        <div>
+          <h5>Unassigned Leads</h5>
+          <p className="text-sm text-muted-foreground">
+            Current inventory breakdown by lead source or lead status
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {(
+            [
+              ['source', 'By Lead Source'],
+              ['status', 'By Lead Status'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                tab === key
+                  ? 'bg-black text-white'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-3 items-end">
+          <AttributeValuePicker
+            label="Lead Source"
+            values={sourceOptions}
+            selected={leadSources}
+            onToggle={(source) =>
+              setLeadSources((current) =>
+                current.includes(source)
+                  ? current.filter((value) => value !== source)
+                  : [...current, source]
+              )
+            }
+          />
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-1">
+              Lead Status
+            </label>
+            <select
+              value={leadStage}
+              onChange={(event) => setLeadStage(event.target.value)}
+              className="h-9 text-sm border rounded-lg px-3 bg-background min-w-[180px]"
+            >
+              <option value="">All Statuses</option>
+              {stageOptions.map((stage) => (
+                <option key={stage} value={stage}>
+                  {stage}
+                </option>
+              ))}
+            </select>
+          </div>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setLeadSources([]);
+                setLeadStage('');
+              }}
+              className="text-xs text-red-500 hover:text-red-700 underline h-9"
+            >
+              Clear filters
+            </button>
+          )}
+          <span className="text-sm text-muted-foreground ml-auto h-9 flex items-center">
+            Filtered total:{' '}
+            <strong className="ml-1">
+              {typeof data?.total === 'number' ? data.total.toLocaleString() : '—'}
+            </strong>
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+            Loading…
+          </div>
+        ) : error ? (
+          <div className="h-48 flex items-center justify-center text-sm text-red-600">
+            {error}
+          </div>
+        ) : (
+          <SortableCountTable
+            dimensionLabel={tab === 'source' ? 'Lead Source' : 'Lead Status'}
+            rows={rows}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+type CseTicketBreakdownTab = 'type' | 'status';
+
+const CseSupportTicketBreakdownPanel: React.FC<{ refreshNonce: number }> = ({
+  refreshNonce,
+}) => {
+  const [tab, setTab] = useState<CseTicketBreakdownTab>('type');
+  const [ticketTypes, setTicketTypes] = useState<string[]>([]);
+  const [resolutionStatus, setResolutionStatus] = useState('');
+  const [data, setData] = useState<CseSupportTicketBreakdown | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await cseAnalyticsApi.getSupportTicketBreakdown({
+          ticket_type: ticketTypes.length ? ticketTypes.join(',') : undefined,
+          resolution_status: resolutionStatus || undefined,
+        });
+        if (!cancelled) setData(result);
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(
+            e?.response?.data?.error ||
+              e?.response?.data?.detail ||
+              e?.message ||
+              'Failed to load support ticket breakdown'
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [ticketTypes, resolutionStatus, refreshNonce]);
+
+  const typeOptions = Array.from(
+    new Set([...(data?.available_types || []), ...ticketTypes])
+  ).sort();
+  const statusOptions = Array.from(
+    new Set([
+      ...(data?.available_statuses || []),
+      ...(resolutionStatus ? [resolutionStatus] : []),
+    ])
+  ).sort();
+  const rows =
+    tab === 'type'
+      ? (data?.by_type || []).map((item) => ({
+          label: item.ticket_type || 'Unknown',
+          count: item.count,
+        }))
+      : (data?.by_status || []).map((item) => ({
+          label: item.resolution_status || 'Open',
+          count: item.count,
+        }));
+  const hasFilters = ticketTypes.length > 0 || !!resolutionStatus;
+
+  return (
+    <Card className="border border-gray-200">
+      <CardHeader className="pb-2 space-y-3">
+        <div>
+          <h5>Support Ticket Breakdown</h5>
+          <p className="text-sm text-muted-foreground">
+            Current assigned-ticket inventory by ticket type or resolution status
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {(
+            [
+              ['type', 'By Ticket Type'],
+              ['status', 'By Resolution Status'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                tab === key
+                  ? 'bg-black text-white'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-3 items-end">
+          <AttributeValuePicker
+            label="Ticket Type"
+            values={typeOptions}
+            selected={ticketTypes}
+            onToggle={(ticketType) =>
+              setTicketTypes((current) =>
+                current.includes(ticketType)
+                  ? current.filter((value) => value !== ticketType)
+                  : [...current, ticketType]
+              )
+            }
+          />
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-1">
+              Resolution Status
+            </label>
+            <select
+              value={resolutionStatus}
+              onChange={(event) => setResolutionStatus(event.target.value)}
+              className="h-9 text-sm border rounded-lg px-3 bg-background min-w-[190px]"
+            >
+              <option value="">All Statuses</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setTicketTypes([]);
+                setResolutionStatus('');
+              }}
+              className="text-xs text-red-500 hover:text-red-700 underline h-9"
+            >
+              Clear filters
+            </button>
+          )}
+          <span className="text-sm text-muted-foreground ml-auto h-9 flex items-center">
+            Filtered total:{' '}
+            <strong className="ml-1">
+              {typeof data?.total === 'number' ? data.total.toLocaleString() : '—'}
+            </strong>
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+            Loading…
+          </div>
+        ) : error ? (
+          <div className="h-48 flex items-center justify-center text-sm text-red-600">
+            {error}
+          </div>
+        ) : (
+          <SortableCountTable
+            dimensionLabel={tab === 'type' ? 'Ticket Type' : 'Resolution Status'}
+            rows={rows}
+          />
+        )}
       </CardContent>
     </Card>
   );
@@ -993,7 +1991,30 @@ const makeDefaultFilters = (): ReportFilters => {
   return { from: range.from, to: range.to, datePreset: 'last7days', attributes: {} };
 };
 
-const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = {} }) => {
+const AnalyticsBoardVariantComponent: React.FC<
+  AnalyticsBoardViewProps & { variant: 'cse' | 'rm' }
+> = ({ config = {}, analyticsTypeSelector, variant }) => {
+  const [visibilityScope, setVisibilityScope] = useState<string | null>(null);
+  const metricCatalog = useMemo(
+    () =>
+      variant === 'rm' && visibilityScope !== 'all'
+        ? RM_METRIC_DEFS.filter((metric) => metric.key !== 'unassigned_leads')
+        : variant === 'rm'
+        ? RM_METRIC_DEFS
+        : METRIC_DEFS,
+    [variant, visibilityScope]
+  );
+  const defaultMetricKeys = useMemo(
+    () =>
+      variant === 'rm'
+        ? ['calls_made', 'trials_activated']
+        : ['assigned', 'resolved'],
+    [variant]
+  );
+  const validMetricKeys = useMemo(
+    () => new Set(metricCatalog.map((metric) => metric.key)),
+    [metricCatalog]
+  );
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     attributes: [],
     handlingStatuses: [],
@@ -1003,21 +2024,23 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
   const [composerFilters, setComposerFilters] = useState<ReportFilters>(makeDefaultFilters);
   const [chartType, setChartType] = useState<ChartType>('column');
   const [breakdown, setBreakdown] = useState<BreakdownType>('date');
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['assigned', 'resolved']);
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(defaultMetricKeys);
   const [metricDropdownOpen, setMetricDropdownOpen] = useState(false);
   const metricDropdownRef = useRef<HTMLDivElement>(null);
 
   // Composer preview data
-  const [overview, setOverview] = useState<CseOverviewData | null>(null);
-  const [members, setMembers] = useState<CseMemberData[]>([]);
-  const [timeSeries, setTimeSeries] = useState<CseTimeSeriesPoint[]>([]);
+  const [overview, setOverview] = useState<CseOverviewData | RmOverviewData | null>(null);
+  const [members, setMembers] = useState<CseMemberData[] | RmMemberData[]>([]);
+  const [timeSeries, setTimeSeries] = useState<CseTimeSeriesPoint[] | RmTimeSeriesPoint[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Board state (persisted server-side, per user — one row per board)
-  const title = config.title || 'Analytics Board';
+  const title =
+    config.title ||
+    (variant === 'rm' ? 'RM Analytics Board' : 'Analytics Board');
   const showDatePicker = config.showDatePicker !== false;
-  const boardType = config.analyticsType || 'cse';
+  const boardType = variant;
   const [board, setBoard] = useState<BoardReport[]>([]);
   const [refreshNonce, setRefreshNonce] = useState(0);
   // Per-board debounce timers for filter edits (keyed by report id)
@@ -1040,7 +2063,13 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
       try {
         const reports = await cseAnalyticsApi.getBoards<BoardReport>(boardType);
         if (cancelled) return;
-        setBoard(reports.map((r) => ({ ...r, filters: normalizeFilters(r.filters) })));
+        setBoard(
+          reports
+            .map((r) =>
+              normalizeBoardReport(r, variant, defaultMetricKeys, validMetricKeys)
+            )
+            .filter((r): r is BoardReport => Boolean(r))
+        );
       } catch (e) {
         if (!cancelled) {
           console.error('Error loading analytics boards:', e);
@@ -1052,8 +2081,7 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardType]);
+  }, [boardType, variant, defaultMetricKeys, validMetricKeys]);
 
   // Clean up any pending per-board save timers on unmount
   useEffect(() => {
@@ -1063,7 +2091,10 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
     };
   }, []);
 
-  const availableMetrics = useMemo(() => getAvailableMetrics(breakdown), [breakdown]);
+  const availableMetrics = useMemo(
+    () => getAvailableMetrics(breakdown, metricCatalog, chartType),
+    [breakdown, metricCatalog, chartType]
+  );
   const activeMetricDefs = useMemo(
     () =>
       selectedMetrics
@@ -1084,17 +2115,27 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
   useEffect(() => {
     const loadFilterOptions = async () => {
       try {
-        const options = await cseAnalyticsApi.getFilterOptions();
-        setFilterOptions({
-          attributes: options.attributes || [],
-          handlingStatuses: options.handling_time_statuses || [],
-        });
+        if (variant === 'rm') {
+          const options = await rmAnalyticsApi.getFilterOptions();
+          setVisibilityScope(options.visibility_scope || 'self');
+          setFilterOptions({
+            attributes: options.attributes || [],
+            handlingStatuses: [],
+          });
+        } else {
+          const options = await cseAnalyticsApi.getFilterOptions();
+          setVisibilityScope(options.visibility_scope || 'self');
+          setFilterOptions({
+            attributes: options.attributes || [],
+            handlingStatuses: options.handling_time_statuses || [],
+          });
+        }
       } catch (e) {
-        console.error('Error loading CSE filter options:', e);
+        console.error(`Error loading ${variant} filter options:`, e);
       }
     };
     loadFilterOptions();
-  }, []);
+  }, [variant]);
 
   const composerParams = useMemo(() => filtersToParams(composerFilters), [composerFilters]);
 
@@ -1102,22 +2143,34 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
     try {
       setPreviewLoading(true);
       setError(null);
-      const [ov, mem, series] = await Promise.all([
-        cseAnalyticsApi.getOverview(composerParams),
-        cseAnalyticsApi.getMembers(composerParams),
-        cseAnalyticsApi.getTimeSeries(composerParams),
-      ]);
-      setOverview(ov);
-      setMembers(mem);
-      setTimeSeries(series);
+      if (variant === 'rm') {
+        const rmParams = composerParams as RmFilterParams;
+        const [ov, mem, series] = await Promise.all([
+          rmAnalyticsApi.getOverview(rmParams),
+          rmAnalyticsApi.getMembers(rmParams),
+          rmAnalyticsApi.getTimeSeries(rmParams),
+        ]);
+        setOverview(ov);
+        setMembers(mem);
+        setTimeSeries(series);
+      } else {
+        const [ov, mem, series] = await Promise.all([
+          cseAnalyticsApi.getOverview(composerParams),
+          cseAnalyticsApi.getMembers(composerParams),
+          cseAnalyticsApi.getTimeSeries(composerParams),
+        ]);
+        setOverview(ov);
+        setMembers(mem);
+        setTimeSeries(series);
+      }
     } catch (e: any) {
       const message =
         e?.response?.data?.error ||
         e?.response?.data?.detail ||
         e.message ||
-        'Failed to load CSE analytics';
+        `Failed to load ${variant.toUpperCase()} analytics`;
       setError(message);
-      console.error('Error fetching CSE analytics:', e?.response?.data || e);
+      console.error(`Error fetching ${variant} analytics:`, e?.response?.data || e);
     } finally {
       setPreviewLoading(false);
     }
@@ -1136,16 +2189,26 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
 
   const composerIsBar = chartType === 'bar' || chartType === 'stackedBar';
   const composerHeight =
-    breakdown === 'cse' && (composerIsBar || chartType === 'table')
+    (breakdown === 'cse' || breakdown === 'rm' || breakdown === 'manager') &&
+    (composerIsBar || chartType === 'table')
       ? Math.max(320, members.length * 40)
       : 384;
+
+  const breakdownLabel =
+    breakdown === 'date'
+      ? 'Date'
+      : breakdown === 'manager'
+      ? 'Manager I'
+      : variant === 'rm'
+      ? 'RM'
+      : 'CSE';
 
   const addCurrentToBoard = () => {
     if (selectedMetrics.length === 0) return;
     const chartLabel = CHART_TYPES.find((c) => c.value === chartType)?.label || '';
     const report: BoardReport = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: `${getMetricLabels(selectedMetrics)} by ${breakdown === 'date' ? 'Date' : 'CSE'} (${chartLabel})`,
+      title: `${getMetricLabels(selectedMetrics, metricCatalog)} by ${breakdownLabel} (${chartLabel})`,
       chartType,
       breakdown,
       metrics: [...selectedMetrics],
@@ -1197,16 +2260,26 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
             Build reports and pin them to your board — each report keeps its own filters
           </p>
         </div>
-        <Button variant="outline" onClick={() => setRefreshNonce((n) => n + 1)}>
-          <RotateCcw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-end gap-3">
+          {analyticsTypeSelector}
+          <Button variant="outline" onClick={() => setRefreshNonce((n) => n + 1)}>
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
           Error: {error}
         </div>
+      )}
+
+      {variant === 'rm' && visibilityScope === 'all' && (
+        <RmUnassignedLeadsPanel refreshNonce={refreshNonce} />
+      )}
+      {variant === 'cse' && (
+        <CseSupportTicketBreakdownPanel refreshNonce={refreshNonce} />
       )}
 
       {/* Explore / composer */}
@@ -1250,7 +2323,14 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="date">By Date</SelectItem>
-                  <SelectItem value="cse">By CSE</SelectItem>
+                  {variant === 'rm' ? (
+                    <SelectItem value="rm">By RM</SelectItem>
+                  ) : (
+                    <SelectItem value="cse">By CSE</SelectItem>
+                  )}
+                  {visibilityScope === 'all' && (
+                    <SelectItem value="manager">By Manager I</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1310,7 +2390,11 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
           </div>
 
           <div style={{ height: `${composerHeight}px` }}>
-            {previewLoading ? (
+            {isManagerIFilterPending(composerFilters) ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm text-center px-4">
+                Select a Manager I to view that team’s data
+              </div>
+            ) : previewLoading ? (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 Loading preview…
               </div>
@@ -1319,9 +2403,11 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
                 chartType={chartType}
                 breakdown={breakdown}
                 metrics={selectedMetrics}
+                metricCatalog={metricCatalog}
                 timeSeries={timeSeries}
                 members={members}
                 overview={overview}
+                expandManagerTeam={(composerFilters.attributes?.manager_i || []).length > 0}
               />
             )}
           </div>
@@ -1353,6 +2439,8 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
               options={filterOptions}
               showDatePicker={showDatePicker}
               refreshNonce={refreshNonce}
+              metricCatalog={metricCatalog}
+              useReportData={variant === 'rm' ? useRmReportData : useCseReportData}
               onRemove={removeReport}
               onFiltersChange={updateReportFilters}
             />
@@ -1360,6 +2448,93 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
         </div>
       )}
     </div>
+  );
+};
+
+const CseAnalyticsBoardComponent: React.FC<AnalyticsBoardViewProps> = (props) => (
+  <AnalyticsBoardVariantComponent {...props} variant="cse" />
+);
+
+const RmAnalyticsBoardComponent: React.FC<AnalyticsBoardViewProps> = (props) => (
+  <AnalyticsBoardVariantComponent {...props} variant="rm" />
+);
+
+const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = {} }) => {
+  const configuredType = (config.analyticsType || 'cse').toLowerCase() === 'rm' ? 'rm' : 'cse';
+  const [analyticsType, setAnalyticsType] = useState<'cse' | 'rm'>(configuredType);
+  const [availableTypes, setAvailableTypes] = useState<Array<'cse' | 'rm'> | null>(
+    null
+  );
+  const [accessError, setAccessError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    cseAnalyticsApi
+      .getAvailableTypes()
+      .then((types) => {
+        if (cancelled) return;
+        setAvailableTypes(types);
+        setAnalyticsType(types.includes(configuredType) ? configuredType : types[0] || 'cse');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error('Error loading analytics access:', error);
+        setAvailableTypes([]);
+        setAccessError('Unable to determine which analytics you can access.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [configuredType]);
+
+  if (availableTypes === null) {
+    return (
+      <div className="min-h-[240px] flex items-center justify-center text-sm text-muted-foreground">
+        Loading analytics access…
+      </div>
+    );
+  }
+
+  if (availableTypes.length === 0) {
+    return (
+      <div className="min-h-[240px] flex items-center justify-center text-sm text-muted-foreground">
+        {accessError || 'No analytics are available for your role or team.'}
+      </div>
+    );
+  }
+
+  const analyticsTypeSelector = (
+    <div>
+      <label className="text-xs text-muted-foreground block mb-1">Analytics Type</label>
+      <Select
+        value={analyticsType}
+        onValueChange={(value) => setAnalyticsType(value as 'cse' | 'rm')}
+      >
+        <SelectTrigger className="w-[180px] bg-background">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {availableTypes.includes('cse') && (
+            <SelectItem value="cse">CSE Analytics</SelectItem>
+          )}
+          {availableTypes.includes('rm') && (
+            <SelectItem value="rm">RM Analytics</SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  return analyticsType === 'rm' ? (
+    <RmAnalyticsBoardComponent
+      config={{ ...config, analyticsType: 'rm' }}
+      analyticsTypeSelector={analyticsTypeSelector}
+    />
+  ) : (
+    <CseAnalyticsBoardComponent
+      config={{ ...config, analyticsType: 'cse' }}
+      analyticsTypeSelector={analyticsTypeSelector}
+    />
   );
 };
 
