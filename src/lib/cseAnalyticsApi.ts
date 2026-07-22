@@ -21,7 +21,6 @@ export interface CseOverviewData {
 
 export interface CseMemberData {
   cse_name: string;
-  manager_i_name: string;
   open_call_back: number;
   open_not_connected: number;
   leads_assigned: number;
@@ -39,7 +38,6 @@ export interface CseTimeSeriesPoint {
   call_later: number;
   resolve_rate: number | null;
   average_handling_time_seconds: number | null;
-  handling_time_ticket_count: number;
   stacked_resolved: number;
   stacked_unresolved: number;
 }
@@ -55,15 +53,6 @@ export interface CseFilterOptions {
   cse_names: string[];
   handling_time_statuses: string[];
   attributes?: CseAttributeOption[];
-  visibility_scope?: string;
-}
-
-export interface CseSupportTicketBreakdown {
-  total: number;
-  by_type: Array<{ ticket_type: string; count: number }>;
-  by_status: Array<{ resolution_status: string; count: number }>;
-  available_types: string[];
-  available_statuses: string[];
 }
 
 type DateParams = { date?: string; from?: string; to?: string };
@@ -93,23 +82,8 @@ export interface AnalyticsBoardsResponse<T = unknown> {
 }
 
 export const cseAnalyticsApi = {
-  async getAvailableTypes(): Promise<Array<'cse' | 'rm'>> {
-    const response = await apiClient.get('/analytics/available-types/');
-    return Array.isArray(response.data?.types) ? response.data.types : [];
-  },
-
   async getFilterOptions(): Promise<CseFilterOptions> {
     const response = await apiClient.get('/analytics/cse/filter-options/');
-    return response.data;
-  },
-
-  async getSupportTicketBreakdown(params?: {
-    ticket_type?: string;
-    resolution_status?: string;
-  }): Promise<CseSupportTicketBreakdown> {
-    const response = await apiClient.get('/analytics/cse/support-ticket-breakdown/', {
-      params,
-    });
     return response.data;
   },
 
