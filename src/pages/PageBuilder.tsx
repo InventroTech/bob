@@ -84,7 +84,6 @@ import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 
 import { apiClient, membershipService, pageService } from '@/lib/api';
-import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
@@ -723,7 +722,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'ticketTable':
         return (
           <TableConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
@@ -794,6 +793,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'inventoryTable':
         return (
           <TableConfig
+            profile="inventory"
             localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
@@ -1016,10 +1016,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
               <Input
                 value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
                 onChange={(e) => handleInputChange('initialStatus', e.target.value)}
-                placeholder="e.g. DRAFT"
+                placeholder="e.g. NEW_REQUEST"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Status for new requests. Leave empty to use default (DRAFT).
+                Status for new requests. Leave empty to use default (NEW_REQUEST).
               </p>
             </div>
 

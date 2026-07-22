@@ -1,15 +1,21 @@
 /** Canonical inventory request statuses used in all dropdowns and filters. */
 export const INVENTORY_REQUEST_STATUSES = [
-  'DRAFT',
-  'PENDING_PM',
-  'VENDOR_IDENTIFIED',
-  'PAYMENT_PENDING',
+  'NEW_REQUEST',
+  'APPROVED',
+  'ORDERED',
   'IN_SHIPPING',
   'FULFILLED',
   'REJECTED',
 ] as const;
 
 export type InventoryRequestStatus = (typeof INVENTORY_REQUEST_STATUSES)[number];
+
+/** Re-export shipment tracking statuses (inventory_request.data.shipment_status). */
+export {
+  SHIPMENT_STATUSES,
+  DEFAULT_SHIPMENT_STATUS,
+  type ShipmentStatus,
+} from '@/lib/shipmentTracking';
 
 /** Canonical inventory item statuses for dropdowns and filters. */
 export const INVENTORY_ITEM_STATUSES = [
