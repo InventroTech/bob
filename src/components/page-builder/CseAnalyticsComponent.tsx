@@ -95,6 +95,9 @@ interface AnalyticsBoardViewProps extends CseAnalyticsComponentProps {
 
 type DatePreset = 'last7days' | 'last30days' | 'custom';
 
+/** Matches backend `_parse_cse_date_range` max span. */
+const MAX_ANALYTICS_RANGE_DAYS = 31;
+
 const formatDate = (d: Date): string => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -112,6 +115,29 @@ const getPresetRange = (preset: DatePreset): { from: string; to: string } => {
     start.setDate(today.getDate() - 6);
   }
   return { from: formatDate(start), to };
+};
+
+const clampDateRange = (from: string, to: string): { from: string; to: string } => {
+  if (!from || !to) return { from, to };
+  const fromDate = new Date(`${from}T00:00:00`);
+  const toDate = new Date(`${to}T00:00:00`);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return { from, to };
+  }
+  let start = fromDate;
+  let end = toDate;
+  if (end < start) {
+    start = toDate;
+    end = fromDate;
+  }
+  const spanDays =
+    Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  if (spanDays <= MAX_ANALYTICS_RANGE_DAYS) {
+    return { from: formatDate(start), to: formatDate(end) };
+  }
+  const clampedStart = new Date(end);
+  clampedStart.setDate(end.getDate() - (MAX_ANALYTICS_RANGE_DAYS - 1));
+  return { from: formatDate(clampedStart), to: formatDate(end) };
 };
 
 const formatTime = (seconds: number | null | undefined): string => {
@@ -439,9 +465,10 @@ const filtersToParams = (filters: ReportFilters): CseFilterParams => {
     Object.entries(attrs).filter(([, values]) => Array.isArray(values) && values.length > 0)
   );
   const af = Object.keys(nonEmpty).length > 0 ? JSON.stringify(nonEmpty) : undefined;
+  const range = clampDateRange(filters.from, filters.to);
   return {
-    from: filters.from,
-    to: filters.to,
+    from: range.from,
+    to: range.to,
     handling_status: filters.handling_status,
     af,
   };
@@ -694,7 +721,10 @@ const ReportFilterBar: React.FC<{
             <Input
               type="date"
               value={filters.from}
-              onChange={(e) => patch({ from: e.target.value, datePreset: 'custom' })}
+              onChange={(e) => {
+                const range = clampDateRange(e.target.value, filters.to);
+                patch({ ...range, datePreset: 'custom' });
+              }}
               className="h-9 w-36"
             />
           </div>
@@ -703,10 +733,16 @@ const ReportFilterBar: React.FC<{
             <Input
               type="date"
               value={filters.to}
-              onChange={(e) => patch({ to: e.target.value, datePreset: 'custom' })}
+              onChange={(e) => {
+                const range = clampDateRange(filters.from, e.target.value);
+                patch({ ...range, datePreset: 'custom' });
+              }}
               className="h-9 w-36"
             />
           </div>
+          <span className="text-[11px] text-muted-foreground self-center">
+            Max {MAX_ANALYTICS_RANGE_DAYS} days
+          </span>
         </>
       )}
 
@@ -1325,7 +1361,8 @@ const ReportChart: React.FC<{
 const useCseReportData = (
   params: CseFilterParams,
   need: { overview: boolean; members: boolean; timeSeries: boolean },
-  refreshNonce: number
+  refreshNonce: number,
+  enabled = true
 ) => {
   const [overview, setOverview] = useState<CseOverviewData | null>(null);
   const [members, setMembers] = useState<CseMemberData[]>([]);
@@ -1333,9 +1370,10 @@ const useCseReportData = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const key = JSON.stringify({ params, need, refreshNonce });
+  const key = JSON.stringify({ params, need, refreshNonce, enabled });
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     const run = async () => {
       try {
@@ -1369,13 +1407,14 @@ const useCseReportData = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return { overview, members, timeSeries, loading, error };
+  return { overview, members, timeSeries, loading: enabled && loading, error };
 };
 
 const useRmReportData = (
   params: RmFilterParams,
   need: { overview: boolean; members: boolean; timeSeries: boolean },
-  refreshNonce: number
+  refreshNonce: number,
+  enabled = true
 ) => {
   const [overview, setOverview] = useState<RmOverviewData | null>(null);
   const [members, setMembers] = useState<RmMemberData[]>([]);
@@ -1383,9 +1422,10 @@ const useRmReportData = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const key = JSON.stringify({ params, need, refreshNonce });
+  const key = JSON.stringify({ params, need, refreshNonce, enabled });
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     const run = async () => {
       try {
@@ -1419,7 +1459,7 @@ const useRmReportData = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return { overview, members, timeSeries, loading, error };
+  return { overview, members, timeSeries, loading: enabled && loading, error };
 };
 
 const computeReportNeed = (report: BoardReport, metricCatalog: MetricDef[]) => {
@@ -1455,12 +1495,14 @@ const BoardReportCard: React.FC<{
   showDatePicker: boolean;
   refreshNonce: number;
   metricCatalog: MetricDef[];
+  enabled?: boolean;
   onRemove: (id: string) => void;
   onFiltersChange: (id: string, filters: ReportFilters) => void;
   useReportData: (
     params: CseFilterParams | RmFilterParams,
     need: { overview: boolean; members: boolean; timeSeries: boolean },
-    refreshNonce: number
+    refreshNonce: number,
+    enabled?: boolean
   ) => {
     overview: CseOverviewData | RmOverviewData | null;
     members: CseMemberData[] | RmMemberData[];
@@ -1474,6 +1516,7 @@ const BoardReportCard: React.FC<{
   showDatePicker,
   refreshNonce,
   metricCatalog,
+  enabled = true,
   onRemove,
   onFiltersChange,
   useReportData,
@@ -1484,7 +1527,8 @@ const BoardReportCard: React.FC<{
   const { overview, members, timeSeries, loading, error } = useReportData(
     params,
     need,
-    refreshNonce
+    refreshNonce,
+    enabled
   );
 
   const isBarOrTable =
@@ -1575,6 +1619,54 @@ const BoardReportCard: React.FC<{
         </div>
       </CardContent>
     </Card>
+  );
+};
+
+/** Defer data fetches until the card is near the viewport. */
+const LazyBoardReportCard: React.FC<
+  React.ComponentProps<typeof BoardReportCard>
+> = (props) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (visible) return;
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '240px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  return (
+    <div ref={ref}>
+      {visible ? (
+        <BoardReportCard {...props} enabled />
+      ) : (
+        <Card>
+          <CardHeader className="pb-2">
+            <h5>{props.report.title}</h5>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center h-80 text-muted-foreground text-sm">
+              Scroll to load…
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 };
 
@@ -2138,30 +2230,59 @@ const AnalyticsBoardVariantComponent: React.FC<
   }, [variant]);
 
   const composerParams = useMemo(() => filtersToParams(composerFilters), [composerFilters]);
+  const composerNeed = useMemo(
+    () =>
+      computeReportNeed(
+        {
+          id: 'composer',
+          title: '',
+          chartType,
+          breakdown,
+          metrics: selectedMetrics,
+          filters: composerFilters,
+        },
+        metricCatalog
+      ),
+    [chartType, breakdown, selectedMetrics, composerFilters, metricCatalog]
+  );
 
-  const fetchPreview = async () => {
+  const fetchPreview = async (
+    need: { overview: boolean; members: boolean; timeSeries: boolean }
+  ) => {
     try {
       setPreviewLoading(true);
       setError(null);
       if (variant === 'rm') {
         const rmParams = composerParams as RmFilterParams;
         const [ov, mem, series] = await Promise.all([
-          rmAnalyticsApi.getOverview(rmParams),
-          rmAnalyticsApi.getMembers(rmParams),
-          rmAnalyticsApi.getTimeSeries(rmParams),
+          need.overview
+            ? rmAnalyticsApi.getOverview(rmParams)
+            : Promise.resolve(null),
+          need.members
+            ? rmAnalyticsApi.getMembers(rmParams)
+            : Promise.resolve([]),
+          need.timeSeries
+            ? rmAnalyticsApi.getTimeSeries(rmParams)
+            : Promise.resolve([]),
         ]);
         setOverview(ov);
         setMembers(mem);
         setTimeSeries(series);
       } else {
         const [ov, mem, series] = await Promise.all([
-          cseAnalyticsApi.getOverview(composerParams),
-          cseAnalyticsApi.getMembers(composerParams),
-          cseAnalyticsApi.getTimeSeries(composerParams),
+          need.overview
+            ? cseAnalyticsApi.getOverview(composerParams)
+            : Promise.resolve(null),
+          need.members
+            ? cseAnalyticsApi.getMembers(composerParams)
+            : Promise.resolve([]),
+          need.timeSeries
+            ? cseAnalyticsApi.getTimeSeries(composerParams)
+            : Promise.resolve([]),
         ]);
         setOverview(ov);
-        setMembers(mem);
-        setTimeSeries(series);
+        setMembers(mem as CseMemberData[]);
+        setTimeSeries(series as CseTimeSeriesPoint[]);
       }
     } catch (e: any) {
       const message =
@@ -2177,9 +2298,12 @@ const AnalyticsBoardVariantComponent: React.FC<
   };
 
   useEffect(() => {
-    fetchPreview();
+    const timer = setTimeout(() => {
+      void fetchPreview(composerNeed);
+    }, 350);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composerParams, refreshNonce]);
+  }, [composerParams, refreshNonce, composerNeed]);
 
   const toggleMetric = (key: string) => {
     setSelectedMetrics((prev) =>
@@ -2433,7 +2557,7 @@ const AnalyticsBoardVariantComponent: React.FC<
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {board.map((report) => (
-            <BoardReportCard
+            <LazyBoardReportCard
               key={report.id}
               report={report}
               options={filterOptions}
