@@ -2046,19 +2046,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         return;
       }
       if (!membershipLoaded) {
+        // Still resolving membership / placeholders — keep loading.
         return;
       }
       // Logged in + membership ready, but no apiEndpoint / nothing to fetch (e.g. fresh drag).
       lastInitialFetchKeyRef.current = '';
+      setData([]);
+      setFilteredData([]);
       setLoading(false);
-      } else if (!effectiveApiEndpoint) {
-        // Configured session but no API endpoint yet (common for newly dropped tables).
-        lastInitialFetchKeyRef.current = '';
-        setData([]);
-        setFilteredData([]);
-        setLoading(false);
-      }
-      // Else: waiting on membershipLoaded / placeholder resolution — keep loading.
       return;
     }
 
