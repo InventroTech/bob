@@ -88,7 +88,6 @@ import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 
 import { apiClient, membershipService, pageService } from '@/lib/api';
-import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
@@ -161,6 +160,13 @@ interface ComponentConfig {
     key: string;
     label: string;
     type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+    linkField?: string;
+    editableInTable?: boolean;
+    openCard?: boolean | string;
+    actionApiEndpoint?: string;
+    actionApiMethod?: string;
+    actionApiHeaders?: string;
+    actionApiPayload?: string;
   }>;
   datasets?: Array<{
     label: string;
@@ -503,16 +509,52 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     [selectedComponentId, setCanvasComponents]
   );
 
-  const debouncedUpdateWithDelay = useMemo(
-    () => debounce(debouncedUpdate, 500),
-    [debouncedUpdate]
+  // Accumulate rapid patches so multi-field resets (e.g. "simple All Requests")
+  // don't lose all but the last field to lodash debounce's last-call-wins behavior.
+  const pendingConfigUpdatesRef = useRef<Partial<ComponentConfig>>({});
+  const flushPendingConfigUpdates = useCallback(() => {
+    const updates = pendingConfigUpdatesRef.current;
+    if (!updates || Object.keys(updates).length === 0) return;
+    pendingConfigUpdatesRef.current = {};
+    debouncedUpdate(updates);
+  }, [debouncedUpdate]);
+
+  const scheduleConfigUpdate = useMemo(
+    () => debounce(flushPendingConfigUpdates, 500),
+    [flushPendingConfigUpdates]
   );
+
+  useEffect(() => {
+    return () => {
+      scheduleConfigUpdate.flush();
+      scheduleConfigUpdate.cancel();
+    };
+  }, [scheduleConfigUpdate]);
+
+  const queueConfigUpdate = useCallback(
+    (updates: Partial<ComponentConfig>) => {
+      pendingConfigUpdatesRef.current = {
+        ...pendingConfigUpdatesRef.current,
+        ...updates,
+      };
+      scheduleConfigUpdate();
+    },
+    [scheduleConfigUpdate]
+  );
+
+  const debouncedUpdateWithDelay = queueConfigUpdate;
 
   // Handle local input changes
   const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string; targetAttribute?: string; statusText?: string }> | Array<{ label: string; value: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
-    debouncedUpdateWithDelay({ [field]: value });
-  }, [debouncedUpdateWithDelay]);
+    queueConfigUpdate({ [field]: value } as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
+
+  /** Apply several config fields in one patch (avoids lost updates on reset buttons). */
+  const handleConfigPatch = useCallback((patch: Partial<LocalConfigType>) => {
+    setLocalConfig((prev) => ({ ...prev, ...patch }));
+    queueConfigUpdate(patch as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
 
   // Handle column count change
   const handleColumnCountChange = useCallback((count: number) => {
@@ -730,7 +772,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'ticketTable':
         return (
           <TableConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
@@ -803,12 +845,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'myRequestTable':
         return (
           <TableConfig
+            profile="inventory"
             localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
             numFilters={numFilters}
             handleInputChange={handleInputChange}
+            handleConfigPatch={handleConfigPatch as any}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
             handleColumnDelete={handleColumnDelete}

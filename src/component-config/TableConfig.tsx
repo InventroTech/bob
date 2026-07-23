@@ -76,7 +76,7 @@ export interface ColumnConfig {
 interface TableConfigProps {
   localConfig: {
     apiEndpoint: string;
-    /** Base host: supabase edge functions vs pyro-backend renderer (localhost kept for older saved configs). */
+    /** Base host: supabase edge functions vs pyro-backend renderer (localhost = local renderer). */
     apiPrefix?: 'supabase' | 'renderer' | 'localhost';
     showFilters: boolean;
     searchFields?: string;
@@ -114,6 +114,8 @@ interface TableConfigProps {
   localFilters: FilterConfig[];
   numFilters: number;
   handleInputChange: (field: string, value: string | number | boolean | StatusActionButtonConfig[] | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | PaymentModalConfig | ModalFlagConfig[]) => void;
+  /** Optional batch updater — used by "Reset to simple All Requests defaults". */
+  handleConfigPatch?: (patch: Record<string, unknown>) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string | boolean) => void;
   handleColumnDelete?: (index: number) => void;
@@ -124,7 +126,30 @@ interface TableConfigProps {
   handleAddFilterOption: (filterIndex: number) => void;
   handleRemoveFilterOption: (filterIndex: number, optionIndex: number) => void;
   handleFilterOptionChange: (filterIndex: number, optionIndex: number, field: keyof FilterConfig['options'][0], value: string) => void;
+  /**
+   * `inventory` = All Requests style helpers (lean form fields).
+   * Status transitions stay configured via Status action buttons.
+   */
+  profile?: 'default' | 'inventory';
 }
+
+/** Lean form fields for inventory All Requests (shipment tracking is a dedicated modal section). */
+export const SIMPLE_INVENTORY_REQUEST_FORM_FIELDS: Array<{
+  key: string;
+  label: string;
+  enabled: boolean;
+  link?: boolean;
+}> = [
+  { key: 'status', label: 'Status', enabled: false },
+  { key: 'item_name_freeform', label: 'Item', enabled: false },
+  { key: 'quantity_required', label: 'Quantity', enabled: true },
+  { key: 'vendor', label: 'Vendor', enabled: true },
+  { key: 'urgency_level', label: 'Urgency', enabled: true },
+  { key: 'department', label: 'Department', enabled: false },
+  { key: 'specifications', label: 'Specifications', enabled: true },
+  { key: 'product_link', label: 'Product link', enabled: true, link: true },
+  { key: 'comments', label: 'Comments', enabled: true },
+];
 
 export const TableConfig: React.FC<TableConfigProps> = ({
   localConfig,
@@ -133,6 +158,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   localFilters,
   numFilters,
   handleInputChange,
+  handleConfigPatch,
   handleColumnCountChange,
   handleColumnFieldChange,
   handleColumnDelete,
@@ -142,24 +168,50 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   handleFilterOptionsSourceChange,
   handleAddFilterOption,
   handleRemoveFilterOption,
-  handleFilterOptionChange
+  handleFilterOptionChange,
+  profile = 'default',
 }) => {
+  const isInventoryProfile =
+    profile === 'inventory' || localConfig.entityType === 'inventory_request';
+
   const [modalFields, setModalFields] = useState<Array<{ key: string; editable: boolean }>>(
     () => localConfig.modalFieldConfig ?? []
   );
   const [formModalFieldsList, setFormModalFieldsList] = useState<Array<{ key: string; label: string; enabled: boolean; link?: boolean }>>(
-    () => localConfig.formModalFields ?? []
+    () => (localConfig.formModalFields ?? []).filter((f) => String(f.key || '').trim() !== '')
   );
   const [modalFlagsList, setModalFlagsList] = useState<ModalFlagConfig[]>(
     () => localConfig.modalFlags ?? []
   );
+
+  const applySimpleInventoryDefaults = () => {
+    const patch = {
+      entityType: 'inventory_request',
+      tableType: 'itemsTable' as const,
+      detailMode: 'record_form_modal' as const,
+      showFinalPriceSection: false,
+      formModalFields: SIMPLE_INVENTORY_REQUEST_FORM_FIELDS,
+    };
+    if (handleConfigPatch) {
+      handleConfigPatch(patch);
+    } else {
+      (Object.entries(patch) as Array<[string, (typeof patch)[keyof typeof patch]]>).forEach(
+        ([field, value]) => handleInputChange(field, value as never)
+      );
+    }
+    setFormModalFieldsList(SIMPLE_INVENTORY_REQUEST_FORM_FIELDS);
+  };
 
   return (
     <div className="space-y-4">
       <div>
         <Label>API Prefix</Label>
         <Select
-          value={localConfig.apiPrefix || 'renderer'}
+          value={
+            localConfig.apiPrefix === 'localhost'
+              ? 'renderer'
+              : localConfig.apiPrefix || 'renderer'
+          }
           onValueChange={(value) => handleInputChange('apiPrefix', value)}
         >
           <SelectTrigger>
@@ -168,6 +220,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           <SelectContent>
             <SelectItem value="supabase">Supabase</SelectItem>
             <SelectItem value="renderer">Renderer</SelectItem>
+            <SelectItem value="localhost">Localhost</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground mt-1">
@@ -205,6 +258,18 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           For records API: entity_type sent to the API. Used to infer row-click behavior if Detail Mode is not set.
         </p>
       </div>
+
+      {isInventoryProfile ? (
+        <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2">
+          <p className="text-sm font-medium">Inventory table helpers</p>
+          <p className="text-xs text-muted-foreground">
+            Sets entity type, record form modal, and lean form fields. Configure Status action buttons below for Approve / Order / other transitions.
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={applySimpleInventoryDefaults}>
+            Reset inventory form defaults
+          </Button>
+        </div>
+      ) : null}
 
       <div>
         <Label>Table type</Label>
@@ -619,7 +684,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500 mt-1">
-              What happens when a row is clicked. Payment modal: one conditional + one default action button.
+              What happens when a row is clicked. Use Record form modal for All Requests, then configure Status action buttons above.
             </p>
           </div>
 
@@ -715,10 +780,12 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 <Label>Modal title</Label>
                 <Input value={localConfig.formModalTitle ?? ''} onChange={(e) => handleInputChange('formModalTitle', e.target.value)} placeholder="e.g. Edit record" />
               </div>
+              {!isInventoryProfile && (
               <div className="space-y-2">
                 <Label>Modal description</Label>
                 <Input value={localConfig.formModalDescription ?? ''} onChange={(e) => handleInputChange('formModalDescription', e.target.value)} placeholder="Shown below the title" />
               </div>
+              )}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Save button in modal</Label>
                 <div className="flex items-center gap-2">
@@ -735,6 +802,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                   When off, Save is shown only if there are no action buttons. When on, Save is always shown.
                 </p>
               </div>
+              {!isInventoryProfile && (
               <div className="space-y-2">
                 <Label>Final price section</Label>
                 <div className="flex items-center gap-2">
@@ -751,6 +819,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                   When off, the “Final price” block is hidden in the form-style modal, computed totals are not applied on save, and the default record detail modal hides price fields (total_price, unit_price, estimated cost, currency).
                 </p>
               </div>
+              )}
               <div className="space-y-2">
                 <Label>Delete request button</Label>
                 <div className="flex items-center gap-2">
@@ -797,18 +866,26 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => { const next = [...formModalFieldsList, { key: '', label: '', enabled: true }]; setFormModalFieldsList(next); handleInputChange('formModalFields', next); }}>Add field</Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => {
-                    const defaultFields: Array<{ key: string; label: string; enabled: boolean }> = [
-                      { key: 'status', label: 'Status', enabled: true }, { key: 'quantity_required', label: 'Quantity required', enabled: true }, { key: 'quantity', label: 'Quantity', enabled: true }, { key: 'item_name_freeform', label: 'Item name', enabled: true }, { key: 'vendor', label: 'Vendor', enabled: true }, { key: 'comments', label: 'Comments', enabled: true }, { key: 'notes', label: 'Notes', enabled: true }, { key: 'urgency_level', label: 'Urgency', enabled: true }, { key: 'project_purpose', label: 'Project / purpose', enabled: true }, { key: 'department', label: 'Department', enabled: true }, { key: 'cart_id', label: 'Cart', enabled: true },
-                    ];
+                    const defaultFields = isInventoryProfile
+                      ? SIMPLE_INVENTORY_REQUEST_FORM_FIELDS
+                      : [
+                          { key: 'status', label: 'Status', enabled: true },
+                          { key: 'quantity_required', label: 'Quantity required', enabled: true },
+                          { key: 'item_name_freeform', label: 'Item name', enabled: true },
+                          { key: 'vendor', label: 'Vendor', enabled: true },
+                          { key: 'comments', label: 'Comments', enabled: true },
+                          { key: 'urgency_level', label: 'Urgency', enabled: true },
+                          { key: 'department', label: 'Department', enabled: true },
+                        ];
                     setFormModalFieldsList(defaultFields);
                     handleInputChange('formModalFields', defaultFields);
-                  }}>Use default (inventory request)</Button>
+                  }}>{isInventoryProfile ? 'Use simple inventory fields' : 'Use default (inventory request)'}</Button>
                 </div>
               </div>
             </div>
           )}
 
-          {(localConfig.detailMode === 'record_form_modal' ||
+          {!isInventoryProfile && (localConfig.detailMode === 'record_form_modal' ||
             localConfig.detailMode === 'inventory_payment_modal' ||
             localConfig.detailMode === 'inventory_request' ||
             localConfig.detailMode === 'inventory_cart') && (

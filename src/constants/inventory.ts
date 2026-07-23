@@ -11,6 +11,13 @@ export const INVENTORY_REQUEST_STATUSES = [
 
 export type InventoryRequestStatus = (typeof INVENTORY_REQUEST_STATUSES)[number];
 
+/** Re-export shipment tracking statuses (inventory_request.data.shipment_status). */
+export {
+  SHIPMENT_STATUSES,
+  DEFAULT_SHIPMENT_STATUS,
+  type ShipmentStatus,
+} from '@/lib/shipmentTracking';
+
 /** Canonical inventory item statuses for dropdowns and filters. */
 export const INVENTORY_ITEM_STATUSES = [
   'IN_STOCK',
