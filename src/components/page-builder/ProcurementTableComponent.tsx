@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './LeadTableComponent';
 import { resolvePriorityFromRow } from '@/lib/inventoryPriority';
+import { mergeInventoryTrackingColumns } from '@/lib/shipmentTracking';
 
 export type ProcurementTableColumn = {
   key: string;
@@ -28,6 +29,7 @@ export type ProcurementTableConfig = {
     | 'lead_assignment_modal'
     | 'none'
     | 'auto';
+  recordDetailModalType?: 'default' | 'form_edit';
   [key: string]: unknown;
 };
 
@@ -49,6 +51,15 @@ export const DEFAULT_PROCUREMENT_TABLE_COLUMNS: ProcurementTableColumn[] = [
   { key: 'urgency_level', label: 'Priority', type: 'chip' },
   { key: 'status', label: 'Status', type: 'chip' },
 ];
+
+/** Defaults applied when the component is first dropped in Page Builder. */
+export const DEFAULT_PROCUREMENT_TABLE_CONFIG = {
+  columns: DEFAULT_PROCUREMENT_TABLE_COLUMNS,
+  entityType: 'inventory_request',
+  tableType: 'itemsTable' as const,
+  // Form modal hosts built-in Approve / Reject / Order (Record detail does not).
+  detailMode: 'record_form_modal' as const,
+};
 
 function withPriorityTransform(columns: ProcurementTableColumn[]): ProcurementTableColumn[] {
   return columns.map((col) => {
@@ -80,28 +91,52 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
 }
 
 /**
+ * Resolve row-click modal so Approve / Order appear on procurement All Requests.
+ * Older pages use record_form_modal; this component previously defaulted to
+ * inventory_request (RecordDetailModal), which has no workflow action buttons.
+ */
+function resolveProcurementDetailMode(
+  detailMode: ProcurementTableConfig['detailMode'] | undefined,
+  isInventoryLike: boolean
+): ProcurementTableConfig['detailMode'] | undefined {
+  if (!detailMode || detailMode === 'auto') {
+    return isInventoryLike ? 'record_form_modal' : undefined;
+  }
+  // Map legacy default to the form modal that owns Approve / Order.
+  if (detailMode === 'inventory_request') {
+    return 'record_form_modal';
+  }
+  return detailMode;
+}
+
+/**
  * Procurement table for Page Builder.
  * Columns + API endpoint are fully dynamic from Page Builder config.
- * Default detailMode opens inventory request modal (not lead Task Progress).
+ * Opens the form-style modal so built-in Approve / Reject / Order show.
  */
 export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ config }) => {
   const mergedConfig = useMemo(() => {
-    const columns = withPriorityTransform(config?.columns || []);
     const fromEndpoint = entityTypeFromEndpoint(config?.apiEndpoint);
-    const entityType = config?.entityType || fromEndpoint;
+    const entityType = config?.entityType || fromEndpoint || 'inventory_request';
     const isInventoryLike =
-      !entityType ||
-      entityType === 'inventory_request' ||
-      entityType === 'unmannd_request';
+      entityType === 'inventory_request' || entityType === 'unmannd_request';
+    const columns = withPriorityTransform(
+      (isInventoryLike
+        ? mergeInventoryTrackingColumns(config?.columns || DEFAULT_PROCUREMENT_TABLE_COLUMNS)
+        : config?.columns || []) as ProcurementTableColumn[]
+    );
+    const detailMode = resolveProcurementDetailMode(config?.detailMode, isInventoryLike);
 
     return {
       ...(config || {}),
       columns,
-      ...(entityType ? { entityType } : {}),
-      // Avoid lead_card (Task Progress) for request-style entities unless explicitly set.
-      detailMode:
-        config?.detailMode ||
-        (isInventoryLike ? 'inventory_request' : undefined),
+      entityType,
+      tableType: config?.tableType || 'itemsTable',
+      detailMode,
+      // If someone still uses inventory_request/inventory_cart modes, force form_edit.
+      ...(detailMode === 'inventory_request' || detailMode === 'inventory_cart'
+        ? { recordDetailModalType: config?.recordDetailModalType ?? 'form_edit' }
+        : {}),
     };
   }, [config]);
 

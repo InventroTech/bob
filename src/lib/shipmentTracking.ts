@@ -12,6 +12,70 @@ export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 
 export const DEFAULT_SHIPMENT_STATUS: ShipmentStatus = 'NOT_SHIPPED';
 
+/** Happy-path delivery pipeline shown in the form modal (excludes NOT_SHIPPED / EXCEPTION). */
+export const SHIPMENT_PIPELINE_STEPS = [
+  'ORDERED',
+  'IN_TRANSIT',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+] as const satisfies readonly ShipmentStatus[];
+
+export type ShipmentPipelineStep = (typeof SHIPMENT_PIPELINE_STEPS)[number];
+
+export function normalizeShipmentStatus(status: unknown): ShipmentStatus | null {
+  const raw = String(status ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_');
+  if (!raw) return null;
+  return SHIPMENT_STATUSES.includes(raw as ShipmentStatus) ? (raw as ShipmentStatus) : null;
+}
+
+/**
+ * When tracking link/number is first applied and status is still empty / NOT_SHIPPED,
+ * move into ORDERED so the delivery pipeline shows a current state.
+ */
+export function advanceShipmentStatusForTracking(
+  currentStatus: unknown,
+  hasTracking: boolean
+): ShipmentStatus | null {
+  const normalized = normalizeShipmentStatus(currentStatus);
+  if (!hasTracking) return normalized;
+  if (!normalized || normalized === 'NOT_SHIPPED') return 'ORDERED';
+  return normalized;
+}
+
+export type LiveShipmentTrackResult = {
+  ok?: boolean;
+  shipment_status?: string | null;
+  courier_name?: string | null;
+  eta?: string | null;
+  tracking_number?: string | null;
+  tracking_link?: string | null;
+  status_detail?: string | null;
+  error?: string | null;
+  method?: string | null;
+  tracked_at?: string | null;
+};
+
+/**
+ * Ask the backend to resolve live carrier status from AWB / tracking link.
+ * Updates the delivery pipeline automatically from the response.
+ */
+export async function fetchLiveShipmentStatus(input: {
+  tracking_number?: string | null;
+  tracking_link?: string | null;
+  courier_name?: string | null;
+}): Promise<LiveShipmentTrackResult> {
+  const { apiClient } = await import('@/lib/api');
+  const res = await apiClient.post<LiveShipmentTrackResult>('/crm-records/shipment-track/', {
+    tracking_number: input.tracking_number || null,
+    tracking_link: input.tracking_link || null,
+    courier_name: input.courier_name || null,
+  });
+  return res.data ?? {};
+}
+
 /** Request statuses where the shipment tracking editor is shown. */
 export const SHIPMENT_TRACKING_VISIBLE_REQUEST_STATUSES = new Set([
   'ORDERED',
@@ -29,7 +93,8 @@ export type ShipmentTrackingFields = {
   tracking_number: string | null;
   tracking_link: string | null;
   courier_name: string | null;
-  shipment_status: ShipmentStatus;
+  /** Null until ops sets a real shipment state (avoid showing NOT_SHIPPED on brand-new requests). */
+  shipment_status: ShipmentStatus | null;
   eta: string | null;
   tracking_updated_at: string | null;
 };
@@ -40,7 +105,7 @@ export function emptyShipmentTrackingFields(): ShipmentTrackingFields {
     tracking_number: null,
     tracking_link: null,
     courier_name: null,
-    shipment_status: DEFAULT_SHIPMENT_STATUS,
+    shipment_status: null,
     eta: null,
     tracking_updated_at: null,
   };

@@ -79,7 +79,7 @@ import {
   InventoryRequestFormComponent,
   ProcurementRequestFormComponent,
 } from "@/components/page-builder";
-import { DEFAULT_PROCUREMENT_TABLE_COLUMNS } from "@/components/page-builder/ProcurementTableComponent";
+import { DEFAULT_PROCUREMENT_TABLE_CONFIG } from "@/components/page-builder/ProcurementTableComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
@@ -1072,10 +1072,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
               <Input
                 value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
                 onChange={(e) => handleInputChange('initialStatus', e.target.value)}
-                placeholder="e.g. DRAFT"
+                placeholder="e.g. PENDING_PM"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Status for new requests. Leave empty to use default (DRAFT).
+                Status for new requests. Leave empty to use default (PENDING_PM).
               </p>
             </div>
 
@@ -1470,7 +1470,10 @@ useEffect(() => {
           props: {},
           config:
             componentType === 'procurementTable'
-              ? ({ columns: [...DEFAULT_PROCUREMENT_TABLE_COLUMNS] } as ComponentConfig)
+              ? ({
+                  ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
+                  columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
+                } as ComponentConfig)
               : componentType === 'procurementRequestForm'
                 ? ({ entityType: 'unmannd_request' } as ComponentConfig)
                 : {},
@@ -1497,7 +1500,10 @@ useEffect(() => {
         props: {},
         config:
           componentType === 'procurementTable'
-            ? ({ columns: [...DEFAULT_PROCUREMENT_TABLE_COLUMNS] } as ComponentConfig)
+            ? ({
+                ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
+                columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
+              } as ComponentConfig)
             : componentType === 'procurementRequestForm'
               ? ({ entityType: 'unmannd_request' } as ComponentConfig)
               : {},

@@ -18,11 +18,6 @@ interface RecordsTableProps {
  *
  * For inventory_request tables, shipment tracking columns (Shipment / Track / ETA / Courier)
  * are merged in when missing so All Requests pages show live tracking without reconfig.
- *
- * Examples:
- * - My inventory requests: apiEndpoint=/crm-records/records/?entity_type=inventory_request&requester_id={{current_membership_id}}
- * - PM queue: apiEndpoint=/crm-records/records/?entity_type=inventory_request&status=PENDING_PM,IN_SHIPPING
- * - Inventory catalog: apiEndpoint=/crm-records/records/?entity_type=inventory_item
  */
 export const InventoryTableComponent: React.FC<RecordsTableProps> = ({ config }) => {
   const entityType = String(config?.entityType || '').trim();

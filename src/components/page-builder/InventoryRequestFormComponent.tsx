@@ -131,7 +131,7 @@ const normalizeIndianPincode = (value: string): string | null => {
 interface InventoryRequestFormConfig {
   /** Entity type to save (e.g. inventory_request). */
   entityType?: string;
-  /** Initial status for new records (e.g. DRAFT). */
+  /** Initial status for new records (e.g. PENDING_PM). */
   initialStatus?: string;
   /** Friendly initial status label stored as data.status_text. */
   initialStatusText?: string;
@@ -413,8 +413,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const { user } = useAuth();
 
   const entityType = config?.entityType ?? 'inventory_request';
-  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'DRAFT';
-  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
+  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'PENDING_PM';  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
@@ -1196,8 +1195,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           department: department || '',
           delivery_pincode: normalizeIndianPincode(deliveryPincode) || '',
           delivery_address: deliveryAddress.trim() || '',
-          urgency_level: (item.urgency_level ?? '').trim() || '',
-          urgency_level: priority?.value ?? '',
+          urgency_level: (priority?.value ?? (item.urgency_level ?? '').trim()) || '',
           priority_label: priority?.label ?? '',
           vendor: toVendorStorageName((item.vendor ?? '').trim()) || '',
           item_name_freeform: (item.item_name_freeform ?? '').trim(),
