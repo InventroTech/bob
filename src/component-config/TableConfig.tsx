@@ -261,9 +261,11 @@ export const TableConfig: React.FC<TableConfigProps> = ({
 
       {isInventoryProfile ? (
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2">
-          <p className="text-sm font-medium">Inventory table helpers</p>
+          <p className="text-sm font-medium">Inventory request flow</p>
           <p className="text-xs text-muted-foreground">
-            Sets entity type, record form modal, and lean form fields. Configure Status action buttons below for Approve / Order / other transitions.
+            Built-in modal actions (on existing statuses): Approve/Reject on NEW_REQUEST/DRAFT/PENDING_PM → VENDOR_IDENTIFIED;
+            team lead Order on VENDOR_IDENTIFIED/PAYMENT_PENDING → IN_SHIPPING; then paste shipment tracking.
+            Extra Status action buttons below are optional.
           </p>
           <Button type="button" variant="outline" size="sm" onClick={applySimpleInventoryDefaults}>
             Reset inventory form defaults
@@ -684,7 +686,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500 mt-1">
-              What happens when a row is clicked. Use Record form modal for All Requests, then configure Status action buttons above.
+              What happens when a row is clicked. Use Record form modal for All Requests (built-in Approve / Order use existing statuses).
             </p>
           </div>
 

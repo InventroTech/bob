@@ -28,17 +28,24 @@ import {
   urgencyReadonlyValueTextClassName,
   isUrgencyToneValue,
 } from '@/lib/urgencyButtonStyles';
-import { getInventoryStatusLabel, getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import { RequestHistoryPanel, type RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
+import { ShipmentDeliveryPipeline } from '@/components/page-builder/ShipmentDeliveryPipeline';
 import {
   SHIPMENT_STATUSES,
   DEFAULT_SHIPMENT_STATUS,
   normalizeTrackingPaste,
+  advanceShipmentStatusForTracking,
   shouldShowShipmentTrackingSection,
+  fetchLiveShipmentStatus,
 } from '@/lib/shipmentTracking';
+import {
+  filterDuplicateInventoryWorkflowButtons,
+  getInventoryWorkflowButtons,
+} from '@/lib/inventoryWorkflow';
 
 const TRACKING_FORM_KEYS = [
   'tracking_number',
@@ -236,6 +243,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [historyEntries, setHistoryEntries] = useState<RequestHistoryEntry[]>([]);
   const [trackingPasteDraft, setTrackingPasteDraft] = useState('');
   const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
+  const [trackingLiveLoading, setTrackingLiveLoading] = useState(false);
+  const [trackingStatusDetail, setTrackingStatusDetail] = useState<string | null>(null);
 
   const myName =
     user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
@@ -285,6 +294,108 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const setField = useCallback((key: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   }, []);
+
+  const applyLiveTrackingResult = useCallback(
+    (result: Awaited<ReturnType<typeof fetchLiveShipmentStatus>>) => {
+      if (result.tracking_number) setField('tracking_number', result.tracking_number);
+      if (result.tracking_link) setField('tracking_link', result.tracking_link);
+      if (result.courier_name) setField('courier_name', result.courier_name);
+      if (result.eta) setField('eta', String(result.eta).slice(0, 10));
+      if (result.shipment_status) setField('shipment_status', result.shipment_status);
+      setTrackingStatusDetail(
+        result.status_detail ||
+          (result.ok === false && result.error ? result.error : null)
+      );
+    },
+    [setField]
+  );
+
+  const refreshLiveTracking = useCallback(
+    async (overrides?: {
+      tracking_number?: string | null;
+      tracking_link?: string | null;
+      courier_name?: string | null;
+      silent?: boolean;
+    }) => {
+      const number = String(overrides?.tracking_number ?? formData.tracking_number ?? '').trim();
+      const link = String(overrides?.tracking_link ?? formData.tracking_link ?? '').trim();
+      const courier = String(overrides?.courier_name ?? formData.courier_name ?? '').trim();
+      if (!number && !link) {
+        if (!overrides?.silent) {
+          toast({
+            title: 'Add tracking first',
+            description: 'Paste a tracking number or link to refresh the delivery pipeline.',
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+      setTrackingLiveLoading(true);
+      try {
+        const result = await fetchLiveShipmentStatus({
+          tracking_number: number || null,
+          tracking_link: link || null,
+          courier_name: courier || null,
+        });
+        applyLiveTrackingResult(result);
+        if (!overrides?.silent) {
+          toast({
+            title: result.ok ? 'Tracking updated' : 'Tracking checked',
+            description: result.ok
+              ? `Pipeline: ${String(result.shipment_status || '').replace(/_/g, ' ')}`
+              : result.error || 'Saved identifiers; live carrier status was unavailable.',
+          });
+        }
+      } catch (err) {
+        console.error('Live shipment track failed', err);
+        // Still advance to ORDERED so the pipeline is not blank.
+        const fallback = advanceShipmentStatusForTracking(formData.shipment_status, true);
+        if (fallback) setField('shipment_status', fallback);
+        setTrackingStatusDetail('Could not reach live tracking. Pipeline set from tracking id.');
+        if (!overrides?.silent) {
+          toast({
+            title: 'Live tracking failed',
+            description: 'Could not fetch carrier status. Check the number/link and try Refresh.',
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        setTrackingLiveLoading(false);
+      }
+    },
+    [formData.tracking_number, formData.tracking_link, formData.courier_name, formData.shipment_status, applyLiveTrackingResult, setField, toast]
+  );
+
+  const applyTrackingPaste = useCallback(
+    async (raw: string, { clearDraft = false }: { clearDraft?: boolean } = {}) => {
+      const paste = raw.trim();
+      if (!paste) return;
+      const normalized = normalizeTrackingPaste(paste);
+      const nextLink = normalized.tracking_link || String(formData.tracking_link ?? '');
+      const nextNumber = normalized.tracking_number || String(formData.tracking_number ?? '');
+      if (normalized.tracking_link) setField('tracking_link', normalized.tracking_link);
+      if (normalized.tracking_number) setField('tracking_number', normalized.tracking_number);
+      const nextStatus = advanceShipmentStatusForTracking(
+        formData.shipment_status,
+        Boolean(nextLink || nextNumber)
+      );
+      if (nextStatus) setField('shipment_status', nextStatus);
+      if (clearDraft) setTrackingPasteDraft('');
+      await refreshLiveTracking({
+        tracking_number: nextNumber || null,
+        tracking_link: nextLink || null,
+        courier_name: String(formData.courier_name ?? '') || null,
+      });
+    },
+    [
+      formData.tracking_link,
+      formData.tracking_number,
+      formData.shipment_status,
+      formData.courier_name,
+      setField,
+      refreshLiveTracking,
+    ]
+  );
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -358,6 +469,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     const data = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
     const recordAny = record as Record<string, unknown>;
     setPriceFieldDraft({});
+    setTrackingStatusDetail(null);
     const initial: Record<string, unknown> = {};
     formModalFields.forEach((f) => {
       const val = data[f.key] ?? recordAny[f.key];
@@ -431,6 +543,39 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       }
     }
   }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig, hasPriceFieldInForm, modalFlags, effectiveShowFinalPrice, entityType]);
+
+  // When a request already has tracking, refresh live carrier status into the pipeline.
+  useEffect(() => {
+    if (!open || !isInventoryRequest || isPaymentModal) return;
+    const data = record?.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
+    const number = String(data.tracking_number ?? '').trim();
+    const link = String(data.tracking_link ?? '').trim();
+    if (!number && !link) return;
+    let cancelled = false;
+    (async () => {
+      setTrackingLiveLoading(true);
+      try {
+        const result = await fetchLiveShipmentStatus({
+          tracking_number: number || null,
+          tracking_link: link || null,
+          courier_name: String(data.courier_name ?? '').trim() || null,
+        });
+        if (cancelled) return;
+        applyLiveTrackingResult(result);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Auto live shipment track failed', err);
+        }
+      } finally {
+        if (!cancelled) setTrackingLiveLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only on open / record change — not on every form edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, record?.id, isInventoryRequest, isPaymentModal]);
 
   /** Get quantity from form or record for price calculation. */
   const getQuantity = useCallback(() => {
@@ -605,10 +750,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       dataToSend.tracking_number = number || null;
       dataToSend.courier_name = String(dataToSend.courier_name ?? '').trim() || null;
       dataToSend.eta = String(dataToSend.eta ?? '').trim() || null;
+      const hasTracking = Boolean(link || number);
       const statusRaw = String(dataToSend.shipment_status ?? '').trim().toUpperCase().replace(/\s+/g, '_');
-      dataToSend.shipment_status = SHIPMENT_STATUSES.includes(statusRaw as (typeof SHIPMENT_STATUSES)[number])
+      const currentStatus = SHIPMENT_STATUSES.includes(statusRaw as (typeof SHIPMENT_STATUSES)[number])
         ? statusRaw
-        : DEFAULT_SHIPMENT_STATUS;
+        : null;
+      // Pasting a link/AWB should move the pipeline into ORDERED (not stay blank / NOT_SHIPPED).
+      dataToSend.shipment_status = advanceShipmentStatusForTracking(currentStatus, hasTracking);
 
       const prev = (record?.data && typeof record.data === 'object' ? record.data : {}) as Record<string, unknown>;
       const keys = ['tracking_number', 'tracking_link', 'courier_name', 'shipment_status', 'eta'] as const;
@@ -650,6 +798,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         };
         if (targetAttribute === 'status') {
           dataToSend.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+          // Order → IN_SHIPPING should start the delivery pipeline at ORDERED.
+          if (String(btn.statusValue).toUpperCase().replace(/\s+/g, '_') === 'IN_SHIPPING') {
+            dataToSend.shipment_status = advanceShipmentStatusForTracking(
+              dataToSend.shipment_status,
+              true
+            );
+          }
         }
         if (isPaymentModal) {
           dataToSend.payment_note = String(extraData?.payment_note ?? formData.payment_note ?? '').trim();
@@ -915,11 +1070,46 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     : false;
 
   const usePaymentButtons = paymentButtonConfig?.conditionalButton && paymentButtonConfig?.defaultButton;
+  const statusFromForm =
+    formData.status != null && String(formData.status).trim() !== '' ? formData.status : undefined;
+  const requestStatusForWorkflow =
+    statusFromForm ??
+    (record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>).status
+      : undefined);
+  const teamLeadFromForm =
+    formData.team_lead != null && String(formData.team_lead).trim() !== ''
+      ? formData.team_lead
+      : undefined;
+  const teamLeadOnRecord =
+    teamLeadFromForm ??
+    (record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>).team_lead
+      : undefined);
+
+  const workflowButtons =
+    isInventoryRequest && !isPaymentModal
+      ? getInventoryWorkflowButtons({
+          requestStatus: requestStatusForWorkflow,
+          roleNameOrKey: myRoleName,
+          roleKey: myRoleKey,
+          membershipId: myMembershipId,
+          teamLeadOnRecord,
+          isRequester,
+        })
+      : [];
+
   const configuredActionButtons = usePaymentButtons
     ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
-    : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
+    : isInventoryRequest && !isPaymentModal
+      ? filterDuplicateInventoryWorkflowButtons(
+          (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn))
+        )
+      : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
 
-  const effectiveActionButtons = configuredActionButtons;
+  const effectiveActionButtons = usePaymentButtons
+    ? configuredActionButtons
+    : [...workflowButtons, ...configuredActionButtons];
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
@@ -1291,8 +1481,18 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Paste the tracking link or AWB from the vendor site. Link and number are filled automatically when possible.
+                  Paste a tracking link or AWB — we look up the carrier and move the delivery pipeline automatically.
                 </p>
+                <ShipmentDeliveryPipeline
+                  status={formData.shipment_status}
+                  disabled={!canUpdate || !!applyingStatusValue || trackingLiveLoading}
+                  statusDetail={trackingStatusDetail}
+                  liveLoading={trackingLiveLoading}
+                  onRefresh={() => {
+                    void refreshLiveTracking();
+                  }}
+                  onChange={(next) => setField('shipment_status', next)}
+                />
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     Paste tracking
@@ -1303,31 +1503,23 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       value={trackingPasteDraft}
                       onChange={(e) => setTrackingPasteDraft(e.target.value)}
                       onBlur={() => {
-                        const paste = trackingPasteDraft.trim();
-                        if (!paste) return;
-                        const normalized = normalizeTrackingPaste(paste);
-                        if (normalized.tracking_link) setField('tracking_link', normalized.tracking_link);
-                        if (normalized.tracking_number) setField('tracking_number', normalized.tracking_number);
+                        if (!trackingPasteDraft.trim()) return;
+                        void applyTrackingPaste(trackingPasteDraft);
                       }}
                       placeholder="https://… or tracking number"
-                      disabled={!canUpdate}
+                      disabled={!canUpdate || trackingLiveLoading}
                     />
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="h-9"
-                      disabled={!canUpdate || !trackingPasteDraft.trim()}
+                      disabled={!canUpdate || !trackingPasteDraft.trim() || trackingLiveLoading}
                       onClick={() => {
-                        const paste = trackingPasteDraft.trim();
-                        if (!paste) return;
-                        const normalized = normalizeTrackingPaste(paste);
-                        if (normalized.tracking_link) setField('tracking_link', normalized.tracking_link);
-                        if (normalized.tracking_number) setField('tracking_number', normalized.tracking_number);
-                        setTrackingPasteDraft('');
+                        void applyTrackingPaste(trackingPasteDraft, { clearDraft: true });
                       }}
                     >
-                      Apply
+                      {trackingLiveLoading ? 'Tracking…' : 'Apply'}
                     </Button>
                   </div>
                 </div>
@@ -1340,7 +1532,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       className="h-9 text-sm rounded-md font-mono"
                       value={String(formData.tracking_number ?? '')}
                       onChange={(e) => setField('tracking_number', e.target.value)}
-                      disabled={!canUpdate}
+                      onBlur={() => {
+                        const number = String(formData.tracking_number ?? '').trim();
+                        const link = String(formData.tracking_link ?? '').trim();
+                        if (!number && !link) return;
+                        void refreshLiveTracking({ silent: true });
+                      }}
+                      disabled={!canUpdate || trackingLiveLoading}
                       placeholder="AWB / tracking no"
                     />
                   </div>
@@ -1352,7 +1550,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       className="h-9 text-sm rounded-md"
                       value={String(formData.tracking_link ?? '')}
                       onChange={(e) => setField('tracking_link', e.target.value)}
-                      disabled={!canUpdate}
+                      onBlur={() => {
+                        const number = String(formData.tracking_number ?? '').trim();
+                        const link = String(formData.tracking_link ?? '').trim();
+                        if (!number && !link) return;
+                        void refreshLiveTracking({ silent: true });
+                      }}
+                      disabled={!canUpdate || trackingLiveLoading}
                       placeholder="https://…"
                     />
                   </div>
@@ -1360,40 +1564,33 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       Courier
                     </Label>
-                    <Input
-                      className="h-9 text-sm rounded-md"
-                      value={String(formData.courier_name ?? '')}
-                      onChange={(e) => setField('courier_name', e.target.value)}
-                      disabled={!canUpdate}
-                      placeholder="Delhivery, BlueDart,…"
-                    />
-                  </div>
-                  <div className="space-y-1.5 min-w-0">
-                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Shipment status
-                    </Label>
                     <Select
-                      value={String(formData.shipment_status || DEFAULT_SHIPMENT_STATUS)}
-                      onValueChange={(v) => setField('shipment_status', v)}
-                      disabled={!canUpdate}
+                      value={String(formData.courier_name ?? '').trim() || '__auto__'}
+                      onValueChange={(v) => {
+                        setField('courier_name', v === '__auto__' ? '' : v);
+                        const number = String(formData.tracking_number ?? '').trim();
+                        const link = String(formData.tracking_link ?? '').trim();
+                        if (number || link) {
+                          void refreshLiveTracking({
+                            courier_name: v === '__auto__' ? null : v,
+                            silent: true,
+                          });
+                        }
+                      }}
+                      disabled={!canUpdate || trackingLiveLoading}
                     >
                       <SelectTrigger className="h-9 w-full text-sm rounded-md">
-                        <SelectValue placeholder="Shipment status" />
+                        <SelectValue placeholder="Auto-detect" />
                       </SelectTrigger>
                       <SelectContent>
-                        {SHIPMENT_STATUSES.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            <span className={cn('inline-flex items-center gap-2')}>
-                              <span
-                                className={cn(
-                                  'inline-block h-2 w-2 rounded-full border',
-                                  getShipmentStatusToneClass(s).split(' ').find((c) => c.startsWith('bg-')) || 'bg-muted'
-                                )}
-                              />
-                              {getShipmentStatusLabel(s)}
-                            </span>
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="__auto__">Auto-detect</SelectItem>
+                        <SelectItem value="BlueDart">BlueDart</SelectItem>
+                        <SelectItem value="Delhivery">Delhivery</SelectItem>
+                        <SelectItem value="FedEx">FedEx</SelectItem>
+                        <SelectItem value="DHL">DHL</SelectItem>
+                        <SelectItem value="DTDC">DTDC</SelectItem>
+                        <SelectItem value="Shiprocket">Shiprocket</SelectItem>
+                        <SelectItem value="India Post">India Post</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1406,7 +1603,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       className="h-9 text-sm rounded-md"
                       value={String(formData.eta ?? '').slice(0, 10)}
                       onChange={(e) => setField('eta', e.target.value)}
-                      disabled={!canUpdate}
+                      disabled={!canUpdate || trackingLiveLoading}
                     />
                   </div>
                 </div>
