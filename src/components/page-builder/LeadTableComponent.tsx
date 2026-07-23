@@ -1200,7 +1200,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         String(column.header || '').toLowerCase() === 'track' ||
         String(column.header || '').toLowerCase().includes('tracking');
 
-      let href = displayValue;
+      const href = displayValue;
       if (
         isTrackingCol &&
         (!href || href === '#' || href === 'N/A') &&
