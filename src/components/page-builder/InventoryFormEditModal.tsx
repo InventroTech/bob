@@ -599,7 +599,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         if (normalized.tracking_link) dataToSend.tracking_link = normalized.tracking_link;
         if (normalized.tracking_number) dataToSend.tracking_number = normalized.tracking_number;
       }
-      let link = String(dataToSend.tracking_link ?? '').trim();
+      const link = String(dataToSend.tracking_link ?? '').trim();
       let number = String(dataToSend.tracking_number ?? '').trim();
       if (link && !number) {
         const extracted = normalizeTrackingPaste(link).tracking_number;
