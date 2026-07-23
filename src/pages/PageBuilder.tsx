@@ -495,16 +495,52 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     [selectedComponentId, setCanvasComponents]
   );
 
-  const debouncedUpdateWithDelay = useMemo(
-    () => debounce(debouncedUpdate, 500),
-    [debouncedUpdate]
+  // Accumulate rapid patches so multi-field resets (e.g. "simple All Requests")
+  // don't lose all but the last field to lodash debounce's last-call-wins behavior.
+  const pendingConfigUpdatesRef = useRef<Partial<ComponentConfig>>({});
+  const flushPendingConfigUpdates = useCallback(() => {
+    const updates = pendingConfigUpdatesRef.current;
+    if (!updates || Object.keys(updates).length === 0) return;
+    pendingConfigUpdatesRef.current = {};
+    debouncedUpdate(updates);
+  }, [debouncedUpdate]);
+
+  const scheduleConfigUpdate = useMemo(
+    () => debounce(flushPendingConfigUpdates, 500),
+    [flushPendingConfigUpdates]
   );
+
+  useEffect(() => {
+    return () => {
+      scheduleConfigUpdate.flush();
+      scheduleConfigUpdate.cancel();
+    };
+  }, [scheduleConfigUpdate]);
+
+  const queueConfigUpdate = useCallback(
+    (updates: Partial<ComponentConfig>) => {
+      pendingConfigUpdatesRef.current = {
+        ...pendingConfigUpdatesRef.current,
+        ...updates,
+      };
+      scheduleConfigUpdate();
+    },
+    [scheduleConfigUpdate]
+  );
+
+  const debouncedUpdateWithDelay = queueConfigUpdate;
 
   // Handle local input changes
   const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string; targetAttribute?: string; statusText?: string }> | Array<{ label: string; value: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
-    debouncedUpdateWithDelay({ [field]: value });
-  }, [debouncedUpdateWithDelay]);
+    queueConfigUpdate({ [field]: value } as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
+
+  /** Apply several config fields in one patch (avoids lost updates on reset buttons). */
+  const handleConfigPatch = useCallback((patch: Partial<LocalConfigType>) => {
+    setLocalConfig((prev) => ({ ...prev, ...patch }));
+    queueConfigUpdate(patch as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
 
   // Handle column count change
   const handleColumnCountChange = useCallback((count: number) => {
@@ -800,6 +836,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             localFilters={localFilters}
             numFilters={numFilters}
             handleInputChange={handleInputChange}
+            handleConfigPatch={handleConfigPatch as any}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
             handleColumnDelete={handleColumnDelete}
@@ -1016,10 +1053,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
               <Input
                 value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
                 onChange={(e) => handleInputChange('initialStatus', e.target.value)}
-                placeholder="e.g. NEW_REQUEST"
+                placeholder="e.g. DRAFT"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Status for new requests. Leave empty to use default (NEW_REQUEST).
+                Status for new requests. Leave empty to use default (DRAFT).
               </p>
             </div>
 

@@ -128,7 +128,7 @@ const normalizeIndianPincode = (value: string): string | null => {
 interface InventoryRequestFormConfig {
   /** Entity type to save (e.g. inventory_request). */
   entityType?: string;
-  /** Initial status for new records (e.g. NEW_REQUEST). */
+  /** Initial status for new records (e.g. DRAFT). */
   initialStatus?: string;
   /** Friendly initial status label stored as data.status_text. */
   initialStatusText?: string;
@@ -386,7 +386,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const { user } = useAuth();
 
   const entityType = config?.entityType ?? 'inventory_request';
-  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'NEW_REQUEST';
+  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'DRAFT';
   const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
   // If `urgencyOptions` exists in config (even empty), treat it as an override.
   const urgencyOptions =

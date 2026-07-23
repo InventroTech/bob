@@ -39,10 +39,6 @@ import {
   normalizeTrackingPaste,
   shouldShowShipmentTrackingSection,
 } from '@/lib/shipmentTracking';
-import {
-  filterConflictingInventoryStatusButtons,
-  getSimpleInventoryWorkflowButtons,
-} from '@/lib/inventoryWorkflow';
 
 const TRACKING_FORM_KEYS = [
   'tracking_number',
@@ -919,46 +915,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     : false;
 
   const usePaymentButtons = paymentButtonConfig?.conditionalButton && paymentButtonConfig?.defaultButton;
-  const statusFromForm =
-    formData.status != null && String(formData.status).trim() !== '' ? formData.status : undefined;
-  const requestStatusForWorkflow =
-    statusFromForm ??
-    (record?.data && typeof record.data === 'object'
-      ? (record.data as Record<string, unknown>).status
-      : undefined);
-  const teamLeadFromForm =
-    formData.team_lead != null && String(formData.team_lead).trim() !== ''
-      ? formData.team_lead
-      : undefined;
-  const teamLeadOnRecord =
-    teamLeadFromForm ??
-    (record?.data && typeof record.data === 'object'
-      ? (record.data as Record<string, unknown>).team_lead
-      : undefined);
-
-  const simpleWorkflowButtons =
-    isInventoryRequest && !isPaymentModal
-      ? getSimpleInventoryWorkflowButtons({
-          requestStatus: requestStatusForWorkflow,
-          roleNameOrKey: myRoleName,
-          roleKey: myRoleKey,
-          membershipId: myMembershipId,
-          teamLeadOnRecord,
-          isRequester,
-        })
-      : [];
-
   const configuredActionButtons = usePaymentButtons
     ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
-    : isInventoryRequest && !isPaymentModal
-      ? filterConflictingInventoryStatusButtons(
-          (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn))
-        )
-      : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
+    : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
 
-  const effectiveActionButtons = usePaymentButtons
-    ? configuredActionButtons
-    : [...simpleWorkflowButtons, ...configuredActionButtons];
+  const effectiveActionButtons = configuredActionButtons;
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.

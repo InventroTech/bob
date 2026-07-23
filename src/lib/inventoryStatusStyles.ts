@@ -1,17 +1,16 @@
 const STATUS_COLOR_CLASS_MAP: Record<string, string> = {
   NEW_REQUEST: 'border-sky-200 bg-sky-50 text-sky-800',
-  APPROVED: 'border-violet-200 bg-violet-50 text-violet-800',
-  ORDERED: 'border-indigo-200 bg-indigo-50 text-indigo-800',
-  IN_SHIPPING: 'border-cyan-200 bg-cyan-50 text-cyan-800',
-  FULFILLED: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  REJECTED: 'border-rose-200 bg-rose-50 text-rose-800',
-  // Legacy chips (older records) — still readable
   'APPROVED(1/2)': 'border-violet-200 bg-violet-50 text-violet-800',
   'APPROVED(2/2)': 'border-emerald-200 bg-emerald-50 text-emerald-800',
   IN_CART: 'border-indigo-200 bg-indigo-50 text-indigo-800',
   PAID: 'border-green-200 bg-green-50 text-green-800',
   DRAFT: 'border-slate-200 bg-slate-50 text-slate-700',
   PENDING_PM: 'border-amber-200 bg-amber-50 text-amber-900',
+  VENDOR_IDENTIFIED: 'border-sky-200 bg-sky-50 text-sky-800',
+  PAYMENT_PENDING: 'border-amber-200 bg-amber-50 text-amber-900',
+  IN_SHIPPING: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+  FULFILLED: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  REJECTED: 'border-rose-200 bg-rose-50 text-rose-800',
 };
 
 /** shipment_status chip tones (separate from request status). */

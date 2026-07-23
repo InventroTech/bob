@@ -114,6 +114,8 @@ interface TableConfigProps {
   localFilters: FilterConfig[];
   numFilters: number;
   handleInputChange: (field: string, value: string | number | boolean | StatusActionButtonConfig[] | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | PaymentModalConfig | ModalFlagConfig[]) => void;
+  /** Optional batch updater — used by "Reset to simple All Requests defaults". */
+  handleConfigPatch?: (patch: Record<string, unknown>) => void;
   handleColumnCountChange: (count: number) => void;
   handleColumnFieldChange: (index: number, field: keyof ColumnConfig, value: string | boolean) => void;
   handleColumnDelete?: (index: number) => void;
@@ -125,8 +127,8 @@ interface TableConfigProps {
   handleRemoveFilterOption: (filterIndex: number, optionIndex: number) => void;
   handleFilterOptionChange: (filterIndex: number, optionIndex: number, field: keyof FilterConfig['options'][0], value: string) => void;
   /**
-   * `inventory` = All Requests style config: hide payment/status-button/flag clutter;
-   * Approve / Order are built into the form modal.
+   * `inventory` = All Requests style helpers (lean form fields).
+   * Status transitions stay configured via Status action buttons.
    */
   profile?: 'default' | 'inventory';
 }
@@ -156,6 +158,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   localFilters,
   numFilters,
   handleInputChange,
+  handleConfigPatch,
   handleColumnCountChange,
   handleColumnFieldChange,
   handleColumnDelete,
@@ -182,16 +185,21 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   );
 
   const applySimpleInventoryDefaults = () => {
-    handleInputChange('entityType', 'inventory_request');
-    handleInputChange('tableType', 'itemsTable');
-    handleInputChange('detailMode', 'record_form_modal');
-    handleInputChange('statusButtons', []);
-    handleInputChange('modalFlags', []);
-    handleInputChange('showFinalPriceSection', false);
-    handleInputChange('showFormModalSaveButton', false);
-    handleInputChange('formModalFields', SIMPLE_INVENTORY_REQUEST_FORM_FIELDS);
+    const patch = {
+      entityType: 'inventory_request',
+      tableType: 'itemsTable' as const,
+      detailMode: 'record_form_modal' as const,
+      showFinalPriceSection: false,
+      formModalFields: SIMPLE_INVENTORY_REQUEST_FORM_FIELDS,
+    };
+    if (handleConfigPatch) {
+      handleConfigPatch(patch);
+    } else {
+      (Object.entries(patch) as Array<[string, (typeof patch)[keyof typeof patch]]>).forEach(
+        ([field, value]) => handleInputChange(field, value as never)
+      );
+    }
     setFormModalFieldsList(SIMPLE_INVENTORY_REQUEST_FORM_FIELDS);
-    setModalFlagsList([]);
   };
 
   return (
@@ -253,17 +261,16 @@ export const TableConfig: React.FC<TableConfigProps> = ({
 
       {isInventoryProfile ? (
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2">
-          <p className="text-sm font-medium">Simple inventory workflow</p>
+          <p className="text-sm font-medium">Inventory table helpers</p>
           <p className="text-xs text-muted-foreground">
-            Approve / Reject / Order buttons are built into the modal (manager approves, team lead orders).
-            You do not need Status action buttons, payment modal, flag toggles, or final price here.
+            Sets entity type, record form modal, and lean form fields. Configure Status action buttons below for Approve / Order / other transitions.
           </p>
           <Button type="button" variant="outline" size="sm" onClick={applySimpleInventoryDefaults}>
-            Reset to simple All Requests defaults
+            Reset inventory form defaults
           </Button>
         </div>
-      ) : (
-        <>
+      ) : null}
+
       <div>
         <Label>Table type</Label>
         <Select
@@ -646,8 +653,6 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           </Button>
         </div>
       )}
-        </>
-      )}
 
       <Card>
         <CardHeader className="pb-2">
@@ -668,30 +673,18 @@ export const TableConfig: React.FC<TableConfigProps> = ({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">Auto (from Entity Type)</SelectItem>
-                {isInventoryProfile ? (
-                  <>
-                    <SelectItem value="record_form_modal">Record form modal (Approve / Order)</SelectItem>
-                    <SelectItem value="receive_shipments">Receive shipment</SelectItem>
-                    <SelectItem value="none">None (no row click)</SelectItem>
-                  </>
-                ) : (
-                  <>
-                    <SelectItem value="lead_card">Lead card (lead modal)</SelectItem>
-                    <SelectItem value="inventory_request">Record detail (request)</SelectItem>
-                    <SelectItem value="inventory_cart">Record detail (cart)</SelectItem>
-                    <SelectItem value="record_form_modal">Record form modal</SelectItem>
-                    <SelectItem value="inventory_payment_modal">Inventory Payment modal</SelectItem>
-                    <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
-                    <SelectItem value="lead_assignment_modal">Lead assignment modal</SelectItem>
-                    <SelectItem value="none">None (no row click)</SelectItem>
-                  </>
-                )}
+                <SelectItem value="lead_card">Lead card (lead modal)</SelectItem>
+                <SelectItem value="inventory_request">Record detail (request)</SelectItem>
+                <SelectItem value="inventory_cart">Record detail (cart)</SelectItem>
+                <SelectItem value="record_form_modal">Record form modal</SelectItem>
+                <SelectItem value="inventory_payment_modal">Inventory Payment modal</SelectItem>
+                <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
+                <SelectItem value="lead_assignment_modal">Lead assignment modal</SelectItem>
+                <SelectItem value="none">None (no row click)</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500 mt-1">
-              {isInventoryProfile
-                ? 'Use Record form modal for All Requests (built-in Approve / Order).'
-                : 'What happens when a row is clicked. Payment modal: one conditional + one default action button.'}
+              What happens when a row is clicked. Use Record form modal for All Requests, then configure Status action buttons above.
             </p>
           </div>
 
