@@ -155,7 +155,14 @@ interface ComponentConfig {
   columns?: Array<{
     key: string;
     label: string;
-    type: 'text' | 'chip' | 'date' | 'number';
+    type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+    linkField?: string;
+    editableInTable?: boolean;
+    openCard?: boolean | string;
+    actionApiEndpoint?: string;
+    actionApiMethod?: string;
+    actionApiHeaders?: string;
+    actionApiPayload?: string;
   }>;
   datasets?: Array<{
     label: string;
