@@ -74,8 +74,12 @@ import {
   LeadAssignmentComponent,
   CallAttemptMatrixComponent,
   InventoryTableComponent,
+  ProcurementTableComponent,
+  MyRequestTableComponent,
   InventoryRequestFormComponent,
+  ProcurementRequestFormComponent,
 } from "@/components/page-builder";
+import { DEFAULT_PROCUREMENT_TABLE_COLUMNS } from "@/components/page-builder/ProcurementTableComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
@@ -156,7 +160,7 @@ interface ComponentConfig {
   columns?: Array<{
     key: string;
     label: string;
-    type: 'text' | 'chip' | 'date' | 'number';
+    type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
   }>;
   datasets?: Array<{
     label: string;
@@ -245,6 +249,8 @@ export const componentMap: Record<string, React.FC<any>> = {
   dataCard:DataCardComponent,
   leadTable: LeadTableComponent,
   inventoryTable: InventoryTableComponent,
+  procurementTable: ProcurementTableComponent,
+  myRequestTable: MyRequestTableComponent,
   collapseCard: CollapseCard,
   leadCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,
@@ -273,6 +279,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
+  procurementRequestForm: ProcurementRequestFormComponent,
   dispatchCardList: DispatchCardListComponent,
   dispatchDashboard: DispatchDashboardComponent,
 };
@@ -357,7 +364,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     initialStatusText?: string;
     defaultStatus?: string;
     urgencyOptions?: Array<{ label: string; value: string }>;
-    // Records table (leadTable / inventoryTable): items table mode
+    // Records / procurement tables (leadTable / inventoryTable / procurementTable): items table mode
     tableType?: 'default' | 'itemsTable';
     statusButtons?: Array<{
       label: string;
@@ -792,6 +799,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         );
 
       case 'inventoryTable':
+      case 'procurementTable':
+      case 'myRequestTable':
         return (
           <TableConfig
             localConfig={localConfig as any}
@@ -984,7 +993,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
-      case 'inventoryRequestForm': {
+      case 'inventoryRequestForm':
+      case 'procurementRequestForm': {
+        const defaultEntityType =
+          selectedComponentType === 'procurementRequestForm' ? 'unmannd_request' : 'inventory_request';
         const defaultUrgencyOptions = [
           { value: 'LOW', label: 'Low' },
           { value: 'MEDIUM', label: 'Medium' },
@@ -1002,12 +1014,12 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             <div>
               <Label>Entity type</Label>
               <Input
-                value={localConfig.entityType ?? 'inventory_request'}
+                value={localConfig.entityType ?? defaultEntityType}
                 onChange={(e) => handleInputChange('entityType', e.target.value)}
-                placeholder="inventory_request"
+                placeholder={defaultEntityType}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Entity type to save (e.g. inventory_request).
+                Entity type to save (e.g. {defaultEntityType}).
               </p>
             </div>
 
@@ -1247,7 +1259,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'myRequestTable', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1412,7 +1424,12 @@ useEffect(() => {
           id: `${componentType}-${Date.now()}`, // Simple unique ID for now
           type: componentType,
           props: {},
-          config: {},
+          config:
+            componentType === 'procurementTable'
+              ? ({ columns: [...DEFAULT_PROCUREMENT_TABLE_COLUMNS] } as ComponentConfig)
+              : componentType === 'procurementRequestForm'
+                ? ({ entityType: 'unmannd_request' } as ComponentConfig)
+                : {},
         };
 
         // Add the new component to the canvas state
@@ -1434,7 +1451,12 @@ useEffect(() => {
         id: `${componentType}-${Date.now()}`,
         type: componentType,
         props: {},
-        config: {},
+        config:
+          componentType === 'procurementTable'
+            ? ({ columns: [...DEFAULT_PROCUREMENT_TABLE_COLUMNS] } as ComponentConfig)
+            : componentType === 'procurementRequestForm'
+              ? ({ entityType: 'unmannd_request' } as ComponentConfig)
+              : {},
       };
 
       // Find the index of the component we dropped on
@@ -1831,6 +1853,16 @@ useEffect(() => {
                           icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
+                          id="procurementTable"
+                          label="Procurement Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="myRequestTable"
+                          label="My Request Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
                           id="dispatchCardList"
                           label="Dispatch Card List"
                           icon={<Truck className="h-8 w-8 mb-1 text-foreground" />}
@@ -1843,6 +1875,11 @@ useEffect(() => {
                         <DraggableSidebarItem
                           id="inventoryRequestForm"
                           label="Inventory Request Form"
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="procurementRequestForm"
+                          label="Procurement Request Form"
                           icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem

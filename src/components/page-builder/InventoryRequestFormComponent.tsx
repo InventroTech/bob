@@ -28,6 +28,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar, User, Send, Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/currencyFormat';
+import { calculateInventoryPriority, formatInventoryPriorityLabel } from '@/lib/inventoryPriority';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const RECORDS_URL = '/crm-records/records/';
 
@@ -77,6 +80,7 @@ interface FormItem {
   id: string;
   item_name_freeform: string;
   quantity_required: number | '';
+  required_date: string;
   product_link: string;
   additional_link: string;
   vendor: string;
@@ -91,6 +95,7 @@ const newEmptyItem = (): FormItem => ({
   id: crypto.randomUUID?.() ?? `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   item_name_freeform: '',
   quantity_required: '',
+  required_date: '',
   product_link: '',
   additional_link: '',
   vendor: '',
@@ -107,38 +112,51 @@ const REQUIRED_ITEM_FIELDS: Array<{ key: keyof FormItem; label: string }> = [
   { key: 'estimated_cost', label: 'Estimated cost' },
   { key: 'vendor', label: 'Vendor' },
   { key: 'product_link', label: 'Product link' },
-  { key: 'urgency_level', label: 'Priority / Urgency' },
+  { key: 'required_date', label: 'Requirement date' },
 ];
 
 interface InventoryRequestFormProps {
   config?: InventoryRequestFormConfig;
+  variant?: 'default' | 'procurement';
 }
 
-const DEFAULT_URGENCY_OPTIONS = [
-  { value: 'STANDARD', label: 'Standard' },
-  { value: 'CRITICAL', label: 'Critical' },
-];
+function priorityChipClass(urgency: string): string {
+  const upper = String(urgency ?? '').trim().toUpperCase();
+  if (upper === 'HIGH' || upper === 'CRITICAL') {
+    return 'border-destructive/30 bg-destructive/10 text-destructive';
+  }
+  if (upper === 'MEDIUM') {
+    return 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200';
+  }
+  if (upper === 'LOW') {
+    return 'border-border bg-muted text-muted-foreground';
+  }
+  return 'border-border bg-muted/50 text-muted-foreground';
+}
+
+function priorityShortLabel(urgency: string): string {
+  const upper = String(urgency ?? '').trim().toUpperCase();
+  if (upper === 'HIGH' || upper === 'CRITICAL') return 'High';
+  if (upper === 'MEDIUM') return 'Middle';
+  if (upper === 'LOW') return 'Low';
+  return formatInventoryPriorityLabel(urgency);
+}
 
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
  * team_lead = user_parent_id (TenantMembership id), or current user's TenantMembership id if null.
  */
-export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> = ({ config }) => {
+export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> = ({
+  config,
+  variant = 'default',
+}) => {
+  const isProcurement = variant === 'procurement';
   const { user } = useAuth();
 
   const entityType = config?.entityType ?? 'inventory_request';
   const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'DRAFT';
   const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
-  // If `urgencyOptions` exists in config (even empty), treat it as an override.
-  const urgencyOptions =
-    config?.urgencyOptions !== undefined ? config.urgencyOptions : DEFAULT_URGENCY_OPTIONS;
-  const normalizedUrgencyOptions = urgencyOptions
-    .map((o) => ({
-      value: String(o.value ?? '').trim(),
-      label: String(o.label ?? '').trim() || String(o.value ?? '').trim(),
-    }))
-    .filter((o) => o.value !== '');
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
@@ -423,9 +441,17 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const updateItem = useCallback((id: string, field: keyof FormItem, value: string | number | boolean | '') => {
     setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
+      prev.map((i) => {
+        if (i.id !== id) return i;
+        const next = { ...i, [field]: value };
+        if (field === 'required_date') {
+          const priority = calculateInventoryPriority(requestDate, String(value ?? ''));
+          next.urgency_level = priority?.value ?? '';
+        }
+        return next;
+      })
     );
-  }, []);
+  }, [requestDate]);
 
   const startAddVendor = (itemId: string) => {
     setAddVendorForItemId(itemId);
@@ -531,9 +557,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       const hasAnyInput =
         (item.item_name_freeform ?? '').trim() !== '' ||
         item.quantity_required !== '' ||
+        (item.required_date ?? '').trim() !== '' ||
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
-        (item.urgency_level ?? '').trim() !== '' ||
         (item.product_link ?? '').trim() !== '' ||
         (item.additional_link ?? '').trim() !== '' ||
         (item.comments ?? '').trim() !== '';
@@ -553,9 +579,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       const hasAnyInput =
         (item.item_name_freeform ?? '').trim() !== '' ||
         item.quantity_required !== '' ||
+        (item.required_date ?? '').trim() !== '' ||
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
-        (item.urgency_level ?? '').trim() !== '' ||
         (item.product_link ?? '').trim() !== '' ||
         (item.additional_link ?? '').trim() !== '' ||
         (item.comments ?? '').trim() !== '';
@@ -570,6 +596,15 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       for (const item of validItems) {
         await upsertUnmanndProduct(item);
 
+        const priority =
+          calculateInventoryPriority(requestDate, item.required_date) ??
+          (item.urgency_level
+            ? {
+                value: item.urgency_level as 'HIGH' | 'MEDIUM' | 'LOW',
+                label: formatInventoryPriorityLabel(item.urgency_level),
+              }
+            : null);
+
         const payloadData: Record<string, unknown> = {
           status: initialStatus,
           status_text: initialStatusText,
@@ -577,10 +612,12 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           tracking_link: null,
           eta: null,
           request_date: requestDate,
+          required_date: (item.required_date ?? '').trim() || null,
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
-          urgency_level: (item.urgency_level ?? '').trim() || '',
+          urgency_level: priority?.value ?? '',
+          priority_label: priority?.label ?? '',
           vendor: toVendorStorageName((item.vendor ?? '').trim()) || '',
           item_name_freeform: (item.item_name_freeform ?? '').trim(),
           quantity_required: typeof item.quantity_required === 'number' ? item.quantity_required : Number(item.quantity_required) || 0,
@@ -608,11 +645,24 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       }
 
       const count = validItems.length;
-      toast.success(count === 1 ? 'Inventory request created.' : `${count} inventory requests created.`);
+      if (isProcurement) {
+        toast.success(
+          count === 1 ? 'Procurement request created.' : `${count} procurement requests created.`
+        );
+      } else {
+        toast.success(
+          count === 1 ? 'Inventory request created.' : `${count} inventory requests created.`
+        );
+      }
       setItems([newEmptyItem()]);
     } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Failed to create inventory request.';
-      console.error('Failed to create inventory request', err);
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : isProcurement
+            ? 'Failed to create procurement request.'
+            : 'Failed to create inventory request.';
+      console.error('Failed to create request', err);
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -631,14 +681,491 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     (i) =>
       (i.item_name_freeform ?? '').trim() !== '' ||
       i.quantity_required !== '' ||
+      (i.required_date ?? '').trim() !== '' ||
       (i.vendor ?? '').trim() !== '' ||
       (i.estimated_cost ?? '') !== '' ||
-      (i.urgency_level ?? '').trim() !== '' ||
       (i.comments ?? '').trim() !== '' ||
       (i.product_link ?? '').trim() !== '' ||
       (i.additional_link ?? '').trim() !== ''
   );
   const isFormEmpty = !hasAnyItemContent;
+
+  const addVendorDialog = (
+    <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add vendor</DialogTitle>
+          <DialogDescription>Create a vendor and auto-fill it for this item.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Input
+            placeholder="Vendor name *"
+            value={newVendorName}
+            onChange={(e) => setNewVendorName(e.target.value)}
+            className="h-10"
+          />
+          <Input
+            placeholder="Vendor site link (optional)"
+            type="url"
+            value={newVendorLink}
+            onChange={(e) => setNewVendorLink(e.target.value)}
+            className="h-10"
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={cancelAddVendor}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={saveNewVendor}
+            disabled={savingNewVendor || !newVendorName.trim()}
+          >
+            {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Save vendor
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  const sectionLabel = (title: string) => (
+    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+  );
+
+  if (isProcurement) {
+    return (
+      <Card className="overflow-hidden border border-border shadow-sm">
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <div className="border-b border-border/60 bg-muted/25 px-6 py-5">
+            <h2 className="text-lg font-semibold tracking-tight">New Request</h2>
+          </div>
+
+          <CardContent className="space-y-8 px-6 py-6">
+            <div className="grid grid-cols-1 gap-4 rounded-lg border border-border/60 bg-muted/30 p-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Requester</Label>
+                <Input value={requesterDisplay} readOnly disabled className="h-10 bg-background/80 font-medium" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Department</Label>
+                <Input
+                  value={department}
+                  readOnly
+                  disabled
+                  placeholder="—"
+                  className="h-10 bg-background/80 font-medium"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Request date</Label>
+                <Input value={requestDate} readOnly disabled className="h-10 bg-background/80 font-medium" />
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              {items.map((item, itemIndex) => (
+                <div
+                  key={item.id}
+                  className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
+                    <Badge variant="outline" className="font-medium">
+                      Item {itemIndex + 1}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length <= 1}
+                      className="h-8 gap-1.5 text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove
+                    </Button>
+                  </div>
+
+                  <div className="space-y-6 p-5">
+                    <div>
+                      {sectionLabel('Item details')}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto]">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Item name *</Label>
+                          <div className="relative">
+                            <Input
+                              placeholder="Describe the item"
+                              value={item.item_name_freeform}
+                              className="h-10"
+                              onFocus={() => {
+                                setFocusedItemNameId(item.id);
+                                setItemNameQuery(item.item_name_freeform || '');
+                                if ((item.item_name_freeform || '').trim().length >= 2) {
+                                  setItemNameSuggestionsOpen(itemNameSuggestions.length > 0);
+                                }
+                              }}
+                              onBlur={() => {
+                                window.setTimeout(() => {
+                                  setFocusedItemNameId((prev) => (prev === item.id ? null : prev));
+                                  setItemNameSuggestionsOpen(false);
+                                }, 150);
+                              }}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                updateItem(item.id, 'item_name_freeform', v);
+                                setFocusedItemNameId(item.id);
+                                setItemNameQuery(v);
+                                if (v.trim().length >= 2) setItemNameSuggestionsOpen(true);
+                              }}
+                            />
+                            {focusedItemNameId === item.id &&
+                              (itemNameSuggestionsOpen || itemNameSuggestionsLoading) && (
+                                <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-md">
+                                  {itemNameSuggestionsLoading ? (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">Searching…</div>
+                                  ) : itemNameSuggestions.length === 0 ? (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">No matches</div>
+                                  ) : (
+                                    <div className="max-h-56 overflow-auto">
+                                      {itemNameSuggestions.map((s) => (
+                                        <button
+                                          key={s.id}
+                                          type="button"
+                                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                                          onMouseDown={(ev) => ev.preventDefault()}
+                                          onClick={() => {
+                                            updateItem(item.id, 'item_name_freeform', s.name);
+                                            const d = s.data || {};
+                                            const vendor = toVendorStorageName(
+                                              String((d.default_vendor ?? d.vendor ?? '') as any).trim()
+                                            );
+                                            if (vendor) updateItem(item.id, 'vendor', vendor);
+                                            const costRaw =
+                                              d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
+                                            const costNum =
+                                              costRaw === '' || costRaw == null ? '' : Number(costRaw);
+                                            if (costNum !== '' && Number.isFinite(costNum))
+                                              updateItem(item.id, 'estimated_cost', costNum);
+                                            const suggestedCurrency = String(
+                                              (d.price_currency ?? d.currency ?? 'INR') as any
+                                            )
+                                              .trim()
+                                              .toUpperCase();
+                                            if (suggestedCurrency === 'USD' || suggestedCurrency === 'INR') {
+                                              updateItem(
+                                                item.id,
+                                                'price_currency',
+                                                suggestedCurrency as 'INR' | 'USD'
+                                              );
+                                            }
+                                            const productLink = String(
+                                              (d.product_link ?? d.link ?? '') as any
+                                            ).trim();
+                                            if (productLink) updateItem(item.id, 'product_link', productLink);
+                                            const additionalLink = String(
+                                              (d.additional_link ?? d.vendor_site_link ?? '') as any
+                                            ).trim();
+                                            if (additionalLink)
+                                              updateItem(item.id, 'additional_link', additionalLink);
+                                            if (typeof d.including_gst === 'boolean')
+                                              updateItem(item.id, 'including_gst', d.including_gst);
+                                            setItemNameSuggestionsOpen(false);
+                                            setFocusedItemNameId(null);
+                                          }}
+                                        >
+                                          <span className="truncate">{s.name}</span>
+                                          <span className="shrink-0 text-xs text-muted-foreground">#{s.id}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5 sm:w-32">
+                          <Label className="text-sm font-medium">Quantity *</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={item.quantity_required === '' ? '' : item.quantity_required}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              updateItem(item.id, 'quantity_required', v === '' ? '' : Number(v));
+                            }}
+                            placeholder="0"
+                            className="h-10"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Cost & vendor')}
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">Estimated cost *</Label>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={
+                                priceDraftByItemId[item.id] ?? formatCurrencyDisplay(item.estimated_cost)
+                              }
+                              onChange={(e) => {
+                                const { display, value } = formatCurrencyInputLive(e.target.value);
+                                setPriceDraftByItemId((prev) => ({ ...prev, [item.id]: display }));
+                                updateItem(item.id, 'estimated_cost', value);
+                              }}
+                              onBlur={() => {
+                                setPriceDraftByItemId((prev) => {
+                                  const next = { ...prev };
+                                  delete next[item.id];
+                                  return next;
+                                });
+                                if (
+                                  item.estimated_cost !== '' &&
+                                  typeof item.estimated_cost === 'number'
+                                ) {
+                                  updateItem(
+                                    item.id,
+                                    'estimated_cost',
+                                    Math.round(item.estimated_cost * 100) / 100
+                                  );
+                                }
+                              }}
+                              className="h-10 min-w-[8rem] font-mono tabular-nums"
+                            />
+                            <Select
+                              value={item.price_currency || 'INR'}
+                              onValueChange={(v) =>
+                                updateItem(item.id, 'price_currency', v === 'USD' ? 'USD' : 'INR')
+                              }
+                            >
+                              <SelectTrigger className="h-10 w-24">
+                                <SelectValue placeholder="INR" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="INR">INR</SelectItem>
+                                <SelectItem value="USD">USD</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
+                              <Checkbox
+                                checked={item.including_gst === true}
+                                onCheckedChange={(checked) =>
+                                  updateItem(item.id, 'including_gst', checked === true)
+                                }
+                              />
+                              <span className="text-xs font-medium">Including GST</span>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Vendor *</Label>
+                          <div className="flex items-start gap-2">
+                            <div className="relative min-w-0 flex-1">
+                              <Input
+                                value={item.vendor}
+                                placeholder="Search or add vendor"
+                                className="h-10 w-full"
+                                onFocus={() => {
+                                  setFocusedVendorId(item.id);
+                                  setVendorQuery(item.vendor || '');
+                                  setVendorSuggestionsOpen(true);
+                                }}
+                                onBlur={() => {
+                                  window.setTimeout(() => {
+                                    setFocusedVendorId((prev) => (prev === item.id ? null : prev));
+                                    setVendorSuggestionsOpen(false);
+                                  }, 150);
+                                }}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  updateItem(item.id, 'vendor', toVendorStorageName(v));
+                                  setFocusedVendorId(item.id);
+                                  setVendorQuery(v);
+                                  setVendorSuggestionsOpen(true);
+                                }}
+                              />
+                              {focusedVendorId === item.id && vendorSuggestionsOpen && (
+                                <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-md">
+                                  {vendorsLoading ? (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
+                                  ) : (
+                                    <div className="max-h-56 overflow-auto">
+                                      {(() => {
+                                        const q = vendorQuery.trim().toLowerCase();
+                                        const filtered = q
+                                          ? vendors.filter((v) => v.name.toLowerCase().includes(q)).slice(0, 12)
+                                          : vendors.slice(0, 12);
+                                        if (filtered.length === 0) {
+                                          return (
+                                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                                              No matches
+                                            </div>
+                                          );
+                                        }
+                                        return filtered.map((v) => (
+                                          <button
+                                            key={v.id}
+                                            type="button"
+                                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                                            onMouseDown={(ev) => ev.preventDefault()}
+                                            onClick={() => {
+                                              updateItem(item.id, 'vendor', v.name);
+                                              setVendorSuggestionsOpen(false);
+                                              setFocusedVendorId(null);
+                                            }}
+                                          >
+                                            <span className="truncate">{v.name}</span>
+                                            <span className="shrink-0 text-xs text-muted-foreground">#{v.id}</span>
+                                          </button>
+                                        ));
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-10 shrink-0"
+                              onClick={() => {
+                                startAddVendor(item.id);
+                                setVendorSuggestionsOpen(false);
+                                setFocusedVendorId(null);
+                              }}
+                            >
+                              + Add vendor
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Dates & priority')}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Requirement date *</Label>
+                          <Input
+                            type="date"
+                            value={item.required_date}
+                            onChange={(e) => updateItem(item.id, 'required_date', e.target.value)}
+                            className="h-10"
+                          />
+                          <p className="text-xs text-muted-foreground">When this item is needed.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Priority</Label>
+                          {item.urgency_level ? (
+                            <Badge
+                              variant="outline"
+                              className={cn('px-3 py-1 text-sm font-medium', priorityChipClass(item.urgency_level))}
+                            >
+                              {priorityShortLabel(item.urgency_level)}
+                            </Badge>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">Set requirement date to calculate priority.</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            High = same day · Middle = 2–5 days · Low = more than 5 days from request date.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Links')}
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Product link *</Label>
+                          <Input
+                            type="url"
+                            placeholder="https://..."
+                            value={item.product_link}
+                            onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Additional link (optional)</Label>
+                          <Input
+                            type="url"
+                            placeholder="https://..."
+                            value={item.additional_link}
+                            onChange={(e) => updateItem(item.id, 'additional_link', e.target.value)}
+                            className="h-10"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Comments')}
+                      <Textarea
+                        placeholder="Notes for procurement (optional)"
+                        value={item.comments}
+                        onChange={(e) => updateItem(item.id, 'comments', e.target.value)}
+                        rows={3}
+                        className="min-h-[72px] resize-y text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <Button type="button" variant="outline" onClick={addItem} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add item
+              </Button>
+            </div>
+          </CardContent>
+
+          <CardFooter className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div>
+              {!user && (
+                <span className="text-sm text-muted-foreground">You must be signed in to submit.</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClear}
+                disabled={submitting || isFormEmpty}
+                className="min-w-[100px]"
+              >
+                Clear
+              </Button>
+              <Button type="submit" disabled={submitting || !user} className="min-w-[160px] gap-2">
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating…
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Create request
+                    {items.filter((i) => (i.item_name_freeform ?? '').trim() && i.quantity_required !== '').length > 1
+                      ? 's'
+                      : ''}
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardFooter>
+        </form>
+        {addVendorDialog}
+      </Card>
+    );
+  }
 
   return (
     <Card className="overflow-hidden border border-border/60 shadow-md">
@@ -950,21 +1477,28 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Priority / Urgency *</Label>
-                    <div className="flex flex-wrap gap-2" role="group" aria-label="Priority level">
-                      {normalizedUrgencyOptions.map((o) => (
-                        <Button
-                          key={o.value}
-                          type="button"
-                          variant={item.urgency_level === o.value ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => updateItem(item.id, 'urgency_level', item.urgency_level === o.value ? '' : o.value)}
-                          className="rounded-full h-8"
-                        >
-                          {o.label}
-                        </Button>
-                      ))}
-                    </div>
+                    <Label className="text-xs font-medium">Requirement date *</Label>
+                    <Input
+                      type="date"
+                      value={item.required_date}
+                      onChange={(e) => updateItem(item.id, 'required_date', e.target.value)}
+                      className="h-9"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Date by which this item is needed.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs font-medium">Priority (auto)</Label>
+                    <Input
+                      value={item.urgency_level ? formatInventoryPriorityLabel(item.urgency_level) : 'Select requirement date'}
+                      readOnly
+                      disabled
+                      className="h-9 bg-muted/50 font-medium"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      High = same day, Middle = 2–5 days, Low = more than 5 days from request date.
+                    </p>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Comments (optional)</Label>
@@ -1021,42 +1555,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         </CardFooter>
       </form>
 
-      <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add vendor</DialogTitle>
-            <DialogDescription>Create a vendor and auto-fill it for this item.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              placeholder="Vendor name *"
-              value={newVendorName}
-              onChange={(e) => setNewVendorName(e.target.value)}
-              className="h-9"
-            />
-            <Input
-              placeholder="Vendor site link (optional)"
-              type="url"
-              value={newVendorLink}
-              onChange={(e) => setNewVendorLink(e.target.value)}
-              className="h-9"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={cancelAddVendor}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={saveNewVendor}
-              disabled={savingNewVendor || !newVendorName.trim()}
-            >
-              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save vendor
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {addVendorDialog}
     </Card>
   );
 };

@@ -27,6 +27,9 @@ export { OperationsProgramsConfig } from './component-config/OperationsProgramsC
 export { default as UserHierarchyComponent } from './UserHierarchyComponent';
 export { UserHierarchyConfig } from './component-config/UserHierarchyConfig';
 export { InventoryTableComponent } from './InventoryTableComponent';
+export { ProcurementTableComponent, DEFAULT_PROCUREMENT_TABLE_COLUMNS } from './ProcurementTableComponent';
+export { MyRequestTableComponent } from './MyRequestTableComponent';
 export { InventoryRequestFormComponent } from './InventoryRequestFormComponent';
+export { ProcurementRequestFormComponent } from './ProcurementRequestFormComponent';
 export { DispatchCardListComponent } from './DispatchCardListComponent';
 export { DispatchDashboardComponent } from './DispatchDashboardComponent';
