@@ -59,6 +59,18 @@ export const DEFAULT_PROCUREMENT_TABLE_CONFIG = {
   tableType: 'itemsTable' as const,
   // Form modal hosts built-in Approve / Reject / Order (Record detail does not).
   detailMode: 'record_form_modal' as const,
+  showFinalPriceSection: false,
+  formModalFields: [
+    { key: 'status', label: 'Status', enabled: false },
+    { key: 'item_name_freeform', label: 'Item', enabled: false },
+    { key: 'quantity_required', label: 'Quantity', enabled: true },
+    { key: 'vendor', label: 'Vendor', enabled: true },
+    { key: 'urgency_level', label: 'Urgency', enabled: true },
+    { key: 'department', label: 'Department', enabled: false },
+    { key: 'specifications', label: 'Specifications', enabled: true },
+    { key: 'product_link', label: 'Product link', enabled: true, link: true },
+    { key: 'comments', label: 'Comments', enabled: true },
+  ],
 };
 
 function withPriorityTransform(columns: ProcurementTableColumn[]): ProcurementTableColumn[] {
@@ -91,22 +103,27 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
 }
 
 /**
- * Resolve row-click modal so Approve / Order appear on procurement All Requests.
- * Older pages use record_form_modal; this component previously defaulted to
- * inventory_request (RecordDetailModal), which has no workflow action buttons.
+ * Resolve row-click modal so Approve / Reject / Order appear on Manager & TL All Requests.
+ * Always use the form modal for inventory-like tables unless an explicit special mode is set.
  */
 function resolveProcurementDetailMode(
   detailMode: ProcurementTableConfig['detailMode'] | undefined,
   isInventoryLike: boolean
 ): ProcurementTableConfig['detailMode'] | undefined {
-  if (!detailMode || detailMode === 'auto') {
-    return isInventoryLike ? 'record_form_modal' : undefined;
+  if (!isInventoryLike) return detailMode;
+
+  // Keep intentional special modes.
+  if (
+    detailMode === 'inventory_payment_modal' ||
+    detailMode === 'receive_shipments' ||
+    detailMode === 'lead_assignment_modal' ||
+    detailMode === 'none'
+  ) {
+    return detailMode;
   }
-  // Map legacy default to the form modal that owns Approve / Order.
-  if (detailMode === 'inventory_request') {
-    return 'record_form_modal';
-  }
-  return detailMode;
+
+  // auto / inventory_request / lead_card / unset → form modal with Approve / Reject / Order.
+  return 'record_form_modal';
 }
 
 /**
@@ -127,18 +144,28 @@ export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ con
     );
     const detailMode = resolveProcurementDetailMode(config?.detailMode, isInventoryLike);
 
+    const { detailMode: _ignoredDetailMode, ...restConfig } = config || {};
+    const tableType: 'default' | 'itemsTable' =
+      restConfig.tableType === 'default' ? 'default' : 'itemsTable';
+
     return {
-      ...(config || {}),
+      ...restConfig,
       columns,
       entityType,
-      tableType: config?.tableType || 'itemsTable',
+      tableType,
       detailMode,
+      // Ensure Manager All Requests always has form fields for the Approve/Reject modal.
+      formModalFields:
+        Array.isArray(config?.formModalFields) && config.formModalFields.length > 0
+          ? config.formModalFields
+          : DEFAULT_PROCUREMENT_TABLE_CONFIG.formModalFields,
+      showFinalPriceSection: config?.showFinalPriceSection ?? false,
       // If someone still uses inventory_request/inventory_cart modes, force form_edit.
       ...(detailMode === 'inventory_request' || detailMode === 'inventory_cart'
         ? { recordDetailModalType: config?.recordDetailModalType ?? 'form_edit' }
         : {}),
-    };
+    } as Record<string, unknown>;
   }, [config]);
 
-  return <LeadTableComponent config={mergedConfig} />;
+  return <LeadTableComponent config={mergedConfig as any} />;
 };

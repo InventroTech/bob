@@ -2,14 +2,16 @@
  * Inventory request flow on the existing status architecture:
  *
  *   NEW_REQUEST / DRAFT / PENDING_PM
- *     → (non-requestor Approve) VENDOR_IDENTIFIED
- *     → (Reject) REJECTED
+ *     → (manager Approve) VENDOR_IDENTIFIED
+ *     → (manager Reject) REJECTED
  *   VENDOR_IDENTIFIED / PAYMENT_PENDING
- *     → (non-requestor Order) IN_SHIPPING
+ *     → (team lead Order) IN_SHIPPING
  *   IN_SHIPPING+ → shipment tracking (paste link/AWB)
  *
- * Team-lead / hierarchy is used for assignment & notifications; Order is not
- * blocked on role-name matching (that caused Save-only on TL pages).
+ * Page Builder can set inventoryWorkflowMode:
+ *   - manager   → Approve / Reject only
+ *   - team_lead → Order only (no Approve / Reject on new requests)
+ *   - auto      → infer from membership role
  */
 
 export const INVENTORY_APPROVABLE_STATUSES = new Set([
@@ -30,6 +32,8 @@ export const INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES = new Set([
   'REJECTED',
   'IN_SHIPPING',
 ]);
+
+export type InventoryWorkflowMode = 'auto' | 'manager' | 'team_lead';
 
 export type InventoryWorkflowActionButton = {
   label: string;
@@ -96,12 +100,27 @@ export function isAssignedInventoryTeamLead(
   return false;
 }
 
+function resolveWorkflowMode(opts: {
+  workflowMode?: InventoryWorkflowMode | null;
+  roleNameOrKey?: string | null;
+  roleKey?: string | null;
+}): 'manager' | 'team_lead' {
+  if (opts.workflowMode === 'manager' || opts.workflowMode === 'team_lead') {
+    return opts.workflowMode;
+  }
+  const roles = [opts.roleNameOrKey, opts.roleKey];
+  if (roles.some((r) => isInventoryTeamLeadRole(r))) return 'team_lead';
+  if (roles.some((r) => isInventoryProcurementRole(r))) return 'manager';
+  // Unknown role: default to manager-style approve (safe for Manager All Requests).
+  // Team-lead pages should set inventoryWorkflowMode=team_lead in Page Builder.
+  return 'manager';
+}
+
 /**
  * Built-in Approve / Reject / Order for the record form modal.
  *
- * Approve/Reject: anyone except the requestor on NEW_REQUEST/DRAFT/PENDING_PM.
- * Order: anyone except the requestor on VENDOR_IDENTIFIED/PAYMENT_PENDING
- *   (team-lead pages filter the list; role/hierarchy matching was too brittle).
+ * Manager: Approve/Reject on NEW_REQUEST/DRAFT/PENDING_PM.
+ * Team lead: Order on VENDOR_IDENTIFIED/PAYMENT_PENDING (never Approve/Reject).
  */
 export function getInventoryWorkflowButtons(opts: {
   requestStatus: unknown;
@@ -111,6 +130,8 @@ export function getInventoryWorkflowButtons(opts: {
   userId?: number | string | null;
   teamLeadOnRecord?: unknown;
   isRequester?: boolean;
+  /** Page-level override: manager All Requests vs team-lead All Requests. */
+  workflowMode?: InventoryWorkflowMode | null;
 }): InventoryWorkflowActionButton[] {
   const status = normalizeStatus(opts.requestStatus);
   const buttons: InventoryWorkflowActionButton[] = [];
@@ -119,7 +140,9 @@ export function getInventoryWorkflowButtons(opts: {
     return buttons;
   }
 
-  if (INVENTORY_APPROVABLE_STATUSES.has(status)) {
+  const mode = resolveWorkflowMode(opts);
+
+  if (mode === 'manager' && INVENTORY_APPROVABLE_STATUSES.has(status)) {
     buttons.push(
       {
         label: 'Approve',
@@ -130,7 +153,7 @@ export function getInventoryWorkflowButtons(opts: {
     );
   }
 
-  if (INVENTORY_ORDERABLE_STATUSES.has(status)) {
+  if (mode === 'team_lead' && INVENTORY_ORDERABLE_STATUSES.has(status)) {
     buttons.push({
       label: 'Order',
       statusValue: 'IN_SHIPPING',

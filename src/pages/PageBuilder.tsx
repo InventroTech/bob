@@ -397,6 +397,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
     showFormModalSaveButton?: boolean;
+    /** manager = Approve/Reject; team_lead = Order only; auto = from role. */
+    inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
     /** Form-style modal: show extra “Final price” block. Default true when omitted. */
     showFinalPriceSection?: boolean;
     /** Requestor-side Delete request (any status when on). Default false. */
@@ -471,6 +473,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription: (initialConfig as any).formModalDescription ?? '',
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
+    inventoryWorkflowMode: (initialConfig as any).inventoryWorkflowMode ?? 'auto',
     showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
     showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
     showHistoryButton: (initialConfig as any).showHistoryButton ?? false,

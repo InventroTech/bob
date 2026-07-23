@@ -405,6 +405,11 @@ interface LeadTableProps {
     };
     /** Show Save button in form-style modal footer. If undefined, Save shows only when there are no action buttons. */
     showFormModalSaveButton?: boolean;
+    /**
+     * Inventory All Requests actor for built-in modal buttons.
+     * manager = Approve/Reject; team_lead = Order only; auto = from role.
+     */
+    inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
     /** Form-style modal: show the extra “Final price” computed block. Default true when omitted. */
     showFinalPriceSection?: boolean;
     /** Default modal: show requestor-side "Delete request" action. Default false. */
@@ -2592,6 +2597,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           actionButtons={effectiveDetailMode === 'inventory_payment_modal' ? undefined : config?.statusButtons}
           paymentButtonConfig={effectiveDetailMode === 'inventory_payment_modal' ? config?.paymentModalConfig : undefined}
           showSaveButton={config?.showFormModalSaveButton}
+          inventoryWorkflowMode={config?.inventoryWorkflowMode}
           showFinalPriceSection={config?.showFinalPriceSection}
           modalFlags={config?.modalFlags}
           cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
