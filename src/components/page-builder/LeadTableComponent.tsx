@@ -28,7 +28,7 @@ import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
-import { convertGMTtoIST } from '@/lib/timeUtils';
+import { formatCalendarDate } from '@/lib/timeUtils';
 import { getEffectiveToken, useSpoofUserId } from '@/lib/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
@@ -260,13 +260,24 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
       } else {
         // Apply default transformations based on field type
         switch (col.type) {
-          case 'date':
-            transformedLead[col.key] = value !== null && value !== undefined
-              ? (config?.entityType?.startsWith('inventory_')
-                  ? convertGMTtoIST(String(value), 'date')
-                  : formatRelativeTime(String(value)))
-              : 'N/A';
+          case 'date': {
+            if (value === null || value === undefined) {
+              transformedLead[col.key] = 'N/A';
+              break;
+            }
+            const entityType = String(config?.entityType || '');
+            // Request / requirement / inventory / unmannd: show calendar day (e.g. Jul 22, 2026), not "12 hours ago".
+            const useCalendarDate =
+              entityType.startsWith('inventory_') ||
+              entityType === 'unmannd_request' ||
+              col.key === 'request_date' ||
+              col.key === 'required_date' ||
+              col.key === 'created_at';
+            transformedLead[col.key] = useCalendarDate
+              ? formatCalendarDate(String(value))
+              : formatRelativeTime(String(value));
             break;
+          }
           default:
             transformedLead[col.key] = value !== null && value !== undefined ? value : 'N/A';
         }
@@ -634,6 +645,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const resolvedApiEndpoint = useMemo(() => {
     if (!config?.apiEndpoint) return undefined;
     let endpoint = applyPlaceholderTemplate(config.apiEndpoint, resolvePlaceholderValue);
+
+    // Allow Page Builder URLs like `/crm-records/records?&entity_type=unmannd_request`
+    endpoint = endpoint
+      .replace(/\/crm-records\/records\?/, '/crm-records/records/?')
+      .replace(/\?&+/g, '?');
     
     // GM users should see all leads - remove assigned_to from URL if present
     if (isGM && endpoint) {
@@ -1505,7 +1521,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         params = new URLSearchParams();
 
         // Only add entity_type if using generic records endpoint and entityType is configured
-        if (endpoint.includes('/crm-records/records') && config?.entityType) {
+        // (and the endpoint URL does not already include entity_type)
+        if (
+          endpoint.includes('/crm-records/records') &&
+          config?.entityType &&
+          !/[?&]entity_type=/.test(endpoint)
+        ) {
           params.append('entity_type', config.entityType);
         }
 
@@ -1922,12 +1943,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     let params: URLSearchParams;
     if (useDynamicFilters) {
       params = service.generateQueryParams(filterState.values);
-      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+      if (
+        endpoint.includes('/crm-records/records') &&
+        config?.entityType &&
+        !/[?&]entity_type=/.test(endpoint)
+      ) {
         params.append('entity_type', config.entityType);
       }
     } else {
       params = new URLSearchParams();
-      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+      if (
+        endpoint.includes('/crm-records/records') &&
+        config?.entityType &&
+        !/[?&]entity_type=/.test(endpoint)
+      ) {
         params.append('entity_type', config.entityType);
       }
       if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
@@ -1980,7 +2009,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       if (!session?.access_token) {
         lastInitialFetchKeyRef.current = '';
         setLoading(false);
+      } else if (!effectiveApiEndpoint) {
+        // Configured session but no API endpoint yet (common for newly dropped tables).
+        lastInitialFetchKeyRef.current = '';
+        setData([]);
+        setFilteredData([]);
+        setLoading(false);
       }
+      // Else: waiting on membershipLoaded / placeholder resolution — keep loading.
       return;
     }
 
@@ -2083,6 +2119,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     buildInitialRecordsParams,
     config?.showFallbackOnly,
     session?.access_token,
+    effectiveApiEndpoint,
     updateURL,
     toast,
   ]);
