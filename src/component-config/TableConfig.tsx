@@ -100,6 +100,8 @@ interface TableConfigProps {
     paymentModalConfig?: PaymentModalConfig;
     /** Show Save button in form-style record modal footer (in addition to any action buttons). */
     showFormModalSaveButton?: boolean;
+    /** manager = Approve/Reject; team_lead = Order only; auto = from role. */
+    inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
     /** Form-style modal: show the extra “Final price” block (computed from quantity). Default on when omitted. */
     showFinalPriceSection?: boolean;
     /** Default record detail modal: show requestor-side Delete request button. Default off. */
@@ -260,13 +262,41 @@ export const TableConfig: React.FC<TableConfigProps> = ({
       </div>
 
       {isInventoryProfile ? (
-        <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2">
-          <p className="text-sm font-medium">Inventory request flow</p>
-          <p className="text-xs text-muted-foreground">
-            Built-in modal actions (on existing statuses): Approve/Reject on NEW_REQUEST/DRAFT/PENDING_PM → VENDOR_IDENTIFIED;
-            team lead Order on VENDOR_IDENTIFIED/PAYMENT_PENDING → IN_SHIPPING; then paste shipment tracking.
-            Extra Status action buttons below are optional.
-          </p>
+        <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-3">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Inventory request flow</p>
+            <p className="text-xs text-muted-foreground">
+              Manager pages: Approve/Reject on NEW_REQUEST/DRAFT/PENDING_PM. Team-lead pages: Order only on
+              VENDOR_IDENTIFIED/PAYMENT_PENDING (no Approve/Reject on new requests).
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>All Requests actor</Label>
+            <Select
+              value={
+                localConfig.inventoryWorkflowMode === 'manager' ||
+                localConfig.inventoryWorkflowMode === 'team_lead'
+                  ? localConfig.inventoryWorkflowMode
+                  : 'auto'
+              }
+              onValueChange={(value: 'auto' | 'manager' | 'team_lead') =>
+                handleInputChange('inventoryWorkflowMode', value)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Auto (from role)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto (from user role)</SelectItem>
+                <SelectItem value="manager">Manager — Approve / Reject</SelectItem>
+                <SelectItem value="team_lead">Team lead — Order only</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Set <strong>Team lead — Order only</strong> on the team-lead All Requests page so new requests never
+              show Approve/Reject.
+            </p>
+          </div>
           <Button type="button" variant="outline" size="sm" onClick={applySimpleInventoryDefaults}>
             Reset inventory form defaults
           </Button>

@@ -104,6 +104,13 @@ interface InventoryFormEditModalProps {
   formModalDescription?: string;
   /** Whether to show the Save button in the footer. If undefined, Save shows only when there are no action buttons. */
   showSaveButton?: boolean;
+  /**
+   * Inventory All Requests actor:
+   * - manager → Approve / Reject only
+   * - team_lead → Order only (no Approve / Reject on new requests)
+   * - auto → infer from membership role
+   */
+  inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
   /** When set, show one button: conditional if attribute matches, else default (e.g. Inventory Payment modal). */
   paymentButtonConfig?: {
     conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string; targetAttribute?: string };
@@ -209,6 +216,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   formModalTitle,
   formModalDescription: _formModalDescription,
   showSaveButton,
+  inventoryWorkflowMode,
   paymentButtonConfig,
   modalFlags,
   showFinalPriceSection,
@@ -1072,11 +1080,12 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const usePaymentButtons = paymentButtonConfig?.conditionalButton && paymentButtonConfig?.defaultButton;
   const statusFromForm =
     formData.status != null && String(formData.status).trim() !== '' ? formData.status : undefined;
+  // Prefer saved record status for Approve / Reject / Order so a mismatched status
+  // dropdown (e.g. NEW_REQUEST not in options) cannot hide the workflow buttons.
   const requestStatusForWorkflow =
-    statusFromForm ??
     (record?.data && typeof record.data === 'object'
       ? (record.data as Record<string, unknown>).status
-      : undefined);
+      : undefined) ?? statusFromForm;
   const teamLeadFromForm =
     formData.team_lead != null && String(formData.team_lead).trim() !== ''
       ? formData.team_lead
@@ -1096,6 +1105,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           membershipId: myMembershipId,
           teamLeadOnRecord,
           isRequester,
+          workflowMode: inventoryWorkflowMode ?? 'auto',
         })
       : [];
 

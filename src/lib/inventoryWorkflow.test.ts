@@ -13,35 +13,81 @@ describe('inventory procurement → order flow (existing statuses)', () => {
       getInventoryWorkflowButtons({
         requestStatus: 'PENDING_PM',
         isRequester: true,
+        workflowMode: 'manager',
       })
     ).toEqual([]);
     expect(
       getInventoryWorkflowButtons({
         requestStatus: 'VENDOR_IDENTIFIED',
         isRequester: true,
+        workflowMode: 'team_lead',
       })
     ).toEqual([]);
   });
 
-  it('non-requestor can Approve/Reject on PENDING_PM, DRAFT, and NEW_REQUEST', () => {
+  it('manager can Approve/Reject on PENDING_PM, DRAFT, and NEW_REQUEST', () => {
     for (const status of ['PENDING_PM', 'DRAFT', 'NEW_REQUEST']) {
       const buttons = getInventoryWorkflowButtons({
         requestStatus: status,
         isRequester: false,
+        workflowMode: 'manager',
       });
       expect(buttons.map((b) => b.statusValue)).toEqual(['VENDOR_IDENTIFIED', 'REJECTED']);
     }
   });
 
-  it('non-requestor sees Order on VENDOR_IDENTIFIED and PAYMENT_PENDING (no role required)', () => {
+  it('team lead never sees Approve/Reject on new requests', () => {
+    for (const status of ['PENDING_PM', 'DRAFT', 'NEW_REQUEST']) {
+      expect(
+        getInventoryWorkflowButtons({
+          requestStatus: status,
+          isRequester: false,
+          workflowMode: 'team_lead',
+          roleNameOrKey: 'Team Lead',
+        })
+      ).toEqual([]);
+    }
+  });
+
+  it('team lead sees Order on VENDOR_IDENTIFIED / PAYMENT_PENDING', () => {
     for (const status of ['VENDOR_IDENTIFIED', 'VENDOR IDENTIFIED', 'PAYMENT_PENDING']) {
       const buttons = getInventoryWorkflowButtons({
         requestStatus: status,
-        roleNameOrKey: 'engineer',
+        roleNameOrKey: 'Team Lead',
+        workflowMode: 'team_lead',
         isRequester: false,
       });
       expect(buttons.map((b) => [b.label, b.statusValue])).toEqual([['Order', 'IN_SHIPPING']]);
     }
+  });
+
+  it('manager does not see Order (team-lead-only action)', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'VENDOR_IDENTIFIED',
+        workflowMode: 'manager',
+        isRequester: false,
+      })
+    ).toEqual([]);
+  });
+
+  it('auto mode: team-lead role hides Approve; procurement role shows Approve', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        roleNameOrKey: 'CSE Team Lead',
+        isRequester: false,
+        workflowMode: 'auto',
+      })
+    ).toEqual([]);
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        roleNameOrKey: 'Procurement Manager',
+        isRequester: false,
+        workflowMode: 'auto',
+      }).map((b) => b.label)
+    ).toEqual(['Approve', 'Reject']);
   });
 
   it('recognizes procurement vs team-lead roles', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { LeadTableComponent } from './LeadTableComponent';
 import { mergeInventoryTrackingColumns } from '@/lib/shipmentTracking';
 
@@ -16,8 +16,10 @@ interface RecordsTableProps {
  * Generic records table component for PageBuilder.
  * Backed by LeadTableComponent but not tied to any specific entity.
  *
- * For inventory_request tables, shipment tracking columns (Shipment / Track / ETA / Courier)
- * are merged in when missing so All Requests pages show live tracking without reconfig.
+ * For inventory_request tables:
+ * - shipment tracking columns are merged when missing
+ * - row click opens the form modal so built-in Approve / Reject / Order show
+ *   (same as Procurement Table / Manager All Requests)
  */
 export const InventoryTableComponent: React.FC<RecordsTableProps> = ({ config }) => {
   const entityType = String(config?.entityType || '').trim();
@@ -26,10 +28,18 @@ export const InventoryTableComponent: React.FC<RecordsTableProps> = ({ config })
     ? mergeInventoryTrackingColumns(config?.columns)
     : config?.columns;
 
+  const detailMode = config?.detailMode;
+  const keepSpecial =
+    detailMode === 'inventory_payment_modal' ||
+    detailMode === 'receive_shipments' ||
+    detailMode === 'lead_assignment_modal' ||
+    detailMode === 'none';
+
   const mergedConfig = {
     title: config?.title || '',
     ...(config || {}),
     ...(columns ? { columns } : {}),
+    ...(isInventoryRequest && !keepSpecial ? { detailMode: 'record_form_modal' } : {}),
   };
 
   return <LeadTableComponent config={mergedConfig} />;
