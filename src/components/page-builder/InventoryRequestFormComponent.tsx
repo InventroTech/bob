@@ -403,7 +403,8 @@ function priorityShortLabel(urgency: string): string {
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
- * team_lead = user_parent_id (TenantMembership id), or current user's TenantMembership id if null.
+ * Hierarchy (this tenant): Requestor -> Procurement Manager -> Team Lead.
+ * manager = requestor's parent; team_lead = manager's parent when present.
  */
 export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> = ({
   config,
@@ -421,8 +422,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [myRoleName, setMyRoleName] = useState<string>('');
   const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
-  // team_lead should store authz_tenantmembership.id (parent membership id preferred).
+  // team_lead / manager store authz_tenantmembership.id
   const [teamLeadMembershipId, setTeamLeadMembershipId] = useState<string | null>(null);
+  const [managerMembershipId, setManagerMembershipId] = useState<string | null>(null);
   const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
   const [submitting, setSubmitting] = useState(false);
@@ -681,8 +683,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         setCurrentMembershipId(ownMembershipId);
       }
 
-      // Resolve current user's membership name from authz_tenantmembership list
-      // and manager membership id (if parent membership exists).
+      // Resolve Requestor -> Team Lead -> Manager from hierarchy.
       try {
         const resp = await apiClient.get<any>('/membership/users/');
         const respData = resp.data;
@@ -714,21 +715,42 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         }
 
         if (parentMembershipId != null) {
-          const parent = users.find(
+          const parentId = String(parentMembershipId);
+          const parentUser = users.find(
             (u) => u.id != null && Number(u.id) === Number(parentMembershipId)
           );
-          if (!cancelled && parent?.id != null) {
-            setTeamLeadMembershipId(String(parent.id));
-            return;
+          const grandparentId = parentUser?.user_parent_id ?? null;
+
+          // Requestor → parent (PM) → grandparent (Team Lead).
+          // Save PM as manager so create emails include Procurement Manager.
+          setManagerMembershipId(parentId);
+          if (grandparentId != null) {
+            const grandparent = users.find(
+              (u) => u.id != null && Number(u.id) === Number(grandparentId)
+            );
+            setTeamLeadMembershipId(
+              grandparent?.id != null ? String(grandparent.id) : String(grandparentId)
+            );
+          } else {
+            setTeamLeadMembershipId(parentId);
           }
+          return;
         }
       } catch (err) {
-        console.warn('Failed to resolve membership users for requester/team_lead', err);
+        console.warn('Failed to resolve membership users for requester/team_lead/manager', err);
       }
 
-      // Fallback: use current user's own membership id as team_lead
-      if (!cancelled && ownMembershipId) {
-        setTeamLeadMembershipId(ownMembershipId);
+      // If parent id is known from /membership/me/role, still save it even when users list fails.
+      if (!cancelled && parentMembershipId != null) {
+        const parentId = String(parentMembershipId);
+        setManagerMembershipId(parentId);
+        setTeamLeadMembershipId(parentId);
+        return;
+      }
+
+      // Do NOT fall back to the requestor's own membership as team_lead.
+      if (!cancelled) {
+        console.warn('No manager/team_lead parent found for current membership; leaving unset');
       }
     };
 
@@ -1237,6 +1259,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         }
         if (teamLeadMembershipId) {
           payloadData.team_lead = teamLeadMembershipId;
+        }
+        if (managerMembershipId) {
+          payloadData.manager = managerMembershipId;
         }
         await apiClient.post(RECORDS_URL, {
           entity_type: entityType,
