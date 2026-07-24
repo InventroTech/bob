@@ -74,8 +74,12 @@ import {
   LeadAssignmentComponent,
   CallAttemptMatrixComponent,
   InventoryTableComponent,
+  ProcurementTableComponent,
+  MyRequestTableComponent,
   InventoryRequestFormComponent,
+  ProcurementRequestFormComponent,
 } from "@/components/page-builder";
+import { DEFAULT_PROCUREMENT_TABLE_CONFIG } from "@/components/page-builder/ProcurementTableComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
@@ -84,7 +88,6 @@ import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 
 import { apiClient, membershipService, pageService } from '@/lib/api';
-import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
@@ -156,7 +159,14 @@ interface ComponentConfig {
   columns?: Array<{
     key: string;
     label: string;
-    type: 'text' | 'chip' | 'date' | 'number';
+    type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+    linkField?: string;
+    editableInTable?: boolean;
+    openCard?: boolean | string;
+    actionApiEndpoint?: string;
+    actionApiMethod?: string;
+    actionApiHeaders?: string;
+    actionApiPayload?: string;
   }>;
   datasets?: Array<{
     label: string;
@@ -245,6 +255,8 @@ export const componentMap: Record<string, React.FC<any>> = {
   dataCard:DataCardComponent,
   leadTable: LeadTableComponent,
   inventoryTable: InventoryTableComponent,
+  procurementTable: ProcurementTableComponent,
+  myRequestTable: MyRequestTableComponent,
   collapseCard: CollapseCard,
   leadCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,
@@ -273,6 +285,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
+  procurementRequestForm: ProcurementRequestFormComponent,
   dispatchCardList: DispatchCardListComponent,
   dispatchDashboard: DispatchDashboardComponent,
 };
@@ -357,7 +370,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     initialStatusText?: string;
     defaultStatus?: string;
     urgencyOptions?: Array<{ label: string; value: string }>;
-    // Records table (leadTable / inventoryTable): items table mode
+    // Records / procurement tables (leadTable / inventoryTable / procurementTable): items table mode
     tableType?: 'default' | 'itemsTable';
     statusButtons?: Array<{
       label: string;
@@ -384,6 +397,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
     showFormModalSaveButton?: boolean;
+    /** manager = Approve/Reject; team_lead = Order only; auto = from role. */
+    inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
     /** Form-style modal: show extra “Final price” block. Default true when omitted. */
     showFinalPriceSection?: boolean;
     /** Requestor-side Delete request (any status when on). Default false. */
@@ -458,6 +473,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription: (initialConfig as any).formModalDescription ?? '',
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
+    inventoryWorkflowMode: (initialConfig as any).inventoryWorkflowMode ?? 'auto',
     showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
     showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
     showHistoryButton: (initialConfig as any).showHistoryButton ?? false,
@@ -496,16 +512,52 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     [selectedComponentId, setCanvasComponents]
   );
 
-  const debouncedUpdateWithDelay = useMemo(
-    () => debounce(debouncedUpdate, 500),
-    [debouncedUpdate]
+  // Accumulate rapid patches so multi-field resets (e.g. "simple All Requests")
+  // don't lose all but the last field to lodash debounce's last-call-wins behavior.
+  const pendingConfigUpdatesRef = useRef<Partial<ComponentConfig>>({});
+  const flushPendingConfigUpdates = useCallback(() => {
+    const updates = pendingConfigUpdatesRef.current;
+    if (!updates || Object.keys(updates).length === 0) return;
+    pendingConfigUpdatesRef.current = {};
+    debouncedUpdate(updates);
+  }, [debouncedUpdate]);
+
+  const scheduleConfigUpdate = useMemo(
+    () => debounce(flushPendingConfigUpdates, 500),
+    [flushPendingConfigUpdates]
   );
+
+  useEffect(() => {
+    return () => {
+      scheduleConfigUpdate.flush();
+      scheduleConfigUpdate.cancel();
+    };
+  }, [scheduleConfigUpdate]);
+
+  const queueConfigUpdate = useCallback(
+    (updates: Partial<ComponentConfig>) => {
+      pendingConfigUpdatesRef.current = {
+        ...pendingConfigUpdatesRef.current,
+        ...updates,
+      };
+      scheduleConfigUpdate();
+    },
+    [scheduleConfigUpdate]
+  );
+
+  const debouncedUpdateWithDelay = queueConfigUpdate;
 
   // Handle local input changes
   const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string; targetAttribute?: string; statusText?: string }> | Array<{ label: string; value: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
-    debouncedUpdateWithDelay({ [field]: value });
-  }, [debouncedUpdateWithDelay]);
+    queueConfigUpdate({ [field]: value } as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
+
+  /** Apply several config fields in one patch (avoids lost updates on reset buttons). */
+  const handleConfigPatch = useCallback((patch: Partial<LocalConfigType>) => {
+    setLocalConfig((prev) => ({ ...prev, ...patch }));
+    queueConfigUpdate(patch as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
 
   // Handle column count change
   const handleColumnCountChange = useCallback((count: number) => {
@@ -723,7 +775,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'ticketTable':
         return (
           <TableConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
@@ -792,14 +844,18 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
         );
 
       case 'inventoryTable':
+      case 'procurementTable':
+      case 'myRequestTable':
         return (
           <TableConfig
+            profile="inventory"
             localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
             numFilters={numFilters}
             handleInputChange={handleInputChange}
+            handleConfigPatch={handleConfigPatch as any}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
             handleColumnDelete={handleColumnDelete}
@@ -984,7 +1040,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
           />
         );
 
-      case 'inventoryRequestForm': {
+      case 'inventoryRequestForm':
+      case 'procurementRequestForm': {
+        const defaultEntityType =
+          selectedComponentType === 'procurementRequestForm' ? 'unmannd_request' : 'inventory_request';
         const defaultUrgencyOptions = [
           { value: 'LOW', label: 'Low' },
           { value: 'MEDIUM', label: 'Medium' },
@@ -1002,12 +1061,12 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             <div>
               <Label>Entity type</Label>
               <Input
-                value={localConfig.entityType ?? 'inventory_request'}
+                value={localConfig.entityType ?? defaultEntityType}
                 onChange={(e) => handleInputChange('entityType', e.target.value)}
-                placeholder="inventory_request"
+                placeholder={defaultEntityType}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Entity type to save (e.g. inventory_request).
+                Entity type to save (e.g. {defaultEntityType}).
               </p>
             </div>
 
@@ -1016,10 +1075,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
               <Input
                 value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
                 onChange={(e) => handleInputChange('initialStatus', e.target.value)}
-                placeholder="e.g. DRAFT"
+                placeholder="e.g. PENDING_PM"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Status for new requests. Leave empty to use default (DRAFT).
+                Status for new requests. Leave empty to use default (PENDING_PM).
               </p>
             </div>
 
@@ -1247,7 +1306,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'inventoryRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'myRequestTable', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1412,7 +1471,15 @@ useEffect(() => {
           id: `${componentType}-${Date.now()}`, // Simple unique ID for now
           type: componentType,
           props: {},
-          config: {},
+          config:
+            componentType === 'procurementTable'
+              ? ({
+                  ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
+                  columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
+                } as ComponentConfig)
+              : componentType === 'procurementRequestForm'
+                ? ({ entityType: 'unmannd_request' } as ComponentConfig)
+                : {},
         };
 
         // Add the new component to the canvas state
@@ -1434,7 +1501,15 @@ useEffect(() => {
         id: `${componentType}-${Date.now()}`,
         type: componentType,
         props: {},
-        config: {},
+        config:
+          componentType === 'procurementTable'
+            ? ({
+                ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
+                columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
+              } as ComponentConfig)
+            : componentType === 'procurementRequestForm'
+              ? ({ entityType: 'unmannd_request' } as ComponentConfig)
+              : {},
       };
 
       // Find the index of the component we dropped on
@@ -1831,6 +1906,16 @@ useEffect(() => {
                           icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
+                          id="procurementTable"
+                          label="Procurement Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="myRequestTable"
+                          label="My Request Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
                           id="dispatchCardList"
                           label="Dispatch Card List"
                           icon={<Truck className="h-8 w-8 mb-1 text-foreground" />}
@@ -1843,6 +1928,11 @@ useEffect(() => {
                         <DraggableSidebarItem
                           id="inventoryRequestForm"
                           label="Inventory Request Form"
+                          icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="procurementRequestForm"
+                          label="Procurement Request Form"
                           icon={<Layers className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem

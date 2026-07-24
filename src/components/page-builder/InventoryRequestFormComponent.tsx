@@ -25,16 +25,113 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Calendar, User, Send, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Calendar, User, Send, Loader2, Plus, Trash2, Scale, RefreshCw, ExternalLink, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/currencyFormat';
+import { emptyShipmentTrackingFields } from '@/lib/shipmentTracking';
+import { calculateInventoryPriority, formatInventoryPriorityLabel } from '@/lib/inventoryPriority';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const RECORDS_URL = '/crm-records/records/';
+const PRICE_COMPARE_URL = '/crm-records/price-compare/';
+
+/** Minimal fallback sources if vendor catalog API is unavailable. */
+const FALLBACK_ECOMMERCE_SOURCES = [
+  { id: 'amazon', label: 'Amazon', vendorName: 'AMAZON', hostIncludes: ['amazon.'] },
+  { id: 'robu', label: 'Robu', vendorName: 'ROBU', hostIncludes: ['robu.in'] },
+  { id: 'robocraze', label: 'Robocraze', vendorName: 'ROBOCRAZE', hostIncludes: ['robocraze.com'] },
+  { id: 'zbotic', label: 'Zbotic', vendorName: 'ZBOTIC', hostIncludes: ['zbotic.in'] },
+  { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] as string[] },
+] as const;
+
+type EcommerceSource = {
+  id: string;
+  label: string;
+  vendorName?: string;
+  hostIncludes?: readonly string[];
+  profile?: 'core' | 'extended' | string;
+};
+
+type PriceQuote = {
+  id: string;
+  source: string;
+  source_label: string;
+  link: string;
+  price: number | '';
+  currency: 'INR' | 'USD';
+  title?: string;
+  live?: boolean;
+  /** Marketplace delivery / ETA text, e.g. "FREE delivery Fri, 24 Jul". */
+  delivery_date?: string;
+};
+
+type LivePriceCompareResult = {
+  source?: string;
+  title?: string | null;
+  price?: number | null;
+  currency?: string;
+  link?: string;
+  available?: boolean;
+  error?: string | null;
+  delivery_date?: string | null;
+};
+
+type LivePriceCompareResponse = {
+  results?: LivePriceCompareResult[];
+  cheapest?: LivePriceCompareResult | null;
+  errors?: string[];
+  amazon_paapi_configured?: boolean;
+  vendors?: EcommerceSource[];
+  profile?: string | null;
+  error?: string;
+};
+
+type PriceCompareVendorsResponse = {
+  defaults?: { profile?: string };
+  vendors?: Array<{
+    id?: string;
+    label?: string;
+    vendor_name?: string;
+    hosts?: string[];
+    profile?: string;
+  }>;
+};
+
+const quoteFromLiveResult = (
+  r: LivePriceCompareResult,
+  catalog: EcommerceSource[]
+): PriceQuote | null => {
+  const sourceRaw = String(r.source || 'other').toLowerCase().replace(/\s+/g, '');
+  const known = catalog.find((s) => s.id === sourceRaw);
+  const source = known?.id || (sourceRaw || 'other');
+  const priceNum = r.price == null ? '' : Number(r.price);
+  if (priceNum === '' || !Number.isFinite(priceNum) || priceNum <= 0) return null;
+  const currency = String(r.currency || 'INR').toUpperCase() === 'USD' ? 'USD' : 'INR';
+  return {
+    id: crypto.randomUUID?.() ?? `quote-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    source,
+    source_label: known?.label || String(r.source || 'Other'),
+    link: String(r.link || '').trim(),
+    price: priceNum,
+    currency,
+    title: String(r.title || '').trim(),
+    live: true,
+    delivery_date: String(r.delivery_date || '').trim(),
+  };
+};
+
+/** 6-digit Indian PIN code for marketplace delivery ETAs. */
+const normalizeIndianPincode = (value: string): string | null => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 6 && digits[0] !== '0') return digits;
+  return null;
+};
 
 interface InventoryRequestFormConfig {
   /** Entity type to save (e.g. inventory_request). */
   entityType?: string;
-  /** Initial status for new records (e.g. DRAFT, PENDING_PM). */
+  /** Initial status for new records (e.g. PENDING_PM). */
   initialStatus?: string;
   /** Friendly initial status label stored as data.status_text. */
   initialStatusText?: string;
@@ -76,7 +173,10 @@ const toVendorStorageName = (name: string): string =>
 interface FormItem {
   id: string;
   item_name_freeform: string;
+  /** Extra product specs (length, connector, model, etc.) used to refine live price search. */
+  specifications: string;
   quantity_required: number | '';
+  required_date: string;
   product_link: string;
   additional_link: string;
   vendor: string;
@@ -85,12 +185,16 @@ interface FormItem {
   including_gst: boolean;
   urgency_level: string;
   comments: string;
+  /** Manual quotes from Amazon / Robu / other sites for side-by-side comparison. */
+  price_quotes: PriceQuote[];
 }
 
 const newEmptyItem = (): FormItem => ({
   id: crypto.randomUUID?.() ?? `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   item_name_freeform: '',
+  specifications: '',
   quantity_required: '',
+  required_date: '',
   product_link: '',
   additional_link: '',
   vendor: '',
@@ -99,7 +203,166 @@ const newEmptyItem = (): FormItem => ({
   including_gst: false,
   urgency_level: '',
   comments: '',
+  price_quotes: [],
 });
+
+type SpecFacet = {
+  key: string;
+  label: string;
+  options: string[];
+};
+
+const buildPriceSearchQuery = (name: string, specifications: string): string =>
+  [name.trim(), specifications.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+
+/** Pull differentiating product specs from live result titles so we can ask the user. */
+const extractSpecFacetsFromTitles = (titles: string[], baseName: string): SpecFacet[] => {
+  const baseTokens = new Set(
+    baseName
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 1)
+  );
+
+  const lengthOpts = new Set<string>();
+  const connectorOpts = new Set<string>();
+  const finishOpts = new Set<string>();
+  const variantOpts = new Set<string>();
+
+  for (const raw of titles) {
+    const title = String(raw || '').trim();
+    if (!title) continue;
+
+    for (const m of title.matchAll(/\b(\d+(?:\.\d+)?\s*(?:cm|mm|m|ft|feet|inch|in))\b/gi)) {
+      lengthOpts.add(m[1].replace(/\s+/g, '').toLowerCase().replace(/feet/i, 'ft'));
+    }
+    // Normalize display of lengths later
+
+    for (const m of title.matchAll(
+      /\b(USB[\s-]?A|USB[\s-]?B|USB[\s-]?C|Type[\s-]?C|Mini[\s-]?B|Micro[\s-]?USB|HDMI|RJ45)\b/gi
+    )) {
+      connectorOpts.add(m[1].replace(/\s+/g, ' ').trim());
+    }
+
+    if (/\bgold[-\s]?plated\b/i.test(title)) finishOpts.add('Gold-plated');
+    if (/\bnickel[-\s]?plated\b/i.test(title)) finishOpts.add('Nickel-plated');
+
+    if (/\bwithout\s+usb\s+cable\b|\bw\/?o\s+usb\s+cable\b|\bno\s+cable\b/i.test(title)) {
+      variantOpts.add('Without USB cable');
+    } else if (/\bwith\s+(?:usb\s+)?cable\b/i.test(title)) {
+      variantOpts.add('With USB cable');
+    }
+    if (/\bofficial\b/i.test(title)) variantOpts.add('Official');
+    if (/\bcompatible\b/i.test(title)) variantOpts.add('Compatible');
+    if (/\bun[-\s]?soldered\b/i.test(title)) variantOpts.add('Unsoldered');
+    if (/\bsoldered\b/i.test(title) && !/\bun[-\s]?soldered\b/i.test(title)) {
+      variantOpts.add('Soldered');
+    }
+  }
+
+  // Pretty-print lengths while keeping unique values
+  const prettyLengths = Array.from(lengthOpts).map((l) => {
+    const m = l.match(/^(\d+(?:\.\d+)?)(cm|mm|m|ft|in)$/i);
+    if (!m) return l;
+    return `${m[1]} ${m[2].toLowerCase()}`;
+  });
+
+  const facets: SpecFacet[] = [];
+  if (prettyLengths.length >= 2) {
+    facets.push({ key: 'length', label: 'Length / size', options: prettyLengths.sort() });
+  }
+  if (connectorOpts.size >= 2) {
+    facets.push({
+      key: 'connector',
+      label: 'Connector / interface',
+      options: Array.from(connectorOpts).sort(),
+    });
+  }
+  if (finishOpts.size >= 2) {
+    facets.push({ key: 'finish', label: 'Finish', options: Array.from(finishOpts).sort() });
+  }
+  if (variantOpts.size >= 2) {
+    facets.push({
+      key: 'variant',
+      label: 'Variant',
+      options: Array.from(variantOpts).sort(),
+    });
+  }
+
+  // If titles still look very different and we found no structured facets,
+  // fall back to asking for free-text only (handled by dialog UI).
+  void baseTokens;
+  return facets;
+};
+
+const titlesNeedSpecificationPrompt = (titles: string[], baseName: string, existingSpecs: string): boolean => {
+  if ((existingSpecs || '').trim()) return false;
+  const clean = titles.map((t) => String(t || '').trim()).filter(Boolean);
+  if (clean.length < 2) return false;
+  const facets = extractSpecFacetsFromTitles(clean, baseName);
+  if (facets.some((f) => f.options.length >= 2)) return true;
+  // Different products when title similarity is low (shared token overlap with base name only).
+  const normalized = clean.map((t) => t.toLowerCase().replace(/\s+/g, ' '));
+  const unique = new Set(normalized);
+  return unique.size >= 3;
+};
+
+const SPEC_STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'this',
+  'that',
+  'product',
+  'board',
+  'module',
+  'kit',
+  'pack',
+  'set',
+]);
+
+const tokenizeProductText = (value: string): string[] =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, ' ')
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 && !SPEC_STOP_WORDS.has(t))
+    .map((t) => t.replace(/^(\d+(?:\.\d+)?)(cm|mm|m|ft|in)$/i, (_, n, u) => `${n}${u.toLowerCase()}`));
+
+/** True when a marketplace title is a close match for the requested name + specs. */
+const isExactEnoughProductMatch = (title: string, name: string, specifications: string): boolean => {
+  const titleText = String(title || '').trim().toLowerCase();
+  if (!titleText) return false;
+
+  const titleTokens = new Set(tokenizeProductText(titleText));
+  const nameTokens = tokenizeProductText(name);
+  if (nameTokens.length === 0) return false;
+
+  const nameHits = nameTokens.filter((t) => titleTokens.has(t) || titleText.includes(t)).length;
+  if (nameTokens.length <= 2) {
+    if (nameHits < nameTokens.length) return false;
+  } else if (nameHits / nameTokens.length < 0.75) {
+    return false;
+  }
+
+  const specTokens = tokenizeProductText(specifications);
+  if (specTokens.length === 0) return true;
+
+  // Specs like length/connector must appear; require strong overlap.
+  const required = specTokens.filter(
+    (t) =>
+      /\d/.test(t) ||
+      /usb|mini|micro|type|hdmi|rj45|gold|nickel|plated|solder|cable|official|compatible/.test(t) ||
+      t.length >= 3
+  );
+  const check = required.length > 0 ? required : specTokens;
+  const specHits = check.filter((t) => titleTokens.has(t) || titleText.includes(t)).length;
+  if (check.length <= 2) return specHits >= check.length;
+  return specHits / check.length >= 0.7;
+};
 
 const REQUIRED_ITEM_FIELDS: Array<{ key: keyof FormItem; label: string }> = [
   { key: 'item_name_freeform', label: 'Item name' },
@@ -107,45 +370,61 @@ const REQUIRED_ITEM_FIELDS: Array<{ key: keyof FormItem; label: string }> = [
   { key: 'estimated_cost', label: 'Estimated cost' },
   { key: 'vendor', label: 'Vendor' },
   { key: 'product_link', label: 'Product link' },
-  { key: 'urgency_level', label: 'Priority / Urgency' },
+  { key: 'required_date', label: 'Requirement date' },
 ];
 
 interface InventoryRequestFormProps {
   config?: InventoryRequestFormConfig;
+  variant?: 'default' | 'procurement';
 }
 
-const DEFAULT_URGENCY_OPTIONS = [
-  { value: 'STANDARD', label: 'Standard' },
-  { value: 'CRITICAL', label: 'Critical' },
-];
+function priorityChipClass(urgency: string): string {
+  const upper = String(urgency ?? '').trim().toUpperCase();
+  if (upper === 'HIGH' || upper === 'CRITICAL') {
+    return 'border-destructive/30 bg-destructive/10 text-destructive';
+  }
+  if (upper === 'MEDIUM') {
+    return 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200';
+  }
+  if (upper === 'LOW') {
+    return 'border-border bg-muted text-muted-foreground';
+  }
+  return 'border-border bg-muted/50 text-muted-foreground';
+}
+
+function priorityShortLabel(urgency: string): string {
+  const upper = String(urgency ?? '').trim().toUpperCase();
+  if (upper === 'HIGH' || upper === 'CRITICAL') return 'High';
+  if (upper === 'MEDIUM') return 'Middle';
+  if (upper === 'LOW') return 'Low';
+  return formatInventoryPriorityLabel(urgency);
+}
 
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
- * team_lead = user_parent_id (TenantMembership id), or current user's TenantMembership id if null.
+ * Hierarchy (this tenant): Requestor -> Procurement Manager -> Team Lead.
+ * manager = requestor's parent; team_lead = manager's parent when present.
  */
-export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> = ({ config }) => {
+export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> = ({
+  config,
+  variant = 'default',
+}) => {
+  const isProcurement = variant === 'procurement';
   const { user } = useAuth();
 
   const entityType = config?.entityType ?? 'inventory_request';
-  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'DRAFT';
-  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
-  // If `urgencyOptions` exists in config (even empty), treat it as an override.
-  const urgencyOptions =
-    config?.urgencyOptions !== undefined ? config.urgencyOptions : DEFAULT_URGENCY_OPTIONS;
-  const normalizedUrgencyOptions = urgencyOptions
-    .map((o) => ({
-      value: String(o.value ?? '').trim(),
-      label: String(o.label ?? '').trim() || String(o.value ?? '').trim(),
-    }))
-    .filter((o) => o.value !== '');
+  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'PENDING_PM';  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
+  const [deliveryPincode, setDeliveryPincode] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [myRoleName, setMyRoleName] = useState<string>('');
   const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
-  // team_lead should store authz_tenantmembership.id (parent membership id preferred).
+  // team_lead / manager store authz_tenantmembership.id
   const [teamLeadMembershipId, setTeamLeadMembershipId] = useState<string | null>(null);
+  const [managerMembershipId, setManagerMembershipId] = useState<string | null>(null);
   const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
   const [submitting, setSubmitting] = useState(false);
@@ -155,8 +434,26 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
+  /** Spec picker shown when live search finds multiple product variants. */
+  const [specPromptItemId, setSpecPromptItemId] = useState<string | null>(null);
+  const [specFacets, setSpecFacets] = useState<SpecFacet[]>([]);
+  const [specSelections, setSpecSelections] = useState<Record<string, string>>({});
+  const [specExtraText, setSpecExtraText] = useState('');
+  const [specSampleTitles, setSpecSampleTitles] = useState<string[]>([]);
   /** Live-formatted price strings while typing (cleared on blur). */
   const [priceDraftByItemId, setPriceDraftByItemId] = useState<Record<string, string>>({});
+  /** Vendor catalog from backend (config-driven). */
+  const [ecommerceSources, setEcommerceSources] = useState<EcommerceSource[]>(() => [
+    ...(FALLBACK_ECOMMERCE_SOURCES as unknown as EcommerceSource[]),
+  ]);
+  /** core = reliable default set; extended = full catalog. */
+  const [priceCompareProfile, setPriceCompareProfile] = useState<'core' | 'extended'>('core');
+  /** Per-item loading state for live marketplace price fetch. */
+  const [liveCompareLoadingByItemId, setLiveCompareLoadingByItemId] = useState<Record<string, boolean>>({});
+  /** Shown when live search finds no close product match. */
+  const [priceCompareStatusByItemId, setPriceCompareStatusByItemId] = useState<
+    Record<string, 'idle' | 'found' | 'unavailable'>
+  >({});
   const [focusedItemNameId, setFocusedItemNameId] = useState<string | null>(null);
   const [itemNameQuery, setItemNameQuery] = useState<string>('');
   const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
@@ -331,6 +628,37 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     return () => window.clearTimeout(t);
   }, [focusedItemNameId, itemNameQuery, fetchItemSuggestions]);
 
+  // Load price-compare vendor catalog from backend (single source of truth).
+  useEffect(() => {
+    let cancelled = false;
+    const loadVendors = async () => {
+      try {
+        const res = await apiClient.get<PriceCompareVendorsResponse>(PRICE_COMPARE_URL);
+        const rows = (res.data?.vendors ?? [])
+          .map((v) => ({
+            id: String(v.id || '').trim().toLowerCase(),
+            label: String(v.label || v.id || '').trim(),
+            vendorName: String(v.vendor_name || '').trim(),
+            hostIncludes: Array.isArray(v.hosts) ? v.hosts.map(String) : [],
+            profile: String(v.profile || 'extended'),
+          }))
+          .filter((v) => v.id && v.label);
+        if (cancelled || rows.length === 0) return;
+        setEcommerceSources([...rows, { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] }]);
+        const defaultProfile = String(res.data?.defaults?.profile || 'core').toLowerCase();
+        if (defaultProfile === 'extended' || defaultProfile === 'core') {
+          setPriceCompareProfile(defaultProfile);
+        }
+      } catch {
+        // Keep fallback sources.
+      }
+    };
+    void loadVendors();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Pre-fill department and team_lead from current user's membership (API only)
   useEffect(() => {
     if (!user) return;
@@ -355,8 +683,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         setCurrentMembershipId(ownMembershipId);
       }
 
-      // Resolve current user's membership name from authz_tenantmembership list
-      // and manager membership id (if parent membership exists).
+      // Resolve Requestor -> Team Lead -> Manager from hierarchy.
       try {
         const resp = await apiClient.get<any>('/membership/users/');
         const respData = resp.data;
@@ -388,21 +715,42 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         }
 
         if (parentMembershipId != null) {
-          const parent = users.find(
+          const parentId = String(parentMembershipId);
+          const parentUser = users.find(
             (u) => u.id != null && Number(u.id) === Number(parentMembershipId)
           );
-          if (!cancelled && parent?.id != null) {
-            setTeamLeadMembershipId(String(parent.id));
-            return;
+          const grandparentId = parentUser?.user_parent_id ?? null;
+
+          // Requestor → parent (PM) → grandparent (Team Lead).
+          // Save PM as manager so create emails include Procurement Manager.
+          setManagerMembershipId(parentId);
+          if (grandparentId != null) {
+            const grandparent = users.find(
+              (u) => u.id != null && Number(u.id) === Number(grandparentId)
+            );
+            setTeamLeadMembershipId(
+              grandparent?.id != null ? String(grandparent.id) : String(grandparentId)
+            );
+          } else {
+            setTeamLeadMembershipId(parentId);
           }
+          return;
         }
       } catch (err) {
-        console.warn('Failed to resolve membership users for requester/team_lead', err);
+        console.warn('Failed to resolve membership users for requester/team_lead/manager', err);
       }
 
-      // Fallback: use current user's own membership id as team_lead
-      if (!cancelled && ownMembershipId) {
-        setTeamLeadMembershipId(ownMembershipId);
+      // If parent id is known from /membership/me/role, still save it even when users list fails.
+      if (!cancelled && parentMembershipId != null) {
+        const parentId = String(parentMembershipId);
+        setManagerMembershipId(parentId);
+        setTeamLeadMembershipId(parentId);
+        return;
+      }
+
+      // Do NOT fall back to the requestor's own membership as team_lead.
+      if (!cancelled) {
+        console.warn('No manager/team_lead parent found for current membership; leaving unset');
       }
     };
 
@@ -421,11 +769,289 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     setItems((prev) => (prev.length <= 1 ? prev : prev.filter((i) => i.id !== id)));
   }, []);
 
-  const updateItem = useCallback((id: string, field: keyof FormItem, value: string | number | boolean | '') => {
+  const updateItem = useCallback((id: string, field: keyof FormItem, value: string | number | boolean | '' | PriceQuote[]) => {
     setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
+      prev.map((i) => {
+        if (i.id !== id) return i;
+        const next = { ...i, [field]: value };
+        if (field === 'required_date') {
+          const priority = calculateInventoryPriority(requestDate, String(value ?? ''));
+          next.urgency_level = priority?.value ?? '';
+        }
+        return next;
+      })
+    );
+  }, [requestDate]);
+
+  const removeQuote = useCallback((itemId: string, quoteId: string) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        return { ...item, price_quotes: item.price_quotes.filter((q) => q.id !== quoteId) };
+      })
     );
   }, []);
+
+  /** Apply a comparison quote into the main cost / vendor / product link fields. */
+  const applyQuoteToItem = useCallback((itemId: string, quote: PriceQuote) => {
+    if (quote.price === '' || !Number.isFinite(Number(quote.price)) || Number(quote.price) <= 0) {
+      toast.error('This quote has no valid price.');
+      return;
+    }
+    const meta = ecommerceSources.find((s) => s.id === quote.source);
+    const vendorName = meta?.vendorName || toVendorStorageName(quote.source_label) || 'OTHER';
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          estimated_cost: Number(quote.price),
+          price_currency: quote.currency,
+          vendor: vendorName,
+          product_link: quote.link.trim() || item.product_link,
+        };
+      })
+    );
+    setPriceDraftByItemId((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    toast.success(`Using ${quote.source_label} price (${formatCurrencyDisplay(quote.price)} ${quote.currency}).`);
+  }, [ecommerceSources]);
+
+  /** Apply live API results into quote rows for one item. */
+  const applyLivePriceResults = useCallback(
+    (itemId: string, data: LivePriceCompareResponse, name: string, specifications: string) => {
+      const catalog =
+        data.vendors && data.vendors.length > 0
+          ? [
+              ...data.vendors.map((v) => ({
+                id: String(v.id || '').toLowerCase(),
+                label: String(v.label || v.id || ''),
+                vendorName: String(v.vendorName || ''),
+                hostIncludes: v.hostIncludes || [],
+                profile: v.profile,
+              })),
+              { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] },
+            ]
+          : ecommerceSources;
+
+      const mapped = (data?.results ?? [])
+        .map((r) => quoteFromLiveResult(r, catalog))
+        .filter(Boolean) as PriceQuote[];
+
+      // Keep only close matches for the requested name + specifications.
+      const exactMatches = mapped.filter((q) =>
+        isExactEnoughProductMatch(q.title || '', name, specifications)
+      );
+
+      const MAX_PER_SOURCE = 3;
+      const SOURCE_ORDER = [
+        ...catalog.map((s) => s.id).filter((id) => id !== 'other'),
+        'other',
+      ];
+      const grouped = new Map<string, PriceQuote[]>();
+      const seenLinks = new Set<string>();
+      for (const q of exactMatches) {
+        const linkKey = (q.link || '').trim().toLowerCase();
+        if (linkKey) {
+          if (seenLinks.has(linkKey)) continue;
+          seenLinks.add(linkKey);
+        }
+        const list = grouped.get(q.source) ?? [];
+        list.push(q);
+        grouped.set(q.source, list);
+      }
+
+      const nextQuotes: PriceQuote[] = [];
+      const orderSet = new Set(SOURCE_ORDER);
+      for (const source of SOURCE_ORDER) {
+        const list = (grouped.get(source) ?? [])
+          .slice()
+          .sort((a, b) => Number(a.price) - Number(b.price))
+          .slice(0, MAX_PER_SOURCE);
+        nextQuotes.push(...list);
+      }
+      for (const [source, list] of grouped) {
+        if (orderSet.has(source)) continue;
+        nextQuotes.push(
+          ...list
+            .slice()
+            .sort((a, b) => Number(a.price) - Number(b.price))
+            .slice(0, MAX_PER_SOURCE)
+        );
+      }
+
+      nextQuotes.sort((a, b) => {
+        const ai = SOURCE_ORDER.indexOf(a.source);
+        const bi = SOURCE_ORDER.indexOf(b.source);
+        const aIdx = ai === -1 ? SOURCE_ORDER.length : ai;
+        const bIdx = bi === -1 ? SOURCE_ORDER.length : bi;
+        if (aIdx !== bIdx) return aIdx - bIdx;
+        const ap = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY;
+        const bp = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY;
+        return ap - bp;
+      });
+
+      if (nextQuotes.length === 0) {
+        setItems((prev) =>
+          prev.map((row) => (row.id === itemId ? { ...row, price_quotes: [] } : row))
+        );
+        setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
+        toast.error('No product available');
+        return false;
+      }
+
+      setItems((prev) =>
+        prev.map((row) => (row.id === itemId ? { ...row, price_quotes: nextQuotes } : row))
+      );
+      setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'found' }));
+
+      const bySourceCount = SOURCE_ORDER.filter((s) =>
+        nextQuotes.some((q) => q.source === s && typeof q.price === 'number' && q.price > 0)
+      ).length;
+      const cheapest = nextQuotes.reduce((best, q) =>
+        typeof q.price === 'number' &&
+        typeof best.price === 'number' &&
+        q.currency === best.currency &&
+        q.price < best.price
+          ? q
+          : best
+      );
+      if (typeof cheapest.price === 'number') {
+        toast.success(
+          `Loaded prices from ${bySourceCount} site${bySourceCount === 1 ? '' : 's'}. Lowest: ${formatCurrencyDisplay(cheapest.price)} ${cheapest.currency} (${cheapest.source_label})`
+        );
+      } else {
+        toast.success(`Loaded ${nextQuotes.length} live price${nextQuotes.length === 1 ? '' : 's'}.`);
+      }
+      return true;
+    },
+    [ecommerceSources]
+  );
+
+  /** Fetch live prices from configured vendor sites via backend. */
+  const fetchLivePrices = useCallback(
+    async (itemId: string, options?: { skipSpecPrompt?: boolean; specificationsOverride?: string }) => {
+      const item = items.find((i) => i.id === itemId);
+      if (!item) return;
+      const name = (item.item_name_freeform ?? '').trim();
+      const specs = (options?.specificationsOverride ?? item.specifications ?? '').trim();
+      const query = buildPriceSearchQuery(name, specs);
+      const urls = [
+        ...(item.product_link ? [item.product_link.trim()] : []),
+        ...item.price_quotes.map((q) => q.link.trim()).filter(Boolean),
+      ].filter((u, idx, arr) => u && arr.indexOf(u) === idx);
+
+      if (!query && urls.length === 0) {
+        toast.error('Enter an item name (or paste a product URL) to fetch live prices.');
+        return;
+      }
+
+      const pin = normalizeIndianPincode(deliveryPincode);
+      if (!pin) {
+        toast.error('Enter a valid 6-digit delivery PIN code to get delivery dates.');
+        return;
+      }
+
+      setLiveCompareLoadingByItemId((prev) => ({ ...prev, [itemId]: true }));
+      setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'idle' }));
+      try {
+        const res = await apiClient.post<LivePriceCompareResponse>(
+          PRICE_COMPARE_URL,
+          {
+            query: query || undefined,
+            // Backend resolves vendors from profile/config — frontend does not hardcode site lists.
+            profile: priceCompareProfile,
+            urls: urls.length ? urls.slice(0, 8) : undefined,
+            pincode: pin,
+          },
+          { timeout: 90000 }
+        );
+        const data = res.data;
+        if (data?.error) {
+          toast.error(data.error);
+          setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
+          return;
+        }
+
+        const pricedResults = (data?.results ?? []).filter(
+          (r) => r.price != null && Number(r.price) > 0
+        );
+        const titles = pricedResults
+          .map((r) => String(r.title || '').trim())
+          .filter(Boolean);
+
+        if (
+          !options?.skipSpecPrompt &&
+          name &&
+          titlesNeedSpecificationPrompt(titles, name, specs)
+        ) {
+          const facets = extractSpecFacetsFromTitles(titles, name);
+          setSpecPromptItemId(itemId);
+          setSpecFacets(facets);
+          setSpecSelections({});
+          setSpecExtraText(specs);
+          setSpecSampleTitles(titles.slice(0, 6));
+          toast.info('Multiple product variants found. Please choose specifications.');
+          return;
+        }
+
+        // If nothing came back at all, or nothing matches closely enough.
+        const anyExact = pricedResults.some((r) =>
+          isExactEnoughProductMatch(String(r.title || ''), name, specs)
+        );
+        if (pricedResults.length === 0 || !anyExact) {
+          setItems((prev) =>
+            prev.map((row) => (row.id === itemId ? { ...row, price_quotes: [] } : row))
+          );
+          setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
+          toast.error('No product available');
+          return;
+        }
+
+        applyLivePriceResults(itemId, data ?? {}, name, specs);
+      } catch (err: unknown) {
+        const msg =
+          err && typeof err === 'object' && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Failed to fetch live prices.';
+        toast.error(msg);
+        setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
+      } finally {
+        setLiveCompareLoadingByItemId((prev) => ({ ...prev, [itemId]: false }));
+      }
+    },
+    [items, applyLivePriceResults, deliveryPincode, priceCompareProfile]
+  );
+
+  const cancelSpecPrompt = () => {
+    setSpecPromptItemId(null);
+    setSpecFacets([]);
+    setSpecSelections({});
+    setSpecExtraText('');
+    setSpecSampleTitles([]);
+  };
+
+  const confirmSpecPrompt = async () => {
+    const itemId = specPromptItemId;
+    if (!itemId) return;
+    const selected = Object.values(specSelections)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    const extra = specExtraText.trim();
+    const combined = [...selected, extra].filter(Boolean).join(', ');
+    if (!combined) {
+      toast.error('Select or enter at least one specification.');
+      return;
+    }
+    setItems((prev) =>
+      prev.map((row) => (row.id === itemId ? { ...row, specifications: combined } : row))
+    );
+    cancelSpecPrompt();
+    await fetchLivePrices(itemId, { skipSpecPrompt: true, specificationsOverride: combined });
+  };
 
   const startAddVendor = (itemId: string) => {
     setAddVendorForItemId(itemId);
@@ -531,9 +1157,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       const hasAnyInput =
         (item.item_name_freeform ?? '').trim() !== '' ||
         item.quantity_required !== '' ||
+        (item.required_date ?? '').trim() !== '' ||
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
-        (item.urgency_level ?? '').trim() !== '' ||
         (item.product_link ?? '').trim() !== '' ||
         (item.additional_link ?? '').trim() !== '' ||
         (item.comments ?? '').trim() !== '';
@@ -553,9 +1179,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       const hasAnyInput =
         (item.item_name_freeform ?? '').trim() !== '' ||
         item.quantity_required !== '' ||
+        (item.required_date ?? '').trim() !== '' ||
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
-        (item.urgency_level ?? '').trim() !== '' ||
         (item.product_link ?? '').trim() !== '' ||
         (item.additional_link ?? '').trim() !== '' ||
         (item.comments ?? '').trim() !== '';
@@ -570,19 +1196,32 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       for (const item of validItems) {
         await upsertUnmanndProduct(item);
 
+        const priority =
+          calculateInventoryPriority(requestDate, item.required_date) ??
+          (item.urgency_level
+            ? {
+                value: item.urgency_level as 'HIGH' | 'MEDIUM' | 'LOW',
+                label: formatInventoryPriorityLabel(item.urgency_level),
+              }
+            : null);
+
         const payloadData: Record<string, unknown> = {
           status: initialStatus,
           status_text: initialStatusText,
-          // Requestor tracking fields: initialized empty; filled later by ops/procurement flows.
-          tracking_link: null,
-          eta: null,
+          // Shipment tracking fields: initialized empty; filled later by ops/procurement flows.
+          ...emptyShipmentTrackingFields(),
           request_date: requestDate,
+          required_date: (item.required_date ?? '').trim() || null,
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
-          urgency_level: (item.urgency_level ?? '').trim() || '',
+          delivery_pincode: normalizeIndianPincode(deliveryPincode) || '',
+          delivery_address: deliveryAddress.trim() || '',
+          urgency_level: (priority?.value ?? (item.urgency_level ?? '').trim()) || '',
+          priority_label: priority?.label ?? '',
           vendor: toVendorStorageName((item.vendor ?? '').trim()) || '',
           item_name_freeform: (item.item_name_freeform ?? '').trim(),
+          specifications: (item.specifications ?? '').trim() || '',
           quantity_required: typeof item.quantity_required === 'number' ? item.quantity_required : Number(item.quantity_required) || 0,
           product_link: (item.product_link ?? '').trim() || '',
           additional_link: (item.additional_link ?? '').trim() || '',
@@ -598,8 +1237,31 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           payloadData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
         }
         payloadData.including_gst = item.including_gst === true;
+        const filledQuotes = (item.price_quotes ?? [])
+          .filter((q) => q.price !== '' && Number(q.price) > 0)
+          .map((q) => ({
+            source: q.source,
+            source_label: q.source_label,
+            link: (q.link ?? '').trim(),
+            price: Number(q.price),
+            currency: q.currency === 'USD' ? 'USD' : 'INR',
+            title: (q.title ?? '').trim() || undefined,
+            delivery_date: (q.delivery_date ?? '').trim() || undefined,
+            live: q.live === true,
+          }));
+        if (filledQuotes.length > 0) {
+          payloadData.price_comparisons = filledQuotes;
+          const cheapest = filledQuotes.reduce((best, q) =>
+            q.currency === best.currency && q.price < best.price ? q : best
+          );
+          payloadData.cheapest_comparison_price = cheapest.price;
+          payloadData.cheapest_comparison_source = cheapest.source_label;
+        }
         if (teamLeadMembershipId) {
           payloadData.team_lead = teamLeadMembershipId;
+        }
+        if (managerMembershipId) {
+          payloadData.manager = managerMembershipId;
         }
         await apiClient.post(RECORDS_URL, {
           entity_type: entityType,
@@ -608,11 +1270,24 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       }
 
       const count = validItems.length;
-      toast.success(count === 1 ? 'Inventory request created.' : `${count} inventory requests created.`);
+      if (isProcurement) {
+        toast.success(
+          count === 1 ? 'Procurement request created.' : `${count} procurement requests created.`
+        );
+      } else {
+        toast.success(
+          count === 1 ? 'Inventory request created.' : `${count} inventory requests created.`
+        );
+      }
       setItems([newEmptyItem()]);
     } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Failed to create inventory request.';
-      console.error('Failed to create inventory request', err);
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : isProcurement
+            ? 'Failed to create procurement request.'
+            : 'Failed to create inventory request.';
+      console.error('Failed to create request', err);
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -624,21 +1299,507 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     setAddVendorForItemId(null);
     setNewVendorName('');
     setNewVendorLink('');
+    setPriceDraftByItemId({});
+    setDeliveryPincode('');
+    setDeliveryAddress('');
+    setPriceCompareStatusByItemId({});
+    cancelSpecPrompt();
     toast.success('Form cleared.');
   };
 
   const hasAnyItemContent = items.some(
     (i) =>
       (i.item_name_freeform ?? '').trim() !== '' ||
+      (i.specifications ?? '').trim() !== '' ||
       i.quantity_required !== '' ||
+      (i.required_date ?? '').trim() !== '' ||
       (i.vendor ?? '').trim() !== '' ||
       (i.estimated_cost ?? '') !== '' ||
-      (i.urgency_level ?? '').trim() !== '' ||
       (i.comments ?? '').trim() !== '' ||
       (i.product_link ?? '').trim() !== '' ||
-      (i.additional_link ?? '').trim() !== ''
+      (i.additional_link ?? '').trim() !== '' ||
+      (i.price_quotes ?? []).some(
+        (q) => (q.link ?? '').trim() !== '' || (q.price !== '' && Number(q.price) > 0)
+      )
   );
   const isFormEmpty = !hasAnyItemContent;
+
+  const addVendorDialog = (
+    <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add vendor</DialogTitle>
+          <DialogDescription>Create a vendor and auto-fill it for this item.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Input
+            placeholder="Vendor name *"
+            value={newVendorName}
+            onChange={(e) => setNewVendorName(e.target.value)}
+            className="h-10"
+          />
+          <Input
+            placeholder="Vendor site link (optional)"
+            type="url"
+            value={newVendorLink}
+            onChange={(e) => setNewVendorLink(e.target.value)}
+            className="h-10"
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={cancelAddVendor}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={saveNewVendor}
+            disabled={savingNewVendor || !newVendorName.trim()}
+          >
+            {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Save vendor
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  const sectionLabel = (title: string) => (
+    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+  );
+
+  if (isProcurement) {
+    return (
+      <Card className="overflow-hidden border border-border shadow-sm">
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <div className="border-b border-border/60 bg-muted/25 px-6 py-5">
+            <h2 className="text-lg font-semibold tracking-tight">New Request</h2>
+          </div>
+
+          <CardContent className="space-y-8 px-6 py-6">
+            <div className="grid grid-cols-1 gap-4 rounded-lg border border-border/60 bg-muted/30 p-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Requester</Label>
+                <Input value={requesterDisplay} readOnly disabled className="h-10 bg-background/80 font-medium" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Department</Label>
+                <Input
+                  value={department}
+                  readOnly
+                  disabled
+                  placeholder="—"
+                  className="h-10 bg-background/80 font-medium"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Request date</Label>
+                <Input value={requestDate} readOnly disabled className="h-10 bg-background/80 font-medium" />
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              {items.map((item, itemIndex) => (
+                <div
+                  key={item.id}
+                  className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
+                    <Badge variant="outline" className="font-medium">
+                      Item {itemIndex + 1}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length <= 1}
+                      className="h-8 gap-1.5 text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove
+                    </Button>
+                  </div>
+
+                  <div className="space-y-6 p-5">
+                    <div>
+                      {sectionLabel('Item details')}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto]">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Item name *</Label>
+                          <div className="relative">
+                            <Input
+                              placeholder="Describe the item"
+                              value={item.item_name_freeform}
+                              className="h-10"
+                              onFocus={() => {
+                                setFocusedItemNameId(item.id);
+                                setItemNameQuery(item.item_name_freeform || '');
+                                if ((item.item_name_freeform || '').trim().length >= 2) {
+                                  setItemNameSuggestionsOpen(itemNameSuggestions.length > 0);
+                                }
+                              }}
+                              onBlur={() => {
+                                window.setTimeout(() => {
+                                  setFocusedItemNameId((prev) => (prev === item.id ? null : prev));
+                                  setItemNameSuggestionsOpen(false);
+                                }, 150);
+                              }}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                updateItem(item.id, 'item_name_freeform', v);
+                                setFocusedItemNameId(item.id);
+                                setItemNameQuery(v);
+                                if (v.trim().length >= 2) setItemNameSuggestionsOpen(true);
+                              }}
+                            />
+                            {focusedItemNameId === item.id &&
+                              (itemNameSuggestionsOpen || itemNameSuggestionsLoading) && (
+                                <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-md">
+                                  {itemNameSuggestionsLoading ? (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">Searching…</div>
+                                  ) : itemNameSuggestions.length === 0 ? (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">No matches</div>
+                                  ) : (
+                                    <div className="max-h-56 overflow-auto">
+                                      {itemNameSuggestions.map((s) => (
+                                        <button
+                                          key={s.id}
+                                          type="button"
+                                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                                          onMouseDown={(ev) => ev.preventDefault()}
+                                          onClick={() => {
+                                            updateItem(item.id, 'item_name_freeform', s.name);
+                                            const d = s.data || {};
+                                            const vendor = toVendorStorageName(
+                                              String((d.default_vendor ?? d.vendor ?? '') as any).trim()
+                                            );
+                                            if (vendor) updateItem(item.id, 'vendor', vendor);
+                                            const costRaw =
+                                              d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
+                                            const costNum =
+                                              costRaw === '' || costRaw == null ? '' : Number(costRaw);
+                                            if (costNum !== '' && Number.isFinite(costNum))
+                                              updateItem(item.id, 'estimated_cost', costNum);
+                                            const suggestedCurrency = String(
+                                              (d.price_currency ?? d.currency ?? 'INR') as any
+                                            )
+                                              .trim()
+                                              .toUpperCase();
+                                            if (suggestedCurrency === 'USD' || suggestedCurrency === 'INR') {
+                                              updateItem(
+                                                item.id,
+                                                'price_currency',
+                                                suggestedCurrency as 'INR' | 'USD'
+                                              );
+                                            }
+                                            const productLink = String(
+                                              (d.product_link ?? d.link ?? '') as any
+                                            ).trim();
+                                            if (productLink) updateItem(item.id, 'product_link', productLink);
+                                            const additionalLink = String(
+                                              (d.additional_link ?? d.vendor_site_link ?? '') as any
+                                            ).trim();
+                                            if (additionalLink)
+                                              updateItem(item.id, 'additional_link', additionalLink);
+                                            if (typeof d.including_gst === 'boolean')
+                                              updateItem(item.id, 'including_gst', d.including_gst);
+                                            setItemNameSuggestionsOpen(false);
+                                            setFocusedItemNameId(null);
+                                          }}
+                                        >
+                                          <span className="truncate">{s.name}</span>
+                                          <span className="shrink-0 text-xs text-muted-foreground">#{s.id}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5 sm:w-32">
+                          <Label className="text-sm font-medium">Quantity *</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={item.quantity_required === '' ? '' : item.quantity_required}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              updateItem(item.id, 'quantity_required', v === '' ? '' : Number(v));
+                            }}
+                            placeholder="0"
+                            className="h-10"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Cost & vendor')}
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium">Estimated cost *</Label>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={
+                                priceDraftByItemId[item.id] ?? formatCurrencyDisplay(item.estimated_cost)
+                              }
+                              onChange={(e) => {
+                                const { display, value } = formatCurrencyInputLive(e.target.value);
+                                setPriceDraftByItemId((prev) => ({ ...prev, [item.id]: display }));
+                                updateItem(item.id, 'estimated_cost', value);
+                              }}
+                              onBlur={() => {
+                                setPriceDraftByItemId((prev) => {
+                                  const next = { ...prev };
+                                  delete next[item.id];
+                                  return next;
+                                });
+                                if (
+                                  item.estimated_cost !== '' &&
+                                  typeof item.estimated_cost === 'number'
+                                ) {
+                                  updateItem(
+                                    item.id,
+                                    'estimated_cost',
+                                    Math.round(item.estimated_cost * 100) / 100
+                                  );
+                                }
+                              }}
+                              className="h-10 min-w-[8rem] font-mono tabular-nums"
+                            />
+                            <Select
+                              value={item.price_currency || 'INR'}
+                              onValueChange={(v) =>
+                                updateItem(item.id, 'price_currency', v === 'USD' ? 'USD' : 'INR')
+                              }
+                            >
+                              <SelectTrigger className="h-10 w-24">
+                                <SelectValue placeholder="INR" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="INR">INR</SelectItem>
+                                <SelectItem value="USD">USD</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
+                              <Checkbox
+                                checked={item.including_gst === true}
+                                onCheckedChange={(checked) =>
+                                  updateItem(item.id, 'including_gst', checked === true)
+                                }
+                              />
+                              <span className="text-xs font-medium">Including GST</span>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Vendor *</Label>
+                          <div className="flex items-start gap-2">
+                            <div className="relative min-w-0 flex-1">
+                              <Input
+                                value={item.vendor}
+                                placeholder="Search or add vendor"
+                                className="h-10 w-full"
+                                onFocus={() => {
+                                  setFocusedVendorId(item.id);
+                                  setVendorQuery(item.vendor || '');
+                                  setVendorSuggestionsOpen(true);
+                                }}
+                                onBlur={() => {
+                                  window.setTimeout(() => {
+                                    setFocusedVendorId((prev) => (prev === item.id ? null : prev));
+                                    setVendorSuggestionsOpen(false);
+                                  }, 150);
+                                }}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  updateItem(item.id, 'vendor', toVendorStorageName(v));
+                                  setFocusedVendorId(item.id);
+                                  setVendorQuery(v);
+                                  setVendorSuggestionsOpen(true);
+                                }}
+                              />
+                              {focusedVendorId === item.id && vendorSuggestionsOpen && (
+                                <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-md">
+                                  {vendorsLoading ? (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
+                                  ) : (
+                                    <div className="max-h-56 overflow-auto">
+                                      {(() => {
+                                        const q = vendorQuery.trim().toLowerCase();
+                                        const filtered = q
+                                          ? vendors.filter((v) => v.name.toLowerCase().includes(q)).slice(0, 12)
+                                          : vendors.slice(0, 12);
+                                        if (filtered.length === 0) {
+                                          return (
+                                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                                              No matches
+                                            </div>
+                                          );
+                                        }
+                                        return filtered.map((v) => (
+                                          <button
+                                            key={v.id}
+                                            type="button"
+                                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                                            onMouseDown={(ev) => ev.preventDefault()}
+                                            onClick={() => {
+                                              updateItem(item.id, 'vendor', v.name);
+                                              setVendorSuggestionsOpen(false);
+                                              setFocusedVendorId(null);
+                                            }}
+                                          >
+                                            <span className="truncate">{v.name}</span>
+                                            <span className="shrink-0 text-xs text-muted-foreground">#{v.id}</span>
+                                          </button>
+                                        ));
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-10 shrink-0"
+                              onClick={() => {
+                                startAddVendor(item.id);
+                                setVendorSuggestionsOpen(false);
+                                setFocusedVendorId(null);
+                              }}
+                            >
+                              + Add vendor
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Dates & priority')}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Requirement date *</Label>
+                          <Input
+                            type="date"
+                            value={item.required_date}
+                            onChange={(e) => updateItem(item.id, 'required_date', e.target.value)}
+                            className="h-10"
+                          />
+                          <p className="text-xs text-muted-foreground">When this item is needed.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Priority</Label>
+                          {item.urgency_level ? (
+                            <Badge
+                              variant="outline"
+                              className={cn('px-3 py-1 text-sm font-medium', priorityChipClass(item.urgency_level))}
+                            >
+                              {priorityShortLabel(item.urgency_level)}
+                            </Badge>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">Set requirement date to calculate priority.</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            High = same day · Middle = 2–5 days · Low = more than 5 days from request date.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Links')}
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Product link *</Label>
+                          <Input
+                            type="url"
+                            placeholder="https://..."
+                            value={item.product_link}
+                            onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Additional link (optional)</Label>
+                          <Input
+                            type="url"
+                            placeholder="https://..."
+                            value={item.additional_link}
+                            onChange={(e) => updateItem(item.id, 'additional_link', e.target.value)}
+                            className="h-10"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      {sectionLabel('Comments')}
+                      <Textarea
+                        placeholder="Notes for procurement (optional)"
+                        value={item.comments}
+                        onChange={(e) => updateItem(item.id, 'comments', e.target.value)}
+                        rows={3}
+                        className="min-h-[72px] resize-y text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <Button type="button" variant="outline" onClick={addItem} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add item
+              </Button>
+            </div>
+          </CardContent>
+
+          <CardFooter className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div>
+              {!user && (
+                <span className="text-sm text-muted-foreground">You must be signed in to submit.</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClear}
+                disabled={submitting || isFormEmpty}
+                className="min-w-[100px]"
+              >
+                Clear
+              </Button>
+              <Button type="submit" disabled={submitting || !user} className="min-w-[160px] gap-2">
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating…
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Create request
+                    {items.filter((i) => (i.item_name_freeform ?? '').trim() && i.quantity_required !== '').length > 1
+                      ? 's'
+                      : ''}
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardFooter>
+        </form>
+        {addVendorDialog}
+      </Card>
+    );
+  }
 
   return (
     <Card className="overflow-hidden border border-border/60 shadow-md">
@@ -673,6 +1834,47 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 placeholder="—"
                 className="h-10 bg-muted/50 font-medium"
               />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label
+                  htmlFor="delivery-pincode"
+                  className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  Delivery PIN code <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="delivery-pincode"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="e.g. 560001"
+                  value={deliveryPincode}
+                  onChange={(e) => setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="h-10 font-medium"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Required for live delivery dates (Amazon and similar).
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="delivery-address"
+                  className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
+                >
+                  Delivery address
+                </Label>
+                <Input
+                  id="delivery-address"
+                  placeholder="Building, street, city"
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  className="h-10 font-medium"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Where this order should be delivered.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -766,6 +1968,13 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
                                     if (typeof d.including_gst === 'boolean') updateItem(item.id, 'including_gst', d.including_gst);
 
+                                    const catalogSpecs = String(
+                                      (d.specifications ?? d.specs ?? d.specification ?? d.short_description ?? '') as any
+                                    ).trim();
+                                    if (catalogSpecs) {
+                                      updateItem(item.id, 'specifications', catalogSpecs.slice(0, 180));
+                                    }
+
                                     setItemNameSuggestionsOpen(false);
                                     setFocusedItemNameId(null);
                                   }}
@@ -780,6 +1989,244 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                       )}
                     </div>
                   </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs font-medium">Specifications</Label>
+                    <Input
+                      placeholder="e.g. 30 cm, USB A to Mini B, gold-plated, with cable"
+                      value={item.specifications}
+                      onChange={(e) => updateItem(item.id, 'specifications', e.target.value)}
+                      className="h-9"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Add length, connector, model, or other details so live search returns the right product.
+                    </p>
+                  </div>
+
+                  {/* E-commerce price comparison (multi-vendor live search) */}
+                  <div className="sm:col-span-2 rounded-md border border-dashed border-border/80 bg-background/60 p-3 space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                          <Scale className="h-3.5 w-3.5" />
+                          Price comparison
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          Live quotes from configured vendors (default: core sites). Switch to Extended for the full catalog.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        <Select
+                          value={priceCompareProfile}
+                          onValueChange={(v) =>
+                            setPriceCompareProfile(v === 'extended' ? 'extended' : 'core')
+                          }
+                        >
+                          <SelectTrigger className="h-7 w-[8.5rem] text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="core">Core vendors</SelectItem>
+                            <SelectItem value="extended">Extended vendors</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 gap-1 text-xs"
+                          disabled={
+                            !!liveCompareLoadingByItemId[item.id] ||
+                            !normalizeIndianPincode(deliveryPincode)
+                          }
+                          onClick={() => fetchLivePrices(item.id)}
+                          title={
+                            normalizeIndianPincode(deliveryPincode)
+                              ? undefined
+                              : 'Enter a valid delivery PIN code first'
+                          }
+                        >
+                          {liveCompareLoadingByItemId[item.id] ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3 w-3" />
+                          )}
+                          Fetch live prices
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-end">
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor={`delivery-pincode-${item.id}`}
+                          className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1"
+                        >
+                          <MapPin className="h-3 w-3" />
+                          Delivery PIN <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id={`delivery-pincode-${item.id}`}
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="560001"
+                          value={deliveryPincode}
+                          onChange={(e) =>
+                            setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                          }
+                          className="h-8 font-mono text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1 min-w-0">
+                        <Label
+                          htmlFor={`delivery-address-${item.id}`}
+                          className="text-[10px] text-muted-foreground uppercase tracking-wide"
+                        >
+                          Delivery address
+                        </Label>
+                        <Input
+                          id={`delivery-address-${item.id}`}
+                          placeholder="Building, street, city"
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {item.price_quotes.length > 0 ? (() => {
+                      const priced = item.price_quotes.filter(
+                        (q) => q.price !== '' && Number.isFinite(Number(q.price)) && Number(q.price) > 0
+                      );
+                      const lowestId =
+                        priced.length > 0
+                          ? priced.reduce((best, q) =>
+                              q.currency === best.currency && Number(q.price) < Number(best.price) ? q : best
+                            ).id
+                          : null;
+
+                      return (
+                        <div className="space-y-2">
+                          {item.price_quotes.map((quote) => {
+                            const isLowest = lowestId === quote.id;
+                            const sourceLabel =
+                              quote.source_label ||
+                              ecommerceSources.find((s) => s.id === quote.source)?.label ||
+                              quote.source;
+                            const priceText =
+                              quote.price !== '' && Number.isFinite(Number(quote.price))
+                                ? `${formatCurrencyDisplay(quote.price)} ${quote.currency || 'INR'}`
+                                : '—';
+                            const deliveryText = (quote.delivery_date || '').trim() || '—';
+                            return (
+                              <div
+                                key={quote.id}
+                                className={`rounded-md border p-2 space-y-2 ${
+                                  isLowest ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-border/50'
+                                }`}
+                              >
+                                {quote.title ? (
+                                  <p className="text-[11px] text-muted-foreground truncate" title={quote.title}>
+                                    {quote.live ? 'Live · ' : ''}
+                                    {quote.title}
+                                  </p>
+                                ) : null}
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[6.5rem_minmax(0,1fr)_7.5rem_7.5rem_auto] sm:items-center">
+                                  <div className="space-y-0.5 min-w-0">
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                      Source
+                                    </p>
+                                    <p className="text-xs font-medium truncate" title={sourceLabel}>
+                                      {sourceLabel}
+                                    </p>
+                                  </div>
+                                  <div className="space-y-0.5 min-w-0">
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                      Product
+                                    </p>
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      <p
+                                        className="text-xs text-muted-foreground truncate min-w-0 flex-1"
+                                        title={quote.link || undefined}
+                                      >
+                                        {quote.link.trim() || '—'}
+                                      </p>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 shrink-0 gap-1 text-xs px-2"
+                                        disabled={!quote.link.trim()}
+                                        onClick={() => {
+                                          const url = quote.link.trim();
+                                          if (!url) return;
+                                          const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+                                          window.open(href, '_blank', 'noopener,noreferrer');
+                                        }}
+                                        title="Open product page"
+                                        aria-label="Open product page"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                        Open
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-0.5 min-w-0">
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                      Delivery
+                                    </p>
+                                    <p className="text-xs font-medium truncate" title={deliveryText}>
+                                      {deliveryText}
+                                    </p>
+                                  </div>
+                                  <div className="space-y-0.5 min-w-0">
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                                      Price
+                                      {isLowest && (
+                                        <span className="rounded bg-emerald-600/15 px-1 py-0.5 text-[9px] font-semibold text-emerald-700 dark:text-emerald-400 normal-case tracking-normal">
+                                          Lowest
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-xs font-mono tabular-nums font-medium">{priceText}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1 sm:justify-end">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant={isLowest ? 'default' : 'secondary'}
+                                      className="h-8 text-xs"
+                                      onClick={() => applyQuoteToItem(item.id, quote)}
+                                    >
+                                      Use
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                                      onClick={() => removeQuote(item.id, quote.id)}
+                                      aria-label="Remove quote"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })() : priceCompareStatusByItemId[item.id] === 'unavailable' ? (
+                      <p className="text-sm text-muted-foreground py-1">
+                        No product available
+                      </p>
+                    ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Enter delivery PIN above, item name (and specs if needed), then click Fetch live prices.
+                        </p>
+                    )}
+                  </div>
+
                   <div className="flex flex-wrap items-end gap-4 sm:col-span-2 w-full">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium">Quantity *</Label>
@@ -939,6 +2386,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                       className="h-9"
                     />
                   </div>
+
+
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Additional link (optional)</Label>
                     <Input
@@ -950,21 +2399,28 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Priority / Urgency *</Label>
-                    <div className="flex flex-wrap gap-2" role="group" aria-label="Priority level">
-                      {normalizedUrgencyOptions.map((o) => (
-                        <Button
-                          key={o.value}
-                          type="button"
-                          variant={item.urgency_level === o.value ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => updateItem(item.id, 'urgency_level', item.urgency_level === o.value ? '' : o.value)}
-                          className="rounded-full h-8"
-                        >
-                          {o.label}
-                        </Button>
-                      ))}
-                    </div>
+                    <Label className="text-xs font-medium">Requirement date *</Label>
+                    <Input
+                      type="date"
+                      value={item.required_date}
+                      onChange={(e) => updateItem(item.id, 'required_date', e.target.value)}
+                      className="h-9"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Date by which this item is needed.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs font-medium">Priority (auto)</Label>
+                    <Input
+                      value={item.urgency_level ? formatInventoryPriorityLabel(item.urgency_level) : 'Select requirement date'}
+                      readOnly
+                      disabled
+                      className="h-9 bg-muted/50 font-medium"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      High = same day, Middle = 2–5 days, Low = more than 5 days from request date.
+                    </p>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Comments (optional)</Label>
@@ -1057,6 +2513,93 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={specPromptItemId !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelSpecPrompt();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Choose product specifications</DialogTitle>
+            <DialogDescription>
+              Your item name matches multiple variants. Pick the specs you need so we fetch the right prices.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-auto pr-1">
+            {specSampleTitles.length > 0 && (
+              <div className="rounded-md border bg-muted/30 p-2 space-y-1">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Sample matches
+                </p>
+                {specSampleTitles.map((t) => (
+                  <p key={t} className="text-xs text-muted-foreground truncate" title={t}>
+                    · {t}
+                  </p>
+                ))}
+              </div>
+            )}
+            {specFacets.map((facet) => (
+              <div key={facet.key} className="space-y-1.5">
+                <Label className="text-xs font-medium">{facet.label}</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {facet.options.map((opt) => {
+                    const selected = specSelections[facet.key] === opt;
+                    return (
+                      <Button
+                        key={opt}
+                        type="button"
+                        size="sm"
+                        variant={selected ? 'default' : 'outline'}
+                        className="h-7 rounded-full text-xs"
+                        onClick={() =>
+                          setSpecSelections((prev) => ({
+                            ...prev,
+                            [facet.key]: selected ? '' : opt,
+                          }))
+                        }
+                      >
+                        {opt}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                {specFacets.length > 0 ? 'Additional details (optional)' : 'Specifications *'}
+              </Label>
+              <Input
+                placeholder="e.g. 30 cm, USB A–Mini B, nickel-plated"
+                value={specExtraText}
+                onChange={(e) => setSpecExtraText(e.target.value)}
+                className="h-9"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                const itemId = specPromptItemId;
+                cancelSpecPrompt();
+                if (itemId) {
+                  await fetchLivePrices(itemId, { skipSpecPrompt: true });
+                }
+              }}
+            >
+              Skip &amp; show all
+            </Button>
+            <Button type="button" onClick={confirmSpecPrompt}>
+              Apply &amp; fetch prices
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {addVendorDialog}
     </Card>
   );
 };

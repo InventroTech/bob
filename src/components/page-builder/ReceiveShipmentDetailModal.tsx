@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { getInventoryStatusLabel, getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventoryStatusStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 
@@ -29,7 +29,11 @@ const FIELDS_TO_SHOW = [
   { key: 'part_number_or_sku', label: 'Part / SKU' },
   { key: 'quantity_required', label: 'Quantity' },
   { key: 'vendor_name', label: 'Vendor' },
+  { key: 'shipment_status', label: 'Shipment' },
+  { key: 'tracking_number', label: 'Tracking no' },
   { key: 'tracking_link', label: 'Tracking' },
+  { key: 'courier_name', label: 'Courier' },
+  { key: 'eta', label: 'ETA' },
   { key: 'comments', label: 'Comments' },
 ];
 
@@ -131,6 +135,15 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
                       )}
                     >
                       {getInventoryStatusLabel(data[key])}
+                    </span>
+                  ) : key === 'shipment_status' ? (
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide',
+                        getShipmentStatusToneClass(data[key]),
+                      )}
+                    >
+                      {getShipmentStatusLabel(data[key])}
                     </span>
                   ) : (
                     (data[key] != null && data[key] !== '' ? String(data[key]) : '—')

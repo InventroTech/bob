@@ -28,11 +28,11 @@ import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/actionApiUtils';
-import { convertGMTtoIST } from '@/lib/timeUtils';
+import { formatCalendarDate } from '@/lib/timeUtils';
 import { getEffectiveToken, useSpoofUserId } from '@/lib/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
-import { getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventoryStatusStyles';
 
 interface Column {
   header: string;
@@ -260,13 +260,24 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
       } else {
         // Apply default transformations based on field type
         switch (col.type) {
-          case 'date':
-            transformedLead[col.key] = value !== null && value !== undefined
-              ? (config?.entityType?.startsWith('inventory_')
-                  ? convertGMTtoIST(String(value), 'date')
-                  : formatRelativeTime(String(value)))
-              : 'N/A';
+          case 'date': {
+            if (value === null || value === undefined) {
+              transformedLead[col.key] = 'N/A';
+              break;
+            }
+            const entityType = String(config?.entityType || '');
+            // Request / requirement / inventory / unmannd: show calendar day (e.g. Jul 22, 2026), not "12 hours ago".
+            const useCalendarDate =
+              entityType.startsWith('inventory_') ||
+              entityType === 'unmannd_request' ||
+              col.key === 'request_date' ||
+              col.key === 'required_date' ||
+              col.key === 'created_at';
+            transformedLead[col.key] = useCalendarDate
+              ? formatCalendarDate(String(value))
+              : formatRelativeTime(String(value));
             break;
+          }
           default:
             transformedLead[col.key] = value !== null && value !== undefined ? value : 'N/A';
         }
@@ -394,6 +405,11 @@ interface LeadTableProps {
     };
     /** Show Save button in form-style modal footer. If undefined, Save shows only when there are no action buttons. */
     showFormModalSaveButton?: boolean;
+    /**
+     * Inventory All Requests actor for built-in modal buttons.
+     * manager = Approve/Reject; team_lead = Order only; auto = from role.
+     */
+    inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
     /** Form-style modal: show the extra “Final price” computed block. Default true when omitted. */
     showFinalPriceSection?: boolean;
     /** Default modal: show requestor-side "Delete request" action. Default false. */
@@ -634,6 +650,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const resolvedApiEndpoint = useMemo(() => {
     if (!config?.apiEndpoint) return undefined;
     let endpoint = applyPlaceholderTemplate(config.apiEndpoint, resolvePlaceholderValue);
+
+    // Allow Page Builder URLs like `/crm-records/records?&entity_type=unmannd_request`
+    endpoint = endpoint
+      .replace(/\/crm-records\/records\?/, '/crm-records/records/?')
+      .replace(/\?&+/g, '?');
     
     // GM users should see all leads - remove assigned_to from URL if present
     if (isGM && endpoint) {
@@ -1193,15 +1214,37 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
     // Render link type columns
     if (column.type === 'link') {
-      if (!displayValue || displayValue === '#' || displayValue === 'N/A') {
+      const accessor = String(column.accessor || '');
+      const isTrackingCol =
+        accessor === 'tracking_link' ||
+        accessor === 'tracking_link_url' ||
+        String(column.header || '').toLowerCase() === 'track' ||
+        String(column.header || '').toLowerCase().includes('tracking');
+
+      const href = displayValue;
+      if (
+        isTrackingCol &&
+        (!href || href === '#' || href === 'N/A') &&
+        row.tracking_number &&
+        row.tracking_number !== 'N/A'
+      ) {
+        // No link yet — show tracking number as plain text
+        return (
+          <span className="text-sm font-mono" title={String(row.tracking_number)}>
+            {truncateText(String(row.tracking_number), columnIndex)}
+          </span>
+        );
+      }
+
+      if (!href || href === '#' || href === 'N/A') {
         return <span className="text-gray-400 text-sm">-</span>;
       }
-      
+
       // Check if it's a profile link
       if (column.accessor === 'user_profile_link' || column.header.toLowerCase().includes('profile')) {
         return (
           <a
-            href={displayValue}
+            href={href}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
@@ -1217,7 +1260,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       if (column.accessor === 'whatsapp_link' || column.header.toLowerCase().includes('whatsapp') || column.header.toLowerCase().includes('whats')) {
         return (
           <a
-            href={displayValue}
+            href={href}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors"
@@ -1228,18 +1271,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           </a>
         );
       }
+
+      const linkLabel = isTrackingCol ? 'Track' : 'Link';
       
       // Default link rendering
       return (
         <a
-          href={value}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink className="h-4 w-4" />
-            <span className="text-sm">{truncateText('Link', columnIndex)}</span>
+            <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
         </a>
       );
     }
@@ -1276,14 +1321,23 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
 
     // Render chip/badge for chip type columns
     if (column.type === 'chip') {
+      const accessorLower = String(column.accessor || '').toLowerCase();
+      const useShipmentTone =
+        (config?.entityType === 'inventory_request' || config?.tableType === 'itemsTable') &&
+        accessorLower === 'shipment_status';
       const useInventoryStatusTone =
-        config?.tableType === 'itemsTable' && String(column.accessor || '').toLowerCase() === 'status';
-      const chipToneClass = useInventoryStatusTone
-        ? getInventoryStatusToneClass(displayValue)
-        : getStatusColor(displayValue, config?.statusColors);
+        config?.tableType === 'itemsTable' && accessorLower === 'status';
+      const chipToneClass = useShipmentTone
+        ? getShipmentStatusToneClass(displayValue)
+        : useInventoryStatusTone
+          ? getInventoryStatusToneClass(displayValue)
+          : getStatusColor(displayValue, config?.statusColors);
+      const chipLabel = useShipmentTone
+        ? getShipmentStatusLabel(displayValue)
+        : displayValue;
       return (
         <Badge className={`${chipToneClass} hover:bg-gray-500 hover:text-white text-xs px-2 py-0.5`}>
-          {truncateText(displayValue, columnIndex)}
+          {truncateText(chipLabel, columnIndex)}
         </Badge>
       );
     }
@@ -1505,7 +1559,12 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         params = new URLSearchParams();
 
         // Only add entity_type if using generic records endpoint and entityType is configured
-        if (endpoint.includes('/crm-records/records') && config?.entityType) {
+        // (and the endpoint URL does not already include entity_type)
+        if (
+          endpoint.includes('/crm-records/records') &&
+          config?.entityType &&
+          !/[?&]entity_type=/.test(endpoint)
+        ) {
           params.append('entity_type', config.entityType);
         }
 
@@ -1922,12 +1981,20 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     let params: URLSearchParams;
     if (useDynamicFilters) {
       params = service.generateQueryParams(filterState.values);
-      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+      if (
+        endpoint.includes('/crm-records/records') &&
+        config?.entityType &&
+        !/[?&]entity_type=/.test(endpoint)
+      ) {
         params.append('entity_type', config.entityType);
       }
     } else {
       params = new URLSearchParams();
-      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+      if (
+        endpoint.includes('/crm-records/records') &&
+        config?.entityType &&
+        !/[?&]entity_type=/.test(endpoint)
+      ) {
         params.append('entity_type', config.entityType);
       }
       if (config?.defaultFilters?.lead_stage && config.defaultFilters.lead_stage.length > 0) {
@@ -1977,10 +2044,21 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     }
 
     if (!initialRecordsFetchKey) {
+      // No fetch key yet: clear loading unless we're still waiting on membership.
       if (!session?.access_token) {
         lastInitialFetchKeyRef.current = '';
         setLoading(false);
+        return;
       }
+      if (!membershipLoaded) {
+        // Still resolving membership / placeholders — keep loading.
+        return;
+      }
+      // Logged in + membership ready, but no apiEndpoint / nothing to fetch (e.g. fresh drag).
+      lastInitialFetchKeyRef.current = '';
+      setData([]);
+      setFilteredData([]);
+      setLoading(false);
       return;
     }
 
@@ -2083,6 +2161,8 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     buildInitialRecordsParams,
     config?.showFallbackOnly,
     session?.access_token,
+    membershipLoaded,
+    effectiveApiEndpoint,
     updateURL,
     toast,
   ]);
@@ -2103,6 +2183,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-gray-600">Loading data...</div>
+      </div>
+    );
+  }
+
+  if (!effectiveApiEndpoint) {
+    return (
+      <div className="w-full border-2 border-dashed border-gray-300 rounded-lg bg-white p-8 text-center space-y-2">
+        <div className="text-sm font-medium text-gray-800">Records Table (API)</div>
+        <div className="text-sm text-gray-600">
+          Configure an <span className="font-mono text-xs">API Endpoint</span> (and entity type) in the
+          component settings to load requests.
+        </div>
       </div>
     );
   }
@@ -2505,6 +2597,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           actionButtons={effectiveDetailMode === 'inventory_payment_modal' ? undefined : config?.statusButtons}
           paymentButtonConfig={effectiveDetailMode === 'inventory_payment_modal' ? config?.paymentModalConfig : undefined}
           showSaveButton={config?.showFormModalSaveButton}
+          inventoryWorkflowMode={config?.inventoryWorkflowMode}
           showFinalPriceSection={config?.showFinalPriceSection}
           modalFlags={config?.modalFlags}
           cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}

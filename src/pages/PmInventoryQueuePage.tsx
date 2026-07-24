@@ -5,7 +5,7 @@ import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 /** Active (non-terminal) statuses shown in PM queue. */
 const PM_QUEUE_STATUSES = INVENTORY_REQUEST_STATUSES.filter(
-  (s) => !['DRAFT', 'FULFILLED', 'REJECTED'].includes(s)
+  (s) => !['FULFILLED', 'REJECTED'].includes(s)
 ).join(',');
 
 const PmInventoryQueuePage: React.FC = () => {
