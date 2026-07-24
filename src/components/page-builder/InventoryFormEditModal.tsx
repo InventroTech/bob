@@ -22,12 +22,12 @@ import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
+import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
 import {
-  urgencyToneButtonClassName,
-  urgencyReadonlyFieldCardClassName,
-  urgencyReadonlyValueTextClassName,
-  isUrgencyToneValue,
-} from '@/lib/urgencyButtonStyles';
+  resolvePriorityFromRow,
+  inventoryPriorityFieldCardClassName,
+  inventoryPriorityValueTextClassName,
+} from '@/lib/inventoryPriority';
 import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
@@ -188,10 +188,6 @@ function toCurrencyNumber(value: unknown): number | null {
 
 /** Keys that we render as textarea (multi-line). */
 const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_freeform', 'project_purpose']);
-const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'STANDARD', label: 'Standard' },
-  { value: 'CRITICAL', label: 'Critical' },
-];
 
 /** Keys that are typically numbers. */
 const NUMBER_KEYS = new Set([
@@ -1226,10 +1222,17 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
-              const isUrgency = field.key === 'urgency_level';
+              // urgency_level slot now shows date-derived Priority (not CRITICAL/STANDARD).
+              const isPriorityField = field.key === 'urgency_level' || field.key === 'priority';
+              const priorityDisplay = isPriorityField
+                ? resolvePriorityFromRow(record, formData.urgency_level ?? formData.priority ?? value)
+                : '';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
               const isNumber = NUMBER_KEYS.has(field.key);
               const spanFullWidth = TEXTAREA_KEYS.has(field.key);
+              const fieldLabel = isPriorityField
+                ? 'Priority'
+                : field.label || field.key.replace(/_/g, ' ');
 
               return (
                 <div
@@ -1238,7 +1241,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
                     <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      {field.label || field.key.replace(/_/g, ' ')}
+                      {fieldLabel}
                     </Label>
                     {isClickableLink ? <OpenLinkButton href={displayStr} /> : null}
                   </div>
@@ -1377,47 +1380,25 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         <SelectItem value="false">No</SelectItem>
                       </SelectContent>
                     </Select>
-                  ) : isUrgency ? (
-                    !isEnabled ? (
-                      <div
+                  ) : isPriorityField ? (
+                    <div
+                      className={cn(
+                        'rounded-lg border px-3 py-2.5 shadow-sm',
+                        inventoryPriorityFieldCardClassName(priorityDisplay),
+                      )}
+                      role="status"
+                      aria-label="Priority"
+                      title="Derived from Request Date vs Requirement Date"
+                    >
+                      <span
                         className={cn(
-                          'rounded-lg border px-3 py-2.5 shadow-sm',
-                          isUrgencyToneValue(displayStr)
-                            ? urgencyReadonlyFieldCardClassName(String(displayStr))
-                            : 'border-border bg-card',
+                          'text-base font-bold tracking-wide',
+                          inventoryPriorityValueTextClassName(priorityDisplay),
                         )}
-                        role="status"
-                        aria-label="Urgency"
                       >
-                        <span
-                          className={cn(
-                            'text-base font-bold tracking-wide uppercase',
-                            urgencyReadonlyValueTextClassName(String(displayStr)),
-                          )}
-                        >
-                          {displayStr && displayStr !== 'N/A' ? String(displayStr).trim() : '—'}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
-                        {URGENCY_BUTTON_OPTIONS.map((opt) => {
-                          const selected = String(displayStr || '').toUpperCase() === opt.value;
-                          return (
-                            <Button
-                              key={opt.value}
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setField(field.key, opt.value)}
-                              disabled={!isEnabled}
-                              className={urgencyToneButtonClassName(opt.value, selected, 'rounded-full h-8')}
-                            >
-                              {opt.label}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    )
+                        {priorityDisplay}
+                      </span>
+                    </div>
                   ) : isTextarea ? (
                     <Textarea
                       className="min-h-[80px] text-sm rounded-md"

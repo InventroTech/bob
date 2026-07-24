@@ -437,7 +437,7 @@ const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: s
   { key: 'additional_link', label: 'Additional link', enabled: false, link: true },
   { key: 'comments', label: 'Comments', enabled: true },
   { key: 'notes', label: 'Notes', enabled: true },
-  { key: 'urgency_level', label: 'Urgency', enabled: true },
+  { key: 'urgency_level', label: 'Priority', enabled: false },
   { key: 'project_purpose', label: 'Project / purpose', enabled: true },
   { key: 'department', label: 'Department', enabled: true },
 ];
@@ -2531,13 +2531,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           record={selectedRecord}
           entityType={config?.entityType}
           formModalFields={
-            (config?.formModalFields?.length
+            ((config?.formModalFields?.length
               ? config.formModalFields
               : effectiveDetailMode === 'inventory_payment_modal'
                 ? DEFAULT_PAYMENT_MODAL_FIELDS
-                : config?.entityType === 'inventory_request'
+                : config?.entityType === 'inventory_request' || config?.entityType === 'unmannd_request'
                   ? DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS
                   : []) ?? []
+            ).map((field) =>
+              field.key === 'urgency_level' || field.key === 'priority'
+                ? { ...field, label: 'Priority', enabled: false }
+                : field
+            )
           }
           formModalTitle={config?.formModalTitle}
           formModalDescription={config?.formModalDescription}
