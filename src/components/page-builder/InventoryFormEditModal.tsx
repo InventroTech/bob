@@ -21,6 +21,7 @@ import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
+import { formatCalendarDate } from '@/lib/timeUtils';
 import { cn } from '@/lib/utils';
 import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
 import {
@@ -1217,8 +1218,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
               const isEnabled = field.enabled && canUpdate;
-              const isClickableLink =
-                !isEnabled && looksLikeUrl(displayStr) && (field.link === true || isLinkLikeFieldKey(field.key));
+              const isLinkField = field.link === true || isLinkLikeFieldKey(field.key);
+              const hasUrl = looksLikeUrl(displayStr);
+              const isClickableProductLink = isLinkField && hasUrl;
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
@@ -1227,12 +1229,44 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const priorityDisplay = isPriorityField
                 ? resolvePriorityFromRow(record, formData.urgency_level ?? formData.priority ?? value)
                 : '';
+              const isLineTotal = field.key === 'line_total' || field.key === 'computed_price';
+              const isRequestDateField = field.key === 'request_date' || field.key === 'requested_date';
+              const lineTotalDisplay = (() => {
+                if (!isLineTotal) return '';
+                const qtyRaw =
+                  formData.quantity ??
+                  formData.quantity_required ??
+                  (record?.data as any)?.quantity ??
+                  (record?.data as any)?.quantity_required;
+                const costRaw =
+                  formData.estimated_cost ?? (record?.data as any)?.estimated_cost;
+                const qty = Number(qtyRaw);
+                const cost = typeof costRaw === 'number' ? costRaw : Number(String(costRaw ?? '').replace(/,/g, ''));
+                if (!Number.isFinite(qty) || !Number.isFinite(cost)) return '—';
+                return formatCurrencyDisplay(Math.round(qty * cost * 100) / 100);
+              })();
+              const requestDateDisplay = isRequestDateField
+                ? formatCalendarDate(
+                    String(
+                      formData.request_date ??
+                        formData.requested_date ??
+                        (record?.data as any)?.request_date ??
+                        (record?.data as any)?.requested_date ??
+                        displayStr ??
+                        ''
+                    )
+                  )
+                : '';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
               const isNumber = NUMBER_KEYS.has(field.key);
               const spanFullWidth = TEXTAREA_KEYS.has(field.key);
               const fieldLabel = isPriorityField
                 ? 'Priority'
-                : field.label || field.key.replace(/_/g, ' ');
+                : isLineTotal
+                  ? 'Price'
+                  : isRequestDateField
+                    ? 'Requested Date'
+                    : field.label || field.key.replace(/_/g, ' ');
 
               return (
                 <div
@@ -1243,10 +1277,23 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       {fieldLabel}
                     </Label>
-                    {isClickableLink ? <OpenLinkButton href={displayStr} /> : null}
                   </div>
-                  {!isClickableLink ? (
-                    field.key === 'comments' ? (
+                  {isLineTotal ? (
+                    <div
+                      className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm font-mono tabular-nums font-semibold text-foreground"
+                      role="status"
+                      title="Quantity × Estimated cost"
+                    >
+                      {lineTotalDisplay}
+                    </div>
+                  ) : isRequestDateField ? (
+                    <div
+                      className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm text-foreground"
+                      role="status"
+                    >
+                      {requestDateDisplay || '—'}
+                    </div>
+                  ) : field.key === 'comments' ? (
                     (() => {
                       const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as any).comments : undefined) as unknown;
                       const history: Array<{ name: string; role: string; comment: string }> = Array.isArray(existingRaw)
@@ -1464,6 +1511,16 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         disabled={!isEnabled}
                       />
                     )
+                  ) : isClickableProductLink ? (
+                    <a
+                      href={displayStr}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={displayStr}
+                      className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm text-black break-all truncate transition-colors hover:text-black active:border-black active:bg-black active:text-white"
+                    >
+                      {displayStr}
+                    </a>
                   ) : (
                     <Input
                       className="h-9 text-sm rounded-md"
@@ -1472,8 +1529,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       disabled={!isEnabled}
                       placeholder={field.label || field.key}
                     />
-                  ))
-                  : null}
+                  )}
                 </div>
               );
             })}
