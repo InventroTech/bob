@@ -36,15 +36,6 @@ import { cn } from '@/lib/utils';
 const RECORDS_URL = '/crm-records/records/';
 const PRICE_COMPARE_URL = '/crm-records/price-compare/';
 
-/** Minimal fallback sources if vendor catalog API is unavailable. */
-const FALLBACK_ECOMMERCE_SOURCES = [
-  { id: 'amazon', label: 'Amazon', vendorName: 'AMAZON', hostIncludes: ['amazon.'] },
-  { id: 'robu', label: 'Robu', vendorName: 'ROBU', hostIncludes: ['robu.in'] },
-  { id: 'robocraze', label: 'Robocraze', vendorName: 'ROBOCRAZE', hostIncludes: ['robocraze.com'] },
-  { id: 'zbotic', label: 'Zbotic', vendorName: 'ZBOTIC', hostIncludes: ['zbotic.in'] },
-  { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] as string[] },
-] as const;
-
 type EcommerceSource = {
   id: string;
   label: string;
@@ -52,6 +43,31 @@ type EcommerceSource = {
   hostIncludes?: readonly string[];
   profile?: 'core' | 'extended' | string;
 };
+
+/** Fallback catalog when vendor API is unavailable (mirrors backend price_compare_vendors.json). */
+const FALLBACK_ECOMMERCE_SOURCES: EcommerceSource[] = [
+  { id: 'amazon', label: 'Amazon', vendorName: 'AMAZON', hostIncludes: ['amazon.'], profile: 'core' },
+  { id: 'robu', label: 'Robu', vendorName: 'ROBU', hostIncludes: ['robu.in'], profile: 'core' },
+  { id: 'robocraze', label: 'Robocraze', vendorName: 'ROBOCRAZE', hostIncludes: ['robocraze.com'], profile: 'core' },
+  { id: 'zbotic', label: 'Zbotic', vendorName: 'ZBOTIC', hostIncludes: ['zbotic.in'], profile: 'core' },
+  { id: 'flyrobo', label: 'Flyrobo', vendorName: 'FLYROBO', hostIncludes: ['flyrobo.in'], profile: 'extended' },
+  { id: 'robokits', label: 'Robokits', vendorName: 'ROBOKITS', hostIncludes: ['robokits.co.in'], profile: 'extended' },
+  { id: 'mouser', label: 'Mouser', vendorName: 'MOUSER', hostIncludes: ['mouser.'], profile: 'extended' },
+  { id: 'digikey', label: 'DigiKey', vendorName: 'DIGIKEY', hostIncludes: ['digikey.'], profile: 'extended' },
+  { id: 'tannatechbiz', label: 'Tanna TechBiz', vendorName: 'TANNATECHBIZ', hostIncludes: ['tannatechbiz.com'], profile: 'extended' },
+  { id: 'anubisrc', label: 'Anubis RC', vendorName: 'ANUBISRC', hostIncludes: ['anubisrc.com'], profile: 'extended' },
+  { id: 'uavstore', label: 'UAV Store', vendorName: 'UAVSTORE', hostIncludes: ['uavstore.in'], profile: 'extended' },
+  { id: 'fpvstore', label: 'FPV Store', vendorName: 'FPVSTORE', hostIncludes: ['fpvstore.in'], profile: 'extended' },
+  { id: 'fpvguru', label: 'FPV Guru', vendorName: 'FPVGURU', hostIncludes: ['fpvguru.in'], profile: 'extended' },
+  { id: 'evelta', label: 'Evelta', vendorName: 'EVELTA', hostIncludes: ['evelta.com'], profile: 'extended' },
+  { id: 'tujorc', label: 'Tujorc', vendorName: 'TUJORC', hostIncludes: ['tujorc.com'], profile: 'extended' },
+  { id: 'quadkart', label: 'Quad Kart', vendorName: 'QUADKART', hostIncludes: ['quadkart.in'], profile: 'extended' },
+  { id: 'ktron', label: 'Ktron', vendorName: 'KTRON', hostIncludes: ['ktron.in'], profile: 'extended' },
+  { id: 'drkstore', label: 'DRK Store', vendorName: 'DRKSTORE', hostIncludes: ['drkstore.in'], profile: 'extended' },
+  { id: 'uavgarage', label: 'UAV Garage', vendorName: 'UAVGARAGE', hostIncludes: ['uavgarage.com'], profile: 'extended' },
+  { id: 'fabtolab', label: 'Fab to Lab', vendorName: 'FABTOLAB', hostIncludes: ['fabtolab.com'], profile: 'extended' },
+  { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] },
+];
 
 type PriceQuote = {
   id: string;
@@ -182,7 +198,6 @@ interface FormItem {
   vendor: string;
   estimated_cost: string | number | '';
   price_currency: 'INR' | 'USD';
-  including_gst: boolean;
   urgency_level: string;
   comments: string;
   /** Manual quotes from Amazon / Robu / other sites for side-by-side comparison. */
@@ -200,7 +215,6 @@ const newEmptyItem = (): FormItem => ({
   vendor: '',
   estimated_cost: '',
   price_currency: 'INR',
-  including_gst: false,
   urgency_level: '',
   comments: '',
   price_quotes: [],
@@ -323,18 +337,30 @@ const SPEC_STOP_WORDS = new Set([
   'set',
 ]);
 
+/** Collapse "7 mm" / "7mm" / "7.5 cm" into a single comparable token ("7mm"). */
+const normalizeMeasurementsInText = (value: string): string =>
+  String(value || '').replace(
+    /\b(\d+(?:\.\d+)?)\s*(cm|mm|m|ft|feet|inch|in)\b/gi,
+    (_full, n: string, u: string) => {
+      const unit = String(u)
+        .toLowerCase()
+        .replace(/^feet$/, 'ft')
+        .replace(/^inch$/, 'in');
+      return `${n}${unit}`;
+    }
+  );
+
 const tokenizeProductText = (value: string): string[] =>
-  String(value || '')
+  normalizeMeasurementsInText(value)
     .toLowerCase()
     .replace(/[^a-z0-9.]+/g, ' ')
     .split(/\s+/)
     .map((t) => t.trim())
-    .filter((t) => t.length >= 2 && !SPEC_STOP_WORDS.has(t))
-    .map((t) => t.replace(/^(\d+(?:\.\d+)?)(cm|mm|m|ft|in)$/i, (_, n, u) => `${n}${u.toLowerCase()}`));
+    .filter((t) => t.length >= 2 && !SPEC_STOP_WORDS.has(t));
 
 /** True when a marketplace title is a close match for the requested name + specs. */
 const isExactEnoughProductMatch = (title: string, name: string, specifications: string): boolean => {
-  const titleText = String(title || '').trim().toLowerCase();
+  const titleText = normalizeMeasurementsInText(String(title || '').trim().toLowerCase());
   if (!titleText) return false;
 
   const titleTokens = new Set(tokenizeProductText(titleText));
@@ -352,6 +378,7 @@ const isExactEnoughProductMatch = (title: string, name: string, specifications: 
   if (specTokens.length === 0) return true;
 
   // Specs like length/connector must appear; require strong overlap.
+  // Length tokens are already normalized to "7mm" so they match title "… 7mm …".
   const required = specTokens.filter(
     (t) =>
       /\d/.test(t) ||
@@ -359,7 +386,20 @@ const isExactEnoughProductMatch = (title: string, name: string, specifications: 
       t.length >= 3
   );
   const check = required.length > 0 ? required : specTokens;
-  const specHits = check.filter((t) => titleTokens.has(t) || titleText.includes(t)).length;
+  const tokenMatches = (t: string) => {
+    if (titleTokens.has(t) || titleText.includes(t)) return true;
+    // "7mm" ↔ "7 mm" already normalized; also accept bare number if unit is present nearby.
+    const m = t.match(/^(\d+(?:\.\d+)?)(cm|mm|m|ft|in)$/i);
+    if (!m) return false;
+    const num = m[1];
+    const unit = m[2].toLowerCase();
+    return (
+      titleText.includes(`${num}${unit}`) ||
+      titleText.includes(`${num} ${unit}`) ||
+      (titleTokens.has(num) && titleText.includes(unit))
+    );
+  };
+  const specHits = check.filter(tokenMatches).length;
   if (check.length <= 2) return specHits >= check.length;
   return specHits / check.length >= 0.7;
 };
@@ -438,14 +478,22 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [specSelections, setSpecSelections] = useState<Record<string, string>>({});
   const [specExtraText, setSpecExtraText] = useState('');
   const [specSampleTitles, setSpecSampleTitles] = useState<string[]>([]);
+  /** At most one matching product selected (titles contain commas — don't parse via split). */
+  const [selectedSampleMatch, setSelectedSampleMatch] = useState<string | null>(null);
+  /** First live-search payload kept so length/size Apply filters existing hits instead of re-querying empty. */
+  const [pendingSpecCompare, setPendingSpecCompare] = useState<{
+    itemId: string;
+    name: string;
+    data: LivePriceCompareResponse;
+  } | null>(null);
   /** Live-formatted price strings while typing (cleared on blur). */
   const [priceDraftByItemId, setPriceDraftByItemId] = useState<Record<string, string>>({});
   /** Vendor catalog from backend (config-driven). */
   const [ecommerceSources, setEcommerceSources] = useState<EcommerceSource[]>(() => [
-    ...(FALLBACK_ECOMMERCE_SOURCES as unknown as EcommerceSource[]),
+    ...FALLBACK_ECOMMERCE_SOURCES,
   ]);
-  /** core = reliable default set; extended = full catalog. */
-  const [priceCompareProfile, setPriceCompareProfile] = useState<'core' | 'extended'>('core');
+  /** core = small reliable set; extended = full catalog (default). */
+  const [priceCompareProfile, setPriceCompareProfile] = useState<'core' | 'extended'>('extended');
   /** Per-item loading state for live marketplace price fetch. */
   const [liveCompareLoadingByItemId, setLiveCompareLoadingByItemId] = useState<Record<string, boolean>>({});
   /** Shown when live search finds no close product match. */
@@ -466,6 +514,13 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
     '—';
+
+  /** Vendors searched for the selected profile (extended = full catalog). */
+  const activePriceCompareVendors = ecommerceSources.filter((s) => {
+    if (!s.id || s.id === 'other') return false;
+    if (priceCompareProfile === 'extended') return true;
+    return s.profile === 'core';
+  });
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -643,10 +698,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           .filter((v) => v.id && v.label);
         if (cancelled || rows.length === 0) return;
         setEcommerceSources([...rows, { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] }]);
-        const defaultProfile = String(res.data?.defaults?.profile || 'core').toLowerCase();
-        if (defaultProfile === 'extended' || defaultProfile === 'core') {
-          setPriceCompareProfile(defaultProfile);
-        }
+        // Form default is Extended; do not overwrite from API (settings used to force core).
       } catch {
         // Keep fallback sources.
       }
@@ -820,9 +872,12 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         .filter(Boolean) as PriceQuote[];
 
       // Keep only close matches for the requested name + specifications.
-      const exactMatches = mapped.filter((q) =>
+      let exactMatches = mapped.filter((q) =>
         isExactEnoughProductMatch(q.title || '', name, specifications)
       );
+      if (exactMatches.length === 0 && specifications.trim()) {
+        exactMatches = mapped.filter((q) => isExactEnoughProductMatch(q.title || '', name, ''));
+      }
 
       const MAX_PER_SOURCE = 3;
       const SOURCE_ORDER = [
@@ -936,12 +991,20 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setLiveCompareLoadingByItemId((prev) => ({ ...prev, [itemId]: true }));
       setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'idle' }));
       try {
+        const vendorIdsForProfile = ecommerceSources
+          .filter((s) => {
+            if (!s.id || s.id === 'other') return false;
+            if (priceCompareProfile === 'extended') return true;
+            return s.profile === 'core';
+          })
+          .map((v) => v.id);
         const res = await apiClient.post<LivePriceCompareResponse>(
           PRICE_COMPARE_URL,
           {
             query: query || undefined,
-            // Backend resolves vendors from profile/config — frontend does not hardcode site lists.
             profile: priceCompareProfile,
+            // Explicit IDs so Extended always hits the full catalog (not stale server default).
+            sources: priceCompareProfile === 'extended' ? vendorIdsForProfile : undefined,
             urls: urls.length ? urls.slice(0, 8) : undefined,
             pincode: pin,
           },
@@ -970,8 +1033,10 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           setSpecPromptItemId(itemId);
           setSpecFacets(facets);
           setSpecSelections({});
+          setSelectedSampleMatch(null);
           setSpecExtraText(specs);
-          setSpecSampleTitles(titles.slice(0, 6));
+          setSpecSampleTitles(titles.slice(0, 10));
+          setPendingSpecCompare({ itemId, name, data: data ?? {} });
           toast.info('Multiple product variants found. Please choose specifications.');
           return;
         }
@@ -980,12 +1045,36 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         const anyExact = pricedResults.some((r) =>
           isExactEnoughProductMatch(String(r.title || ''), name, specs)
         );
-        if (pricedResults.length === 0 || !anyExact) {
+        if (pricedResults.length === 0) {
           setItems((prev) =>
             prev.map((row) => (row.id === itemId ? { ...row, price_quotes: [] } : row))
           );
           setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
           toast.error('No product available');
+          return;
+        }
+        if (!anyExact) {
+          // Specs (e.g. "7 mm") can over-filter; keep name matches so stocked items still show.
+          const nameOnly = pricedResults.filter((r) =>
+            isExactEnoughProductMatch(String(r.title || ''), name, '')
+          );
+          if (nameOnly.length === 0) {
+            setItems((prev) =>
+              prev.map((row) => (row.id === itemId ? { ...row, price_quotes: [] } : row))
+            );
+            setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
+            toast.error('No product available');
+            return;
+          }
+          applyLivePriceResults(
+            itemId,
+            { ...(data ?? {}), results: nameOnly },
+            name,
+            ''
+          );
+          if (specs) {
+            toast.info('Showing closest name matches — selected size was not found in every listing title.');
+          }
           return;
         }
 
@@ -1001,8 +1090,15 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         setLiveCompareLoadingByItemId((prev) => ({ ...prev, [itemId]: false }));
       }
     },
-    [items, applyLivePriceResults, deliveryPincode, priceCompareProfile]
+    [items, applyLivePriceResults, deliveryPincode, priceCompareProfile, ecommerceSources]
   );
+
+  const buildSpecBoxText = useCallback((sample: string | null, facets: Record<string, string>) => {
+    const facetParts = Object.values(facets)
+      .map((v) => String(v || '').trim())
+      .filter(Boolean);
+    return [sample ? String(sample).trim() : '', ...facetParts].filter(Boolean).join(' · ');
+  }, []);
 
   const cancelSpecPrompt = () => {
     setSpecPromptItemId(null);
@@ -1010,24 +1106,101 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     setSpecSelections({});
     setSpecExtraText('');
     setSpecSampleTitles([]);
+    setSelectedSampleMatch(null);
+    setPendingSpecCompare(null);
   };
+
+  /** Length/size chips update independently; product pick stays single via selectedSampleMatch. */
+  const selectSpecFacetOption = useCallback(
+    (facetKey: string, opt: string, wasSelected: boolean) => {
+      setSpecSelections((prev) => {
+        const next = {
+          ...prev,
+          [facetKey]: wasSelected ? '' : opt,
+        };
+        setSelectedSampleMatch((sample) => {
+          setSpecExtraText(buildSpecBoxText(sample, next));
+          return sample;
+        });
+        return next;
+      });
+    },
+    [buildSpecBoxText]
+  );
+
+  /** Only one matching product at a time. */
+  const selectSampleMatch = useCallback(
+    (title: string) => {
+      const value = String(title || '').trim();
+      if (!value) return;
+      setSelectedSampleMatch((prev) => {
+        const next = prev === value ? null : value;
+        setSpecSelections((facets) => {
+          setSpecExtraText(buildSpecBoxText(next, facets));
+          return facets;
+        });
+        return next;
+      });
+    },
+    [buildSpecBoxText]
+  );
 
   const confirmSpecPrompt = async () => {
     const itemId = specPromptItemId;
     if (!itemId) return;
-    const selected = Object.values(specSelections)
+    const fromFacets = Object.values(specSelections)
       .map((v) => v.trim())
       .filter(Boolean);
-    const extra = specExtraText.trim();
-    const combined = [...selected, extra].filter(Boolean).join(', ');
+    const sample = (selectedSampleMatch || '').trim();
+    const combined =
+      buildSpecBoxText(sample || null, specSelections) ||
+      specExtraText.trim() ||
+      fromFacets.join(' · ');
     if (!combined) {
-      toast.error('Select or enter at least one specification.');
+      toast.error('Select a sample match or length/size, or enter specifications.');
       return;
     }
     setItems((prev) =>
       prev.map((row) => (row.id === itemId ? { ...row, specifications: combined } : row))
     );
+    const pending =
+      pendingSpecCompare && pendingSpecCompare.itemId === itemId ? pendingSpecCompare : null;
+    const pendingName = pending?.name ?? '';
+    const pendingData = pending?.data ?? null;
     cancelSpecPrompt();
+
+    // Prefer filtering the first search results (items already found) by the chosen length/size.
+    if (pendingData) {
+      const priced = (pendingData.results ?? []).filter(
+        (r) => r.price != null && Number(r.price) > 0
+      );
+      const exact = priced.filter((r) =>
+        isExactEnoughProductMatch(String(r.title || ''), pendingName, combined)
+      );
+      if (exact.length > 0) {
+        applyLivePriceResults(
+          itemId,
+          { ...pendingData, results: exact },
+          pendingName,
+          combined
+        );
+        return;
+      }
+      const nameOnly = priced.filter((r) =>
+        isExactEnoughProductMatch(String(r.title || ''), pendingName, '')
+      );
+      if (nameOnly.length > 0) {
+        applyLivePriceResults(
+          itemId,
+          { ...pendingData, results: nameOnly },
+          pendingName,
+          ''
+        );
+        toast.info('Showing closest name matches — selected size was not found in every listing title.');
+        return;
+      }
+    }
+
     await fetchLivePrices(itemId, { skipSpecPrompt: true, specificationsOverride: combined });
   };
 
@@ -1214,7 +1387,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         if (estCost !== '' && estCost !== undefined) {
           payloadData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
         }
-        payloadData.including_gst = item.including_gst === true;
         const filledQuotes = (item.price_quotes ?? [])
           .filter((q) => q.price !== '' && Number(q.price) > 0)
           .map((q) => ({
@@ -1476,8 +1648,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                             ).trim();
                                             if (additionalLink)
                                               updateItem(item.id, 'additional_link', additionalLink);
-                                            if (typeof d.including_gst === 'boolean')
-                                              updateItem(item.id, 'including_gst', d.including_gst);
                                             setItemNameSuggestionsOpen(false);
                                             setFocusedItemNameId(null);
                                           }}
@@ -1561,15 +1731,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                 <SelectItem value="USD">USD</SelectItem>
                               </SelectContent>
                             </Select>
-                            <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
-                              <Checkbox
-                                checked={item.including_gst === true}
-                                onCheckedChange={(checked) =>
-                                  updateItem(item.id, 'including_gst', checked === true)
-                                }
-                              />
-                              <span className="text-xs font-medium">Including GST</span>
-                            </label>
                           </div>
                         </div>
                         <div className="space-y-1.5">
@@ -1941,8 +2102,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                     const additionalLink = String((d.additional_link ?? d.vendor_site_link ?? '') as any).trim();
                                     if (additionalLink) updateItem(item.id, 'additional_link', additionalLink);
 
-                                    if (typeof d.including_gst === 'boolean') updateItem(item.id, 'including_gst', d.including_gst);
-
                                     const catalogSpecs = String(
                                       (d.specifications ?? d.specs ?? d.specification ?? d.short_description ?? '') as any
                                     ).trim();
@@ -1987,7 +2146,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                           Price comparison
                         </Label>
                         <p className="text-[11px] text-muted-foreground">
-                          Live quotes from configured vendors (default: core sites). Switch to Extended for the full catalog.
+                          Searching {activePriceCompareVendors.length} vendors
+                          {priceCompareProfile === 'extended' ? ' (full catalog)' : ' (core set)'}.
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-1.5 items-center">
@@ -1997,12 +2157,14 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                             setPriceCompareProfile(v === 'extended' ? 'extended' : 'core')
                           }
                         >
-                          <SelectTrigger className="h-7 w-[8.5rem] text-xs">
+                          <SelectTrigger className="h-7 w-[10.5rem] text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="core">Core vendors</SelectItem>
-                            <SelectItem value="extended">Extended vendors</SelectItem>
+                            <SelectItem value="core">Core ({ecommerceSources.filter((s) => s.id !== 'other' && s.profile === 'core').length})</SelectItem>
+                            <SelectItem value="extended">
+                              Extended ({ecommerceSources.filter((s) => s.id && s.id !== 'other').length})
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <Button
@@ -2028,6 +2190,18 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                           Fetch live prices
                         </Button>
                       </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {activePriceCompareVendors.map((v) => (
+                        <Badge
+                          key={v.id}
+                          variant="secondary"
+                          className="rounded-md px-2 py-0.5 text-[10px] font-normal"
+                        >
+                          {v.label}
+                        </Badge>
+                      ))}
                     </div>
 
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-end">
@@ -2260,13 +2434,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                         </Select>
                       </div>
                     </div>
-                    <label className="flex items-center gap-2 cursor-pointer pb-2 text-muted-foreground shrink-0">
-                      <Checkbox
-                        checked={item.including_gst === true}
-                        onCheckedChange={(checked) => updateItem(item.id, 'including_gst', checked === true)}
-                      />
-                      <span className="text-xs font-medium">Including GST</span>
-                    </label>
                     <div className="space-y-1.5 flex-1 min-w-[180px]">
                       <Label className="text-xs font-medium">Vendor *</Label>
                       <div className="flex items-center gap-2">
@@ -2495,24 +2662,36 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           if (!open) cancelSpecPrompt();
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Choose product specifications</DialogTitle>
             <DialogDescription>
               Your item name matches multiple variants. Pick the specs you need so we fetch the right prices.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-auto pr-1">
+          <div className="space-y-4 max-h-[70vh] overflow-auto pr-1">
             {specSampleTitles.length > 0 && (
-              <div className="rounded-md border bg-muted/30 p-2 space-y-1">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                  Sample matches
-                </p>
-                {specSampleTitles.map((t) => (
-                  <p key={t} className="text-xs text-muted-foreground truncate" title={t}>
-                    · {t}
-                  </p>
-                ))}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Matching products</Label>
+                <div className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
+                  {specSampleTitles.map((t, idx) => {
+                    const selected = selectedSampleMatch === t.trim();
+                    return (
+                      <button
+                        key={`${idx}-${t.slice(0, 40)}`}
+                        type="button"
+                        onClick={() => selectSampleMatch(t)}
+                        className={
+                          selected
+                            ? 'block w-full rounded-lg border border-black bg-black px-4 py-3.5 text-left text-sm leading-relaxed text-white shadow-sm'
+                            : 'block w-full rounded-lg border border-input bg-background px-4 py-3.5 text-left text-sm leading-relaxed text-foreground hover:bg-accent hover:text-accent-foreground'
+                        }
+                      >
+                        <span className="block whitespace-normal break-words">{t}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
             {specFacets.map((facet) => (
@@ -2528,12 +2707,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                         size="sm"
                         variant={selected ? 'default' : 'outline'}
                         className="h-7 rounded-full text-xs"
-                        onClick={() =>
-                          setSpecSelections((prev) => ({
-                            ...prev,
-                            [facet.key]: selected ? '' : opt,
-                          }))
-                        }
+                        onClick={() => selectSpecFacetOption(facet.key, opt, selected)}
                       >
                         {opt}
                       </Button>
@@ -2544,10 +2718,12 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
             ))}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">
-                {specFacets.length > 0 ? 'Additional details (optional)' : 'Specifications *'}
+                {specFacets.length > 0 || specSampleTitles.length > 0
+                  ? 'Specifications'
+                  : 'Specifications *'}
               </Label>
               <Input
-                placeholder="e.g. 30 cm, USB A–Mini B, nickel-plated"
+                placeholder="Filled when you select a product or length/size…"
                 value={specExtraText}
                 onChange={(e) => setSpecExtraText(e.target.value)}
                 className="h-9"
@@ -2560,10 +2736,17 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
               variant="outline"
               onClick={async () => {
                 const itemId = specPromptItemId;
+                const pending =
+                  pendingSpecCompare && pendingSpecCompare.itemId === itemId
+                    ? pendingSpecCompare
+                    : null;
                 cancelSpecPrompt();
-                if (itemId) {
-                  await fetchLivePrices(itemId, { skipSpecPrompt: true });
+                if (!itemId) return;
+                if (pending?.data) {
+                  applyLivePriceResults(itemId, pending.data, pending.name, '');
+                  return;
                 }
+                await fetchLivePrices(itemId, { skipSpecPrompt: true });
               }}
             >
               Skip &amp; show all
