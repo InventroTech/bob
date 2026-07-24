@@ -41,6 +41,10 @@ import {
   advanceShipmentStatusForTracking,
   shouldShowShipmentTrackingSection,
   fetchLiveShipmentStatus,
+  shipmentDetailsFromTrackResult,
+  publicTrackingLink,
+  normalizeCourierLabel,
+  type ShipmentTrackDetails,
 } from '@/lib/shipmentTracking';
 import {
   filterDuplicateInventoryWorkflowButtons,
@@ -253,6 +257,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
   const [trackingLiveLoading, setTrackingLiveLoading] = useState(false);
   const [trackingStatusDetail, setTrackingStatusDetail] = useState<string | null>(null);
+  const [trackingDetails, setTrackingDetails] = useState<ShipmentTrackDetails | null>(null);
 
   const myName =
     user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
@@ -305,15 +310,48 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
   const applyLiveTrackingResult = useCallback(
     (result: Awaited<ReturnType<typeof fetchLiveShipmentStatus>>) => {
+      console.log('[shipment-track] apply result to form', {
+        ok: result.ok,
+        incomingStatus: result.shipment_status,
+        statusDetail: result.status_detail,
+        error: result.error,
+        method: result.method,
+        courier: result.courier_name,
+      });
       if (result.tracking_number) setField('tracking_number', result.tracking_number);
-      if (result.tracking_link) setField('tracking_link', result.tracking_link);
-      if (result.courier_name) setField('courier_name', result.courier_name);
+      // Always fill tracking link when the user only pasted an AWB.
+      if (result.tracking_link) {
+        setField('tracking_link', result.tracking_link);
+      } else if (result.tracking_number) {
+        const synthesized = publicTrackingLink(result.tracking_number, result.courier_name);
+        if (synthesized) setField('tracking_link', synthesized);
+      }
+      // Only overwrite courier on a confirmed live hit.
+      if (result.ok === true && result.courier_name) {
+        const label = normalizeCourierLabel(result.courier_name) || String(result.courier_name);
+        setField('courier_name', label);
+      }
       if (result.eta) setField('eta', String(result.eta).slice(0, 10));
-      if (result.shipment_status) setField('shipment_status', result.shipment_status);
       setTrackingStatusDetail(
         result.status_detail ||
           (result.ok === false && result.error ? result.error : null)
       );
+      setTrackingDetails(shipmentDetailsFromTrackResult(result));
+      // Soft / pending failures must not move the pipeline.
+      if (result.ok === false) {
+        console.warn('[shipment-track] live track not confirmed — pipeline left unchanged', {
+          error: result.error,
+          statusDetail: result.status_detail,
+        });
+        return;
+      }
+      if (!result.shipment_status) {
+        console.warn('[shipment-track] no shipment_status in response — pipeline unchanged');
+        return;
+      }
+      const incoming = String(result.shipment_status).trim().toUpperCase().replace(/\s+/g, '_');
+      console.log('[shipment-track] setting pipeline (ok)', incoming);
+      setField('shipment_status', incoming);
     },
     [setField]
   );
@@ -356,14 +394,12 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         }
       } catch (err) {
         console.error('Live shipment track failed', err);
-        // Still advance to ORDERED so the pipeline is not blank.
-        const fallback = advanceShipmentStatusForTracking(formData.shipment_status, true);
-        if (fallback) setField('shipment_status', fallback);
-        setTrackingStatusDetail('Could not reach live tracking. Pipeline set from tracking id.');
+        setTrackingStatusDetail('Live tracking timed out. Try Refresh again in a moment.');
+        // Keep any previously loaded route/events on timeout.
         if (!overrides?.silent) {
           toast({
-            title: 'Live tracking failed',
-            description: 'Could not fetch carrier status. Check the number/link and try Refresh.',
+            title: 'Live tracking timed out',
+            description: 'Could not reach the carrier in time. Try Refresh again.',
             variant: 'destructive',
           });
         }
@@ -371,7 +407,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setTrackingLiveLoading(false);
       }
     },
-    [formData.tracking_number, formData.tracking_link, formData.courier_name, formData.shipment_status, applyLiveTrackingResult, setField, toast]
+    [formData.tracking_number, formData.tracking_link, formData.courier_name, formData.shipment_status, applyLiveTrackingResult, toast]
   );
 
   const applyTrackingPaste = useCallback(
@@ -379,9 +415,14 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       const paste = raw.trim();
       if (!paste) return;
       const normalized = normalizeTrackingPaste(paste);
-      const nextLink = normalized.tracking_link || String(formData.tracking_link ?? '');
       const nextNumber = normalized.tracking_number || String(formData.tracking_number ?? '');
-      if (normalized.tracking_link) setField('tracking_link', normalized.tracking_link);
+      let nextLink = normalized.tracking_link || String(formData.tracking_link ?? '');
+      // Number-only paste: fill a public track URL immediately (refined after live lookup).
+      if (!normalized.tracking_link && nextNumber && !String(formData.tracking_link ?? '').trim()) {
+        nextLink =
+          publicTrackingLink(nextNumber, String(formData.courier_name ?? '') || null) || nextLink;
+      }
+      if (nextLink) setField('tracking_link', nextLink);
       if (normalized.tracking_number) setField('tracking_number', normalized.tracking_number);
       const nextStatus = advanceShipmentStatusForTracking(
         formData.shipment_status,
@@ -478,6 +519,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     const recordAny = record as Record<string, unknown>;
     setPriceFieldDraft({});
     setTrackingStatusDetail(null);
+    setTrackingDetails(null);
     const initial: Record<string, unknown> = {};
     formModalFields.forEach((f) => {
       const val = data[f.key] ?? recordAny[f.key];
@@ -767,7 +809,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       dataToSend.shipment_status = advanceShipmentStatusForTracking(currentStatus, hasTracking);
 
       const prev = (record?.data && typeof record.data === 'object' ? record.data : {}) as Record<string, unknown>;
-      const keys = ['tracking_number', 'tracking_link', 'courier_name', 'shipment_status', 'eta'] as const;
+      const keys = [
+        'tracking_number',
+        'tracking_link',
+        'courier_name',
+        'shipment_status',
+        'eta',
+      ] as const;
       const changed = keys.some((k) => String(dataToSend[k] ?? '') !== String(prev[k] ?? ''));
       if (changed) {
         dataToSend.tracking_updated_at = new Date().toISOString();
@@ -1491,17 +1539,18 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                   ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Paste a tracking link or AWB — we look up the carrier and move the delivery pipeline automatically.
+                  Paste a tracking link or AWB — we look up the carrier and update the delivery pipeline
+                  when scans are available. Pipeline is read-only.
                 </p>
                 <ShipmentDeliveryPipeline
                   status={formData.shipment_status}
                   disabled={!canUpdate || !!applyingStatusValue || trackingLiveLoading}
                   statusDetail={trackingStatusDetail}
+                  details={trackingDetails}
                   liveLoading={trackingLiveLoading}
                   onRefresh={() => {
                     void refreshLiveTracking();
                   }}
-                  onChange={(next) => setField('shipment_status', next)}
                 />
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -1594,6 +1643,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__auto__">Auto-detect</SelectItem>
+                        <SelectItem value="Amazon">Amazon</SelectItem>
                         <SelectItem value="BlueDart">BlueDart</SelectItem>
                         <SelectItem value="Delhivery">Delhivery</SelectItem>
                         <SelectItem value="FedEx">FedEx</SelectItem>

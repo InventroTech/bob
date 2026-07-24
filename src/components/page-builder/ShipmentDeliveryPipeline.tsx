@@ -1,37 +1,130 @@
 'use client';
 
-import React from 'react';
-import { Check, AlertTriangle } from 'lucide-react';
+import { Check, AlertTriangle, ArrowRight, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   SHIPMENT_PIPELINE_STEPS,
   normalizeShipmentStatus,
-  type ShipmentStatus,
+  type ShipmentTrackEvent,
+  type ShipmentTrackDetails,
 } from '@/lib/shipmentTracking';
 import { getShipmentStatusLabel } from '@/lib/inventoryStatusStyles';
 
 type ShipmentDeliveryPipelineProps = {
   status: unknown;
   disabled?: boolean;
-  /** Optional manual override; live tracking is the primary source. */
-  onChange?: (status: ShipmentStatus) => void;
   statusDetail?: string | null;
   liveLoading?: boolean;
   onRefresh?: () => void;
+  /** Live carrier route + scan history from shipment-track. */
+  details?: ShipmentTrackDetails | null;
   className?: string;
 };
+
+function formatEventTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  try {
+    return d.toLocaleString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return raw;
+  }
+}
+
+function RouteRow({
+  origin,
+  destination,
+  currentLocation,
+}: {
+  origin?: string | null;
+  destination?: string | null;
+  currentLocation?: string | null;
+}) {
+  if (!origin && !destination && !currentLocation) return null;
+  return (
+    <div className="space-y-1.5 rounded-md border border-border/60 bg-background/70 px-2.5 py-2">
+      {(origin || destination) && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            From
+          </span>
+          <span className="font-medium">{origin || '—'}</span>
+          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            To
+          </span>
+          <span className="font-medium">{destination || '—'}</span>
+        </div>
+      )}
+      {currentLocation ? (
+        <p className="inline-flex items-start gap-1.5 text-xs text-muted-foreground">
+          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            <span className="font-medium text-foreground">Last seen: </span>
+            {currentLocation}
+          </span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function EventsList({ events }: { events: ShipmentTrackEvent[] }) {
+  if (!events.length) return null;
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        Scan history
+      </p>
+      <ol className="max-h-52 space-y-0 overflow-y-auto rounded-md border border-border/60 bg-background/70">
+        {events.map((ev, index) => {
+          const when = formatEventTime(ev.time);
+          const key = `${ev.time ?? ''}-${ev.message ?? ''}-${ev.location ?? ''}-${index}`;
+          return (
+            <li
+              key={key}
+              className={cn(
+                'border-b border-border/50 px-2.5 py-2 last:border-b-0',
+                index === 0 && 'bg-sky-50/60'
+              )}
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                <p className="text-xs font-medium text-foreground">{ev.message || 'Update'}</p>
+                {when ? <p className="text-[10px] text-muted-foreground tabular-nums">{when}</p> : null}
+              </div>
+              {ev.location ? (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{ev.location}</p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 /**
  * Visual delivery pipeline for inventory_request.shipment_status.
  * Steps: Ordered → In transit → Out for delivery → Delivered.
+ * Read-only — status comes from live carrier tracking only.
+ * Also shows route (from → to) and carrier scan history when available.
  */
 export function ShipmentDeliveryPipeline({
   status,
   disabled = false,
-  onChange,
   statusDetail,
   liveLoading = false,
   onRefresh,
+  details,
   className,
 }: ShipmentDeliveryPipelineProps) {
   const normalized = normalizeShipmentStatus(status);
@@ -40,6 +133,9 @@ export function ShipmentDeliveryPipeline({
     normalized && !isException && normalized !== 'NOT_SHIPPED'
       ? SHIPMENT_PIPELINE_STEPS.indexOf(normalized as (typeof SHIPMENT_PIPELINE_STEPS)[number])
       : -1;
+
+  const events = Array.isArray(details?.events) ? details.events : [];
+  const hasRoute = Boolean(details?.origin || details?.destination || details?.current_location);
 
   return (
     <div className={cn('space-y-3 rounded-md border border-border/70 bg-muted/20 px-3 py-3', className)}>
@@ -71,7 +167,7 @@ export function ShipmentDeliveryPipeline({
       </div>
 
       {statusDetail ? (
-        <p className="text-xs text-muted-foreground line-clamp-2">{statusDetail}</p>
+        <p className="text-xs text-muted-foreground">{statusDetail}</p>
       ) : null}
 
       <div className="flex items-start w-full">
@@ -79,18 +175,13 @@ export function ShipmentDeliveryPipeline({
           const done = activeIndex > index;
           const current = activeIndex === index;
           const upcoming = activeIndex < index;
-          const clickable = Boolean(onChange) && !disabled;
 
+          // Use a real element (not Fragment): Vite/lovable injects data-lov-id
+          // onto JSX nodes, and React.Fragment only allows `key` + `children`.
           return (
-            <React.Fragment key={step}>
-              <button
-                type="button"
-                disabled={!clickable}
-                onClick={() => onChange?.(step)}
-                className={cn(
-                  'flex flex-col items-center gap-1.5 min-w-0 flex-1 text-center',
-                  clickable ? 'cursor-pointer group' : 'cursor-default'
-                )}
+            <span key={step} className="contents">
+              <div
+                className="flex flex-col items-center gap-1.5 min-w-0 flex-1 text-center cursor-default"
                 title={getShipmentStatusLabel(step)}
               >
                 <span
@@ -99,8 +190,7 @@ export function ShipmentDeliveryPipeline({
                     done && 'border-emerald-500 bg-emerald-500 text-white',
                     current && 'border-sky-500 bg-sky-500 text-white ring-2 ring-sky-200',
                     upcoming && !isException && 'border-border bg-background text-muted-foreground',
-                    isException && 'border-rose-300 bg-rose-50 text-rose-700',
-                    clickable && upcoming && 'group-hover:border-sky-300 group-hover:text-sky-700'
+                    isException && 'border-rose-300 bg-rose-50 text-rose-700'
                   )}
                 >
                   {done ? <Check className="h-3.5 w-3.5" aria-hidden /> : index + 1}
@@ -115,7 +205,7 @@ export function ShipmentDeliveryPipeline({
                 >
                   {getShipmentStatusLabel(step)}
                 </span>
-              </button>
+              </div>
               {index < SHIPMENT_PIPELINE_STEPS.length - 1 ? (
                 <div
                   className={cn(
@@ -125,45 +215,27 @@ export function ShipmentDeliveryPipeline({
                   aria-hidden
                 />
               ) : null}
-            </React.Fragment>
+            </span>
           );
         })}
       </div>
 
-      {onChange && !disabled ? (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px]',
-              normalized === 'NOT_SHIPPED' || !normalized
-                ? 'border-slate-300 bg-slate-50 text-slate-800'
-                : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
-            )}
-            onClick={() => onChange('NOT_SHIPPED')}
-          >
-            Not shipped
-          </button>
-          <button
-            type="button"
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px]',
-              isException
-                ? 'border-rose-300 bg-rose-50 text-rose-800'
-                : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
-            )}
-            onClick={() => onChange('EXCEPTION')}
-          >
-            <AlertTriangle className="h-3 w-3" aria-hidden />
-            Exception
-          </button>
-        </div>
-      ) : isException ? (
+      {isException ? (
         <p className="inline-flex items-center gap-1.5 text-xs text-rose-700">
           <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
           Shipment exception — check with courier / vendor.
         </p>
       ) : null}
+
+      {hasRoute ? (
+        <RouteRow
+          origin={details?.origin}
+          destination={details?.destination}
+          currentLocation={details?.current_location}
+        />
+      ) : null}
+
+      <EventsList events={events} />
     </div>
   );
 }
