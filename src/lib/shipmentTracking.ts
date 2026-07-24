@@ -45,6 +45,20 @@ export function advanceShipmentStatusForTracking(
   return normalized;
 }
 
+export type ShipmentTrackEvent = {
+  time?: string | null;
+  message?: string | null;
+  location?: string | null;
+  status?: string | null;
+};
+
+export type ShipmentTrackDetails = {
+  origin?: string | null;
+  destination?: string | null;
+  current_location?: string | null;
+  events?: ShipmentTrackEvent[];
+};
+
 export type LiveShipmentTrackResult = {
   ok?: boolean;
   shipment_status?: string | null;
@@ -56,7 +70,88 @@ export type LiveShipmentTrackResult = {
   error?: string | null;
   method?: string | null;
   tracked_at?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  current_location?: string | null;
+  events?: ShipmentTrackEvent[];
 };
+
+export function shipmentDetailsFromTrackResult(
+  result: LiveShipmentTrackResult | null | undefined
+): ShipmentTrackDetails | null {
+  if (!result) return null;
+  const events = Array.isArray(result.events) ? result.events : [];
+  const details: ShipmentTrackDetails = {
+    origin: result.origin ?? null,
+    destination: result.destination ?? null,
+    current_location: result.current_location ?? null,
+    events,
+  };
+  if (!details.origin && !details.destination && !details.current_location && events.length === 0) {
+    return null;
+  }
+  return details;
+}
+
+export function looksLikeAmazonTrackingId(value: string | null | undefined): boolean {
+  const v = String(value ?? '').trim();
+  if (!v) return false;
+  if (/^\d{3}-\d{7}-\d{7}$/.test(v)) return true;
+  if (/^TBA[0-9A-Z]{8,}$/i.test(v)) return true;
+  if (/^(TBA|AMZL)/i.test(v)) return true;
+  return false;
+}
+
+/** Map AfterShip slugs / labels onto our Courier select values. */
+export function normalizeCourierLabel(value: string | null | undefined): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[\s_]+/g, '-');
+  if (key.startsWith('amazon')) return 'Amazon';
+  if (key.startsWith('fedex')) return 'FedEx';
+  if (key === 'dhl' || key.startsWith('dhl-')) return 'DHL';
+  if (key.includes('bluedart') || key.includes('blue-dart')) return 'BlueDart';
+  if (key.includes('delhivery')) return 'Delhivery';
+  if (key.includes('dtdc')) return 'DTDC';
+  if (key.includes('shiprocket')) return 'Shiprocket';
+  if (key.includes('india-post') || key.includes('indiapost')) return 'India Post';
+  return raw;
+}
+
+export function publicTrackingLink(
+  awb: string | null | undefined,
+  courier?: string | null
+): string | null {
+  const number = String(awb ?? '').trim();
+  if (!number) return null;
+  const safe = encodeURIComponent(number);
+  const raw = String(courier ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
+  let slug = raw;
+  if (raw.includes('fedex')) slug = 'fedex';
+  else if (raw === 'dhl' || raw.startsWith('dhl')) slug = 'dhl';
+  else if (raw.includes('bluedart') || raw.includes('blue-dart')) slug = 'bluedart';
+  else if (raw.includes('delhivery')) slug = 'delhivery';
+  else if (raw.includes('dtdc')) slug = 'dtdc';
+  else if (raw.includes('shiprocket')) slug = 'shiprocket';
+  else if (raw.includes('india-post') || raw.includes('indiapost') || raw === 'india post')
+    slug = 'india-post';
+
+  if (slug === 'fedex') return `https://www.fedex.com/fedextrack/?trknbr=${safe}`;
+  if (slug === 'dhl' || slug.startsWith('dhl'))
+    return `https://www.dhl.com/en/express/tracking.html?AWB=${safe}&brand=DHL`;
+  if (slug === 'delhivery') return `https://www.delhivery.com/track/package/?waybill=${safe}`;
+  if (slug === 'bluedart') return `https://www.aftership.com/track/bluedart/${safe}`;
+  if (slug === 'dtdc') return `https://www.aftership.com/track/dtdc/${safe}`;
+  if (slug === 'shiprocket') return `https://www.aftership.com/track/shiprocket/${safe}`;
+  if (slug === 'india-post') return `https://www.aftership.com/track/india-post/${safe}`;
+  if (slug && !['aftership', 'auto-detect', 'auto', '__auto__'].includes(slug)) {
+    return `https://www.aftership.com/track/${encodeURIComponent(slug)}/${safe}`;
+  }
+  return `https://www.aftership.com/track/${safe}`;
+}
 
 /**
  * Ask the backend to resolve live carrier status from AWB / tracking link.
@@ -67,13 +162,40 @@ export async function fetchLiveShipmentStatus(input: {
   tracking_link?: string | null;
   courier_name?: string | null;
 }): Promise<LiveShipmentTrackResult> {
-  const { apiClient } = await import('@/lib/api');
-  const res = await apiClient.post<LiveShipmentTrackResult>('/crm-records/shipment-track/', {
+  const body = {
     tracking_number: input.tracking_number || null,
     tracking_link: input.tracking_link || null,
     courier_name: input.courier_name || null,
-  });
-  return res.data ?? {};
+  };
+  console.log('[shipment-track] request', body);
+  try {
+    const { apiClient } = await import('@/lib/api');
+    const res = await apiClient.post<LiveShipmentTrackResult>('/crm-records/shipment-track/', body, {
+      timeout: 30000,
+    });
+    const data = res.data ?? {};
+    console.log('[shipment-track] response', {
+      ok: data.ok,
+      shipment_status: data.shipment_status,
+      status_detail: data.status_detail,
+      courier_name: data.courier_name,
+      method: data.method,
+      error: data.error,
+      tracking_number: data.tracking_number,
+      tracking_link: data.tracking_link,
+      eta: data.eta,
+      tracked_at: data.tracked_at,
+      origin: data.origin,
+      destination: data.destination,
+      current_location: data.current_location,
+      events_count: Array.isArray(data.events) ? data.events.length : 0,
+      full: data,
+    });
+    return data;
+  } catch (err) {
+    console.error('[shipment-track] request failed', err);
+    throw err;
+  }
 }
 
 /** Request statuses where the shipment tracking editor is shown. */
@@ -166,16 +288,6 @@ export function extractTrackingNumberFromUrl(url: string): string | null {
       if (last && /^[A-Za-z0-9-]{6,}$/.test(last) && !/^(track|tracking|shipment|order)$/i.test(last)) {
         return last;
       }
-    }
-
-    // Amazon progress tracker: packageId / trackingId in query
-    if (host.includes('amazon.')) {
-      const amazonId =
-        params.get('packageId') ||
-        params.get('trackingId') ||
-        params.get('orderId') ||
-        params.get('shipmentId');
-      if (amazonId && String(amazonId).trim()) return String(amazonId).trim();
     }
   } catch {
     // ignore parse errors
