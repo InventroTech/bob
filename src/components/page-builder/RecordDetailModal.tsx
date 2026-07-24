@@ -36,11 +36,11 @@ import {
 import { cn } from '@/lib/utils';
 import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
 import {
-  urgencyToneButtonClassName,
-  urgencyReadonlyFieldCardClassName,
-  urgencyReadonlyValueTextClassName,
-  isUrgencyToneValue,
-} from '@/lib/urgencyButtonStyles';
+  resolvePriorityFromRow,
+  inventoryPriorityFieldCardClassName,
+  inventoryPriorityValueTextClassName,
+} from '@/lib/inventoryPriority';
+import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
@@ -108,7 +108,8 @@ const EDITABLE_FIELDS_FOR_REQUESTER: string[] = [
   // 'part_number_or_sku',
   'quantity_required',
   'comments',
-  'urgency_level',
+  // Priority is derived from request/requirement dates — not editable as urgency.
+  // 'urgency_level',
   // 'expected_delivery_date',
   // 'procurement_type',
   'quantity',
@@ -188,11 +189,6 @@ const DETAIL_ROW_FULL_WIDTH_KEYS = new Set([
   'item_name_freeform',
   'project_purpose',
 ]);
-const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'STANDARD', label: 'Standard' },
-  { value: 'CRITICAL', label: 'Critical' },
-];
-
 /**
  * Build display rows from API-shaped record only:
  * - Standard top-level: id, entity_type, created_at, updated_at, pyro_data (no tenant_id)
@@ -462,7 +458,8 @@ function humanizeLabel(key: string): string {
     item_name_freeform: 'Item name',
     product_link: 'Product link',
     part_number_or_sku: 'Part number / SKU',
-    urgency_level: 'Urgency',
+    urgency_level: 'Priority',
+    priority: 'Priority',
     expected_delivery_date: 'Expected delivery',
     procurement_type: 'Procurement type',
     invoice_number: 'Invoice number',
@@ -1181,25 +1178,29 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                   placeholder="Add a new comment..."
                                 />
                               </div>
-                            ) : key === 'urgency_level' ? (
-                              <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
-                                {URGENCY_BUTTON_OPTIONS.map((opt) => {
-                                  const selected = String(displayValue ?? '').toUpperCase() === opt.value;
-                                  return (
-                                    <Button
-                                      key={opt.value}
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleEditableChange(key, value, opt.value)}
-                                      disabled={isSaving}
-                                      className={urgencyToneButtonClassName(opt.value, selected, 'rounded-full h-8')}
+                            ) : key === 'urgency_level' || key === 'priority' ? (
+                              (() => {
+                                const priorityDisplay = resolvePriorityFromRow(record, displayValue);
+                                return (
+                                  <div
+                                    className={cn(
+                                      'inline-flex max-w-full rounded-lg border px-3 py-2.5 shadow-sm',
+                                      inventoryPriorityFieldCardClassName(priorityDisplay),
+                                    )}
+                                    role="status"
+                                    title="Derived from Request Date vs Requirement Date"
+                                  >
+                                    <span
+                                      className={cn(
+                                        'text-base font-bold tracking-wide break-words',
+                                        inventoryPriorityValueTextClassName(priorityDisplay),
+                                      )}
                                     >
-                                      {opt.label}
-                                    </Button>
-                                  );
-                                })}
-                              </div>
+                                      {priorityDisplay}
+                                    </span>
+                                  </div>
+                                );
+                              })()
                             ) : (
                               <Input
                                 className="w-full max-w-md min-w-0 h-9 text-sm rounded-md"
@@ -1209,6 +1210,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               />
                             )
                           }
+                          {key !== 'urgency_level' && key !== 'priority' ? (
                           <Button
                             type="button"
                             variant="secondary"
@@ -1224,26 +1226,34 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                               <Save className="h-3.5 w-3.5" aria-hidden />
                             )}
                           </Button>
+                          ) : null}
                         </div>
-                      ) : key === 'urgency_level' && String(displayValue ?? '').trim() && displayValue !== '—' ? (
-                        <div
-                          className={cn(
-                            'inline-flex max-w-full rounded-lg border px-3 py-2.5 shadow-sm',
-                            isUrgencyToneValue(String(displayValue))
-                              ? urgencyReadonlyFieldCardClassName(String(displayValue))
-                              : 'border-border bg-card',
-                          )}
-                          role="status"
-                        >
-                          <span
-                            className={cn(
-                              'text-base font-bold tracking-wide uppercase break-words',
-                              urgencyReadonlyValueTextClassName(String(displayValue)),
-                            )}
-                          >
-                            {String(displayValue).trim()}
-                          </span>
-                        </div>
+                      ) : (key === 'urgency_level' || key === 'priority') ? (
+                        (() => {
+                          const priorityDisplay = resolvePriorityFromRow(record, displayValue);
+                          if (!priorityDisplay || priorityDisplay === '—') {
+                            return <span className="text-muted-foreground">—</span>;
+                          }
+                          return (
+                            <div
+                              className={cn(
+                                'inline-flex max-w-full rounded-lg border px-3 py-2.5 shadow-sm',
+                                inventoryPriorityFieldCardClassName(priorityDisplay),
+                              )}
+                              role="status"
+                              title="Derived from Request Date vs Requirement Date"
+                            >
+                              <span
+                                className={cn(
+                                  'text-base font-bold tracking-wide break-words',
+                                  inventoryPriorityValueTextClassName(priorityDisplay),
+                                )}
+                              >
+                                {priorityDisplay}
+                              </span>
+                            </div>
+                          );
+                        })()
                       ) : key === 'status' && String(displayValue ?? '').trim() ? (
                         <span
                           className={cn(
