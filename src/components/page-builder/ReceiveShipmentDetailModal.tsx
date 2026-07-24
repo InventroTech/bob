@@ -65,7 +65,7 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
       });
       toast({
         title: 'Added to inventory',
-        description: 'Quantity added to existing or new inventory item; request marked FULFILLED.',
+        description: 'Quantity added to existing or new inventory item.',
       });
       onSuccess?.();
       onOpenChange(false);
@@ -91,7 +91,7 @@ export const ReceiveShipmentDetailModal: React.FC<ReceiveShipmentDetailModalProp
       });
       toast({
         title: 'Rolled back to PM',
-        description: 'Request status set to PENDING_PM for PM to handle (e.g. defective or problem).',
+        description: 'Request status set to NEW_REQUEST for PM to handle (e.g. defective or problem).',
       });
       onSuccess?.();
       onOpenChange(false);

@@ -355,7 +355,7 @@ interface LeadTableProps {
     };
     entityType?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
     statusOptions?: string[];
     statusColors?: Record<string, string>;
     tableLayout?: 'auto' | 'fixed';
@@ -437,10 +437,9 @@ const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: s
   { key: 'additional_link', label: 'Additional link', enabled: false, link: true },
   { key: 'comments', label: 'Comments', enabled: true },
   { key: 'notes', label: 'Notes', enabled: true },
-  { key: 'urgency_level', label: 'Urgency', enabled: true },
+  { key: 'urgency_level', label: 'Priority', enabled: false },
   { key: 'project_purpose', label: 'Project / purpose', enabled: true },
   { key: 'department', label: 'Department', enabled: true },
-  { key: 'cart_id', label: 'Cart', enabled: true },
 ];
 
 /** Default fields for Inventory Payment modal when none configured (mix of show-only and editable). */
@@ -467,8 +466,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [isRecordDetailModalOpen, setIsRecordDetailModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
-  const [cartOptions, setCartOptions] = useState<Array<{ id: number; label: string }>>([]);
-  const [cartOptionsLoading, setCartOptionsLoading] = useState(false);
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [isCallBackModalOpen, setIsCallBackModalOpen] = useState(false);
   const leadCardRef = useRef<LeadCardCarouselHandle>(null);
@@ -479,61 +476,11 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     if (mode && mode !== 'auto') return mode;
     const et = config?.entityType;
     if (et === 'inventory_request') return 'inventory_request' as const;
-    if (et === 'inventory_cart') return 'inventory_cart' as const;
     return 'lead_card';
   }, [config?.detailMode, config?.entityType]);
 
   /** Use form-style modal when detail mode is record_form_modal, inventory_payment_modal, or when record detail modal type is form_edit. */
   const useFormModal = effectiveDetailMode === 'record_form_modal' || effectiveDetailMode === 'inventory_payment_modal' || (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit');
-
-  // Load cart options when opening record detail for inventory_request (not for receive_shipments modal)
-  useEffect(() => {
-    const shouldLoadCarts =
-      isRecordDetailModalOpen &&
-      config?.entityType === 'inventory_request' &&
-      effectiveDetailMode !== 'receive_shipments';
-    if (!shouldLoadCarts) return;
-
-    let cancelled = false;
-    const loadCarts = async () => {
-      try {
-        setCartOptionsLoading(true);
-        const res = await apiClient.get<any>('/crm-records/records/?entity_type=inventory_cart&page_size=100');
-        const list: any[] = res.data?.results ?? (res.data as any)?.data ?? [];
-        const options = list
-          .map((r: any) => {
-            const id = r.id;
-            const d = r.data || {};
-            const status = d.status || 'DRAFT';
-            const invoice = d.invoice_number;
-            const labelParts = [`Cart #${id}`, `(${status})`];
-            if (invoice) labelParts.push(`Invoice: ${invoice}`);
-            return {
-              id,
-              label: labelParts.join(' '),
-            };
-          })
-          .filter((o) => o && o.id != null);
-        if (!cancelled) {
-          setCartOptions(options);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setCartOptions([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setCartOptionsLoading(false);
-        }
-      }
-    };
-
-    loadCarts();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isRecordDetailModalOpen, config?.entityType, effectiveDetailMode]);
 
   // Memoize onLeadUpdate callback for modal to prevent infinite re-render loop
   const handleModalLeadUpdate = useCallback((updatedLead: any) => {
@@ -1881,7 +1828,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       setIsCustomModalOpen(true);
       return;
     }
-    // inventory_request | inventory_cart (or any other record type)
+    // inventory_request (or any other record type)
     setSelectedRecord(row);
     setIsRecordDetailModalOpen(true);
   }, [effectiveDetailMode]);
@@ -2584,13 +2531,18 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           record={selectedRecord}
           entityType={config?.entityType}
           formModalFields={
-            (config?.formModalFields?.length
+            ((config?.formModalFields?.length
               ? config.formModalFields
               : effectiveDetailMode === 'inventory_payment_modal'
                 ? DEFAULT_PAYMENT_MODAL_FIELDS
-                : config?.entityType === 'inventory_request'
+                : config?.entityType === 'inventory_request' || config?.entityType === 'unmannd_request'
                   ? DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS
                   : []) ?? []
+            ).map((field) =>
+              field.key === 'urgency_level' || field.key === 'priority'
+                ? { ...field, label: 'Priority', enabled: false }
+                : field
+            )
           }
           formModalTitle={config?.formModalTitle}
           formModalDescription={config?.formModalDescription}
@@ -2600,7 +2552,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           inventoryWorkflowMode={config?.inventoryWorkflowMode}
           showFinalPriceSection={config?.showFinalPriceSection}
           modalFlags={config?.modalFlags}
-          cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
           onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
             ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
                 const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
@@ -2649,7 +2600,7 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         />
       )}
 
-      {/* Default record detail modal (inventory_request, inventory_cart, inventory_item, etc.) */}
+      {/* Default record detail modal (inventory_request, inventory_item, etc.) */}
       {effectiveDetailMode !== 'receive_shipments' && !useFormModal && (
       <RecordDetailModal
         open={isRecordDetailModalOpen}
@@ -2665,7 +2616,6 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
           const merged = [...new Set([...fromColumns, ...fromModalConfig])];
           return merged.length > 0 ? merged : undefined;
         })()}
-        cartOptions={config?.entityType === 'inventory_request' ? cartOptions : undefined}
         modalFlags={config?.modalFlags}
         showFinalPriceSection={config?.showFinalPriceSection}
         showDeleteRequestButton={config?.showDeleteRequestButton}

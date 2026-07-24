@@ -11,7 +11,7 @@ describe('inventory procurement → order flow (existing statuses)', () => {
   it('requestor never sees Approve/Reject/Order', () => {
     expect(
       getInventoryWorkflowButtons({
-        requestStatus: 'PENDING_PM',
+        requestStatus: 'NEW_REQUEST',
         isRequester: true,
         workflowMode: 'manager',
       })
@@ -25,32 +25,28 @@ describe('inventory procurement → order flow (existing statuses)', () => {
     ).toEqual([]);
   });
 
-  it('manager can Approve/Reject on PENDING_PM, DRAFT, and NEW_REQUEST', () => {
-    for (const status of ['PENDING_PM', 'DRAFT', 'NEW_REQUEST']) {
-      const buttons = getInventoryWorkflowButtons({
-        requestStatus: status,
-        isRequester: false,
-        workflowMode: 'manager',
-      });
-      expect(buttons.map((b) => b.statusValue)).toEqual(['VENDOR_IDENTIFIED', 'REJECTED']);
-    }
+  it('manager can Approve/Reject on NEW_REQUEST', () => {
+    const buttons = getInventoryWorkflowButtons({
+      requestStatus: 'NEW_REQUEST',
+      isRequester: false,
+      workflowMode: 'manager',
+    });
+    expect(buttons.map((b) => b.statusValue)).toEqual(['VENDOR_IDENTIFIED', 'REJECTED']);
   });
 
   it('team lead never sees Approve/Reject on new requests', () => {
-    for (const status of ['PENDING_PM', 'DRAFT', 'NEW_REQUEST']) {
-      expect(
-        getInventoryWorkflowButtons({
-          requestStatus: status,
-          isRequester: false,
-          workflowMode: 'team_lead',
-          roleNameOrKey: 'Team Lead',
-        })
-      ).toEqual([]);
-    }
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        isRequester: false,
+        workflowMode: 'team_lead',
+        roleNameOrKey: 'Team Lead',
+      })
+    ).toEqual([]);
   });
 
-  it('team lead sees Order on VENDOR_IDENTIFIED / PAYMENT_PENDING', () => {
-    for (const status of ['VENDOR_IDENTIFIED', 'VENDOR IDENTIFIED', 'PAYMENT_PENDING']) {
+  it('team lead sees Order on VENDOR_IDENTIFIED', () => {
+    for (const status of ['VENDOR_IDENTIFIED', 'VENDOR IDENTIFIED']) {
       const buttons = getInventoryWorkflowButtons({
         requestStatus: status,
         roleNameOrKey: 'Team Lead',
@@ -100,17 +96,16 @@ describe('inventory procurement → order flow (existing statuses)', () => {
   it('filters duplicate Page Builder status buttons', () => {
     const filtered = filterDuplicateInventoryWorkflowButtons([
       { label: 'Approve vendor', statusValue: 'VENDOR_IDENTIFIED' },
-      { label: 'Custom', statusValue: 'PAYMENT_PENDING' },
+      { label: 'Custom', statusValue: 'SOME_CUSTOM' },
     ]);
-    expect(filtered.map((b) => b.statusValue)).toEqual(['PAYMENT_PENDING']);
+    expect(filtered.map((b) => b.statusValue)).toEqual(['SOME_CUSTOM']);
   });
 });
 
 describe('shipment tracking visibility', () => {
-  it('shows from VENDOR_IDENTIFIED / PAYMENT_PENDING / IN_SHIPPING', () => {
-    expect(shouldShowShipmentTrackingSection('PENDING_PM')).toBe(false);
+  it('shows from VENDOR_IDENTIFIED / IN_SHIPPING', () => {
+    expect(shouldShowShipmentTrackingSection('NEW_REQUEST')).toBe(false);
     expect(shouldShowShipmentTrackingSection('VENDOR_IDENTIFIED')).toBe(true);
-    expect(shouldShowShipmentTrackingSection('PAYMENT_PENDING')).toBe(true);
     expect(shouldShowShipmentTrackingSection('IN_SHIPPING')).toBe(true);
   });
 });

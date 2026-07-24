@@ -254,7 +254,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
         <Input
           value={localConfig.entityType || ''}
           onChange={(e) => handleInputChange('entityType', e.target.value)}
-          placeholder="e.g., inventory_request, inventory_cart, inventory_item"
+          placeholder="e.g., inventory_request, inventory_item"
         />
         <p className="text-xs text-gray-500 mt-1">
           For records API: entity_type sent to the API. Used to infer row-click behavior if Detail Mode is not set.
@@ -266,8 +266,8 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           <div className="space-y-2">
             <p className="text-sm font-medium">Inventory request flow</p>
             <p className="text-xs text-muted-foreground">
-              Manager pages: Approve/Reject on NEW_REQUEST/DRAFT/PENDING_PM. Team-lead pages: Order only on
-              VENDOR_IDENTIFIED/PAYMENT_PENDING (no Approve/Reject on new requests).
+              Manager pages: Approve/Reject on NEW_REQUEST. Team-lead pages: Order only on
+              VENDOR_IDENTIFIED (no Approve/Reject on new requests).
             </p>
           </div>
           <div className="space-y-2">
@@ -707,7 +707,6 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 <SelectItem value="auto">Auto (from Entity Type)</SelectItem>
                 <SelectItem value="lead_card">Lead card (lead modal)</SelectItem>
                 <SelectItem value="inventory_request">Record detail (request)</SelectItem>
-                <SelectItem value="inventory_cart">Record detail (cart)</SelectItem>
                 <SelectItem value="record_form_modal">Record form modal</SelectItem>
                 <SelectItem value="inventory_payment_modal">Inventory Payment modal</SelectItem>
                 <SelectItem value="receive_shipments">Receive shipment (inventory manager)</SelectItem>
@@ -722,8 +721,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
 
           {(localConfig.detailMode === 'record_form_modal' ||
             localConfig.detailMode === 'inventory_payment_modal' ||
-            localConfig.detailMode === 'inventory_request' ||
-            localConfig.detailMode === 'inventory_cart') && (
+            localConfig.detailMode === 'inventory_request') && (
             <div className="space-y-2">
               <Label>Request history button</Label>
               <div className="flex items-center gap-2">
@@ -742,8 +740,8 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             </div>
           )}
 
-          {/* Record detail (request/cart) — default or form-style */}
-          {(localConfig.detailMode === 'inventory_request' || localConfig.detailMode === 'inventory_cart') && (
+          {/* Record detail (request) — default or form-style */}
+          {localConfig.detailMode === 'inventory_request' && (
             <>
               <div className="space-y-2">
                 <Label>Record detail modal type</Label>
@@ -806,7 +804,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           )}
 
           {/* Form-style modal: title, description, form fields — for record_form_modal or form_edit */}
-          {((localConfig.detailMode === 'record_form_modal') || ((localConfig.detailMode === 'inventory_request' || localConfig.detailMode === 'inventory_cart') && localConfig.recordDetailModalType === 'form_edit')) && (
+          {((localConfig.detailMode === 'record_form_modal') || (localConfig.detailMode === 'inventory_request' && localConfig.recordDetailModalType === 'form_edit')) && (
             <div className="space-y-4 border-t pt-4">
               <div className="space-y-2">
                 <Label>Modal title</Label>
@@ -919,8 +917,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
 
           {!isInventoryProfile && (localConfig.detailMode === 'record_form_modal' ||
             localConfig.detailMode === 'inventory_payment_modal' ||
-            localConfig.detailMode === 'inventory_request' ||
-            localConfig.detailMode === 'inventory_cart') && (
+            localConfig.detailMode === 'inventory_request') && (
             <div className="space-y-2 border-t pt-4">
               <Label>Flag toggles (beside action buttons)</Label>
               <p className="text-xs text-gray-500">

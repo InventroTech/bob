@@ -80,3 +80,39 @@ export function formatInventoryPriorityLabel(value: unknown): string {
   }
   return raw;
 }
+
+/** Normalize a priority label/value to HIGH | MEDIUM | LOW when possible. */
+export function normalizeInventoryPriorityLevel(value: unknown): 'HIGH' | 'MEDIUM' | 'LOW' | null {
+  const raw = String(value ?? '').trim();
+  if (!raw || raw === '—') return null;
+  const upper = raw.toUpperCase();
+  const lower = raw.toLowerCase();
+  if (upper === 'HIGH' || lower.startsWith('high') || upper === 'CRITICAL') return 'HIGH';
+  if (upper === 'MEDIUM' || lower.startsWith('medium') || lower.startsWith('middle')) return 'MEDIUM';
+  if (upper === 'LOW' || lower.startsWith('low') || upper === 'STANDARD') return 'LOW';
+  return null;
+}
+
+/** Card background/border for read-only Priority in request modals. */
+export function inventoryPriorityFieldCardClassName(value: unknown): string {
+  const level = normalizeInventoryPriorityLevel(value);
+  if (level === 'HIGH') {
+    return 'border-orange-200 bg-orange-50/80 dark:border-orange-800/80 dark:bg-orange-950/35';
+  }
+  if (level === 'MEDIUM') {
+    return 'border-amber-200 bg-amber-50/80 dark:border-amber-800/80 dark:bg-amber-950/35';
+  }
+  if (level === 'LOW') {
+    return 'border-sky-200 bg-sky-50/80 dark:border-sky-800/80 dark:bg-sky-950/35';
+  }
+  return 'border-border bg-card';
+}
+
+/** Text color for read-only Priority value. */
+export function inventoryPriorityValueTextClassName(value: unknown): string {
+  const level = normalizeInventoryPriorityLevel(value);
+  if (level === 'HIGH') return 'text-orange-950 dark:text-orange-50';
+  if (level === 'MEDIUM') return 'text-amber-950 dark:text-amber-50';
+  if (level === 'LOW') return 'text-sky-950 dark:text-sky-50';
+  return 'text-foreground';
+}

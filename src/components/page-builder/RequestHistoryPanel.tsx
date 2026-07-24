@@ -52,7 +52,6 @@ const DATA_DISPLAY_ORDER: string[] = [
   'including_gst',
   'consolidation',
   'comments',
-  'cart_id',
   'requester_name',
 ];
 
