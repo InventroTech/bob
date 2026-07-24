@@ -101,7 +101,6 @@ interface InventoryFormEditModalProps {
   }>;
   onUpdate?: (recordId: number, patch: { data?: Record<string, unknown> }) => Promise<void>;
   onRecordUpdated?: (recordId: number) => void;
-  cartOptions?: Array<{ id: number; label: string }>;
   /** Modal title (e.g. "Edit record"). */
   formModalTitle?: string;
   /** Modal description text below the title. */
@@ -197,7 +196,7 @@ const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
 /** Keys that are typically numbers. */
 const NUMBER_KEYS = new Set([
   'quantity', 'quantity_required', 'allocated_quantity', 'available_quantity',
-  'estimated_cost', 'total_quantity', 'cart_id', 'total_price', 'unit_price',
+  'estimated_cost', 'total_quantity', 'total_price', 'unit_price',
 ]);
 const PRICE_KEYS = new Set(['estimated_cost', 'total_price', 'unit_price']);
 
@@ -216,7 +215,6 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   actionButtons,
   onUpdate,
   onRecordUpdated,
-  cartOptions,
   formModalTitle,
   formModalDescription: _formModalDescription,
   showSaveButton,
@@ -1213,6 +1211,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
             {formModalFields
               .filter((field) => {
+                if (field.key === 'cart_id') return false;
                 // Dedicated shipment section owns these keys for inventory requests.
                 if (!isInventoryRequest || isPaymentModal) return true;
                 return !(TRACKING_FORM_KEYS as readonly string[]).includes(field.key);
@@ -1225,12 +1224,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const isClickableLink =
                 !isEnabled && looksLikeUrl(displayStr) && (field.link === true || isLinkLikeFieldKey(field.key));
               const isStatus = field.key === 'status' && statusOptions.length > 0;
-              const isCartId = field.key === 'cart_id' && isInventoryRequest && cartOptions && cartOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
               const isUrgency = field.key === 'urgency_level';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
-              const isNumber = NUMBER_KEYS.has(field.key) && field.key !== 'cart_id';
+              const isNumber = NUMBER_KEYS.has(field.key);
               const spanFullWidth = TEXTAREA_KEYS.has(field.key);
 
               return (
@@ -1361,24 +1359,6 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                             className={cn('font-medium', getInventoryStatusToneClass(opt))}
                           >
                             {getInventoryStatusLabel(opt)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : isCartId ? (
-                    <Select
-                      value={displayStr === '' || displayStr === '—' ? '_none_' : displayStr}
-                      onValueChange={(v) => setField(field.key, v === '_none_' ? '' : v)}
-                      disabled={!isEnabled}
-                    >
-                      <SelectTrigger className="h-9 text-sm rounded-md">
-                        <SelectValue placeholder="Select cart" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none_">No cart</SelectItem>
-                        {cartOptions.map((opt) => (
-                          <SelectItem key={opt.id} value={String(opt.id)}>
-                            {opt.label}
                           </SelectItem>
                         ))}
                       </SelectContent>

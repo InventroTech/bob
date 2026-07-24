@@ -200,15 +200,8 @@ export async function fetchLiveShipmentStatus(input: {
 
 /** Request statuses where the shipment tracking editor is shown. */
 export const SHIPMENT_TRACKING_VISIBLE_REQUEST_STATUSES = new Set([
-  'ORDERED',
-  'IN_SHIPPING',
-  'FULFILLED',
-  // Legacy / transitional
-  'PAID',
-  'PAYMENT_PENDING',
   'VENDOR_IDENTIFIED',
-  'IN_CART',
-  'APPROVED(2/2)',
+  'IN_SHIPPING',
 ]);
 
 export type ShipmentTrackingFields = {

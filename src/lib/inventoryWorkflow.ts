@@ -1,12 +1,12 @@
 /**
  * Inventory request flow on the existing status architecture:
  *
- *   NEW_REQUEST / DRAFT / PENDING_PM
+ *   NEW_REQUEST
  *     → (manager Approve) VENDOR_IDENTIFIED
  *     → (manager Reject) REJECTED
- *   VENDOR_IDENTIFIED / PAYMENT_PENDING
+ *   VENDOR_IDENTIFIED
  *     → (team lead Order) IN_SHIPPING
- *   IN_SHIPPING+ → shipment tracking (paste link/AWB)
+ *   IN_SHIPPING → shipment tracking (paste link/AWB)
  *
  * Page Builder can set inventoryWorkflowMode:
  *   - manager   → Approve / Reject only
@@ -16,14 +16,11 @@
 
 export const INVENTORY_APPROVABLE_STATUSES = new Set([
   'NEW_REQUEST',
-  'DRAFT',
-  'PENDING_PM',
 ]);
 
 /** Statuses where Order is available (moves request into shipping). */
 export const INVENTORY_ORDERABLE_STATUSES = new Set([
   'VENDOR_IDENTIFIED',
-  'PAYMENT_PENDING',
 ]);
 
 /** Page Builder status values that duplicate built-in Approve / Reject / Order. */
@@ -119,8 +116,8 @@ function resolveWorkflowMode(opts: {
 /**
  * Built-in Approve / Reject / Order for the record form modal.
  *
- * Manager: Approve/Reject on NEW_REQUEST/DRAFT/PENDING_PM.
- * Team lead: Order on VENDOR_IDENTIFIED/PAYMENT_PENDING (never Approve/Reject).
+ * Manager: Approve/Reject on NEW_REQUEST.
+ * Team lead: Order on VENDOR_IDENTIFIED (never Approve/Reject).
  */
 export function getInventoryWorkflowButtons(opts: {
   requestStatus: unknown;

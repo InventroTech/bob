@@ -22,7 +22,6 @@ export type ProcurementTableConfig = {
   detailMode?:
     | 'inventory_request'
     | 'lead_card'
-    | 'inventory_cart'
     | 'record_form_modal'
     | 'inventory_payment_modal'
     | 'receive_shipments'
@@ -160,8 +159,8 @@ export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ con
           ? config.formModalFields
           : DEFAULT_PROCUREMENT_TABLE_CONFIG.formModalFields,
       showFinalPriceSection: config?.showFinalPriceSection ?? false,
-      // If someone still uses inventory_request/inventory_cart modes, force form_edit.
-      ...(detailMode === 'inventory_request' || detailMode === 'inventory_cart'
+      // If someone still uses inventory_request mode, force form_edit.
+      ...(detailMode === 'inventory_request'
         ? { recordDetailModalType: config?.recordDetailModalType ?? 'form_edit' }
         : {}),
     } as Record<string, unknown>;

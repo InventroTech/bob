@@ -1,15 +1,7 @@
 const STATUS_COLOR_CLASS_MAP: Record<string, string> = {
   NEW_REQUEST: 'border-sky-200 bg-sky-50 text-sky-800',
-  'APPROVED(1/2)': 'border-violet-200 bg-violet-50 text-violet-800',
-  'APPROVED(2/2)': 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  IN_CART: 'border-indigo-200 bg-indigo-50 text-indigo-800',
-  PAID: 'border-green-200 bg-green-50 text-green-800',
-  DRAFT: 'border-slate-200 bg-slate-50 text-slate-700',
-  PENDING_PM: 'border-amber-200 bg-amber-50 text-amber-900',
   VENDOR_IDENTIFIED: 'border-sky-200 bg-sky-50 text-sky-800',
-  PAYMENT_PENDING: 'border-amber-200 bg-amber-50 text-amber-900',
   IN_SHIPPING: 'border-cyan-200 bg-cyan-50 text-cyan-800',
-  FULFILLED: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   REJECTED: 'border-rose-200 bg-rose-50 text-rose-800',
 };
 
@@ -35,11 +27,6 @@ function normalizeStatus(status: unknown): string {
 export function getInventoryStatusToneClass(status: unknown): string {
   const normalized = normalizeStatus(status);
   if (!normalized) return DEFAULT_STATUS_CLASS;
-  // Keep parentheses statuses like APPROVED(1/2) as stored
-  const raw = String(status ?? '')
-    .trim()
-    .toUpperCase();
-  if (STATUS_COLOR_CLASS_MAP[raw]) return STATUS_COLOR_CLASS_MAP[raw];
   return STATUS_COLOR_CLASS_MAP[normalized] ?? DEFAULT_STATUS_CLASS;
 }
 
@@ -52,8 +39,6 @@ export function getShipmentStatusToneClass(status: unknown): string {
 export function getInventoryStatusLabel(status: unknown): string {
   const raw = String(status ?? '').trim();
   if (!raw) return '—';
-  // Preserve APPROVED(1/2)-style labels
-  if (raw.includes('(')) return raw.toUpperCase();
   const normalized = normalizeStatus(raw);
   return normalized ? normalized.replace(/_/g, ' ') : '—';
 }
