@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './LeadTableComponent';
 import { resolvePriorityFromRow } from '@/lib/inventoryPriority';
+import { mergeInventoryTrackingColumns } from '@/lib/shipmentTracking';
 
 export type MyRequestTableColumn = {
   key: string;
@@ -64,16 +65,20 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
 
 /**
  * My Request table for Page Builder.
- * Fully dynamic: columns, API endpoint, entity type, title — all from config.
- * Nothing is seeded or hardcoded.
+ * Columns come from config; for inventory/unmannd requests, shipment tracking
+ * columns are merged in the same way as All Requests / Procurement Table.
  */
 export const MyRequestTableComponent: React.FC<MyRequestTableProps> = ({ config }) => {
   const mergedConfig = useMemo(() => {
-    const columns = withPriorityTransform(config?.columns || []);
     const fromEndpoint = entityTypeFromEndpoint(config?.apiEndpoint);
     const entityType = config?.entityType || fromEndpoint;
     const isInventoryLike =
       entityType === 'inventory_request' || entityType === 'unmannd_request';
+    const columns = withPriorityTransform(
+      (isInventoryLike
+        ? mergeInventoryTrackingColumns(config?.columns || [])
+        : config?.columns || []) as MyRequestTableColumn[]
+    );
 
     return {
       ...(config || {}),
