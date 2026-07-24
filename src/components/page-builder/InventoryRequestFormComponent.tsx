@@ -131,7 +131,7 @@ const normalizeIndianPincode = (value: string): string | null => {
 interface InventoryRequestFormConfig {
   /** Entity type to save (e.g. inventory_request). */
   entityType?: string;
-  /** Initial status for new records (e.g. PENDING_PM). */
+  /** Initial status for new records (e.g. NEW_REQUEST). */
   initialStatus?: string;
   /** Friendly initial status label stored as data.status_text. */
   initialStatusText?: string;
@@ -413,7 +413,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const { user } = useAuth();
 
   const entityType = config?.entityType ?? 'inventory_request';
-  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'PENDING_PM';  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
+  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'NEW_REQUEST';  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');

@@ -325,10 +325,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     refreshInterval?: number;
     showFilters: boolean;
     searchFields: string;
-    /** Records table: entity type for API (e.g. inventory_request, inventory_cart). */
+    /** Records table: entity type for API (e.g. inventory_request, inventory_item). */
     entityType?: string;
     /** Records table: row click behavior — lead card, record detail modal, receive shipment modal, none, or auto (infer from entityType). */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -1075,10 +1075,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
               <Input
                 value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
                 onChange={(e) => handleInputChange('initialStatus', e.target.value)}
-                placeholder="e.g. PENDING_PM"
+                placeholder="e.g. NEW_REQUEST"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Status for new requests. Leave empty to use default (PENDING_PM).
+                Status for new requests. Leave empty to use default (NEW_REQUEST).
               </p>
             </div>
 

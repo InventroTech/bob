@@ -52,7 +52,7 @@ const NewInventoryRequestPage: React.FC = () => {
       await apiClient.post('/crm-records/records/', {
         entity_type: 'UNMANNED_REQUEST',
         data: {
-          status: 'PENDING_PM',
+          status: 'NEW_REQUEST',
           requester_id: user.id,
           item_name_freeform: itemName,
           quantity_required: quantity,

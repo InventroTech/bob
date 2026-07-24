@@ -21,7 +21,6 @@ export type MyRequestTableConfig = {
   detailMode?:
     | 'inventory_request'
     | 'lead_card'
-    | 'inventory_cart'
     | 'record_form_modal'
     | 'inventory_payment_modal'
     | 'receive_shipments'
