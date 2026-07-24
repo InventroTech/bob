@@ -42,13 +42,16 @@ const DATA_DISPLAY_ORDER: string[] = [
   'product_link',
   'additional_link',
   'tracking_link',
+  'tracking_number',
+  'courier_name',
+  'shipment_status',
   'request_date',
   'eta',
+  'tracking_updated_at',
   'team_lead',
   'including_gst',
   'consolidation',
   'comments',
-  'cart_id',
   'requester_name',
 ];
 

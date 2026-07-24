@@ -21,18 +21,45 @@ import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { Loader2, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
+import { formatCalendarDate } from '@/lib/timeUtils';
 import { cn } from '@/lib/utils';
+import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
 import {
-  urgencyToneButtonClassName,
-  urgencyReadonlyFieldCardClassName,
-  urgencyReadonlyValueTextClassName,
-  isUrgencyToneValue,
-} from '@/lib/urgencyButtonStyles';
+  resolvePriorityFromRow,
+  inventoryPriorityFieldCardClassName,
+  inventoryPriorityValueTextClassName,
+} from '@/lib/inventoryPriority';
 import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import { RequestHistoryPanel, type RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
+import { ShipmentDeliveryPipeline } from '@/components/page-builder/ShipmentDeliveryPipeline';
+import {
+  SHIPMENT_STATUSES,
+  DEFAULT_SHIPMENT_STATUS,
+  normalizeTrackingPaste,
+  advanceShipmentStatusForTracking,
+  shouldShowShipmentTrackingSection,
+  fetchLiveShipmentStatus,
+  shipmentDetailsFromTrackResult,
+  publicTrackingLink,
+  normalizeCourierLabel,
+  type ShipmentTrackDetails,
+} from '@/lib/shipmentTracking';
+import {
+  filterDuplicateInventoryWorkflowButtons,
+  getInventoryWorkflowButtons,
+} from '@/lib/inventoryWorkflow';
+
+const TRACKING_FORM_KEYS = [
+  'tracking_number',
+  'tracking_link',
+  'courier_name',
+  'shipment_status',
+  'eta',
+  'tracking_updated_at',
+] as const;
 
 const RECORDS_URL = '/crm-records/records/';
 const ADD_VENDOR_VALUE = '__add_vendor__';
@@ -75,13 +102,19 @@ interface InventoryFormEditModalProps {
   }>;
   onUpdate?: (recordId: number, patch: { data?: Record<string, unknown> }) => Promise<void>;
   onRecordUpdated?: (recordId: number) => void;
-  cartOptions?: Array<{ id: number; label: string }>;
   /** Modal title (e.g. "Edit record"). */
   formModalTitle?: string;
   /** Modal description text below the title. */
   formModalDescription?: string;
   /** Whether to show the Save button in the footer. If undefined, Save shows only when there are no action buttons. */
   showSaveButton?: boolean;
+  /**
+   * Inventory All Requests actor:
+   * - manager → Approve / Reject only
+   * - team_lead → Order only (no Approve / Reject on new requests)
+   * - auto → infer from membership role
+   */
+  inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
   /** When set, show one button: conditional if attribute matches, else default (e.g. Inventory Payment modal). */
   paymentButtonConfig?: {
     conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string | number; label: string; statusValue: string; targetAttribute?: string };
@@ -156,15 +189,11 @@ function toCurrencyNumber(value: unknown): number | null {
 
 /** Keys that we render as textarea (multi-line). */
 const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_freeform', 'project_purpose']);
-const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'STANDARD', label: 'Standard' },
-  { value: 'CRITICAL', label: 'Critical' },
-];
 
 /** Keys that are typically numbers. */
 const NUMBER_KEYS = new Set([
   'quantity', 'quantity_required', 'allocated_quantity', 'available_quantity',
-  'estimated_cost', 'total_quantity', 'cart_id', 'total_price', 'unit_price',
+  'estimated_cost', 'total_quantity', 'total_price', 'unit_price',
 ]);
 const PRICE_KEYS = new Set(['estimated_cost', 'total_price', 'unit_price']);
 
@@ -183,10 +212,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   actionButtons,
   onUpdate,
   onRecordUpdated,
-  cartOptions,
   formModalTitle,
   formModalDescription: _formModalDescription,
   showSaveButton,
+  inventoryWorkflowMode,
   paymentButtonConfig,
   modalFlags,
   showFinalPriceSection,
@@ -214,10 +243,16 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [priceFieldDraft, setPriceFieldDraft] = useState<Record<string, string>>({});
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
   const [myRoleName, setMyRoleName] = useState<string>('');
+  const [myRoleKey, setMyRoleKey] = useState<string>('');
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyEntries, setHistoryEntries] = useState<RequestHistoryEntry[]>([]);
+  const [trackingPasteDraft, setTrackingPasteDraft] = useState('');
+  const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
+  const [trackingLiveLoading, setTrackingLiveLoading] = useState(false);
+  const [trackingStatusDetail, setTrackingStatusDetail] = useState<string | null>(null);
+  const [trackingDetails, setTrackingDetails] = useState<ShipmentTrackDetails | null>(null);
 
   const myName =
     user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
@@ -227,9 +262,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const requesterId = record?.data?.requester_id;
   const isRequester =
     isInventoryRequest &&
-    !!user &&
     requesterId != null &&
-    String(requesterId) === String(user.id);
+    ((!!user && String(requesterId) === String(user.id)) ||
+      (myMembershipId != null && String(requesterId) === String(myMembershipId)));
   const canShowDeleteRequestButton =
     showDeleteRequestButton === true &&
     isInventoryRequest &&
@@ -249,7 +284,10 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       try {
         const membership = await membershipService.getMyMembership();
         if (cancelled) return;
-        setMyRoleName(membership?.role_name ?? membership?.role_key ?? '');
+        setMyRoleName(membership?.role_name ?? '');
+        setMyRoleKey(membership?.role_key ?? '');
+        const mid = membership?.tenant_membership_id;
+        setMyMembershipId(typeof mid === 'number' && Number.isFinite(mid) ? mid : mid != null ? Number(mid) : null);
       } catch {
         // Non-fatal: still store comment with name only.
       }
@@ -264,6 +302,144 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const setField = useCallback((key: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   }, []);
+
+  const applyLiveTrackingResult = useCallback(
+    (result: Awaited<ReturnType<typeof fetchLiveShipmentStatus>>) => {
+      console.log('[shipment-track] apply result to form', {
+        ok: result.ok,
+        incomingStatus: result.shipment_status,
+        statusDetail: result.status_detail,
+        error: result.error,
+        method: result.method,
+        courier: result.courier_name,
+      });
+      if (result.tracking_number) setField('tracking_number', result.tracking_number);
+      // Always fill tracking link when the user only pasted an AWB.
+      if (result.tracking_link) {
+        setField('tracking_link', result.tracking_link);
+      } else if (result.tracking_number) {
+        const synthesized = publicTrackingLink(result.tracking_number, result.courier_name);
+        if (synthesized) setField('tracking_link', synthesized);
+      }
+      // Only overwrite courier on a confirmed live hit.
+      if (result.ok === true && result.courier_name) {
+        const label = normalizeCourierLabel(result.courier_name) || String(result.courier_name);
+        setField('courier_name', label);
+      }
+      if (result.eta) setField('eta', String(result.eta).slice(0, 10));
+      setTrackingStatusDetail(
+        result.status_detail ||
+          (result.ok === false && result.error ? result.error : null)
+      );
+      setTrackingDetails(shipmentDetailsFromTrackResult(result));
+      // Soft / pending failures must not move the pipeline.
+      if (result.ok === false) {
+        console.warn('[shipment-track] live track not confirmed — pipeline left unchanged', {
+          error: result.error,
+          statusDetail: result.status_detail,
+        });
+        return;
+      }
+      if (!result.shipment_status) {
+        console.warn('[shipment-track] no shipment_status in response — pipeline unchanged');
+        return;
+      }
+      const incoming = String(result.shipment_status).trim().toUpperCase().replace(/\s+/g, '_');
+      console.log('[shipment-track] setting pipeline (ok)', incoming);
+      setField('shipment_status', incoming);
+    },
+    [setField]
+  );
+
+  const refreshLiveTracking = useCallback(
+    async (overrides?: {
+      tracking_number?: string | null;
+      tracking_link?: string | null;
+      courier_name?: string | null;
+      silent?: boolean;
+    }) => {
+      const number = String(overrides?.tracking_number ?? formData.tracking_number ?? '').trim();
+      const link = String(overrides?.tracking_link ?? formData.tracking_link ?? '').trim();
+      const courier = String(overrides?.courier_name ?? formData.courier_name ?? '').trim();
+      if (!number && !link) {
+        if (!overrides?.silent) {
+          toast({
+            title: 'Add tracking first',
+            description: 'Paste a tracking number or link to refresh the delivery pipeline.',
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+      setTrackingLiveLoading(true);
+      try {
+        const result = await fetchLiveShipmentStatus({
+          tracking_number: number || null,
+          tracking_link: link || null,
+          courier_name: courier || null,
+        });
+        applyLiveTrackingResult(result);
+        if (!overrides?.silent) {
+          toast({
+            title: result.ok ? 'Tracking updated' : 'Tracking checked',
+            description: result.ok
+              ? `Pipeline: ${String(result.shipment_status || '').replace(/_/g, ' ')}`
+              : result.error || 'Saved identifiers; live carrier status was unavailable.',
+          });
+        }
+      } catch (err) {
+        console.error('Live shipment track failed', err);
+        setTrackingStatusDetail('Live tracking timed out. Try Refresh again in a moment.');
+        // Keep any previously loaded route/events on timeout.
+        if (!overrides?.silent) {
+          toast({
+            title: 'Live tracking timed out',
+            description: 'Could not reach the carrier in time. Try Refresh again.',
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        setTrackingLiveLoading(false);
+      }
+    },
+    [formData.tracking_number, formData.tracking_link, formData.courier_name, formData.shipment_status, applyLiveTrackingResult, toast]
+  );
+
+  const applyTrackingPaste = useCallback(
+    async (raw: string, { clearDraft = false }: { clearDraft?: boolean } = {}) => {
+      const paste = raw.trim();
+      if (!paste) return;
+      const normalized = normalizeTrackingPaste(paste);
+      const nextNumber = normalized.tracking_number || String(formData.tracking_number ?? '');
+      let nextLink = normalized.tracking_link || String(formData.tracking_link ?? '');
+      // Number-only paste: fill a public track URL immediately (refined after live lookup).
+      if (!normalized.tracking_link && nextNumber && !String(formData.tracking_link ?? '').trim()) {
+        nextLink =
+          publicTrackingLink(nextNumber, String(formData.courier_name ?? '') || null) || nextLink;
+      }
+      if (nextLink) setField('tracking_link', nextLink);
+      if (normalized.tracking_number) setField('tracking_number', normalized.tracking_number);
+      const nextStatus = advanceShipmentStatusForTracking(
+        formData.shipment_status,
+        Boolean(nextLink || nextNumber)
+      );
+      if (nextStatus) setField('shipment_status', nextStatus);
+      if (clearDraft) setTrackingPasteDraft('');
+      await refreshLiveTracking({
+        tracking_number: nextNumber || null,
+        tracking_link: nextLink || null,
+        courier_name: String(formData.courier_name ?? '') || null,
+      });
+    },
+    [
+      formData.tracking_link,
+      formData.tracking_number,
+      formData.shipment_status,
+      formData.courier_name,
+      setField,
+      refreshLiveTracking,
+    ]
+  );
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -331,11 +507,14 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setFinalPriceIsTotal(false);
       setExtraChargesDraft('');
       setPriceFieldDraft({});
+      setTrackingPasteDraft('');
       return;
     }
     const data = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
     const recordAny = record as Record<string, unknown>;
     setPriceFieldDraft({});
+    setTrackingStatusDetail(null);
+    setTrackingDetails(null);
     const initial: Record<string, unknown> = {};
     formModalFields.forEach((f) => {
       const val = data[f.key] ?? recordAny[f.key];
@@ -368,6 +547,21 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     if (data.payment_note != null) {
       initial.payment_note = String(data.payment_note);
     }
+    // Always hydrate shipment tracking fields for inventory requests (dedicated section).
+    if (entityType === 'inventory_request') {
+      for (const key of TRACKING_FORM_KEYS) {
+        if (initial[key] !== undefined) continue;
+        const val = data[key];
+        if (key === 'shipment_status') {
+          initial[key] =
+            val != null && String(val).trim()
+              ? String(val).trim().toUpperCase().replace(/\s+/g, '_')
+              : DEFAULT_SHIPMENT_STATUS;
+        } else {
+          initial[key] = val !== undefined && val !== null ? val : '';
+        }
+      }
+    }
     if ((hasPriceFieldInForm || (!paymentButtonConfig && effectiveShowFinalPrice)) && !initial.price_currency) {
       const savedCurrency = String(data.price_currency ?? data.currency ?? '').toUpperCase();
       initial.price_currency = savedCurrency === 'USD' ? 'USD' : 'INR';
@@ -393,7 +587,40 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setFinalPriceIsTotal(false);
       }
     }
-  }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig, hasPriceFieldInForm, modalFlags, effectiveShowFinalPrice]);
+  }, [open, record?.id, record?.data, formModalFields, paymentButtonConfig, hasPriceFieldInForm, modalFlags, effectiveShowFinalPrice, entityType]);
+
+  // When a request already has tracking, refresh live carrier status into the pipeline.
+  useEffect(() => {
+    if (!open || !isInventoryRequest || isPaymentModal) return;
+    const data = record?.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
+    const number = String(data.tracking_number ?? '').trim();
+    const link = String(data.tracking_link ?? '').trim();
+    if (!number && !link) return;
+    let cancelled = false;
+    (async () => {
+      setTrackingLiveLoading(true);
+      try {
+        const result = await fetchLiveShipmentStatus({
+          tracking_number: number || null,
+          tracking_link: link || null,
+          courier_name: String(data.courier_name ?? '').trim() || null,
+        });
+        if (cancelled) return;
+        applyLiveTrackingResult(result);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Auto live shipment track failed', err);
+        }
+      } finally {
+        if (!cancelled) setTrackingLiveLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only on open / record change — not on every form edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, record?.id, isInventoryRequest, isPaymentModal]);
 
   /** Get quantity from form or record for price calculation. */
   const getQuantity = useCallback(() => {
@@ -549,6 +776,51 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     [formData, record?.data]
   );
 
+  const applyShipmentTrackingOnSave = useCallback(
+    (dataToSend: Record<string, unknown>) => {
+      if (!isInventoryRequest) return;
+      const paste = trackingPasteDraft.trim();
+      if (paste) {
+        const normalized = normalizeTrackingPaste(paste);
+        if (normalized.tracking_link) dataToSend.tracking_link = normalized.tracking_link;
+        if (normalized.tracking_number) dataToSend.tracking_number = normalized.tracking_number;
+      }
+      const link = String(dataToSend.tracking_link ?? '').trim();
+      let number = String(dataToSend.tracking_number ?? '').trim();
+      if (link && !number) {
+        const extracted = normalizeTrackingPaste(link).tracking_number;
+        if (extracted) number = extracted;
+      }
+      dataToSend.tracking_link = link || null;
+      dataToSend.tracking_number = number || null;
+      dataToSend.courier_name = String(dataToSend.courier_name ?? '').trim() || null;
+      dataToSend.eta = String(dataToSend.eta ?? '').trim() || null;
+      const hasTracking = Boolean(link || number);
+      const statusRaw = String(dataToSend.shipment_status ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+      const currentStatus = SHIPMENT_STATUSES.includes(statusRaw as (typeof SHIPMENT_STATUSES)[number])
+        ? statusRaw
+        : null;
+      // Pasting a link/AWB should move the pipeline into ORDERED (not stay blank / NOT_SHIPPED).
+      dataToSend.shipment_status = advanceShipmentStatusForTracking(currentStatus, hasTracking);
+
+      const prev = (record?.data && typeof record.data === 'object' ? record.data : {}) as Record<string, unknown>;
+      const keys = [
+        'tracking_number',
+        'tracking_link',
+        'courier_name',
+        'shipment_status',
+        'eta',
+      ] as const;
+      const changed = keys.some((k) => String(dataToSend[k] ?? '') !== String(prev[k] ?? ''));
+      if (changed) {
+        dataToSend.tracking_updated_at = new Date().toISOString();
+      } else if (prev.tracking_updated_at != null) {
+        dataToSend.tracking_updated_at = prev.tracking_updated_at;
+      }
+    },
+    [isInventoryRequest, trackingPasteDraft, record?.data]
+  );
+
   const handleActionClick = useCallback(
     async (btn: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }, extraData?: Record<string, unknown>) => {
       if (!record?.id || !onUpdate) return;
@@ -577,6 +849,13 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         };
         if (targetAttribute === 'status') {
           dataToSend.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+          // Order → IN_SHIPPING should start the delivery pipeline at ORDERED.
+          if (String(btn.statusValue).toUpperCase().replace(/\s+/g, '_') === 'IN_SHIPPING') {
+            dataToSend.shipment_status = advanceShipmentStatusForTracking(
+              dataToSend.shipment_status,
+              true
+            );
+          }
         }
         if (isPaymentModal) {
           dataToSend.payment_note = String(extraData?.payment_note ?? formData.payment_note ?? '').trim();
@@ -602,7 +881,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           if (commentText) {
             history = [
               ...history,
-              { name: myName, role: myRoleName ?? '', comment: commentText },
+              { name: myName, role: myRoleName || myRoleKey || '', comment: commentText },
             ];
           }
           dataToSend.comments = history;
@@ -655,7 +934,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             dataToSend.total_quantity = alloc + avail;
           }
         }
+        applyShipmentTrackingOnSave(dataToSend);
         await onUpdate(record.id, { data: dataToSend });
+        setTrackingPasteDraft('');
         toast({
           title: 'Saved',
           description: `${((btn.targetAttribute || 'status').trim() || 'status')} set to ${btn.statusValue.replace(/_/g, ' ')}.`,
@@ -672,7 +953,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches, isPaymentModal]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, isPaymentModal, applyShipmentTrackingOnSave]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -699,7 +980,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
 
         const commentText = typeof formData.comments === 'string' ? formData.comments.trim() : '';
         if (commentText) {
-          history = [...history, { name: myName, role: myRoleName ?? '', comment: commentText }];
+          history = [...history, { name: myName, role: myRoleName || myRoleKey || '', comment: commentText }];
         }
         dataToSend.comments = history;
       }
@@ -749,7 +1030,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           dataToSend.total_quantity = alloc + avail;
         }
       }
+      applyShipmentTrackingOnSave(dataToSend);
       await onUpdate(record.id, { data: dataToSend });
+      setTrackingPasteDraft('');
       toast({ title: 'Saved', description: 'All changes saved.' });
       onRecordUpdated?.(record.id);
       onOpenChange(false);
@@ -762,7 +1045,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, flagConditionMatches]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, applyShipmentTrackingOnSave]);
 
   const handleDeleteRequest = useCallback(async () => {
     if (!canShowDeleteRequestButton || !record?.id) return;
@@ -838,9 +1121,48 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     : false;
 
   const usePaymentButtons = paymentButtonConfig?.conditionalButton && paymentButtonConfig?.defaultButton;
-  const effectiveActionButtons = usePaymentButtons
+  const statusFromForm =
+    formData.status != null && String(formData.status).trim() !== '' ? formData.status : undefined;
+  // Prefer saved record status for Approve / Reject / Order so a mismatched status
+  // dropdown (e.g. NEW_REQUEST not in options) cannot hide the workflow buttons.
+  const requestStatusForWorkflow =
+    (record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>).status
+      : undefined) ?? statusFromForm;
+  const teamLeadFromForm =
+    formData.team_lead != null && String(formData.team_lead).trim() !== ''
+      ? formData.team_lead
+      : undefined;
+  const teamLeadOnRecord =
+    teamLeadFromForm ??
+    (record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>).team_lead
+      : undefined);
+
+  const workflowButtons =
+    isInventoryRequest && !isPaymentModal
+      ? getInventoryWorkflowButtons({
+          requestStatus: requestStatusForWorkflow,
+          roleNameOrKey: myRoleName,
+          roleKey: myRoleKey,
+          membershipId: myMembershipId,
+          teamLeadOnRecord,
+          isRequester,
+          workflowMode: inventoryWorkflowMode ?? 'auto',
+        })
+      : [];
+
+  const configuredActionButtons = usePaymentButtons
     ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
-    : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
+    : isInventoryRequest && !isPaymentModal
+      ? filterDuplicateInventoryWorkflowButtons(
+          (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn))
+        )
+      : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
+
+  const effectiveActionButtons = usePaymentButtons
+    ? configuredActionButtons
+    : [...workflowButtons, ...configuredActionButtons];
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
@@ -884,21 +1206,67 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             <p className="text-sm text-muted-foreground">No fields configured. Add fields in table config.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
-            {formModalFields.map((field) => {
+            {formModalFields
+              .filter((field) => {
+                if (field.key === 'cart_id') return false;
+                // Dedicated shipment section owns these keys for inventory requests.
+                if (!isInventoryRequest || isPaymentModal) return true;
+                return !(TRACKING_FORM_KEYS as readonly string[]).includes(field.key);
+              })
+              .map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
               const isEnabled = field.enabled && canUpdate;
-              const isClickableLink =
-                !isEnabled && looksLikeUrl(displayStr) && (field.link === true || isLinkLikeFieldKey(field.key));
+              const isLinkField = field.link === true || isLinkLikeFieldKey(field.key);
+              const hasUrl = looksLikeUrl(displayStr);
+              const isClickableProductLink = isLinkField && hasUrl;
               const isStatus = field.key === 'status' && statusOptions.length > 0;
-              const isCartId = field.key === 'cart_id' && isInventoryRequest && cartOptions && cartOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
-              const isUrgency = field.key === 'urgency_level';
+              // urgency_level slot now shows date-derived Priority (not CRITICAL/STANDARD).
+              const isPriorityField = field.key === 'urgency_level' || field.key === 'priority';
+              const priorityDisplay = isPriorityField
+                ? resolvePriorityFromRow(record, formData.urgency_level ?? formData.priority ?? value)
+                : '';
+              const isLineTotal = field.key === 'line_total' || field.key === 'computed_price';
+              const isRequestDateField = field.key === 'request_date' || field.key === 'requested_date';
+              const lineTotalDisplay = (() => {
+                if (!isLineTotal) return '';
+                const qtyRaw =
+                  formData.quantity ??
+                  formData.quantity_required ??
+                  (record?.data as any)?.quantity ??
+                  (record?.data as any)?.quantity_required;
+                const costRaw =
+                  formData.estimated_cost ?? (record?.data as any)?.estimated_cost;
+                const qty = Number(qtyRaw);
+                const cost = typeof costRaw === 'number' ? costRaw : Number(String(costRaw ?? '').replace(/,/g, ''));
+                if (!Number.isFinite(qty) || !Number.isFinite(cost)) return '—';
+                return formatCurrencyDisplay(Math.round(qty * cost * 100) / 100);
+              })();
+              const requestDateDisplay = isRequestDateField
+                ? formatCalendarDate(
+                    String(
+                      formData.request_date ??
+                        formData.requested_date ??
+                        (record?.data as any)?.request_date ??
+                        (record?.data as any)?.requested_date ??
+                        displayStr ??
+                        ''
+                    )
+                  )
+                : '';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
-              const isNumber = NUMBER_KEYS.has(field.key) && field.key !== 'cart_id';
+              const isNumber = NUMBER_KEYS.has(field.key);
               const spanFullWidth = TEXTAREA_KEYS.has(field.key);
+              const fieldLabel = isPriorityField
+                ? 'Priority'
+                : isLineTotal
+                  ? 'Price'
+                  : isRequestDateField
+                    ? 'Requested Date'
+                    : field.label || field.key.replace(/_/g, ' ');
 
               return (
                 <div
@@ -907,12 +1275,25 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
                     <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      {field.label || field.key.replace(/_/g, ' ')}
+                      {fieldLabel}
                     </Label>
-                    {isClickableLink ? <OpenLinkButton href={displayStr} /> : null}
                   </div>
-                  {!isClickableLink ? (
-                    field.key === 'comments' ? (
+                  {isLineTotal ? (
+                    <div
+                      className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm font-mono tabular-nums font-semibold text-foreground"
+                      role="status"
+                      title="Quantity × Estimated cost"
+                    >
+                      {lineTotalDisplay}
+                    </div>
+                  ) : isRequestDateField ? (
+                    <div
+                      className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm text-foreground"
+                      role="status"
+                    >
+                      {requestDateDisplay || '—'}
+                    </div>
+                  ) : field.key === 'comments' ? (
                     (() => {
                       const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as any).comments : undefined) as unknown;
                       const history: Array<{ name: string; role: string; comment: string }> = Array.isArray(existingRaw)
@@ -1032,24 +1413,6 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         ))}
                       </SelectContent>
                     </Select>
-                  ) : isCartId ? (
-                    <Select
-                      value={displayStr === '' || displayStr === '—' ? '_none_' : displayStr}
-                      onValueChange={(v) => setField(field.key, v === '_none_' ? '' : v)}
-                      disabled={!isEnabled}
-                    >
-                      <SelectTrigger className="h-9 text-sm rounded-md">
-                        <SelectValue placeholder="Select cart" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none_">No cart</SelectItem>
-                        {cartOptions.map((opt) => (
-                          <SelectItem key={opt.id} value={String(opt.id)}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   ) : isBoolean ? (
                     <Select
                       value={displayStr}
@@ -1064,47 +1427,25 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         <SelectItem value="false">No</SelectItem>
                       </SelectContent>
                     </Select>
-                  ) : isUrgency ? (
-                    !isEnabled ? (
-                      <div
+                  ) : isPriorityField ? (
+                    <div
+                      className={cn(
+                        'rounded-lg border px-3 py-2.5 shadow-sm',
+                        inventoryPriorityFieldCardClassName(priorityDisplay),
+                      )}
+                      role="status"
+                      aria-label="Priority"
+                      title="Derived from Request Date vs Requirement Date"
+                    >
+                      <span
                         className={cn(
-                          'rounded-lg border px-3 py-2.5 shadow-sm',
-                          isUrgencyToneValue(displayStr)
-                            ? urgencyReadonlyFieldCardClassName(String(displayStr))
-                            : 'border-border bg-card',
+                          'text-base font-bold tracking-wide',
+                          inventoryPriorityValueTextClassName(priorityDisplay),
                         )}
-                        role="status"
-                        aria-label="Urgency"
                       >
-                        <span
-                          className={cn(
-                            'text-base font-bold tracking-wide uppercase',
-                            urgencyReadonlyValueTextClassName(String(displayStr)),
-                          )}
-                        >
-                          {displayStr && displayStr !== 'N/A' ? String(displayStr).trim() : '—'}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2" role="group" aria-label="Urgency level">
-                        {URGENCY_BUTTON_OPTIONS.map((opt) => {
-                          const selected = String(displayStr || '').toUpperCase() === opt.value;
-                          return (
-                            <Button
-                              key={opt.value}
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setField(field.key, opt.value)}
-                              disabled={!isEnabled}
-                              className={urgencyToneButtonClassName(opt.value, selected, 'rounded-full h-8')}
-                            >
-                              {opt.label}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    )
+                        {priorityDisplay}
+                      </span>
+                    </div>
                   ) : isTextarea ? (
                     <Textarea
                       className="min-h-[80px] text-sm rounded-md"
@@ -1170,6 +1511,16 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                         disabled={!isEnabled}
                       />
                     )
+                  ) : isClickableProductLink ? (
+                    <a
+                      href={displayStr}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={displayStr}
+                      className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm text-black break-all truncate transition-colors hover:text-black active:border-black active:bg-black active:text-white"
+                    >
+                      {displayStr}
+                    </a>
                   ) : (
                     <Input
                       className="h-9 text-sm rounded-md"
@@ -1178,13 +1529,163 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                       disabled={!isEnabled}
                       placeholder={field.label || field.key}
                     />
-                  ))
-                  : null}
+                  )}
                 </div>
               );
             })}
             </div>
           )}
+
+          {/* Shipment tracking — ops paste tracking from vendor site */}
+          {isInventoryRequest &&
+            !isPaymentModal &&
+            shouldShowShipmentTrackingSection(
+              formData.status ?? (record?.data as any)?.status,
+              {
+                ...(typeof record?.data === 'object' && record.data ? (record.data as Record<string, unknown>) : {}),
+                ...formData,
+              }
+            ) && (
+              <div className="space-y-3 pt-2 border-t border-border/60">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Shipment tracking
+                  </Label>
+                  {formData.tracking_link && looksLikeUrl(String(formData.tracking_link)) ? (
+                    <OpenLinkButton href={String(formData.tracking_link)} />
+                  ) : null}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Paste a tracking link or AWB — we look up the carrier and update the delivery pipeline
+                  when scans are available. Pipeline is read-only.
+                </p>
+                <ShipmentDeliveryPipeline
+                  status={formData.shipment_status}
+                  disabled={!canUpdate || !!applyingStatusValue || trackingLiveLoading}
+                  statusDetail={trackingStatusDetail}
+                  details={trackingDetails}
+                  liveLoading={trackingLiveLoading}
+                  onRefresh={() => {
+                    void refreshLiveTracking();
+                  }}
+                />
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Paste tracking
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      className="h-9 text-sm rounded-md flex-1 min-w-[12rem]"
+                      value={trackingPasteDraft}
+                      onChange={(e) => setTrackingPasteDraft(e.target.value)}
+                      onBlur={() => {
+                        if (!trackingPasteDraft.trim()) return;
+                        void applyTrackingPaste(trackingPasteDraft);
+                      }}
+                      placeholder="https://… or tracking number"
+                      disabled={!canUpdate || trackingLiveLoading}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9"
+                      disabled={!canUpdate || !trackingPasteDraft.trim() || trackingLiveLoading}
+                      onClick={() => {
+                        void applyTrackingPaste(trackingPasteDraft, { clearDraft: true });
+                      }}
+                    >
+                      {trackingLiveLoading ? 'Tracking…' : 'Apply'}
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Tracking number
+                    </Label>
+                    <Input
+                      className="h-9 text-sm rounded-md font-mono"
+                      value={String(formData.tracking_number ?? '')}
+                      onChange={(e) => setField('tracking_number', e.target.value)}
+                      onBlur={() => {
+                        const number = String(formData.tracking_number ?? '').trim();
+                        const link = String(formData.tracking_link ?? '').trim();
+                        if (!number && !link) return;
+                        void refreshLiveTracking({ silent: true });
+                      }}
+                      disabled={!canUpdate || trackingLiveLoading}
+                      placeholder="AWB / tracking no"
+                    />
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Tracking link
+                    </Label>
+                    <Input
+                      className="h-9 text-sm rounded-md"
+                      value={String(formData.tracking_link ?? '')}
+                      onChange={(e) => setField('tracking_link', e.target.value)}
+                      onBlur={() => {
+                        const number = String(formData.tracking_number ?? '').trim();
+                        const link = String(formData.tracking_link ?? '').trim();
+                        if (!number && !link) return;
+                        void refreshLiveTracking({ silent: true });
+                      }}
+                      disabled={!canUpdate || trackingLiveLoading}
+                      placeholder="https://…"
+                    />
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Courier
+                    </Label>
+                    <Select
+                      value={String(formData.courier_name ?? '').trim() || '__auto__'}
+                      onValueChange={(v) => {
+                        setField('courier_name', v === '__auto__' ? '' : v);
+                        const number = String(formData.tracking_number ?? '').trim();
+                        const link = String(formData.tracking_link ?? '').trim();
+                        if (number || link) {
+                          void refreshLiveTracking({
+                            courier_name: v === '__auto__' ? null : v,
+                            silent: true,
+                          });
+                        }
+                      }}
+                      disabled={!canUpdate || trackingLiveLoading}
+                    >
+                      <SelectTrigger className="h-9 w-full text-sm rounded-md">
+                        <SelectValue placeholder="Auto-detect" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__auto__">Auto-detect</SelectItem>
+                        <SelectItem value="Amazon">Amazon</SelectItem>
+                        <SelectItem value="BlueDart">BlueDart</SelectItem>
+                        <SelectItem value="Delhivery">Delhivery</SelectItem>
+                        <SelectItem value="FedEx">FedEx</SelectItem>
+                        <SelectItem value="DHL">DHL</SelectItem>
+                        <SelectItem value="DTDC">DTDC</SelectItem>
+                        <SelectItem value="Shiprocket">Shiprocket</SelectItem>
+                        <SelectItem value="India Post">India Post</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      ETA
+                    </Label>
+                    <Input
+                      type="date"
+                      className="h-9 text-sm rounded-md"
+                      value={String(formData.eta ?? '').slice(0, 10)}
+                      onChange={(e) => setField('eta', e.target.value)}
+                      disabled={!canUpdate || trackingLiveLoading}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
           {/* Final price (form-style modal only; not shown for Inventory Payment modal — use modal fields for total_price/unit_price there) */}
           {!paymentButtonConfig && effectiveShowFinalPrice && (

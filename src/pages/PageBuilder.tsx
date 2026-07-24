@@ -79,7 +79,7 @@ import {
   InventoryRequestFormComponent,
   ProcurementRequestFormComponent,
 } from "@/components/page-builder";
-import { DEFAULT_PROCUREMENT_TABLE_COLUMNS } from "@/components/page-builder/ProcurementTableComponent";
+import { DEFAULT_PROCUREMENT_TABLE_CONFIG } from "@/components/page-builder/ProcurementTableComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
@@ -88,7 +88,6 @@ import type { Json } from '@/types/supabase';
 import { useTenant } from '@/hooks/useTenant';
 
 import { apiClient, membershipService, pageService } from '@/lib/api';
-import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 import {DataCardComponent} from "@/components/page-builder/DataCardComponent"
   import { LeadTableComponent } from "@/components/page-builder/LeadTableComponent";
@@ -161,6 +160,13 @@ interface ComponentConfig {
     key: string;
     label: string;
     type: 'text' | 'chip' | 'date' | 'number' | 'link' | 'action';
+    linkField?: string;
+    editableInTable?: boolean;
+    openCard?: boolean | string;
+    actionApiEndpoint?: string;
+    actionApiMethod?: string;
+    actionApiHeaders?: string;
+    actionApiPayload?: string;
   }>;
   datasets?: Array<{
     label: string;
@@ -319,10 +325,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     refreshInterval?: number;
     showFilters: boolean;
     searchFields: string;
-    /** Records table: entity type for API (e.g. inventory_request, inventory_cart). */
+    /** Records table: entity type for API (e.g. inventory_request, inventory_item). */
     entityType?: string;
     /** Records table: row click behavior — lead card, record detail modal, receive shipment modal, none, or auto (infer from entityType). */
-    detailMode?: 'lead_card' | 'inventory_request' | 'inventory_cart' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
+    detailMode?: 'lead_card' | 'inventory_request' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
     // OpenModalButton specific fields
     buttonTitle?: string;
     buttonColor?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
@@ -391,6 +397,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription?: string;
     paymentModalConfig?: import('@/component-config').PaymentModalConfig;
     showFormModalSaveButton?: boolean;
+    /** manager = Approve/Reject; team_lead = Order only; auto = from role. */
+    inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
     /** Form-style modal: show extra “Final price” block. Default true when omitted. */
     showFinalPriceSection?: boolean;
     /** Requestor-side Delete request (any status when on). Default false. */
@@ -465,6 +473,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     formModalDescription: (initialConfig as any).formModalDescription ?? '',
     paymentModalConfig: (initialConfig as any).paymentModalConfig ?? undefined,
     showFormModalSaveButton: (initialConfig as any).showFormModalSaveButton ?? undefined,
+    inventoryWorkflowMode: (initialConfig as any).inventoryWorkflowMode ?? 'auto',
     showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
     showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
     showHistoryButton: (initialConfig as any).showHistoryButton ?? false,
@@ -503,16 +512,52 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     [selectedComponentId, setCanvasComponents]
   );
 
-  const debouncedUpdateWithDelay = useMemo(
-    () => debounce(debouncedUpdate, 500),
-    [debouncedUpdate]
+  // Accumulate rapid patches so multi-field resets (e.g. "simple All Requests")
+  // don't lose all but the last field to lodash debounce's last-call-wins behavior.
+  const pendingConfigUpdatesRef = useRef<Partial<ComponentConfig>>({});
+  const flushPendingConfigUpdates = useCallback(() => {
+    const updates = pendingConfigUpdatesRef.current;
+    if (!updates || Object.keys(updates).length === 0) return;
+    pendingConfigUpdatesRef.current = {};
+    debouncedUpdate(updates);
+  }, [debouncedUpdate]);
+
+  const scheduleConfigUpdate = useMemo(
+    () => debounce(flushPendingConfigUpdates, 500),
+    [flushPendingConfigUpdates]
   );
+
+  useEffect(() => {
+    return () => {
+      scheduleConfigUpdate.flush();
+      scheduleConfigUpdate.cancel();
+    };
+  }, [scheduleConfigUpdate]);
+
+  const queueConfigUpdate = useCallback(
+    (updates: Partial<ComponentConfig>) => {
+      pendingConfigUpdatesRef.current = {
+        ...pendingConfigUpdatesRef.current,
+        ...updates,
+      };
+      scheduleConfigUpdate();
+    },
+    [scheduleConfigUpdate]
+  );
+
+  const debouncedUpdateWithDelay = queueConfigUpdate;
 
   // Handle local input changes
   const handleInputChange = useCallback((field: keyof LocalConfigType, value: string | number | boolean | Array<{ label: string; statusValue: string; targetAttribute?: string; statusText?: string }> | Array<{ label: string; value: string }> | Array<{ key: string; editable: boolean }> | Array<{ key: string; label: string; enabled: boolean; link?: boolean }> | import('@/component-config').PaymentModalConfig | import('@/component-config').ModalFlagConfig[]) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
-    debouncedUpdateWithDelay({ [field]: value });
-  }, [debouncedUpdateWithDelay]);
+    queueConfigUpdate({ [field]: value } as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
+
+  /** Apply several config fields in one patch (avoids lost updates on reset buttons). */
+  const handleConfigPatch = useCallback((patch: Partial<LocalConfigType>) => {
+    setLocalConfig((prev) => ({ ...prev, ...patch }));
+    queueConfigUpdate(patch as Partial<ComponentConfig>);
+  }, [queueConfigUpdate]);
 
   // Handle column count change
   const handleColumnCountChange = useCallback((count: number) => {
@@ -730,7 +775,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'ticketTable':
         return (
           <TableConfig
-            localConfig={localConfig}
+            localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
@@ -803,12 +848,14 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
       case 'myRequestTable':
         return (
           <TableConfig
+            profile="inventory"
             localConfig={localConfig as any}
             localColumns={localColumns}
             numColumns={numColumns}
             localFilters={localFilters}
             numFilters={numFilters}
             handleInputChange={handleInputChange}
+            handleConfigPatch={handleConfigPatch as any}
             handleColumnCountChange={handleColumnCountChange}
             handleColumnFieldChange={handleColumnFieldChange}
             handleColumnDelete={handleColumnDelete}
@@ -1028,10 +1075,10 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
               <Input
                 value={localConfig.initialStatus ?? localConfig.defaultStatus ?? ''}
                 onChange={(e) => handleInputChange('initialStatus', e.target.value)}
-                placeholder="e.g. DRAFT"
+                placeholder="e.g. NEW_REQUEST"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Status for new requests. Leave empty to use default (DRAFT).
+                Status for new requests. Leave empty to use default (NEW_REQUEST).
               </p>
             </div>
 
@@ -1426,7 +1473,10 @@ useEffect(() => {
           props: {},
           config:
             componentType === 'procurementTable'
-              ? ({ columns: [...DEFAULT_PROCUREMENT_TABLE_COLUMNS] } as ComponentConfig)
+              ? ({
+                  ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
+                  columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
+                } as ComponentConfig)
               : componentType === 'procurementRequestForm'
                 ? ({ entityType: 'unmannd_request' } as ComponentConfig)
                 : {},
@@ -1453,7 +1503,10 @@ useEffect(() => {
         props: {},
         config:
           componentType === 'procurementTable'
-            ? ({ columns: [...DEFAULT_PROCUREMENT_TABLE_COLUMNS] } as ComponentConfig)
+            ? ({
+                ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
+                columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
+              } as ComponentConfig)
             : componentType === 'procurementRequestForm'
               ? ({ entityType: 'unmannd_request' } as ComponentConfig)
               : {},
