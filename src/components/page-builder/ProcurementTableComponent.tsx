@@ -63,8 +63,11 @@ export const DEFAULT_PROCUREMENT_TABLE_CONFIG = {
     { key: 'status', label: 'Status', enabled: false },
     { key: 'item_name_freeform', label: 'Item', enabled: false },
     { key: 'quantity_required', label: 'Quantity', enabled: true },
+    { key: 'estimated_cost', label: 'Estimated Cost', enabled: false },
+    { key: 'line_total', label: 'Price', enabled: false },
+    { key: 'request_date', label: 'Requested Date', enabled: false },
     { key: 'vendor', label: 'Vendor', enabled: true },
-    { key: 'urgency_level', label: 'Urgency', enabled: true },
+    { key: 'urgency_level', label: 'Priority', enabled: false },
     { key: 'department', label: 'Department', enabled: false },
     { key: 'specifications', label: 'Specifications', enabled: true },
     { key: 'product_link', label: 'Product link', enabled: true, link: true },
@@ -99,6 +102,44 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
     const match = /[?&]entity_type=([^&]*)/.exec(normalized);
     return match?.[1] ? decodeURIComponent(match[1]).trim() : undefined;
   }
+}
+
+/** Ensure Price (qty × estimated cost) and Requested Date always appear in the procurement modal. */
+function withProcurementModalFields(
+  fields: Array<{ key: string; label: string; enabled: boolean; link?: boolean }>
+): Array<{ key: string; label: string; enabled: boolean; link?: boolean }> {
+  const keys = new Set(fields.map((f) => f.key));
+  const next = [...fields];
+
+  const insertAfter = (afterKey: string, field: { key: string; label: string; enabled: boolean; link?: boolean }) => {
+    if (keys.has(field.key)) return;
+    const idx = next.findIndex((f) => f.key === afterKey);
+    if (idx >= 0) next.splice(idx + 1, 0, field);
+    else next.push(field);
+    keys.add(field.key);
+  };
+
+  insertAfter('quantity_required', { key: 'estimated_cost', label: 'Estimated Cost', enabled: false });
+  if (!keys.has('estimated_cost')) {
+    insertAfter('quantity', { key: 'estimated_cost', label: 'Estimated Cost', enabled: false });
+  }
+  insertAfter('estimated_cost', { key: 'line_total', label: 'Price', enabled: false });
+  if (!keys.has('line_total')) {
+    insertAfter('quantity_required', { key: 'line_total', label: 'Price', enabled: false });
+  }
+  if (!keys.has('line_total')) {
+    insertAfter('quantity', { key: 'line_total', label: 'Price', enabled: false });
+  }
+  insertAfter('line_total', { key: 'request_date', label: 'Requested Date', enabled: false });
+  if (!keys.has('request_date')) {
+    next.push({ key: 'request_date', label: 'Requested Date', enabled: false });
+  }
+
+  return next.map((f) =>
+    f.key === 'urgency_level' || f.key === 'priority'
+      ? { ...f, label: 'Priority', enabled: false }
+      : f
+  );
 }
 
 /**
@@ -154,10 +195,11 @@ export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ con
       tableType,
       detailMode,
       // Ensure Manager All Requests always has form fields for the Approve/Reject modal.
-      formModalFields:
+      formModalFields: withProcurementModalFields(
         Array.isArray(config?.formModalFields) && config.formModalFields.length > 0
           ? config.formModalFields
-          : DEFAULT_PROCUREMENT_TABLE_CONFIG.formModalFields,
+          : DEFAULT_PROCUREMENT_TABLE_CONFIG.formModalFields
+      ),
       showFinalPriceSection: config?.showFinalPriceSection ?? false,
       // If someone still uses inventory_request mode, force form_edit.
       ...(detailMode === 'inventory_request'

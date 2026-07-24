@@ -7,7 +7,7 @@ type RecordModalTitleDisplayProps = {
 };
 
 /**
- * Readable modal header: request # (chip), item name (emphasis), date (muted).
+ * Readable modal header: Request Number | Item · Date (24 July 2026).
  */
 export function RecordModalTitleDisplay({ record }: RecordModalTitleDisplayProps) {
   const parts = getRecordModalTitleParts(record);
@@ -17,30 +17,36 @@ export function RecordModalTitleDisplay({ record }: RecordModalTitleDisplayProps
   }
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-4 sm:gap-y-2">
-      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-2">
-        <span
-          className="inline-flex w-fit shrink-0 items-center rounded-md border border-border/80 bg-muted/50 px-2.5 py-1 text-sm font-semibold tabular-nums tracking-tight text-muted-foreground shadow-sm"
-          title="Request number"
-        >
-          #{parts.idNum}
-        </span>
-        <span
-          className="min-w-0 max-w-full text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl"
-          title={parts.itemName === '—' ? undefined : parts.itemName}
-        >
-          <span className="line-clamp-3 break-words">{parts.itemName}</span>
-        </span>
-      </div>
-      <div className="flex shrink-0 items-center gap-3 border-t border-border/60 pt-2 sm:border-t-0 sm:border-l sm:pl-4 sm:pt-0">
-        <time
-          className="text-sm font-medium tabular-nums text-muted-foreground sm:text-base"
-          dateTime={parts.dateTimeAttr}
-          title="Date"
-        >
-          {parts.dateDisplay}
-        </time>
-      </div>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+      <span
+        className="inline-flex shrink-0 items-center rounded-md bg-muted px-2 py-0.5 font-mono text-[13px] font-medium tabular-nums tracking-tight text-muted-foreground"
+        title="Request Number"
+      >
+        #{parts.idNum}
+      </span>
+
+      <span className="select-none text-border" aria-hidden>
+        |
+      </span>
+
+      <span
+        className="min-w-0 text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg"
+        title={parts.itemName === '—' ? undefined : parts.itemName}
+      >
+        <span className="line-clamp-2 break-words">{parts.itemName}</span>
+      </span>
+
+      <span className="select-none text-border/80" aria-hidden>
+        ·
+      </span>
+
+      <time
+        className="shrink-0 text-sm font-normal tabular-nums text-muted-foreground"
+        dateTime={parts.dateTimeAttr}
+        title="Requested Date"
+      >
+        {parts.dateDisplay}
+      </time>
     </div>
   );
 }
