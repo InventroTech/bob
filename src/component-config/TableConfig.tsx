@@ -76,8 +76,8 @@ export interface ColumnConfig {
 interface TableConfigProps {
   localConfig: {
     apiEndpoint: string;
-    /** Base host: supabase edge functions vs pyro-backend renderer. */
-    apiPrefix?: 'supabase' | 'renderer';
+    /** Base host: supabase edge functions vs pyro-backend renderer (localhost kept for older saved configs). */
+    apiPrefix?: 'supabase' | 'renderer' | 'localhost';
     showFilters: boolean;
     searchFields?: string;
     entityType?: string;

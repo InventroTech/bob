@@ -60,3 +60,26 @@ export const convertGMTtoIST = (
   const years = Math.floor(diffSeconds / 31536000);
   return `${years} year${years > 1 ? 's' : ''} ago`;
 };
+
+/**
+ * Format a date-only value (YYYY-MM-DD) as a calendar day without timezone shift.
+ * Full timestamps still go through convertGMTtoIST.
+ */
+export const formatCalendarDate = (dateString: string): string => {
+  if (!dateString) return 'N/A';
+  const trimmed = String(dateString).trim();
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]) - 1;
+    const day = Number(dateOnly[3]);
+    const local = new Date(year, month, day);
+    if (Number.isNaN(local.getTime())) return 'Invalid date';
+    return local.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+  return convertGMTtoIST(trimmed, 'date');
+};
