@@ -7,8 +7,6 @@ import { CustomButton } from '@/components/ui/CustomButton';
 import { useNavigate } from 'react-router-dom';
 import { membershipService, User } from '@/lib/api';
 
-
-
 const UsersPage = () => {
   const { user, session } = useAuth();
   const navigate = useNavigate();

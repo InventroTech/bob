@@ -365,6 +365,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // title already in base; showTable, showDiagram below
     showTable?: boolean;
     showDiagram?: boolean;
+    // AddUser specific fields
+    userScope?: 'all' | 'under_me';
     // InventoryRequestForm specific fields
     initialStatus?: string;
     initialStatusText?: string;
@@ -458,6 +460,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
     // UserHierarchy
     showTable: initialConfig.showTable !== false,
     showDiagram: initialConfig.showDiagram !== false,
+    // AddUser
+    userScope: (initialConfig as any).userScope || 'all',
     // InventoryRequestForm (empty by default so user can set from config)
     initialStatus: (initialConfig as any).initialStatus ?? (initialConfig as any).defaultStatus ?? '',
     initialStatusText: (initialConfig as any).initialStatusText ?? '',
@@ -1030,6 +1034,21 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedCompone
             localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
+        );
+
+      case 'addUser':
+        return (
+          <div className="space-y-3">
+            <Label>User Scope</Label>
+            <select
+              className="h-9 w-full border rounded-md px-3 text-sm bg-white"
+              value={localConfig.userScope || 'all'}
+              onChange={(e) => handleInputChange('userScope', e.target.value)}
+            >
+              <option value="all">Show all users</option>
+              <option value="under_me">Show only users under me</option>
+            </select>
+          </div>
         );
 
       case 'userHierarchy':

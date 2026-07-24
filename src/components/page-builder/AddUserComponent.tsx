@@ -183,13 +183,18 @@ function isCseRole(role?: Role): boolean {
   return name.includes('CSE') || name.includes('CUSTOMER SUPPORT');
 }
 
-const AddUserComponent: React.FC = () => {
+interface AddUserComponentConfig {
+  userScope?: 'all' | 'under_me';
+}
+
+const AddUserComponent: React.FC<{ config?: AddUserComponentConfig }> = ({ config }) => {
   const { user, session } = useAuth();
   const navigate = useNavigate();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { tenantId } = useTenant();
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleKey, setNewRoleKey] = useState('');
@@ -367,6 +372,13 @@ const AddUserComponent: React.FC = () => {
   }, [tenantId]);
 
   useEffect(() => {
+    if (config?.userScope !== 'under_me') return;
+    membershipService.getMyMembership().then((m) => {
+      setMyMembershipId(m?.tenant_membership_id ?? null);
+    });
+  }, [config?.userScope]);
+
+  useEffect(() => {
     if (users.length > 0) {
       fetchCoreSettings();
     } else {
@@ -429,7 +441,12 @@ const AddUserComponent: React.FC = () => {
 
   const filteredUsersWithSettings = useMemo(() => {
     const term = userSearchTerm.toLowerCase().trim();
-    const validUsers = usersWithSettings.filter((user) => user.name && user.email);
+    let validUsers = usersWithSettings.filter((user) => user.name && user.email);
+
+    if (config?.userScope === 'under_me' && myMembershipId != null) {
+      validUsers = validUsers.filter((u) => u.user_parent_id === myMembershipId);
+    }
+
     if (!term) return validUsers;
 
     return validUsers.filter(
@@ -438,7 +455,7 @@ const AddUserComponent: React.FC = () => {
         user.email.toLowerCase().includes(term) ||
         (user.role?.name || '').toLowerCase().includes(term)
     );
-  }, [usersWithSettings, userSearchTerm]);
+  }, [usersWithSettings, userSearchTerm, config?.userScope, myMembershipId]);
 
   const handleDownloadUsersPdf = async () => {
     if (filteredUsersWithSettings.length === 0) {
