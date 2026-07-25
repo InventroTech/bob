@@ -266,7 +266,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           <div className="space-y-2">
             <p className="text-sm font-medium">Inventory request flow</p>
             <p className="text-xs text-muted-foreground">
-              Manager pages: Approve/Reject on NEW_REQUEST. Team-lead pages: Order only on
+              Manager pages: Approve/Reject/Send to requestor to verify on NEW_REQUEST. Team-lead pages: Order only on
               VENDOR_IDENTIFIED (no Approve/Reject on new requests).
             </p>
           </div>

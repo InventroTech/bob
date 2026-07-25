@@ -36,11 +36,11 @@ const DATA_DISPLAY_ORDER: string[] = [
   'urgency_level',
   'quantity_required',
   'estimated_cost',
+  'negotiated_value',
   'final_amount',
   'extra_charges',
   'price_currency',
   'product_link',
-  'additional_link',
   'tracking_link',
   'tracking_number',
   'courier_name',
@@ -58,7 +58,6 @@ const DATA_DISPLAY_ORDER: string[] = [
 const LINKISH_DATA_KEYS = new Set([
   'product_link',
   'tracking_link',
-  'additional_link',
   'vendor_link',
   'link',
 ]);
