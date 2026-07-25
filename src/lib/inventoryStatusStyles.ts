@@ -2,6 +2,7 @@ const STATUS_COLOR_CLASS_MAP: Record<string, string> = {
   NEW_REQUEST: 'border-sky-200 bg-sky-50 text-sky-800',
   VENDOR_IDENTIFIED: 'border-sky-200 bg-sky-50 text-sky-800',
   IN_SHIPPING: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+  ON_HOLD: 'border-amber-200 bg-amber-50 text-amber-900',
   REJECTED: 'border-rose-200 bg-rose-50 text-rose-800',
 };
 

@@ -3,6 +3,7 @@ export const INVENTORY_REQUEST_STATUSES = [
   'NEW_REQUEST',
   'VENDOR_IDENTIFIED',
   'IN_SHIPPING',
+  'ON_HOLD',
   'REJECTED',
 ] as const;
 
@@ -28,4 +29,5 @@ export const INVENTORY_ITEM_STATUSES = [
 export const ALLOWED_STATUSES: Record<string, readonly string[]> = {
   inventory_item: INVENTORY_ITEM_STATUSES,
   inventory_request: INVENTORY_REQUEST_STATUSES,
+  unmannd_request: INVENTORY_REQUEST_STATUSES,
 };
