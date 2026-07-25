@@ -4,18 +4,30 @@
  *   NEW_REQUEST
  *     → (manager Approve) VENDOR_IDENTIFIED
  *     → (manager Reject) REJECTED
+ *     → (manager Put on Hold) ON_HOLD
+ *   ON_HOLD
+ *     → (manager Approve) VENDOR_IDENTIFIED
+ *     → (manager Reject) REJECTED
  *   VENDOR_IDENTIFIED
  *     → (team lead Order) IN_SHIPPING
+ *     → (manager Put on Hold) ON_HOLD
  *   IN_SHIPPING → shipment tracking (paste link/AWB)
  *
  * Page Builder can set inventoryWorkflowMode:
- *   - manager   → Approve / Reject only
+ *   - manager   → Approve / Reject / Put on Hold
  *   - team_lead → Order only (no Approve / Reject on new requests)
  *   - auto      → infer from membership role
  */
 
 export const INVENTORY_APPROVABLE_STATUSES = new Set([
   'NEW_REQUEST',
+  'ON_HOLD',
+]);
+
+/** Statuses where a procurement manager can put the request on hold. */
+export const INVENTORY_HOLDABLE_STATUSES = new Set([
+  'NEW_REQUEST',
+  'VENDOR_IDENTIFIED',
 ]);
 
 /** Statuses where Order is available (moves request into shipping). */
@@ -23,11 +35,12 @@ export const INVENTORY_ORDERABLE_STATUSES = new Set([
   'VENDOR_IDENTIFIED',
 ]);
 
-/** Page Builder status values that duplicate built-in Approve / Reject / Order. */
+/** Page Builder status values that duplicate built-in workflow buttons. */
 export const INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES = new Set([
   'VENDOR_IDENTIFIED',
   'REJECTED',
   'IN_SHIPPING',
+  'ON_HOLD',
 ]);
 
 export type InventoryWorkflowMode = 'auto' | 'manager' | 'team_lead';
@@ -114,9 +127,9 @@ function resolveWorkflowMode(opts: {
 }
 
 /**
- * Built-in Approve / Reject / Order for the record form modal.
+ * Built-in Approve / Reject / Put on Hold / Order for the record form modal.
  *
- * Manager: Approve/Reject on NEW_REQUEST.
+ * Manager: Approve/Reject on NEW_REQUEST or ON_HOLD; Put on Hold on open requests.
  * Team lead: Order on VENDOR_IDENTIFIED (never Approve/Reject).
  */
 export function getInventoryWorkflowButtons(opts: {
@@ -150,6 +163,14 @@ export function getInventoryWorkflowButtons(opts: {
     );
   }
 
+  if (mode === 'manager' && INVENTORY_HOLDABLE_STATUSES.has(status)) {
+    buttons.push({
+      label: 'Put on Hold',
+      statusValue: 'ON_HOLD',
+      statusText: 'ON_HOLD',
+    });
+  }
+
   if (mode === 'team_lead' && INVENTORY_ORDERABLE_STATUSES.has(status)) {
     buttons.push({
       label: 'Order',
@@ -161,7 +182,7 @@ export function getInventoryWorkflowButtons(opts: {
   return buttons;
 }
 
-/** Drop Page Builder buttons that would duplicate built-in Approve / Reject / Order. */
+/** Drop Page Builder buttons that would duplicate built-in workflow actions. */
 export function filterDuplicateInventoryWorkflowButtons<
   T extends { statusValue?: string; label?: string },
 >(buttons: T[] | undefined | null): T[] {
