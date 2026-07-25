@@ -25,13 +25,35 @@ describe('inventory procurement → order flow (existing statuses)', () => {
     ).toEqual([]);
   });
 
-  it('manager can Approve/Reject on NEW_REQUEST', () => {
+  it('manager can Approve/Reject/Put on Hold on NEW_REQUEST', () => {
     const buttons = getInventoryWorkflowButtons({
       requestStatus: 'NEW_REQUEST',
       isRequester: false,
       workflowMode: 'manager',
     });
-    expect(buttons.map((b) => b.statusValue)).toEqual(['VENDOR_IDENTIFIED', 'REJECTED']);
+    expect(buttons.map((b) => b.statusValue)).toEqual([
+      'VENDOR_IDENTIFIED',
+      'REJECTED',
+      'ON_HOLD',
+    ]);
+  });
+
+  it('manager can Put on Hold on VENDOR_IDENTIFIED and resume from ON_HOLD', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'VENDOR_IDENTIFIED',
+        isRequester: false,
+        workflowMode: 'manager',
+      }).map((b) => [b.label, b.statusValue])
+    ).toEqual([['Put on Hold', 'ON_HOLD']]);
+
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'ON_HOLD',
+        isRequester: false,
+        workflowMode: 'manager',
+      }).map((b) => b.statusValue)
+    ).toEqual(['VENDOR_IDENTIFIED', 'REJECTED']);
   });
 
   it('team lead never sees Approve/Reject on new requests', () => {
@@ -63,8 +85,8 @@ describe('inventory procurement → order flow (existing statuses)', () => {
         requestStatus: 'VENDOR_IDENTIFIED',
         workflowMode: 'manager',
         isRequester: false,
-      })
-    ).toEqual([]);
+      }).map((b) => b.label)
+    ).toEqual(['Put on Hold']);
   });
 
   it('auto mode: team-lead role hides Approve; procurement role shows Approve', () => {
@@ -83,7 +105,7 @@ describe('inventory procurement → order flow (existing statuses)', () => {
         isRequester: false,
         workflowMode: 'auto',
       }).map((b) => b.label)
-    ).toEqual(['Approve', 'Reject']);
+    ).toEqual(['Approve', 'Reject', 'Put on Hold']);
   });
 
   it('recognizes procurement vs team-lead roles', () => {
