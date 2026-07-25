@@ -33,6 +33,12 @@ import { getEffectiveToken, useSpoofUserId } from '@/lib/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
 import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
 import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventoryStatusStyles';
+import {
+  formatInventoryPriorityLabel,
+  formatInventoryPriorityShortLabel,
+  inventoryPriorityChipClassName,
+  normalizeInventoryPriorityLevel,
+} from '@/lib/inventoryPriority';
 
 interface Column {
   header: string;
@@ -1253,6 +1259,23 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       );
     }
     
+    // Priority / urgency: short colored pill (High / Middle / Low).
+    const accessorLowerEarly = String(column.accessor || '').toLowerCase();
+    const isPriorityColumn =
+      accessorLowerEarly === 'urgency_level' || accessorLowerEarly === 'priority';
+    if (isPriorityColumn && normalizeInventoryPriorityLevel(displayValue)) {
+      const fullLabel = formatInventoryPriorityLabel(displayValue);
+      return (
+        <Badge
+          variant="outline"
+          className={`${inventoryPriorityChipClassName(displayValue)} rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wide hover:opacity-90`}
+          title={fullLabel}
+        >
+          {formatInventoryPriorityShortLabel(displayValue)}
+        </Badge>
+      );
+    }
+
     // Urgency: show colored pill even when column type is `text` (items tables often use text columns).
     const urgencyUpper = String(displayValue ?? '').trim().toUpperCase();
     if (column.accessor === 'urgency_level' && (urgencyUpper === 'CRITICAL' || urgencyUpper === 'STANDARD')) {
@@ -1274,17 +1297,30 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
         accessorLower === 'shipment_status';
       const useInventoryStatusTone =
         config?.tableType === 'itemsTable' && accessorLower === 'status';
+      const usePriorityTone =
+        accessorLower === 'urgency_level' || accessorLower === 'priority';
       const chipToneClass = useShipmentTone
         ? getShipmentStatusToneClass(displayValue)
         : useInventoryStatusTone
           ? getInventoryStatusToneClass(displayValue)
-          : getStatusColor(displayValue, config?.statusColors);
+          : usePriorityTone
+            ? inventoryPriorityChipClassName(displayValue)
+            : getStatusColor(displayValue, config?.statusColors);
       const chipLabel = useShipmentTone
         ? getShipmentStatusLabel(displayValue)
-        : displayValue;
+        : usePriorityTone
+          ? formatInventoryPriorityShortLabel(displayValue)
+          : displayValue;
+      const chipTitle = usePriorityTone
+        ? formatInventoryPriorityLabel(displayValue)
+        : chipLabel;
       return (
-        <Badge className={`${chipToneClass} hover:bg-gray-500 hover:text-white text-xs px-2 py-0.5`}>
-          {truncateText(chipLabel, columnIndex)}
+        <Badge
+          variant="outline"
+          className={`${chipToneClass} rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wide hover:opacity-90`}
+          title={chipTitle}
+        >
+          {usePriorityTone ? chipLabel : truncateText(chipLabel, columnIndex)}
         </Badge>
       );
     }

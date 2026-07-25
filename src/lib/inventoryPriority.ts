@@ -116,3 +116,28 @@ export function inventoryPriorityValueTextClassName(value: unknown): string {
   if (level === 'LOW') return 'text-sky-950 dark:text-sky-50';
   return 'text-foreground';
 }
+
+/** Short table label: HIGH / MIDDLE / LOW (full meaning stays in tooltip). */
+export function formatInventoryPriorityShortLabel(value: unknown): string {
+  const level = normalizeInventoryPriorityLevel(value);
+  if (level === 'HIGH') return 'HIGH';
+  if (level === 'MEDIUM') return 'MIDDLE';
+  if (level === 'LOW') return 'LOW';
+  const raw = String(value ?? '').trim();
+  return raw && raw !== '—' ? raw.toUpperCase() : '—';
+}
+
+/** Colored pill styles for Priority chips in tables (matches Status pill shape). */
+export function inventoryPriorityChipClassName(value: unknown): string {
+  const level = normalizeInventoryPriorityLevel(value);
+  if (level === 'HIGH') {
+    return 'border border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-100';
+  }
+  if (level === 'MEDIUM') {
+    return 'border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100';
+  }
+  if (level === 'LOW') {
+    return 'border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-100';
+  }
+  return 'border border-border bg-muted/60 text-muted-foreground';
+}
