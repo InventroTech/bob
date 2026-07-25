@@ -145,11 +145,22 @@ function withProcurementModalFields(
     next.push({ key: 'category', label: 'Category', enabled: false });
   }
 
-  return next.map((f) =>
-    f.key === 'urgency_level' || f.key === 'priority'
-      ? { ...f, label: 'Priority', enabled: false }
-      : f
-  );
+  // When vendor can be changed, product link must be editable too.
+  const vendorEnabled = next.some((f) => f.key === 'vendor' && f.enabled);
+  insertAfter('vendor', { key: 'product_link', label: 'Item link', enabled: true, link: true });
+  if (!keys.has('product_link')) {
+    next.push({ key: 'product_link', label: 'Item link', enabled: true, link: true });
+  }
+
+  return next.map((f) => {
+    if (f.key === 'urgency_level' || f.key === 'priority') {
+      return { ...f, label: 'Priority', enabled: false };
+    }
+    if (f.key === 'product_link' && vendorEnabled) {
+      return { ...f, enabled: true, link: true, label: f.label || 'Item link' };
+    }
+    return f;
+  });
 }
 
 /**

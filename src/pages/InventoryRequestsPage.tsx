@@ -28,6 +28,9 @@ const InventoryRequestsPage: React.FC = () => {
           config={{
             title: 'My Requests',
             entityType: 'inventory_request',
+            detailMode: 'record_form_modal',
+            recordDetailModalType: 'form_edit',
+            showFormModalSaveButton: true,
             apiEndpoint:
               '/crm-records/records/?entity_type=inventory_request&requester_id={{current_user}}',
             columns: [

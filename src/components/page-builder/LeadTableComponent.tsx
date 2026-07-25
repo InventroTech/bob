@@ -436,10 +436,9 @@ interface LeadTableProps {
 const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: string; enabled: boolean; link?: boolean }> = [
   { key: 'status', label: 'Status', enabled: true },
   { key: 'quantity_required', label: 'Quantity required', enabled: true },
-  { key: 'quantity', label: 'Quantity', enabled: true },
   { key: 'item_name_freeform', label: 'Item name', enabled: true },
   { key: 'vendor', label: 'Vendor', enabled: true },
-  { key: 'product_link', label: 'Product link', enabled: false, link: true },
+  { key: 'product_link', label: 'Product link', enabled: true, link: true },
   { key: 'additional_link', label: 'Additional link', enabled: false, link: true },
   { key: 'comments', label: 'Comments', enabled: true },
   { key: 'notes', label: 'Notes', enabled: true },
@@ -2574,11 +2573,23 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
                 : config?.entityType === 'inventory_request' || config?.entityType === 'unmannd_request'
                   ? DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS
                   : []) ?? []
-            ).map((field) =>
-              field.key === 'urgency_level' || field.key === 'priority'
-                ? { ...field, label: 'Priority', enabled: false }
-                : field
-            )
+            ).map((field) => {
+              if (field.key === 'urgency_level' || field.key === 'priority') {
+                return { ...field, label: 'Priority', enabled: false };
+              }
+              const vendorEditable = (config?.formModalFields?.length
+                ? config.formModalFields
+                : DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS
+              ).some((f) => f.key === 'vendor' && f.enabled);
+              if (
+                field.key === 'product_link' &&
+                vendorEditable &&
+                (config?.entityType === 'inventory_request' || config?.entityType === 'unmannd_request')
+              ) {
+                return { ...field, enabled: true, link: true };
+              }
+              return field;
+            })
           }
           formModalTitle={config?.formModalTitle}
           formModalDescription={config?.formModalDescription}
