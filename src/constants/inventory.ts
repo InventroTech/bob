@@ -1,6 +1,7 @@
 /** Canonical inventory request statuses used in all dropdowns and filters. */
 export const INVENTORY_REQUEST_STATUSES = [
   'NEW_REQUEST',
+  'REQ_TO_VERIFY',
   'VENDOR_IDENTIFIED',
   'IN_SHIPPING',
   'ON_HOLD',

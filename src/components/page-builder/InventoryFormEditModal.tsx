@@ -278,9 +278,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     !paymentButtonConfig;
   const canShowHistoryButton = showHistoryButton === true && record?.id != null;
   const canUpdate = Boolean(onUpdate && record?.id != null);
+  /** Requestors review + Verify only — no field edits. */
+  const canEditFields = canUpdate && !isRequester;
   const isPaymentModal = Boolean(paymentButtonConfig);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
-  const effectiveShowFinalPrice = showFinalPriceSection !== false;
+  const effectiveShowFinalPrice = showFinalPriceSection !== false && !isRequester;
 
   useEffect(() => {
     if (!open || !user) return;
@@ -1272,8 +1274,31 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
   const hasEditableField = formModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
-  const effectiveShowSaveButton =
-    showSaveButton !== undefined ? showSaveButton : !hasActionButtons;
+  // Requestors never get Save — they only Verify / Delete.
+  const effectiveShowSaveButton = isRequester
+    ? false
+    : showSaveButton !== undefined
+      ? showSaveButton
+      : !hasActionButtons;
+
+  const finalPriceDisplayValue = (() => {
+    const data = record?.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
+    const fromFinal = toCurrencyNumber(formData.final_amount ?? data.final_amount);
+    if (fromFinal != null) return formatCurrencyDisplay(fromFinal);
+    const fromTotal = toCurrencyNumber(formData.total_price ?? data.total_price);
+    if (fromTotal != null) return formatCurrencyDisplay(fromTotal);
+    const fromUnit = toCurrencyNumber(formData.unit_price ?? data.unit_price);
+    if (fromUnit != null) {
+      const qty = getQuantity();
+      return formatCurrencyDisplay(Math.round(fromUnit * qty * 100) / 100);
+    }
+    return '—';
+  })();
+
+  const quantityFieldKeys = formModalFields
+    .filter((f) => f.key === 'quantity_required' || f.key === 'quantity')
+    .map((f) => f.key);
+  const primaryQuantityFieldKey = quantityFieldKeys[0] ?? null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1327,10 +1352,11 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
               const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
-              const isEnabled = field.enabled && canUpdate;
+              const isEnabled = field.enabled && canEditFields;
               const isLinkField = field.link === true || isLinkLikeFieldKey(field.key);
               const hasUrl = looksLikeUrl(displayStr);
-              const isClickableProductLink = isLinkField && hasUrl;
+              // Read-only link fields open in a new tab; editable ones stay as inputs.
+              const isClickableProductLink = isLinkField && hasUrl && !isEnabled;
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
@@ -1630,6 +1656,18 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     >
                       {displayStr}
                     </a>
+                  ) : isLinkField && isEnabled ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Input
+                        type="url"
+                        className="h-9 text-sm rounded-md flex-1 min-w-0"
+                        value={displayStr}
+                        onChange={(e) => setField(field.key, e.target.value)}
+                        disabled={!isEnabled}
+                        placeholder="https://..."
+                      />
+                      {hasUrl ? <OpenLinkButton href={displayStr} /> : null}
+                    </div>
                   ) : (
                     <Input
                       className="h-9 text-sm rounded-md"
@@ -1642,44 +1680,78 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                 </div>
               );
 
-              if (!(isLineTotal && isInventoryRequest && !isPaymentModal)) {
-                return <React.Fragment key={field.key}>{fieldNode}</React.Fragment>;
+              if (isLineTotal && isInventoryRequest && !isPaymentModal) {
+                return (
+                  <React.Fragment key={field.key}>
+                    {fieldNode}
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Negotiated value
+                      </Label>
+                      {canEditFields ? (
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={
+                            negotiatedValueDraft ||
+                            formatCurrencyDisplay(formData.negotiated_value as number | '' | string | undefined)
+                          }
+                          onChange={(e) => {
+                            const { display, value } = formatCurrencyInputLive(e.target.value);
+                            setNegotiatedValueDraft(display);
+                            setField('negotiated_value', value);
+                          }}
+                          onBlur={() => {
+                            setNegotiatedValueDraft('');
+                            const parsed = toCurrencyNumber(formData.negotiated_value);
+                            setField(
+                              'negotiated_value',
+                              parsed != null ? Math.round(parsed * 100) / 100 : ''
+                            );
+                          }}
+                          className="h-9 text-sm rounded-md font-mono tabular-nums"
+                          disabled={!canEditFields}
+                        />
+                      ) : (
+                        <div
+                          className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm font-mono tabular-nums font-semibold text-foreground"
+                          role="status"
+                        >
+                          {formatCurrencyDisplay(
+                            formData.negotiated_value as number | '' | string | undefined
+                          ) || '—'}
+                        </div>
+                      )}
+                    </div>
+                  </React.Fragment>
+                );
               }
 
-              return (
-                <React.Fragment key={field.key}>
-                  {fieldNode}
-                  <div className="space-y-1.5 min-w-0">
-                    <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Negotiated value
-                    </Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      value={
-                        negotiatedValueDraft ||
-                        formatCurrencyDisplay(formData.negotiated_value as number | '' | string | undefined)
-                      }
-                      onChange={(e) => {
-                        const { display, value } = formatCurrencyInputLive(e.target.value);
-                        setNegotiatedValueDraft(display);
-                        setField('negotiated_value', value);
-                      }}
-                      onBlur={() => {
-                        setNegotiatedValueDraft('');
-                        const parsed = toCurrencyNumber(formData.negotiated_value);
-                        setField(
-                          'negotiated_value',
-                          parsed != null ? Math.round(parsed * 100) / 100 : ''
-                        );
-                      }}
-                      className="h-9 text-sm rounded-md font-mono tabular-nums"
-                      disabled={!canUpdate}
-                    />
-                  </div>
-                </React.Fragment>
-              );
+              if (
+                isRequester &&
+                primaryQuantityFieldKey != null &&
+                field.key === primaryQuantityFieldKey
+              ) {
+                return (
+                  <React.Fragment key={field.key}>
+                    {fieldNode}
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Final price
+                      </Label>
+                      <div
+                        className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm font-mono tabular-nums font-semibold text-foreground"
+                        role="status"
+                      >
+                        {finalPriceDisplayValue}
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              }
+
+              return <React.Fragment key={field.key}>{fieldNode}</React.Fragment>;
             })}
             </div>
           )}
@@ -1687,6 +1759,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           {/* Shipment tracking — ops paste tracking from vendor site */}
           {isInventoryRequest &&
             !isPaymentModal &&
+            !isRequester &&
             shouldShowShipmentTrackingSection(
               formData.status ?? (record?.data as any)?.status,
               {
@@ -2024,7 +2097,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                 })}
               </>
             )}
-            {canUpdate && hasEditableField && effectiveShowSaveButton && (
+            {canEditFields && hasEditableField && effectiveShowSaveButton && (
               <Button
                 type="button"
                 variant="default"

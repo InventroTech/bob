@@ -3,18 +3,22 @@
  *
  *   NEW_REQUEST
  *     → (manager Approve) VENDOR_IDENTIFIED
+ *     → (manager Send to requestor to verify) REQ_TO_VERIFY
  *     → (manager Reject) REJECTED
  *     → (manager Put on Hold) ON_HOLD
  *   ON_HOLD
  *     → (manager Approve) VENDOR_IDENTIFIED
+ *     → (manager Send to requestor to verify) REQ_TO_VERIFY
  *     → (manager Reject) REJECTED
+ *   REQ_TO_VERIFY
+ *     → (requestor Verify) VENDOR_IDENTIFIED
  *   VENDOR_IDENTIFIED
  *     → (team lead Order) IN_SHIPPING
  *     → (manager Put on Hold) ON_HOLD
  *   IN_SHIPPING → shipment tracking (paste link/AWB)
  *
  * Page Builder can set inventoryWorkflowMode:
- *   - manager   → Approve / Reject / Put on Hold
+ *   - manager   → Approve / Reject / Put on Hold / Send to verify
  *   - team_lead → Order only (no Approve / Reject on new requests)
  *   - auto      → infer from membership role
  */
@@ -38,6 +42,7 @@ export const INVENTORY_ORDERABLE_STATUSES = new Set([
 /** Page Builder status values that duplicate built-in workflow buttons. */
 export const INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES = new Set([
   'VENDOR_IDENTIFIED',
+  'REQ_TO_VERIFY',
   'REJECTED',
   'IN_SHIPPING',
   'ON_HOLD',
@@ -127,9 +132,10 @@ function resolveWorkflowMode(opts: {
 }
 
 /**
- * Built-in Approve / Reject / Put on Hold / Order for the record form modal.
+ * Built-in Approve / Reject / Put on Hold / Send to verify / Order / Verify for the record form modal.
  *
- * Manager: Approve/Reject on NEW_REQUEST or ON_HOLD; Put on Hold on open requests.
+ * Manager: Approve/Reject/Send-to-verify on NEW_REQUEST or ON_HOLD; Put on Hold on open requests.
+ * Requestor: Verify on REQ_TO_VERIFY only.
  * Team lead: Order on VENDOR_IDENTIFIED (never Approve/Reject).
  */
 export function getInventoryWorkflowButtons(opts: {
@@ -147,6 +153,13 @@ export function getInventoryWorkflowButtons(opts: {
   const buttons: InventoryWorkflowActionButton[] = [];
 
   if (opts.isRequester) {
+    if (status === 'REQ_TO_VERIFY') {
+      buttons.push({
+        label: 'Verify',
+        statusValue: 'VENDOR_IDENTIFIED',
+        statusText: 'VENDOR_IDENTIFIED',
+      });
+    }
     return buttons;
   }
 
@@ -158,6 +171,11 @@ export function getInventoryWorkflowButtons(opts: {
         label: 'Approve',
         statusValue: 'VENDOR_IDENTIFIED',
         statusText: 'VENDOR_IDENTIFIED',
+      },
+      {
+        label: 'Send to requestor to verify',
+        statusValue: 'REQ_TO_VERIFY',
+        statusText: 'REQ TO VERIFY',
       },
       { label: 'Reject', statusValue: 'REJECTED', statusText: 'REJECTED' }
     );

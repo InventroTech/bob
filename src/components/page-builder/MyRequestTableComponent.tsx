@@ -80,13 +80,34 @@ export const MyRequestTableComponent: React.FC<MyRequestTableProps> = ({ config 
         : config?.columns || []) as MyRequestTableColumn[]
     );
 
+    const configuredDetailMode = config?.detailMode;
+    const detailMode =
+      configuredDetailMode === 'inventory_payment_modal' ||
+      configuredDetailMode === 'receive_shipments' ||
+      configuredDetailMode === 'lead_assignment_modal' ||
+      configuredDetailMode === 'none' ||
+      configuredDetailMode === 'lead_card'
+        ? configuredDetailMode
+        : isInventoryLike
+          ? 'record_form_modal'
+          : configuredDetailMode;
+
     return {
       ...(config || {}),
       columns,
       ...(entityType ? { entityType } : {}),
-      detailMode:
-        config?.detailMode ||
-        (isInventoryLike ? 'inventory_request' : undefined),
+      // Form modal so requestors get Verify (and other workflow actions) in the footer.
+      detailMode,
+      recordDetailModalType: ((): 'default' | 'form_edit' | undefined => {
+        const configured = (config as { recordDetailModalType?: 'default' | 'form_edit' } | undefined)
+          ?.recordDetailModalType;
+        if (configured === 'default') return 'default';
+        if (isInventoryLike) return 'form_edit';
+        return configured;
+      })(),
+      showFormModalSaveButton:
+        (config as { showFormModalSaveButton?: boolean } | undefined)?.showFormModalSaveButton ??
+        (isInventoryLike ? true : undefined),
     };
   }, [config]);
 
