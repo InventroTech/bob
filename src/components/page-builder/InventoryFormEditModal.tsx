@@ -193,9 +193,9 @@ const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_fr
 /** Keys that are typically numbers. */
 const NUMBER_KEYS = new Set([
   'quantity', 'quantity_required', 'allocated_quantity', 'available_quantity',
-  'estimated_cost', 'total_quantity', 'total_price', 'unit_price',
+  'estimated_cost', 'negotiated_value', 'total_quantity', 'total_price', 'unit_price',
 ]);
-const PRICE_KEYS = new Set(['estimated_cost', 'total_price', 'unit_price']);
+const PRICE_KEYS = new Set(['estimated_cost', 'negotiated_value', 'total_price', 'unit_price']);
 
 type StatusHistoryEntry = {
   current_status: string;
@@ -239,6 +239,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
   const [finalPriceValue, setFinalPriceValue] = useState<string>('');
   const [finalPriceIsTotal, setFinalPriceIsTotal] = useState<boolean>(false);
   const [extraChargesDraft, setExtraChargesDraft] = useState<string>('');
+  const [negotiatedValueDraft, setNegotiatedValueDraft] = useState<string>('');
   /** Live-formatted strings for price form fields while typing (cleared on blur). */
   const [priceFieldDraft, setPriceFieldDraft] = useState<Record<string, string>>({});
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
@@ -572,6 +573,7 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       setFinalPriceValue('');
       setFinalPriceIsTotal(false);
       setExtraChargesDraft('');
+      setNegotiatedValueDraft('');
       setPriceFieldDraft({});
       setTrackingPasteDraft('');
       hydratedRecordIdRef.current = undefined;
@@ -606,6 +608,12 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
       const parsedExtraCharges = toCurrencyNumber(data.extra_charges);
       if (parsedExtraCharges != null) {
         initial.extra_charges = parsedExtraCharges;
+      }
+    }
+    if (data.negotiated_value != null && data.negotiated_value !== '') {
+      const parsedNegotiated = toCurrencyNumber(data.negotiated_value);
+      if (parsedNegotiated != null) {
+        initial.negotiated_value = parsedNegotiated;
       }
     }
     if (data.extra_charge_details != null) {
@@ -1309,6 +1317,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
             {formModalFields
               .filter((field) => {
                 if (field.key === 'cart_id') return false;
+                // Rendered inline just after Price (line_total / computed_price).
+                if (field.key === 'negotiated_value') return false;
                 // Dedicated shipment section owns these keys for inventory requests.
                 if (!isInventoryRequest || isPaymentModal) return true;
                 return !(TRACKING_FORM_KEYS as readonly string[]).includes(field.key);
@@ -1368,9 +1378,8 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     ? 'Requested Date'
                     : field.label || field.key.replace(/_/g, ' ');
 
-              return (
+              const fieldNode = (
                 <div
-                  key={field.key}
                   className={cn('space-y-1.5 min-w-0', spanFullWidth && 'md:col-span-2 xl:col-span-3')}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
@@ -1631,6 +1640,45 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
                     />
                   )}
                 </div>
+              );
+
+              if (!(isLineTotal && isInventoryRequest && !isPaymentModal)) {
+                return <React.Fragment key={field.key}>{fieldNode}</React.Fragment>;
+              }
+
+              return (
+                <React.Fragment key={field.key}>
+                  {fieldNode}
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Negotiated value
+                    </Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={
+                        negotiatedValueDraft ||
+                        formatCurrencyDisplay(formData.negotiated_value as number | '' | string | undefined)
+                      }
+                      onChange={(e) => {
+                        const { display, value } = formatCurrencyInputLive(e.target.value);
+                        setNegotiatedValueDraft(display);
+                        setField('negotiated_value', value);
+                      }}
+                      onBlur={() => {
+                        setNegotiatedValueDraft('');
+                        const parsed = toCurrencyNumber(formData.negotiated_value);
+                        setField(
+                          'negotiated_value',
+                          parsed != null ? Math.round(parsed * 100) / 100 : ''
+                        );
+                      }}
+                      className="h-9 text-sm rounded-md font-mono tabular-nums"
+                      disabled={!canUpdate}
+                    />
+                  </div>
+                </React.Fragment>
               );
             })}
             </div>

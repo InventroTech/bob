@@ -217,7 +217,6 @@ interface FormItem {
   quantity_required: number | '';
   required_date: string;
   product_link: string;
-  additional_link: string;
   /** Product thumbnail URL from marketplace page (og:image / JSON-LD). */
   product_image: string;
   vendor: string;
@@ -236,7 +235,6 @@ const newEmptyItem = (): FormItem => ({
   quantity_required: '',
   required_date: '',
   product_link: '',
-  additional_link: '',
   product_image: '',
   vendor: '',
   estimated_cost: '',
@@ -1631,7 +1629,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
         (item.product_link ?? '').trim() !== '' ||
-        (item.additional_link ?? '').trim() !== '' ||
         (item.comments ?? '').trim() !== '';
       if (!hasAnyInput) return false;
       return REQUIRED_ITEM_FIELDS.some((f) => isMissingRequired(item, f.key));
@@ -1653,7 +1650,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
         (item.product_link ?? '').trim() !== '' ||
-        (item.additional_link ?? '').trim() !== '' ||
         (item.comments ?? '').trim() !== '';
       return hasAnyInput;
     });
@@ -1696,7 +1692,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           specifications: (item.specifications ?? '').trim() || '',
           quantity_required: typeof item.quantity_required === 'number' ? item.quantity_required : Number(item.quantity_required) || 0,
           product_link: (item.product_link ?? '').trim() || '',
-          additional_link: (item.additional_link ?? '').trim() || '',
           product_image: (item.product_image ?? '').trim() || '',
           price_currency: item.price_currency === 'USD' ? 'USD' : 'INR',
         };
@@ -1793,7 +1788,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       (i.estimated_cost ?? '') !== '' ||
       (i.comments ?? '').trim() !== '' ||
       (i.product_link ?? '').trim() !== '' ||
-      (i.additional_link ?? '').trim() !== '' ||
       (i.price_quotes ?? []).some(
         (q) => (q.link ?? '').trim() !== '' || (q.price !== '' && Number(q.price) > 0)
       )
@@ -2015,11 +2009,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                               (d.product_link ?? d.link ?? '') as any
                                             ).trim();
                                             if (productLink) updateItem(item.id, 'product_link', productLink);
-                                            const additionalLink = String(
-                                              (d.additional_link ?? d.vendor_site_link ?? '') as any
-                                            ).trim();
-                                            if (additionalLink)
-                                              updateItem(item.id, 'additional_link', additionalLink);
                                             setItemNameSuggestionsOpen(false);
                                             setFocusedItemNameId(null);
                                           }}
@@ -2273,22 +2262,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                           <p className="text-xs text-muted-foreground">
                             High = same day · Middle = 2–5 days · Low = more than 5 days from request date.
                           </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      {sectionLabel('Links')}
-                      <div className="grid grid-cols-1 gap-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Additional link (optional)</Label>
-                          <Input
-                            type="url"
-                            placeholder="https://..."
-                            value={item.additional_link}
-                            onChange={(e) => updateItem(item.id, 'additional_link', e.target.value)}
-                            className="h-10"
-                          />
                         </div>
                       </div>
                     </div>
@@ -2561,9 +2534,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
                                     const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
                                     if (productLink) updateItem(item.id, 'product_link', productLink);
-
-                                    const additionalLink = String((d.additional_link ?? d.vendor_site_link ?? '') as any).trim();
-                                    if (additionalLink) updateItem(item.id, 'additional_link', additionalLink);
 
                                     const catalogSpecs = String(
                                       (d.specifications ?? d.specs ?? d.specification ?? d.short_description ?? '') as any
@@ -3024,16 +2994,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                         </Button>
                       </div>
                     </div>
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Additional link (optional)</Label>
-                    <Input
-                      type="url"
-                      placeholder="https://..."
-                      value={item.additional_link}
-                      onChange={(e) => updateItem(item.id, 'additional_link', e.target.value)}
-                      className="h-9"
-                    />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Requirement date *</Label>
