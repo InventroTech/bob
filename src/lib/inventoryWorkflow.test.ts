@@ -8,7 +8,7 @@ import {
 import { shouldShowShipmentTrackingSection } from './shipmentTracking';
 
 describe('inventory procurement → order flow (existing statuses)', () => {
-  it('requestor never sees Approve/Reject/Order', () => {
+  it('requestor never sees Approve/Reject/Order on non-verify statuses', () => {
     expect(
       getInventoryWorkflowButtons({
         requestStatus: 'NEW_REQUEST',
@@ -25,7 +25,41 @@ describe('inventory procurement → order flow (existing statuses)', () => {
     ).toEqual([]);
   });
 
-  it('manager can Approve/Reject/Put on Hold on NEW_REQUEST', () => {
+  it('requestor can Verify on REQ_TO_VERIFY only', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'REQ_TO_VERIFY',
+        isRequester: true,
+        workflowMode: 'manager',
+      }).map((b) => [b.label, b.statusValue])
+    ).toEqual([['Verify', 'VENDOR_IDENTIFIED']]);
+
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'ON_HOLD',
+        isRequester: true,
+      })
+    ).toEqual([]);
+  });
+
+  it('non-requestor cannot Verify on REQ_TO_VERIFY', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'REQ_TO_VERIFY',
+        isRequester: false,
+        workflowMode: 'manager',
+      })
+    ).toEqual([]);
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'REQ_TO_VERIFY',
+        isRequester: false,
+        workflowMode: 'team_lead',
+      })
+    ).toEqual([]);
+  });
+
+  it('manager can Approve / Send to verify / Reject / Put on Hold on NEW_REQUEST', () => {
     const buttons = getInventoryWorkflowButtons({
       requestStatus: 'NEW_REQUEST',
       isRequester: false,
@@ -33,9 +67,11 @@ describe('inventory procurement → order flow (existing statuses)', () => {
     });
     expect(buttons.map((b) => b.statusValue)).toEqual([
       'VENDOR_IDENTIFIED',
+      'REQ_TO_VERIFY',
       'REJECTED',
       'ON_HOLD',
     ]);
+    expect(buttons.map((b) => b.label)).toContain('Send to requestor to verify');
   });
 
   it('manager can Put on Hold on VENDOR_IDENTIFIED and resume from ON_HOLD', () => {
@@ -53,7 +89,7 @@ describe('inventory procurement → order flow (existing statuses)', () => {
         isRequester: false,
         workflowMode: 'manager',
       }).map((b) => b.statusValue)
-    ).toEqual(['VENDOR_IDENTIFIED', 'REJECTED']);
+    ).toEqual(['VENDOR_IDENTIFIED', 'REQ_TO_VERIFY', 'REJECTED']);
   });
 
   it('team lead never sees Approve/Reject on new requests', () => {
@@ -105,7 +141,7 @@ describe('inventory procurement → order flow (existing statuses)', () => {
         isRequester: false,
         workflowMode: 'auto',
       }).map((b) => b.label)
-    ).toEqual(['Approve', 'Reject', 'Put on Hold']);
+    ).toEqual(['Approve', 'Send to requestor to verify', 'Reject', 'Put on Hold']);
   });
 
   it('recognizes procurement vs team-lead roles', () => {
@@ -118,6 +154,7 @@ describe('inventory procurement → order flow (existing statuses)', () => {
   it('filters duplicate Page Builder status buttons', () => {
     const filtered = filterDuplicateInventoryWorkflowButtons([
       { label: 'Approve vendor', statusValue: 'VENDOR_IDENTIFIED' },
+      { label: 'Send verify', statusValue: 'REQ_TO_VERIFY' },
       { label: 'Custom', statusValue: 'SOME_CUSTOM' },
     ]);
     expect(filtered.map((b) => b.statusValue)).toEqual(['SOME_CUSTOM']);
@@ -127,6 +164,7 @@ describe('inventory procurement → order flow (existing statuses)', () => {
 describe('shipment tracking visibility', () => {
   it('shows from VENDOR_IDENTIFIED / IN_SHIPPING', () => {
     expect(shouldShowShipmentTrackingSection('NEW_REQUEST')).toBe(false);
+    expect(shouldShowShipmentTrackingSection('REQ_TO_VERIFY')).toBe(false);
     expect(shouldShowShipmentTrackingSection('VENDOR_IDENTIFIED')).toBe(true);
     expect(shouldShowShipmentTrackingSection('IN_SHIPPING')).toBe(true);
   });

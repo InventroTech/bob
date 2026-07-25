@@ -35,6 +35,7 @@ import {
 } from '@/lib/currencyFormat';
 import { cn } from '@/lib/utils';
 import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { getInventoryWorkflowButtons } from '@/lib/inventoryWorkflow';
 import {
   resolvePriorityFromRow,
   inventoryPriorityFieldCardClassName,
@@ -509,23 +510,39 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const displayRows = record ? buildDisplayRows(record, entityType) : [];
   const statusOptions = entityType ? ALLOWED_STATUSES[entityType] ?? [] : [];
   const canEdit = Boolean(onUpdate && record?.id != null);
-  const isInventoryRequest = entityType === 'inventory_request';
+  const isInventoryRequest =
+    entityType === 'inventory_request' || entityType === 'unmannd_request';
   const requesterId = record?.data?.requester_id;
+  const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
   const isRequester =
     isInventoryRequest &&
-    !!user &&
     requesterId != null &&
-    String(requesterId) === String(user.id);
+    ((!!user && String(requesterId) === String(user.id)) ||
+      (myMembershipId != null && String(requesterId) === String(myMembershipId)));
   const assignedToId = record?.data?.assigned_to_id;
   const isAssignee =
     isInventoryRequest &&
     !!user &&
     assignedToId != null &&
-    String(assignedToId) === String(user.id);
+    (String(assignedToId) === String(user.id) ||
+      (myMembershipId != null && String(assignedToId) === String(myMembershipId)));
 
   const effectiveShowFinalPrice = showFinalPriceSection !== false;
   const canShowDeleteRequestButton = showDeleteRequestButton === true;
   const canShowHistoryButton = showHistoryButton === true && record?.id != null;
+
+  const requestStatusForWorkflow =
+    (pending.status !== undefined ? pending.status : record?.data?.status) ??
+    (record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>).status
+      : undefined);
+  const requesterWorkflowButtons =
+    isInventoryRequest && isRequester
+      ? getInventoryWorkflowButtons({
+          requestStatus: requestStatusForWorkflow,
+          isRequester: true,
+        })
+      : [];
 
   /** Rows to show: hide system fields for all users, and PM-only fields for requestors. */
   const visibleRows = displayRows.filter((r) => {
@@ -602,6 +619,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         const membership = await membershipService.getMyMembership();
         if (cancelled) return;
         setMyRoleName(membership?.role_name ?? membership?.role_key ?? '');
+        const mid = membership?.tenant_membership_id;
+        setMyMembershipId(
+          typeof mid === 'number' && Number.isFinite(mid) ? mid : mid != null ? Number(mid) : null
+        );
       } catch {
         // Non-fatal
       }
@@ -1351,7 +1372,9 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
         {isInventoryRequest && isRequester && (
           <DialogFooter className={cn(
             "px-6 py-4 border-t bg-muted/20 gap-3 sm:gap-2 flex-row",
-            canShowDeleteRequestButton ? "justify-between sm:justify-between" : "justify-end sm:justify-end",
+            canShowDeleteRequestButton || requesterWorkflowButtons.length > 0
+              ? "justify-between sm:justify-between"
+              : "justify-end sm:justify-end",
           )}>
             <div className="flex items-center gap-2">
               {canShowHistoryButton ? (
@@ -1359,7 +1382,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   type="button"
                   variant="outline"
                   size="default"
-                  disabled={deleting}
+                  disabled={deleting || !!applyingStatusValue}
                   onClick={handleOpenHistory}
                 >
                   See request history
@@ -1371,7 +1394,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                   variant="outline"
                   size="default"
                   className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70"
-                  disabled={deleting}
+                  disabled={deleting || !!applyingStatusValue}
                   onClick={handleDelete}
                 >
                   {deleting ? (
@@ -1383,6 +1406,32 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                 </Button>
               ) : null}
             </div>
+            {requesterWorkflowButtons.length > 0 && record?.id && onUpdate ? (
+              <div className="flex flex-wrap gap-2 items-center justify-end">
+                {requesterWorkflowButtons.map((btn) => {
+                  const applyingThis = applyingStatusValue === btn.statusValue;
+                  return (
+                    <Button
+                      key={btn.statusValue}
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      className={cn(
+                        'gap-2 h-9 rounded-md',
+                        urgencyToneButtonClassName(btn.statusValue, applyingThis),
+                      )}
+                      disabled={!!applyingStatusValue || deleting}
+                      onClick={() => handleActionButtonClick(btn)}
+                    >
+                      {applyingThis ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      ) : null}
+                      {applyingThis ? 'Updating…' : btn.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            ) : null}
           </DialogFooter>
         )}
       </DialogContent>
