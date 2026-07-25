@@ -77,7 +77,6 @@ type PriceQuote = {
   price: number | '';
   currency: 'INR' | 'USD';
   title?: string;
-  image?: string;
   live?: boolean;
   /** Marketplace delivery / ETA text, e.g. "FREE delivery Fri, 24 Jul". */
   delivery_date?: string;
@@ -89,7 +88,6 @@ type LivePriceCompareResult = {
   price?: number | null;
   currency?: string;
   link?: string;
-  image?: string | null;
   available?: boolean;
   error?: string | null;
   delivery_date?: string | null;
@@ -134,37 +132,16 @@ const quoteFromLiveResult = (
     price: priceNum,
     currency,
     title: String(r.title || '').trim(),
-    image: String(r.image || '').trim(),
     live: true,
     delivery_date: String(r.delivery_date || '').trim(),
   };
 };
 
 /** 6-digit Indian PIN code for marketplace delivery ETAs. */
-const DEFAULT_DELIVERY_PINCODE = '562149';
-
-const REQUEST_CATEGORY_OPTIONS = [
-  { value: 'Domestic', label: 'Domestic' },
-  { value: 'International', label: 'International' },
-] as const;
-
-type RequestCategory = (typeof REQUEST_CATEGORY_OPTIONS)[number]['value'] | '';
-
 const normalizeIndianPincode = (value: string): string | null => {
   const digits = String(value || '').replace(/\D/g, '');
   if (digits.length === 6 && digits[0] !== '0') return digits;
   return null;
-};
-
-const looksLikeProductUrl = (value: string): boolean => {
-  const s = String(value || '').trim();
-  if (!s) return false;
-  try {
-    const u = new URL(s);
-    return u.protocol === 'http:' || u.protocol === 'https:';
-  } catch {
-    return /^https?:\/\/\S+/i.test(s);
-  }
 };
 
 interface InventoryRequestFormConfig {
@@ -218,8 +195,6 @@ interface FormItem {
   required_date: string;
   product_link: string;
   additional_link: string;
-  /** Product thumbnail URL from marketplace page (og:image / JSON-LD). */
-  product_image: string;
   vendor: string;
   estimated_cost: string | number | '';
   price_currency: 'INR' | 'USD';
@@ -237,7 +212,6 @@ const newEmptyItem = (): FormItem => ({
   required_date: '',
   product_link: '',
   additional_link: '',
-  product_image: '',
   vendor: '',
   estimated_cost: '',
   price_currency: 'INR',
@@ -333,122 +307,6 @@ const extractSpecFacetsFromTitles = (titles: string[], baseName: string): SpecFa
   // fall back to asking for free-text only (handled by dialog UI).
   void baseTokens;
   return facets;
-};
-
-/** Pull measurable / distinguishing specs from a product page title into a short specs string. */
-const extractSpecificationsFromTitle = (title: string): string => {
-  const text = String(title || '').trim();
-  if (!text) return '';
-
-  const parts: string[] = [];
-  const seen = new Set<string>();
-  const push = (value: string) => {
-    const v = value.replace(/\s+/g, ' ').trim();
-    if (!v) return;
-    const key = v.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    parts.push(v);
-  };
-
-  for (const m of text.matchAll(/\b(\d+(?:\.\d+)?)\s*(cm|mm|m|ft|feet|inch|in)\b/gi)) {
-    const unit = m[2].toLowerCase().replace(/^feet$/, 'ft').replace(/^inch$/, 'in');
-    push(`${m[1]} ${unit}`);
-  }
-  for (const m of text.matchAll(
-    /\b(USB[\s-]?A|USB[\s-]?B|USB[\s-]?C|Type[\s-]?C|Mini[\s-]?B|Micro[\s-]?USB|HDMI|RJ45)\b/gi
-  )) {
-    push(m[1].replace(/\s+/g, ' '));
-  }
-  for (const m of text.matchAll(/\b(\d+(?:\.\d+)?)\s*(v|volt|volts|kv)\b/gi)) {
-    push(`${m[1]} ${m[2].toUpperCase().replace(/VOLTS?/, 'V')}`);
-  }
-  for (const m of text.matchAll(/\b(\d+(?:\.\d+)?)\s*(mah|ah|wh)\b/gi)) {
-    push(`${m[1]} ${m[2].toUpperCase()}`);
-  }
-  for (const m of text.matchAll(/\b(\d{4,5})\b/g)) {
-    // Cell / model codes like 18650, 21700
-    if (/^(18650|21700|26650|14500|18350)$/i.test(m[1])) push(m[1]);
-  }
-  for (const m of text.matchAll(/\b(?:pack\s*of|set\s*of|qty)\s*(\d+)\b/gi)) {
-    push(`Pack of ${m[1]}`);
-  }
-  for (const m of text.matchAll(/\b(\d+)\s*(?:pcs|pieces|pc)\b/gi)) {
-    push(`${m[1]} pcs`);
-  }
-  if (/\bgold[-\s]?plated\b/i.test(text)) push('Gold-plated');
-  if (/\bnickel[-\s]?plated\b/i.test(text)) push('Nickel-plated');
-  if (/\bwithout\s+usb\s+cable\b|\bw\/?o\s+usb\s+cable\b|\bno\s+cable\b/i.test(text)) {
-    push('Without USB cable');
-  } else if (/\bwith\s+(?:usb\s+)?cable\b/i.test(text)) {
-    push('With USB cable');
-  }
-  if (/\bofficial\b/i.test(text)) push('Official');
-  if (/\bcompatible\b/i.test(text)) push('Compatible');
-  for (const m of text.matchAll(/\b(\d+(?:\.\d+)?)\s*(w|watt|watts|hz|mhz|ghz|rpm|awg)\b/gi)) {
-    push(`${m[1]} ${m[2].toUpperCase().replace(/WATTS?/, 'W')}`);
-  }
-  for (const m of text.matchAll(/\b(IP\d{2})\b/gi)) {
-    push(m[1].toUpperCase());
-  }
-  for (const m of text.matchAll(/\b(\d+(?:\.\d+)?)\s*(kg|g|lb|oz)\b/gi)) {
-    push(`${m[1]} ${m[2].toLowerCase()}`);
-  }
-  if (/\baluminium\b|\baluminum\b/i.test(text)) push('Aluminium');
-  if (/\bstainless\s*steel\b/i.test(text)) push('Stainless steel');
-  if (/\bplastic\b/i.test(text)) push('Plastic');
-  if (/\bcopper\b/i.test(text)) push('Copper');
-  if (/\blithium\b/i.test(text)) push('Lithium');
-  if (/\bli[-\s]?ion\b/i.test(text)) push('Li-ion');
-  if (/\bholder\b/i.test(text)) push('Holder');
-  if (/\bsocket\b/i.test(text)) push('Socket');
-
-  return parts.slice(0, 10).join(', ');
-};
-
-/** Prefer a shorter item name: strip noisy marketplace suffixes from the page title. */
-const cleanItemNameFromTitle = (title: string): string => {
-  let name = String(title || '').trim();
-  if (!name) return '';
-  // Drop common marketplace suffixes after | or -
-  name = name.split(/\s*[|\u2013\u2014]\s*/)[0]?.trim() || name;
-  // Truncate very long titles at a comma if still huge
-  if (name.length > 120) {
-    const cut = name.slice(0, 120);
-    const lastComma = cut.lastIndexOf(',');
-    name = (lastComma > 40 ? cut.slice(0, lastComma) : cut).trim();
-  }
-  return name;
-};
-
-/**
- * Always produce something for Specifications when a product title exists:
- * structured tokens first, otherwise leftover / full title text.
- */
-const resolveSpecificationsFromTitle = (rawTitle: string, itemName: string): string => {
-  const title = String(rawTitle || '').trim();
-  if (!title) return '';
-
-  const extracted = extractSpecificationsFromTitle(title);
-  if (extracted) return extracted;
-
-  const name = String(itemName || '').trim();
-  let leftover = title;
-  if (name) {
-    const idx = leftover.toLowerCase().indexOf(name.toLowerCase());
-    if (idx === 0) {
-      leftover = leftover.slice(name.length).replace(/^[\s,|/\-–—:]+/, '').trim();
-    } else if (name.length < leftover.length) {
-      // Prefer text after the first comma / dash segment as detail
-      const afterComma = leftover.includes(',')
-        ? leftover.slice(leftover.indexOf(',') + 1).trim()
-        : '';
-      if (afterComma.length >= 8) leftover = afterComma;
-    }
-  }
-
-  const fallback = (leftover.length >= 8 ? leftover : title).replace(/\s+/g, ' ').trim();
-  return fallback.slice(0, 240);
 };
 
 const titlesNeedSpecificationPrompt = (titles: string[], baseName: string, existingSpecs: string): boolean => {
@@ -547,9 +405,11 @@ const isExactEnoughProductMatch = (title: string, name: string, specifications: 
 };
 
 const REQUIRED_ITEM_FIELDS: Array<{ key: keyof FormItem; label: string }> = [
+  { key: 'item_name_freeform', label: 'Item name' },
   { key: 'quantity_required', label: 'Quantity' },
   { key: 'estimated_cost', label: 'Estimated cost' },
   { key: 'vendor', label: 'Vendor' },
+  { key: 'product_link', label: 'Product link' },
   { key: 'required_date', label: 'Requirement date' },
 ];
 
@@ -580,13 +440,6 @@ function priorityShortLabel(urgency: string): string {
   return formatInventoryPriorityLabel(urgency);
 }
 
-/** Display calendar day as DD-MM-YYYY (e.g. 25-07-2026). */
-const formatRequestDateDisplay = (isoDate: string): string => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate || '').trim());
-  if (!m) return isoDate || '—';
-  return `${m[3]}-${m[2]}-${m[1]}`;
-};
-
 /**
  * Inventory request creation form for PageBuilder.
  * Supports multiple items per submission; each item is saved as a separate record via API.
@@ -605,9 +458,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
-  const [projectPurpose, setProjectPurpose] = useState('');
-  const [requestCategory, setRequestCategory] = useState<RequestCategory>('');
-  const [deliveryPincode, setDeliveryPincode] = useState(DEFAULT_DELIVERY_PINCODE);
+  const [deliveryPincode, setDeliveryPincode] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [myRoleName, setMyRoleName] = useState<string>('');
   const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
@@ -647,10 +498,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [priceCompareProfile, setPriceCompareProfile] = useState<'core' | 'extended'>('extended');
   /** Per-item loading state for live marketplace price fetch. */
   const [liveCompareLoadingByItemId, setLiveCompareLoadingByItemId] = useState<Record<string, boolean>>({});
-  /** Per-item loading while resolving product details from a pasted item link. */
-  const [linkFetchLoadingByItemId, setLinkFetchLoadingByItemId] = useState<Record<string, boolean>>({});
-  /** Last item-link URL successfully fetched per item (skip duplicate blur fetches). */
-  const [lastFetchedLinkByItemId, setLastFetchedLinkByItemId] = useState<Record<string, string>>({});
   /** Shown when live search finds no close product match. */
   const [priceCompareStatusByItemId, setPriceCompareStatusByItemId] = useState<
     Record<string, 'idle' | 'found' | 'unavailable'>
@@ -1014,7 +861,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           price_currency: quote.currency,
           vendor: vendorName,
           product_link: quote.link.trim() || item.product_link,
-          product_image: quote.image?.trim() || item.product_image,
         };
       })
     );
@@ -1025,139 +871,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     });
     toast.success(`Using ${quote.source_label} price (${formatCurrencyDisplay(quote.price)} ${quote.currency}).`);
   }, [ecommerceSources]);
-
-  /**
-   * Fetch product title / price / vendor from a pasted item link via price-compare (urls only).
-   */
-  const fetchDetailsFromItemLink = useCallback(
-    async (itemId: string, rawUrl?: string, options?: { force?: boolean }) => {
-      const item = items.find((i) => i.id === itemId);
-      if (!item) return;
-
-      const url = String(rawUrl ?? item.product_link ?? '').trim();
-      if (!looksLikeProductUrl(url)) {
-        if (url) toast.error('Enter a valid product URL (https://…).');
-        return;
-      }
-
-      const normalizedUrl = url;
-      if (!options?.force && lastFetchedLinkByItemId[itemId] === normalizedUrl) {
-        return;
-      }
-
-      const pin = normalizeIndianPincode(deliveryPincode) || DEFAULT_DELIVERY_PINCODE;
-
-      setLinkFetchLoadingByItemId((prev) => ({ ...prev, [itemId]: true }));
-      try {
-        const res = await apiClient.post<LivePriceCompareResponse>(
-          PRICE_COMPARE_URL,
-          {
-            urls: [normalizedUrl],
-            pincode: pin,
-          },
-          { timeout: 90000 }
-        );
-        const data = res.data;
-        if (data?.error) {
-          toast.error(data.error);
-          return;
-        }
-
-        const results = (data?.results ?? []).filter(
-          (r) => !r.error && r.price != null && Number(r.price) > 0
-        );
-        if (results.length === 0) {
-          const errMsg =
-            (data?.results ?? []).find((r) => r.error)?.error ||
-            data?.errors?.[0] ||
-            'Could not fetch product details from this link.';
-          toast.error(String(errMsg));
-          return;
-        }
-
-        // Prefer the result whose link matches the pasted URL; else cheapest.
-        const urlHost = (() => {
-          try {
-            return new URL(normalizedUrl).hostname.replace(/^www\./, '').toLowerCase();
-          } catch {
-            return '';
-          }
-        })();
-        const matched =
-          results.find((r) => {
-            const link = String(r.link || '').trim();
-            if (!link) return false;
-            if (link === normalizedUrl) return true;
-            try {
-              const h = new URL(link).hostname.replace(/^www\./, '').toLowerCase();
-              return Boolean(urlHost && h === urlHost);
-            } catch {
-              return false;
-            }
-          }) ||
-          [...results].sort((a, b) => Number(a.price) - Number(b.price))[0];
-
-        const quote = quoteFromLiveResult(matched, ecommerceSources);
-        if (!quote) {
-          toast.error('Could not read a price from this link.');
-          return;
-        }
-
-        const meta = ecommerceSources.find((s) => s.id === quote.source);
-        const vendorName = meta?.vendorName || toVendorStorageName(quote.source_label) || 'OTHER';
-        const rawTitle = (quote.title || '').trim();
-        const title = cleanItemNameFromTitle(rawTitle) || rawTitle;
-        const specsFromTitle = resolveSpecificationsFromTitle(rawTitle, title);
-
-        const productImage =
-          String(matched.image || quote.image || '').trim() ||
-          (item.product_image ?? '').trim();
-
-        setItems((prev) =>
-          prev.map((row) => {
-            if (row.id !== itemId) return row;
-            const existingQuotes = row.price_quotes.filter(
-              (q) => (q.link || '').trim().toLowerCase() !== (quote.link || '').trim().toLowerCase()
-            );
-            return {
-              ...row,
-              item_name_freeform: title || row.item_name_freeform,
-              // Always fill specs from the link when we have a title.
-              specifications: specsFromTitle || row.specifications || title || row.item_name_freeform,
-              estimated_cost: Number(quote.price),
-              price_currency: quote.currency,
-              vendor: vendorName || row.vendor,
-              product_link: quote.link.trim() || normalizedUrl,
-              product_image: productImage || row.product_image,
-              price_quotes: [quote, ...existingQuotes],
-            };
-          })
-        );
-        setPriceDraftByItemId((prev) => {
-          const next = { ...prev };
-          delete next[itemId];
-          return next;
-        });
-        setLastFetchedLinkByItemId((prev) => ({ ...prev, [itemId]: normalizedUrl }));
-        setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'found' }));
-
-        toast.success(
-          title
-            ? `Loaded “${title.slice(0, 60)}${title.length > 60 ? '…' : ''}” — ${formatCurrencyDisplay(quote.price)} ${quote.currency}`
-            : `Loaded price ${formatCurrencyDisplay(quote.price)} ${quote.currency} from link`
-        );
-      } catch (err: unknown) {
-        const msg =
-          err && typeof err === 'object' && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'Failed to fetch details from this link.';
-        toast.error(msg);
-      } finally {
-        setLinkFetchLoadingByItemId((prev) => ({ ...prev, [itemId]: false }));
-      }
-    },
-    [items, deliveryPincode, ecommerceSources, lastFetchedLinkByItemId]
-  );
 
   /** Apply live API results into quote rows for one item. */
   const applyLivePriceResults = useCallback(
@@ -1595,16 +1308,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       return;
     }
 
-    if (!requestCategory) {
-      toast.error('Please select a category (Domestic or International).');
-      return;
-    }
-
-    if (!projectPurpose.trim()) {
-      toast.error('Please fill in the Purpose.');
-      return;
-    }
-
     const hasAtLeastOneNamedItem = items.some((i) => (i.item_name_freeform ?? '').trim() !== '');
     if (!hasAtLeastOneNamedItem) {
       toast.error('Add at least one item.');
@@ -1685,8 +1388,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
-          project_purpose: projectPurpose.trim() || '',
-          category: requestCategory,
           delivery_pincode: normalizeIndianPincode(deliveryPincode) || '',
           delivery_address: deliveryAddress.trim() || '',
           urgency_level: (priority?.value ?? (item.urgency_level ?? '').trim()) || '',
@@ -1697,7 +1398,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           quantity_required: typeof item.quantity_required === 'number' ? item.quantity_required : Number(item.quantity_required) || 0,
           product_link: (item.product_link ?? '').trim() || '',
           additional_link: (item.additional_link ?? '').trim() || '',
-          product_image: (item.product_image ?? '').trim() || '',
           price_currency: item.price_currency === 'USD' ? 'USD' : 'INR',
         };
         const commentText = (item.comments ?? '').trim();
@@ -1772,13 +1472,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     setNewVendorName('');
     setNewVendorLink('');
     setPriceDraftByItemId({});
-    setProjectPurpose('');
-    setRequestCategory('');
-    setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
+    setDeliveryPincode('');
     setDeliveryAddress('');
     setPriceCompareStatusByItemId({});
-    setLinkFetchLoadingByItemId({});
-    setLastFetchedLinkByItemId({});
     cancelSpecPrompt();
     toast.success('Form cleared.');
   };
@@ -1852,68 +1548,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           </div>
 
           <CardContent className="space-y-8 px-6 py-6">
-            <div className="grid grid-cols-1 gap-4 rounded-lg border border-border/60 bg-muted/30 p-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 rounded-lg border border-border/60 bg-muted/30 p-4 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Requester name</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Requester</Label>
                 <Input value={requesterDisplay} readOnly disabled className="h-10 bg-background/80 font-medium" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Date</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Department</Label>
                 <Input
-                  value={formatRequestDateDisplay(requestDate)}
+                  value={department}
                   readOnly
                   disabled
+                  placeholder="—"
                   className="h-10 bg-background/80 font-medium"
                 />
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Department</Label>
-              <Input
-                value={department}
-                readOnly
-                disabled
-                placeholder="—"
-                className="h-10 bg-background/80 font-medium"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="request-category" className="text-sm font-medium">
-                Category <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={requestCategory || undefined}
-                onValueChange={(v) =>
-                  setRequestCategory(v === 'International' ? 'International' : 'Domestic')
-                }
-              >
-                <SelectTrigger id="request-category" className="h-10">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REQUEST_CATEGORY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="project-purpose" className="text-sm font-medium">
-                Purpose <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="project-purpose"
-                placeholder="Why is this needed? (project, use case, or reason)"
-                value={projectPurpose}
-                onChange={(e) => setProjectPurpose(e.target.value)}
-                rows={2}
-                className="resize-y min-h-[64px]"
-              />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Request date</Label>
+                <Input value={requestDate} readOnly disabled className="h-10 bg-background/80 font-medium" />
+              </div>
             </div>
 
             <div className="space-y-5">
@@ -1942,9 +1595,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                   <div className="space-y-6 p-5">
                     <div>
                       {sectionLabel('Item details')}
-                      <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto]">
                         <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Item name</Label>
+                          <Label className="text-sm font-medium">Item name *</Label>
                           <div className="relative">
                             <Input
                               placeholder="Describe the item"
@@ -2033,61 +1686,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                                 </div>
                               )}
                           </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Specifications</Label>
-                          <Input
-                            placeholder="e.g. 30 cm, USB A to Mini B, gold-plated"
-                            value={item.specifications}
-                            onChange={(e) => updateItem(item.id, 'specifications', e.target.value)}
-                            className="h-10"
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Filled automatically from the item link when available.
-                          </p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Item link</Label>
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <Input
-                              type="url"
-                              placeholder="https://… (Amazon, Robu, vendor page, etc.)"
-                              value={item.product_link}
-                              onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                              onBlur={(e) => {
-                                const url = e.target.value.trim();
-                                if (looksLikeProductUrl(url)) {
-                                  void fetchDetailsFromItemLink(item.id, url);
-                                }
-                              }}
-                              className="h-10 flex-1"
-                              disabled={!!linkFetchLoadingByItemId[item.id]}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-10 shrink-0 gap-1.5"
-                              disabled={
-                                !!linkFetchLoadingByItemId[item.id] ||
-                                !looksLikeProductUrl(item.product_link)
-                              }
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() =>
-                                void fetchDetailsFromItemLink(item.id, item.product_link, { force: true })
-                              }
-                            >
-                              {linkFetchLoadingByItemId[item.id] ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <RefreshCw className="h-4 w-4" />
-                              )}
-                              Fetch details
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Paste a product URL to auto-fill item name, specifications, vendor, and cost.
-                          </p>
                         </div>
                         <div className="space-y-1.5 sm:w-32">
                           <Label className="text-sm font-medium">Quantity *</Label>
@@ -2281,6 +1879,16 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                       {sectionLabel('Links')}
                       <div className="grid grid-cols-1 gap-4">
                         <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Product link *</Label>
+                          <Input
+                            type="url"
+                            placeholder="https://..."
+                            value={item.product_link}
+                            onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
                           <Label className="text-sm font-medium">Additional link (optional)</Label>
                           <Input
                             type="url"
@@ -2362,22 +1970,17 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Date <span className="text-destructive">*</span>
+                </Label>
+                <Input value={requestDate} readOnly disabled className="h-10 bg-muted/50 font-medium" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
                   <User className="h-3.5 w-3.5" />
                   Requester name <span className="text-destructive">*</span>
                 </Label>
                 <Input value={requesterDisplay} readOnly disabled className="h-10 bg-muted/50 font-medium" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
-                  <Calendar className="h-3.5 w-3.5" />
-                  Date <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  value={formatRequestDateDisplay(requestDate)}
-                  readOnly
-                  disabled
-                  className="h-10 bg-muted/50 font-medium"
-                />
               </div>
             </div>
             <div className="space-y-2">
@@ -2391,47 +1994,6 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 disabled
                 placeholder="—"
                 className="h-10 bg-muted/50 font-medium"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="request-category-default"
-                className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
-              >
-                Category <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={requestCategory || undefined}
-                onValueChange={(v) =>
-                  setRequestCategory(v === 'International' ? 'International' : 'Domestic')
-                }
-              >
-                <SelectTrigger id="request-category-default" className="h-10">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REQUEST_CATEGORY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="project-purpose-default"
-                className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
-              >
-                Purpose <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="project-purpose-default"
-                placeholder="Why is this needed? (project, use case, or reason)"
-                value={projectPurpose}
-                onChange={(e) => setProjectPurpose(e.target.value)}
-                rows={2}
-                className="resize-y min-h-[64px]"
               />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2502,7 +2064,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Item name</Label>
+                    <Label className="text-xs font-medium">Item name *</Label>
                     <div className="relative">
                       <Input
                         placeholder="Describe the item"
@@ -2596,51 +2158,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                       className="h-9"
                     />
                     <p className="text-[11px] text-muted-foreground">
-                      Filled automatically from the item link when available.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Item link</Label>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <Input
-                        type="url"
-                        placeholder="https://… (Amazon, Robu, vendor page, etc.)"
-                        value={item.product_link}
-                        onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                        onBlur={(e) => {
-                          const url = e.target.value.trim();
-                          if (looksLikeProductUrl(url)) {
-                            void fetchDetailsFromItemLink(item.id, url);
-                          }
-                        }}
-                        className="h-9 flex-1"
-                        disabled={!!linkFetchLoadingByItemId[item.id]}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 shrink-0 gap-1.5"
-                        disabled={
-                          !!linkFetchLoadingByItemId[item.id] ||
-                          !looksLikeProductUrl(item.product_link)
-                        }
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() =>
-                          void fetchDetailsFromItemLink(item.id, item.product_link, { force: true })
-                        }
-                      >
-                        {linkFetchLoadingByItemId[item.id] ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                        Fetch details
-                      </Button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Paste a product URL to auto-fill item name, specifications, vendor, and cost.
+                      Add length, connector, model, or other details so live search returns the right product.
                     </p>
                   </div>
 
@@ -3025,6 +2543,18 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                       </div>
                     </div>
                   </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs font-medium">Product link *</Label>
+                    <Input
+                      type="url"
+                      placeholder="https://..."
+                      value={item.product_link}
+                      onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+
+
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Additional link (optional)</Label>
                     <Input
