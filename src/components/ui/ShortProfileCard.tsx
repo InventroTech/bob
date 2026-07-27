@@ -32,9 +32,15 @@ const ShortProfileCard = ({ image, name = '', address = '' }: ShortProfileCardPr
           <User className="h-5 w-5" aria-hidden />
         )}
       </div>
-      <div className='flex flex-col font-body'>
-        <span className='text-sm font-bold text-gray-900'>{name || 'Unnamed'}</span>
-        <p className='text-xs text-gray-500'>{address || 'No address'}</p>
+      <div className='flex flex-col font-body min-w-0'>
+        <span className='text-sm font-bold text-gray-900 truncate' title={name || undefined}>
+          {name || 'Unnamed'}
+        </span>
+        {address ? (
+          <p className='text-xs text-gray-500 truncate' title={address}>
+            {address}
+          </p>
+        ) : null}
       </div>
     </div>
   )

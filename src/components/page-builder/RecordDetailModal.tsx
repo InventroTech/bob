@@ -455,7 +455,7 @@ function humanizeLabel(key: string): string {
     comments: 'Comments',
     department: 'Department',
     sub_department: 'Sub-department',
-    project_purpose: 'Project / purpose',
+    project_purpose: 'Project',
     item_name_freeform: 'Item name',
     product_link: 'Product link',
     part_number_or_sku: 'Part number / SKU',

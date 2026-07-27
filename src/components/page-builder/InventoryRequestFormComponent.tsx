@@ -29,9 +29,9 @@ import { Calendar, User, Send, Loader2, Plus, Trash2, Scale, RefreshCw, External
 import { toast } from 'sonner';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/currencyFormat';
 import { emptyShipmentTrackingFields } from '@/lib/shipmentTracking';
-import { calculateInventoryPriority, formatInventoryPriorityLabel } from '@/lib/inventoryPriority';
+import { formatInventoryPriorityLabel } from '@/lib/inventoryPriority';
+import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 
 const RECORDS_URL = '/crm-records/records/';
 const PRICE_COMPARE_URL = '/crm-records/price-compare/';
@@ -544,38 +544,22 @@ const isExactEnoughProductMatch = (title: string, name: string, specifications: 
   return specHits / check.length >= 0.7;
 };
 
+const PRIORITY_OPTIONS = [
+  { value: 'HIGH', label: 'High (Same day)' },
+  { value: 'MEDIUM', label: 'Middle (2-5 days)' },
+  { value: 'LOW', label: 'Low (More than 5 days)' },
+] as const;
+
 const REQUIRED_ITEM_FIELDS: Array<{ key: keyof FormItem; label: string }> = [
   { key: 'quantity_required', label: 'Quantity' },
   { key: 'estimated_cost', label: 'Estimated cost' },
   { key: 'vendor', label: 'Vendor' },
-  { key: 'required_date', label: 'Requirement date' },
+  { key: 'urgency_level', label: 'Priority' },
 ];
 
 interface InventoryRequestFormProps {
   config?: InventoryRequestFormConfig;
   variant?: 'default' | 'procurement';
-}
-
-function priorityChipClass(urgency: string): string {
-  const upper = String(urgency ?? '').trim().toUpperCase();
-  if (upper === 'HIGH' || upper === 'CRITICAL') {
-    return 'border-destructive/30 bg-destructive/10 text-destructive';
-  }
-  if (upper === 'MEDIUM') {
-    return 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200';
-  }
-  if (upper === 'LOW') {
-    return 'border-border bg-muted text-muted-foreground';
-  }
-  return 'border-border bg-muted/50 text-muted-foreground';
-}
-
-function priorityShortLabel(urgency: string): string {
-  const upper = String(urgency ?? '').trim().toUpperCase();
-  if (upper === 'HIGH' || upper === 'CRITICAL') return 'High';
-  if (upper === 'MEDIUM') return 'Middle';
-  if (upper === 'LOW') return 'Low';
-  return formatInventoryPriorityLabel(urgency);
 }
 
 /** Display calendar day as DD-MM-YYYY (e.g. 25-07-2026). */
@@ -658,6 +642,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
   const [itemNameSuggestionsOpen, setItemNameSuggestionsOpen] = useState(false);
   const [itemNameSuggestionsLoading, setItemNameSuggestionsLoading] = useState(false);
+  const [projectSuggestions, setProjectSuggestions] = useState<string[]>([]);
+  const [projectSuggestionsOpen, setProjectSuggestionsOpen] = useState(false);
+  const [projectSuggestionsLoading, setProjectSuggestionsLoading] = useState(false);
   const [focusedVendorId, setFocusedVendorId] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState<string>('');
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
@@ -698,6 +685,41 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       setVendorsLoading(false);
     }
   }, []);
+
+  const loadProjectSuggestions = useCallback(async () => {
+    try {
+      setProjectSuggestionsLoading(true);
+      const values = await fetchDistinctFieldValues(entityType, 'project_purpose');
+      setProjectSuggestions(values);
+    } catch {
+      // Keep whatever we already have (e.g. locally remembered after submit).
+    } finally {
+      setProjectSuggestionsLoading(false);
+    }
+  }, [entityType]);
+
+  useEffect(() => {
+    void loadProjectSuggestions();
+  }, [loadProjectSuggestions]);
+
+  const rememberProjectSuggestion = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setProjectSuggestions((prev) => {
+      if (prev.some((p) => p.toLowerCase() === trimmed.toLowerCase())) return prev;
+      return [...prev, trimmed].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+      );
+    });
+  }, []);
+
+  const filteredProjectSuggestions = (() => {
+    const q = projectPurpose.trim().toLowerCase();
+    const list = !q
+      ? projectSuggestions
+      : projectSuggestions.filter((p) => p.toLowerCase().includes(q));
+    return list.slice(0, 12);
+  })();
 
   const fetchItemSuggestions = useCallback(async (query: string) => {
     const q = query.trim();
@@ -974,17 +996,9 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const updateItem = useCallback((id: string, field: keyof FormItem, value: string | number | boolean | '' | PriceQuote[]) => {
     setItems((prev) =>
-      prev.map((i) => {
-        if (i.id !== id) return i;
-        const next = { ...i, [field]: value };
-        if (field === 'required_date') {
-          const priority = calculateInventoryPriority(requestDate, String(value ?? ''));
-          next.urgency_level = priority?.value ?? '';
-        }
-        return next;
-      })
+      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
     );
-  }, [requestDate]);
+  }, []);
 
   const removeQuote = useCallback((itemId: string, quoteId: string) => {
     setItems((prev) =>
@@ -1599,7 +1613,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
     }
 
     if (!projectPurpose.trim()) {
-      toast.error('Please fill in the Purpose.');
+      toast.error('Please fill in the Project.');
       return;
     }
 
@@ -1625,7 +1639,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       const hasAnyInput =
         (item.item_name_freeform ?? '').trim() !== '' ||
         item.quantity_required !== '' ||
-        (item.required_date ?? '').trim() !== '' ||
+        (item.urgency_level ?? '').trim() !== '' ||
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
         (item.product_link ?? '').trim() !== '' ||
@@ -1646,7 +1660,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       const hasAnyInput =
         (item.item_name_freeform ?? '').trim() !== '' ||
         item.quantity_required !== '' ||
-        (item.required_date ?? '').trim() !== '' ||
+        (item.urgency_level ?? '').trim() !== '' ||
         (item.vendor ?? '').trim() !== '' ||
         (item.estimated_cost ?? '') !== '' ||
         (item.product_link ?? '').trim() !== '' ||
@@ -1662,14 +1676,10 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       for (const item of validItems) {
         await upsertUnmanndProduct(item);
 
-        const priority =
-          calculateInventoryPriority(requestDate, item.required_date) ??
-          (item.urgency_level
-            ? {
-                value: item.urgency_level as 'HIGH' | 'MEDIUM' | 'LOW',
-                label: formatInventoryPriorityLabel(item.urgency_level),
-              }
-            : null);
+        const urgency = String(item.urgency_level ?? '').trim().toUpperCase();
+        const priorityLabel =
+          PRIORITY_OPTIONS.find((o) => o.value === urgency)?.label ||
+          formatInventoryPriorityLabel(urgency);
 
         const payloadData: Record<string, unknown> = {
           status: initialStatus,
@@ -1677,7 +1687,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           // Shipment tracking fields: initialized empty; filled later by ops/procurement flows.
           ...emptyShipmentTrackingFields(),
           request_date: requestDate,
-          required_date: (item.required_date ?? '').trim() || null,
+          required_date: null,
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
@@ -1685,8 +1695,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           category: requestCategory,
           delivery_pincode: normalizeIndianPincode(deliveryPincode) || '',
           delivery_address: deliveryAddress.trim() || '',
-          urgency_level: (priority?.value ?? (item.urgency_level ?? '').trim()) || '',
-          priority_label: priority?.label ?? '',
+          urgency_level: urgency || '',
+          priority_label: urgency ? priorityLabel : '',
           vendor: toVendorStorageName((item.vendor ?? '').trim()) || '',
           item_name_freeform: (item.item_name_freeform ?? '').trim(),
           specifications: (item.specifications ?? '').trim() || '',
@@ -1746,6 +1756,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           count === 1 ? 'Inventory request created.' : `${count} inventory requests created.`
         );
       }
+      rememberProjectSuggestion(projectPurpose);
       setItems([newEmptyItem()]);
     } catch (err: unknown) {
       const message =
@@ -1783,7 +1794,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
       (i.item_name_freeform ?? '').trim() !== '' ||
       (i.specifications ?? '').trim() !== '' ||
       i.quantity_required !== '' ||
-      (i.required_date ?? '').trim() !== '' ||
+      (i.urgency_level ?? '').trim() !== '' ||
       (i.vendor ?? '').trim() !== '' ||
       (i.estimated_cost ?? '') !== '' ||
       (i.comments ?? '').trim() !== '' ||
@@ -1835,6 +1846,66 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
 
   const sectionLabel = (title: string) => (
     <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+  );
+
+  const renderProjectField = (opts: {
+    id: string;
+    labelClassName: string;
+  }) => (
+    <div className="space-y-1.5">
+      <Label htmlFor={opts.id} className={opts.labelClassName}>
+        Project <span className="text-destructive">*</span>
+      </Label>
+      <div className="relative">
+        <Textarea
+          id={opts.id}
+          placeholder={
+            projectSuggestions.length > 0
+              ? 'Select a previous project or type a new one'
+              : 'Project name or description'
+          }
+          value={projectPurpose}
+          onFocus={() => {
+            if (projectSuggestions.length > 0 || projectSuggestionsLoading) {
+              setProjectSuggestionsOpen(true);
+            }
+          }}
+          onBlur={() => {
+            window.setTimeout(() => setProjectSuggestionsOpen(false), 150);
+          }}
+          onChange={(e) => {
+            setProjectPurpose(e.target.value);
+            setProjectSuggestionsOpen(true);
+          }}
+          rows={2}
+          className="resize-y min-h-[64px]"
+          autoComplete="off"
+        />
+        {projectSuggestionsOpen &&
+          (projectSuggestionsLoading || filteredProjectSuggestions.length > 0) && (
+            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-background shadow-md">
+              {projectSuggestionsLoading && projectSuggestions.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-muted-foreground">Loading projects…</div>
+              ) : (
+                filteredProjectSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-muted"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setProjectPurpose(suggestion);
+                      setProjectSuggestionsOpen(false);
+                    }}
+                  >
+                    {suggestion}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+      </div>
+    </div>
   );
 
   if (isProcurement) {
@@ -1896,19 +1967,10 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
               </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="project-purpose" className="text-sm font-medium">
-                Purpose <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="project-purpose"
-                placeholder="Why is this needed? (project, use case, or reason)"
-                value={projectPurpose}
-                onChange={(e) => setProjectPurpose(e.target.value)}
-                rows={2}
-                className="resize-y min-h-[64px]"
-              />
-            </div>
+            {renderProjectField({
+              id: 'project-purpose',
+              labelClassName: 'text-sm font-medium',
+            })}
 
             <div className="space-y-5">
               {items.map((item, itemIndex) => (
@@ -2235,33 +2297,25 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     </div>
 
                     <div>
-                      {sectionLabel('Dates & priority')}
+                      {sectionLabel('Priority')}
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Requirement date *</Label>
-                          <Input
-                            type="date"
-                            value={item.required_date}
-                            onChange={(e) => updateItem(item.id, 'required_date', e.target.value)}
-                            className="h-10"
-                          />
-                          <p className="text-xs text-muted-foreground">When this item is needed.</p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">Priority</Label>
-                          {item.urgency_level ? (
-                            <Badge
-                              variant="outline"
-                              className={cn('px-3 py-1 text-sm font-medium', priorityChipClass(item.urgency_level))}
-                            >
-                              {priorityShortLabel(item.urgency_level)}
-                            </Badge>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">Set requirement date to calculate priority.</p>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            High = same day · Middle = 2–5 days · Low = more than 5 days from request date.
-                          </p>
+                          <Label className="text-sm font-medium">Priority *</Label>
+                          <Select
+                            value={item.urgency_level || undefined}
+                            onValueChange={(v) => updateItem(item.id, 'urgency_level', v)}
+                          >
+                            <SelectTrigger className="h-10">
+                              <SelectValue placeholder="Select priority" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PRIORITY_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     </div>
@@ -2391,22 +2445,11 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="project-purpose-default"
-                className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
-              >
-                Purpose <span className="text-destructive">*</span>
-              </Label>
-              <Textarea
-                id="project-purpose-default"
-                placeholder="Why is this needed? (project, use case, or reason)"
-                value={projectPurpose}
-                onChange={(e) => setProjectPurpose(e.target.value)}
-                rows={2}
-                className="resize-y min-h-[64px]"
-              />
-            </div>
+            {renderProjectField({
+              id: 'project-purpose-default',
+              labelClassName:
+                'text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
+            })}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label
@@ -2996,28 +3039,22 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
                     </div>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Requirement date *</Label>
-                    <Input
-                      type="date"
-                      value={item.required_date}
-                      onChange={(e) => updateItem(item.id, 'required_date', e.target.value)}
-                      className="h-9"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Date by which this item is needed.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Priority (auto)</Label>
-                    <Input
-                      value={item.urgency_level ? formatInventoryPriorityLabel(item.urgency_level) : 'Select requirement date'}
-                      readOnly
-                      disabled
-                      className="h-9 bg-muted/50 font-medium"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      High = same day, Middle = 2–5 days, Low = more than 5 days from request date.
-                    </p>
+                    <Label className="text-xs font-medium">Priority *</Label>
+                    <Select
+                      value={item.urgency_level || undefined}
+                      onValueChange={(v) => updateItem(item.id, 'urgency_level', v)}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITY_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Comments (optional)</Label>
