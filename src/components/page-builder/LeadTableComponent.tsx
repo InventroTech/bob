@@ -484,8 +484,14 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
     return 'lead_card';
   }, [config?.detailMode, config?.entityType]);
 
-  /** Use form-style modal when detail mode is record_form_modal, inventory_payment_modal, or when record detail modal type is form_edit. */
-  const useFormModal = effectiveDetailMode === 'record_form_modal' || effectiveDetailMode === 'inventory_payment_modal' || (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit');
+  /** Use form-style modal when detail mode is record_form_modal, inventory_payment_modal, or form_edit.
+   * Always use form modal for inventory requests so Approve/Reject render in the footer. */
+  const useFormModal =
+    effectiveDetailMode === 'record_form_modal' ||
+    effectiveDetailMode === 'inventory_payment_modal' ||
+    (effectiveDetailMode !== 'receive_shipments' && config?.recordDetailModalType === 'form_edit') ||
+    (effectiveDetailMode !== 'receive_shipments' &&
+      (config?.entityType === 'inventory_request' || config?.entityType === 'unmannd_request'));
 
   // Memoize onLeadUpdate callback for modal to prevent infinite re-render loop
   const handleModalLeadUpdate = useCallback((updatedLead: any) => {
