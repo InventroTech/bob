@@ -109,10 +109,8 @@ interface InventoryFormEditModalProps {
   /** Whether to show the Save button in the footer. If undefined, Save shows only when there are no action buttons. */
   showSaveButton?: boolean;
   /**
-   * Inventory All Requests actor:
-   * - manager → Approve / Reject / Put on Hold
-   * - team_lead → Order only (no Approve / Reject on new requests)
-   * - auto → infer from membership role
+   * Inventory All Requests actor page. Team lead and PM both get Approve/Reject
+   * (including on their own requests). Mode is kept for Page Builder pages.
    */
   inventoryWorkflowMode?: 'auto' | 'manager' | 'team_lead';
   /** When set, show one button: conditional if attribute matches, else default (e.g. Inventory Payment modal). */
@@ -1246,6 +1244,15 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
     (record?.data && typeof record.data === 'object'
       ? (record.data as Record<string, unknown>).team_lead
       : undefined);
+  const managerFromForm =
+    formData.manager != null && String(formData.manager).trim() !== ''
+      ? formData.manager
+      : undefined;
+  const managerOnRecord =
+    managerFromForm ??
+    (record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>).manager
+      : undefined);
 
   const workflowButtons =
     isInventoryRequest && !isPaymentModal
@@ -1254,7 +1261,9 @@ export const InventoryFormEditModal: React.FC<InventoryFormEditModalProps> = ({
           roleNameOrKey: myRoleName,
           roleKey: myRoleKey,
           membershipId: myMembershipId,
+          userId: user?.id ?? null,
           teamLeadOnRecord,
+          managerOnRecord,
           isRequester,
           workflowMode: inventoryWorkflowMode ?? 'auto',
         })
