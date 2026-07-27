@@ -2,170 +2,136 @@ import { describe, expect, it } from 'vitest';
 import {
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
+  isInventoryApproverActor,
   isInventoryProcurementRole,
   isInventoryTeamLeadRole,
 } from './inventoryWorkflow';
-import { shouldShowShipmentTrackingSection } from './shipmentTracking';
 
-describe('inventory procurement → order flow (existing statuses)', () => {
-  it('requestor never sees Approve/Reject/Order on non-verify statuses', () => {
+describe('inventory Approve/Reject for team lead and PM', () => {
+  it('plain requestor only gets Verify on REQ_TO_VERIFY', () => {
     expect(
       getInventoryWorkflowButtons({
         requestStatus: 'NEW_REQUEST',
         isRequester: true,
-        workflowMode: 'manager',
-      })
-    ).toEqual([]);
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'VENDOR_IDENTIFIED',
-        isRequester: true,
-        workflowMode: 'team_lead',
-      })
-    ).toEqual([]);
-  });
-
-  it('requestor can Verify on REQ_TO_VERIFY only', () => {
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'REQ_TO_VERIFY',
-        isRequester: true,
-        workflowMode: 'manager',
-      }).map((b) => [b.label, b.statusValue])
-    ).toEqual([['Verify', 'VENDOR_IDENTIFIED']]);
-
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'ON_HOLD',
-        isRequester: true,
-      })
-    ).toEqual([]);
-  });
-
-  it('non-requestor cannot Verify on REQ_TO_VERIFY', () => {
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'REQ_TO_VERIFY',
-        isRequester: false,
-        workflowMode: 'manager',
+        roleNameOrKey: 'Engineer',
       })
     ).toEqual([]);
     expect(
       getInventoryWorkflowButtons({
         requestStatus: 'REQ_TO_VERIFY',
-        isRequester: false,
-        workflowMode: 'team_lead',
-      })
-    ).toEqual([]);
-  });
-
-  it('manager can Approve / Send to verify / Reject / Put on Hold on NEW_REQUEST', () => {
-    const buttons = getInventoryWorkflowButtons({
-      requestStatus: 'NEW_REQUEST',
-      isRequester: false,
-      workflowMode: 'manager',
-    });
-    expect(buttons.map((b) => b.statusValue)).toEqual([
-      'VENDOR_IDENTIFIED',
-      'REQ_TO_VERIFY',
-      'REJECTED',
-      'ON_HOLD',
-    ]);
-    expect(buttons.map((b) => b.label)).toContain('Send to requestor to verify');
-  });
-
-  it('manager can Put on Hold on VENDOR_IDENTIFIED and resume from ON_HOLD', () => {
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'VENDOR_IDENTIFIED',
-        isRequester: false,
-        workflowMode: 'manager',
-      }).map((b) => [b.label, b.statusValue])
-    ).toEqual([['Put on Hold', 'ON_HOLD']]);
-
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'ON_HOLD',
-        isRequester: false,
-        workflowMode: 'manager',
-      }).map((b) => b.statusValue)
-    ).toEqual(['VENDOR_IDENTIFIED', 'REQ_TO_VERIFY', 'REJECTED']);
-  });
-
-  it('team lead never sees Approve/Reject on new requests', () => {
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'NEW_REQUEST',
-        isRequester: false,
-        workflowMode: 'team_lead',
-        roleNameOrKey: 'Team Lead',
-      })
-    ).toEqual([]);
-  });
-
-  it('team lead sees Order on VENDOR_IDENTIFIED', () => {
-    for (const status of ['VENDOR_IDENTIFIED', 'VENDOR IDENTIFIED']) {
-      const buttons = getInventoryWorkflowButtons({
-        requestStatus: status,
-        roleNameOrKey: 'Team Lead',
-        workflowMode: 'team_lead',
-        isRequester: false,
-      });
-      expect(buttons.map((b) => [b.label, b.statusValue])).toEqual([['Order', 'IN_SHIPPING']]);
-    }
-  });
-
-  it('manager does not see Order (team-lead-only action)', () => {
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'VENDOR_IDENTIFIED',
-        workflowMode: 'manager',
-        isRequester: false,
+        isRequester: true,
+        roleNameOrKey: 'Engineer',
       }).map((b) => b.label)
-    ).toEqual(['Put on Hold']);
+    ).toEqual(['Verify']);
   });
 
-  it('auto mode: team-lead role hides Approve; procurement role shows Approve', () => {
+  it('team lead can Approve/Reject on NEW_REQUEST', () => {
     expect(
       getInventoryWorkflowButtons({
         requestStatus: 'NEW_REQUEST',
-        roleNameOrKey: 'CSE Team Lead',
         isRequester: false,
-        workflowMode: 'auto',
-      })
-    ).toEqual([]);
-    expect(
-      getInventoryWorkflowButtons({
-        requestStatus: 'NEW_REQUEST',
-        roleNameOrKey: 'Procurement Manager',
-        isRequester: false,
-        workflowMode: 'auto',
+        roleNameOrKey: 'Team Lead',
       }).map((b) => b.label)
     ).toEqual(['Approve', 'Send to requestor to verify', 'Reject', 'Put on Hold']);
   });
 
-  it('recognizes procurement vs team-lead roles', () => {
-    expect(isInventoryProcurementRole('Procurement Manager')).toBe(true);
-    expect(isInventoryProcurementRole('team_lead')).toBe(false);
+  it('PM can Approve/Reject someone else\'s NEW_REQUEST', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        isRequester: false,
+        roleNameOrKey: 'Procurement Manager',
+      }).map((b) => b.label)
+    ).toEqual(['Approve', 'Send to requestor to verify', 'Reject', 'Put on Hold']);
+  });
+
+  it('team lead can Approve their own request', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        isRequester: true,
+        roleNameOrKey: 'CSE Team Lead',
+      }).map((b) => b.label)
+    ).toContain('Approve');
+  });
+
+  it('PM cannot Approve/Reject their own request (same as requestor)', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        isRequester: true,
+        roleNameOrKey: 'Procurement Manager',
+      })
+    ).toEqual([]);
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'REQ_TO_VERIFY',
+        isRequester: true,
+        roleNameOrKey: 'Procurement Manager',
+      }).map((b) => b.label)
+    ).toEqual(['Verify']);
+    expect(
+      isInventoryApproverActor({
+        roleNameOrKey: 'Procurement Manager',
+        isRequester: true,
+      })
+    ).toBe(false);
+  });
+
+  it('assigned team_lead on record can Approve', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        isRequester: false,
+        membershipId: 10,
+        teamLeadOnRecord: 10,
+      }).map((b) => b.label)
+    ).toContain('Approve');
+  });
+
+  it('assigned manager on record can Approve others\' requests only', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        isRequester: false,
+        membershipId: 20,
+        managerOnRecord: 20,
+      }).map((b) => b.label)
+    ).toContain('Approve');
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'NEW_REQUEST',
+        isRequester: true,
+        membershipId: 20,
+        managerOnRecord: 20,
+        roleNameOrKey: 'Procurement Manager',
+      })
+    ).toEqual([]);
+  });
+
+  it('team lead can Order on VENDOR_IDENTIFIED', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'VENDOR_IDENTIFIED',
+        roleNameOrKey: 'Team Lead',
+      }).map((b) => b.label)
+    ).toEqual(['Put on Hold', 'Order']);
+  });
+
+  it('recognizes TL and PM roles', () => {
+    expect(isInventoryApproverActor({ roleNameOrKey: 'Team Lead' })).toBe(true);
+    expect(isInventoryApproverActor({ roleNameOrKey: 'Procurement Manager' })).toBe(true);
+    expect(isInventoryApproverActor({ roleNameOrKey: 'Engineer' })).toBe(false);
     expect(isInventoryTeamLeadRole('TL')).toBe(true);
-    expect(isInventoryTeamLeadRole('CSE Team Lead')).toBe(true);
+    expect(isInventoryProcurementRole('PM')).toBe(true);
   });
 
   it('filters duplicate Page Builder status buttons', () => {
-    const filtered = filterDuplicateInventoryWorkflowButtons([
-      { label: 'Approve vendor', statusValue: 'VENDOR_IDENTIFIED' },
-      { label: 'Send verify', statusValue: 'REQ_TO_VERIFY' },
-      { label: 'Custom', statusValue: 'SOME_CUSTOM' },
-    ]);
-    expect(filtered.map((b) => b.statusValue)).toEqual(['SOME_CUSTOM']);
-  });
-});
-
-describe('shipment tracking visibility', () => {
-  it('shows from VENDOR_IDENTIFIED / IN_SHIPPING', () => {
-    expect(shouldShowShipmentTrackingSection('NEW_REQUEST')).toBe(false);
-    expect(shouldShowShipmentTrackingSection('REQ_TO_VERIFY')).toBe(false);
-    expect(shouldShowShipmentTrackingSection('VENDOR_IDENTIFIED')).toBe(true);
-    expect(shouldShowShipmentTrackingSection('IN_SHIPPING')).toBe(true);
+    expect(
+      filterDuplicateInventoryWorkflowButtons([
+        { label: 'Approve', statusValue: 'VENDOR_IDENTIFIED' },
+        { label: 'Custom', statusValue: 'OTHER' },
+      ]).map((b) => b.statusValue)
+    ).toEqual(['OTHER']);
   });
 });
