@@ -2095,7 +2095,22 @@ export const TicketTableComponent: React.FC<TicketTableProps> = ({ config }) => 
           }
         }}
       >
-        <DialogContent className="font-body max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
+        <DialogContent
+          className="font-body max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0"
+          onPointerDownOutside={(event) => {
+            // Portaled popovers render outside dialog DOM; don't dismiss on those clicks.
+            const target = event.target as HTMLElement | null;
+            if (target?.closest?.("[data-radix-popper-content-wrapper]")) {
+              event.preventDefault();
+            }
+          }}
+          onFocusOutside={(event) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest?.("[data-radix-popper-content-wrapper]")) {
+              event.preventDefault();
+            }
+          }}
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>
               {selectedTicket?.name
