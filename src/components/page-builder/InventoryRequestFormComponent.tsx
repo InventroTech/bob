@@ -625,8 +625,8 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
   const [ecommerceSources, setEcommerceSources] = useState<EcommerceSource[]>(() => [
     ...FALLBACK_ECOMMERCE_SOURCES,
   ]);
-  /** core = small reliable set; extended = full catalog (default). */
-  const [priceCompareProfile, setPriceCompareProfile] = useState<'core' | 'extended'>('extended');
+  /** core = small reliable set (default); extended = full catalog. */
+  const [priceCompareProfile, setPriceCompareProfile] = useState<'core' | 'extended'>('core');
   /** Per-item loading state for live marketplace price fetch. */
   const [liveCompareLoadingByItemId, setLiveCompareLoadingByItemId] = useState<Record<string, boolean>>({});
   /** Per-item loading while resolving product details from a pasted item link. */
@@ -873,7 +873,7 @@ export const InventoryRequestFormComponent: React.FC<InventoryRequestFormProps> 
           .filter((v) => v.id && v.label);
         if (cancelled || rows.length === 0) return;
         setEcommerceSources([...rows, { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] }]);
-        // Form default is Extended; do not overwrite from API (settings used to force core).
+        // Form default is Core; keep local selection unless the user changes the profile control.
       } catch {
         // Keep fallback sources.
       }
