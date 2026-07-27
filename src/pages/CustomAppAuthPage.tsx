@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -17,6 +18,8 @@ const CustomAppAuthPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -164,16 +167,33 @@ const CustomAppAuthPage: React.FC = () => {
                 />
               </div>
               <div className="space-y-1">
-                <Label>Password</Label>
-                <Input
-                  placeholder="••••••••"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={loading}
-                />
-              </div>
+  <Label>Password</Label>
+
+  <div className="relative">
+    <Input
+      placeholder="••••••••"
+      type={showPassword ? 'text' : 'password'}
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      required
+      disabled={loading}
+      className="pr-10"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+      tabIndex={-1}
+    >
+      {showPassword ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      )}
+    </button>
+  </div>
+</div>
               <div className="text-right">
                 <Link
                   to={`/app/${tenantSlug}/auth/forgot-password`}
@@ -261,29 +281,63 @@ const CustomAppAuthPage: React.FC = () => {
                 />
               </div>
               <div className="space-y-1">
-                <Label>Password</Label>
-                <Input
-                  placeholder="Minimum 6 characters"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  disabled={loading}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Confirm password</Label>
-                <Input
-                  placeholder="Re-enter password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  disabled={loading}
-                />
-              </div>
+  <Label>Password</Label>
+
+  <div className="relative">
+    <Input
+      placeholder="Minimum 6 characters"
+      type={showPassword ? 'text' : 'password'}
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      required
+      minLength={6}
+      disabled={loading}
+      className="pr-10"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+      tabIndex={-1}
+    >
+      {showPassword ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      )}
+    </button>
+  </div>
+</div>
+<div className="space-y-1">
+  <Label>Confirm password</Label>
+
+  <div className="relative">
+    <Input
+      placeholder="Re-enter password"
+      type={showConfirmPassword ? 'text' : 'password'}
+      value={confirmPassword}
+      onChange={(e) => setConfirmPassword(e.target.value)}
+      required
+      minLength={6}
+      disabled={loading}
+      className="pr-10"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+      className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+      tabIndex={-1}
+    >
+      {showConfirmPassword ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      )}
+    </button>
+  </div>
+</div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Signing up...' : 'Create account'}
               </Button>
