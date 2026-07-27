@@ -1,26 +1,19 @@
 /**
- * Inventory request flow on the existing status architecture:
+ * Inventory request flow:
  *
- *   NEW_REQUEST
- *     → (manager Approve) VENDOR_IDENTIFIED
- *     → (manager Send to requestor to verify) REQ_TO_VERIFY
- *     → (manager Reject) REJECTED
- *     → (manager Put on Hold) ON_HOLD
- *   ON_HOLD
- *     → (manager Approve) VENDOR_IDENTIFIED
- *     → (manager Send to requestor to verify) REQ_TO_VERIFY
- *     → (manager Reject) REJECTED
+ *   NEW_REQUEST / ON_HOLD
+ *     → (team lead OR PM Approve) VENDOR_IDENTIFIED
+ *     → (team lead OR PM Reject / Send to verify / Hold)
  *   REQ_TO_VERIFY
  *     → (requestor Verify) VENDOR_IDENTIFIED
  *   VENDOR_IDENTIFIED
- *     → (team lead Order) IN_SHIPPING
- *     → (manager Put on Hold) ON_HOLD
- *   IN_SHIPPING → shipment tracking (paste link/AWB)
+ *     → (team lead OR PM Order / Hold)
  *
- * Page Builder can set inventoryWorkflowMode:
- *   - manager   → Approve / Reject / Put on Hold / Send to verify
- *   - team_lead → Order only (no Approve / Reject on new requests)
- *   - auto      → infer from membership role
+ * Rules:
+ * - Team lead can Approve/Reject, including on requests they created.
+ * - PM can Approve/Reject other people's requests, but NOT their own
+ *   (on their own request they are treated like a requestor).
+ * - Plain requestors only get Verify on REQ_TO_VERIFY.
  */
 
 export const INVENTORY_APPROVABLE_STATUSES = new Set([
@@ -28,18 +21,15 @@ export const INVENTORY_APPROVABLE_STATUSES = new Set([
   'ON_HOLD',
 ]);
 
-/** Statuses where a procurement manager can put the request on hold. */
 export const INVENTORY_HOLDABLE_STATUSES = new Set([
   'NEW_REQUEST',
   'VENDOR_IDENTIFIED',
 ]);
 
-/** Statuses where Order is available (moves request into shipping). */
 export const INVENTORY_ORDERABLE_STATUSES = new Set([
   'VENDOR_IDENTIFIED',
 ]);
 
-/** Page Builder status values that duplicate built-in workflow buttons. */
 export const INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES = new Set([
   'VENDOR_IDENTIFIED',
   'REQ_TO_VERIFY',
@@ -71,6 +61,16 @@ function normalizeStatus(status: unknown): string {
     .replace(/\s+/g, '_');
 }
 
+function idsMatch(
+  left: number | string | null | undefined,
+  right: unknown
+): boolean {
+  if (left == null || right == null || right === '') return false;
+  const a = String(left).trim();
+  const b = String(right).trim();
+  return !!a && !!b && a === b;
+}
+
 /** Team-lead-like role from membership role_key / role_name. */
 export function isInventoryTeamLeadRole(role: string | null | undefined): boolean {
   const r = normalizeRole(role);
@@ -82,7 +82,7 @@ export function isInventoryTeamLeadRole(role: string | null | undefined): boolea
   return false;
 }
 
-/** Procurement / manager-like roles (All Requests actors). */
+/** Procurement / manager-like roles. */
 export function isInventoryProcurementRole(role: string | null | undefined): boolean {
   const r = normalizeRole(role);
   if (!r) return false;
@@ -98,45 +98,67 @@ export function isInventoryProcurementRole(role: string | null | undefined): boo
   );
 }
 
-/**
- * True when the current user is the record's team_lead.
- * `team_lead` may be a tenant membership id or (legacy) auth user id.
- */
+/** True when the current user is the record's team_lead. */
 export function isAssignedInventoryTeamLead(
   membershipId: number | string | null | undefined,
   teamLeadOnRecord: unknown,
   userId?: number | string | null
 ): boolean {
-  if (teamLeadOnRecord == null || teamLeadOnRecord === '') return false;
-  const tl = String(teamLeadOnRecord).trim();
-  if (!tl) return false;
-  if (membershipId != null && String(membershipId).trim() === tl) return true;
-  if (userId != null && String(userId).trim() === tl) return true;
+  return idsMatch(membershipId, teamLeadOnRecord) || idsMatch(userId, teamLeadOnRecord);
+}
+
+/** True when the current user is the record's manager (PM). */
+export function isAssignedInventoryManager(
+  membershipId: number | string | null | undefined,
+  managerOnRecord: unknown,
+  userId?: number | string | null
+): boolean {
+  return idsMatch(membershipId, managerOnRecord) || idsMatch(userId, managerOnRecord);
+}
+
+function isTeamLeadActor(opts: {
+  roleNameOrKey?: string | null;
+  roleKey?: string | null;
+  membershipId?: number | string | null;
+  userId?: number | string | null;
+  teamLeadOnRecord?: unknown;
+}): boolean {
+  const roles = [opts.roleNameOrKey, opts.roleKey];
+  if (roles.some((r) => isInventoryTeamLeadRole(r))) return true;
+  return isAssignedInventoryTeamLead(opts.membershipId, opts.teamLeadOnRecord, opts.userId);
+}
+
+/** Team lead or PM — can Approve / Reject (PM excluded when acting as requestor). */
+export function isInventoryApproverActor(opts: {
+  roleNameOrKey?: string | null;
+  roleKey?: string | null;
+  membershipId?: number | string | null;
+  userId?: number | string | null;
+  teamLeadOnRecord?: unknown;
+  managerOnRecord?: unknown;
+  workflowMode?: InventoryWorkflowMode | null;
+  isRequester?: boolean;
+}): boolean {
+  const isTl = isTeamLeadActor(opts);
+  // Team lead may Approve even on their own request.
+  if (isTl) return true;
+
+  // PM (and anyone else) cannot Approve/Reject a request they created.
+  if (opts.isRequester) return false;
+
+  const roles = [opts.roleNameOrKey, opts.roleKey];
+  if (roles.some((r) => isInventoryProcurementRole(r))) return true;
+  if (isAssignedInventoryManager(opts.membershipId, opts.managerOnRecord, opts.userId)) {
+    return true;
+  }
+  if (opts.workflowMode === 'manager' || opts.workflowMode === 'team_lead') return true;
   return false;
 }
 
-function resolveWorkflowMode(opts: {
-  workflowMode?: InventoryWorkflowMode | null;
-  roleNameOrKey?: string | null;
-  roleKey?: string | null;
-}): 'manager' | 'team_lead' {
-  if (opts.workflowMode === 'manager' || opts.workflowMode === 'team_lead') {
-    return opts.workflowMode;
-  }
-  const roles = [opts.roleNameOrKey, opts.roleKey];
-  if (roles.some((r) => isInventoryTeamLeadRole(r))) return 'team_lead';
-  if (roles.some((r) => isInventoryProcurementRole(r))) return 'manager';
-  // Unknown role: default to manager-style approve (safe for Manager All Requests).
-  // Team-lead pages should set inventoryWorkflowMode=team_lead in Page Builder.
-  return 'manager';
-}
-
 /**
- * Built-in Approve / Reject / Put on Hold / Send to verify / Order / Verify for the record form modal.
- *
- * Manager: Approve/Reject/Send-to-verify on NEW_REQUEST or ON_HOLD; Put on Hold on open requests.
- * Requestor: Verify on REQ_TO_VERIFY only.
- * Team lead: Order on VENDOR_IDENTIFIED (never Approve/Reject).
+ * Built-in workflow buttons.
+ * Team lead: Approve/Reject (including own requests).
+ * PM: Approve/Reject others' requests only — own requests = requestor (Verify only).
  */
 export function getInventoryWorkflowButtons(opts: {
   requestStatus: unknown;
@@ -145,15 +167,16 @@ export function getInventoryWorkflowButtons(opts: {
   membershipId?: number | string | null;
   userId?: number | string | null;
   teamLeadOnRecord?: unknown;
+  managerOnRecord?: unknown;
   isRequester?: boolean;
-  /** Page-level override: manager All Requests vs team-lead All Requests. */
   workflowMode?: InventoryWorkflowMode | null;
 }): InventoryWorkflowActionButton[] {
   const status = normalizeStatus(opts.requestStatus);
   const buttons: InventoryWorkflowActionButton[] = [];
+  const isApprover = isInventoryApproverActor(opts);
 
-  if (opts.isRequester) {
-    if (status === 'REQ_TO_VERIFY') {
+  if (!isApprover) {
+    if (opts.isRequester && status === 'REQ_TO_VERIFY') {
       buttons.push({
         label: 'Verify',
         statusValue: 'VENDOR_IDENTIFIED',
@@ -163,9 +186,7 @@ export function getInventoryWorkflowButtons(opts: {
     return buttons;
   }
 
-  const mode = resolveWorkflowMode(opts);
-
-  if (mode === 'manager' && INVENTORY_APPROVABLE_STATUSES.has(status)) {
+  if (INVENTORY_APPROVABLE_STATUSES.has(status)) {
     buttons.push(
       {
         label: 'Approve',
@@ -181,7 +202,7 @@ export function getInventoryWorkflowButtons(opts: {
     );
   }
 
-  if (mode === 'manager' && INVENTORY_HOLDABLE_STATUSES.has(status)) {
+  if (INVENTORY_HOLDABLE_STATUSES.has(status)) {
     buttons.push({
       label: 'Put on Hold',
       statusValue: 'ON_HOLD',
@@ -189,7 +210,7 @@ export function getInventoryWorkflowButtons(opts: {
     });
   }
 
-  if (mode === 'team_lead' && INVENTORY_ORDERABLE_STATUSES.has(status)) {
+  if (INVENTORY_ORDERABLE_STATUSES.has(status)) {
     buttons.push({
       label: 'Order',
       statusValue: 'IN_SHIPPING',

@@ -266,8 +266,8 @@ export const TableConfig: React.FC<TableConfigProps> = ({
           <div className="space-y-2">
             <p className="text-sm font-medium">Inventory request flow</p>
             <p className="text-xs text-muted-foreground">
-              Manager pages: Approve/Reject/Send to requestor to verify on NEW_REQUEST. Team-lead pages: Order only on
-              VENDOR_IDENTIFIED (no Approve/Reject on new requests).
+              Team lead can Approve / Reject (including their own requests). PM can Approve / Reject other people&apos;s
+              requests only — on their own request they act like a requestor (Verify only).
             </p>
           </div>
           <div className="space-y-2">
@@ -288,13 +288,12 @@ export const TableConfig: React.FC<TableConfigProps> = ({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">Auto (from user role)</SelectItem>
-                <SelectItem value="manager">Manager — Approve / Reject</SelectItem>
-                <SelectItem value="team_lead">Team lead — Order only</SelectItem>
+                <SelectItem value="team_lead">Team lead page</SelectItem>
+                <SelectItem value="manager">Manager / PM page</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Set <strong>Team lead — Order only</strong> on the team-lead All Requests page so new requests never
-              show Approve/Reject.
+              Used on All Requests tables. PM still cannot Approve a request they created.
             </p>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={applySimpleInventoryDefaults}>
