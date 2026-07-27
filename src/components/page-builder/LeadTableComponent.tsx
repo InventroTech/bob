@@ -305,6 +305,16 @@ const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
       lead.data?.display_pic_url ||
       transformedLead.display_pic_url ||
       null;
+
+    // Inventory / procurement item thumbnails (Item name column)
+    transformedLead.product_image =
+      lead.product_image ||
+      lead.data?.product_image ||
+      transformedLead.product_image ||
+      null;
+    if (!transformedLead.vendor) {
+      transformedLead.vendor = lead.data?.vendor || lead.vendor || null;
+    }
     
     return transformedLead;
   }
@@ -443,7 +453,7 @@ const DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS: Array<{ key: string; label: s
   { key: 'comments', label: 'Comments', enabled: true },
   { key: 'notes', label: 'Notes', enabled: true },
   { key: 'urgency_level', label: 'Priority', enabled: false },
-  { key: 'project_purpose', label: 'Project / purpose', enabled: true },
+  { key: 'project_purpose', label: 'Project', enabled: true },
   { key: 'department', label: 'Department', enabled: true },
 ];
 
@@ -1241,14 +1251,50 @@ export const LeadTableComponent: React.FC<LeadTableProps> = ({ config, pageId })
       );
     }
     
-    // Items table: first column as normal text (no ShortProfileCard)
+    const headerLower = String(column.header || '').toLowerCase().trim();
+    const accessorLowerForName = String(column.accessor || '').toLowerCase();
+    const isItemNameColumn =
+      accessorLowerForName === 'item_name_freeform' ||
+      accessorLowerForName === 'item_name' ||
+      headerLower === 'item name' ||
+      headerLower === 'item';
+
+    // Item name: product thumbnail from product_image URL (not person avatar)
+    if (isItemNameColumn) {
+      const productImage =
+        String(
+          row.product_image ||
+            row.data?.product_image ||
+            (Array.isArray(row.price_comparisons)
+              ? row.price_comparisons.find((q: { image?: string }) => q?.image)?.image
+              : '') ||
+            (Array.isArray(row.data?.price_comparisons)
+              ? row.data.price_comparisons.find((q: { image?: string }) => q?.image)?.image
+              : '') ||
+            ''
+        ).trim();
+      const subtitle = String(
+        row.vendor || row.data?.vendor || row.specifications || row.data?.specifications || ''
+      ).trim();
+      const itemName =
+        displayValue && displayValue !== 'N/A' ? displayValue : String(row.item_name_freeform || '').trim();
+      return (
+        <ShortProfileCard
+          image={productImage || undefined}
+          name={itemName || 'Unnamed item'}
+          address={subtitle}
+        />
+      );
+    }
+
+    // Items table: first column as normal text (no person ShortProfileCard)
     const isItemsTableFirstColumn = config?.tableType === 'itemsTable' && columnIndex === 0;
     if (isItemsTableFirstColumn) {
       return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
     }
     
     // Special handling for name column - show avatar, name, and email
-    if (column.accessor === 'name' || column.header.toLowerCase().includes('name')) {
+    if (column.accessor === 'name' || headerLower.includes('name')) {
       return (
         <ShortProfileCard
           image={row.display_pic_url || row.image}

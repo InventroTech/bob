@@ -69,7 +69,7 @@ export const DEFAULT_PROCUREMENT_TABLE_CONFIG = {
     { key: 'vendor', label: 'Vendor', enabled: true },
     { key: 'urgency_level', label: 'Priority', enabled: false },
     { key: 'department', label: 'Department', enabled: false },
-    { key: 'project_purpose', label: 'Purpose', enabled: false },
+    { key: 'project_purpose', label: 'Project', enabled: false },
     { key: 'category', label: 'Category', enabled: false },
     { key: 'specifications', label: 'Specifications', enabled: true },
     { key: 'product_link', label: 'Item link', enabled: true, link: true },
@@ -136,9 +136,9 @@ function withProcurementModalFields(
   if (!keys.has('request_date')) {
     next.push({ key: 'request_date', label: 'Requested Date', enabled: false });
   }
-  insertAfter('department', { key: 'project_purpose', label: 'Purpose', enabled: false });
+  insertAfter('department', { key: 'project_purpose', label: 'Project', enabled: false });
   if (!keys.has('project_purpose')) {
-    next.push({ key: 'project_purpose', label: 'Purpose', enabled: false });
+    next.push({ key: 'project_purpose', label: 'Project', enabled: false });
   }
   insertAfter('project_purpose', { key: 'category', label: 'Category', enabled: false });
   if (!keys.has('category')) {
