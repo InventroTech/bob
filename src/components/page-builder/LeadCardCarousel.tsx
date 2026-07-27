@@ -25,10 +25,10 @@ Info,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-Tooltip,
-TooltipContent,
-TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { LeadActionButton } from "./LeadActionButton";
 import { NotInterestedModal } from "./NotInterestedModal";
@@ -138,78 +138,113 @@ function formatRecallAtLabel(iso: string | null): string {
 }
 
 
-const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProps>(({ config, initialLead, onLeadUpdate, isInModal = false, hideActionBar = false, onActionButtonsVisibilityChange, onCallBackModalChange, onActionComplete }, ref) => {
-  const { toast } = useToast();
-  const { user: authUser, session } = useAuth();
-  const spoofUserId = useSpoofUserId();
-  const activeUserId = spoofUserId ?? authUser?.id ?? null;
-  const [currentLead, setCurrentLead] = useState<LeadData | null>(initialLead || null);
-  const [loading, setLoading] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [fetchingNext, setFetchingNext] = useState(false);
-  const [refreshingLead, setRefreshingLead] = useState(false);
-  const [showPendingCard, setShowPendingCard] = useState(true);
-  const [hasCheckedForLeads, setHasCheckedForLeads] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  /** Idle “pending leads” dashboard: recall queue + today’s activity */
-  const [pendingDash, setPendingDash] = useState<{
-    notConnected: { name: string; nextCallLabel: string } | null;
-    snoozed: { name: string; nextCallLabel: string } | null;
-    trialAcceptedToday: number;
-    notInterestedToday: number;
-    loading: boolean;
-  }>({
-    notConnected: null,
-    snoozed: null,
-    trialAcceptedToday: 0,
-    notInterestedToday: 0,
-    loading: true,
-  });
-  const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
-  const [showCallBackDialog, setShowCallBackDialog] = useState(false);
+const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProps>(
+  (
+    {
+      config,
+      initialLead,
+      onLeadUpdate,
+      isInModal = false,
+      hideActionBar = false,
+      onActionButtonsVisibilityChange,
+      onCallBackModalChange,
+      onActionComplete,
+    },
+    ref
+  ) => {
+    const { toast } = useToast();
+    const { user: authUser, session } = useAuth();
+    const spoofUserId = useSpoofUserId();
+    const activeUserId = spoofUserId ?? authUser?.id ?? null;
+
+    const [currentLead, setCurrentLead] = useState<LeadData | null>(initialLead || null);
+    const [loading, setLoading] = useState(false);
+    const [updating, setUpdating] = useState(false);
+    const [fetchingNext, setFetchingNext] = useState(false);
+    const [refreshingLead, setRefreshingLead] = useState(false);
+    const [showPendingCard, setShowPendingCard] = useState(true);
+    const [hasCheckedForLeads, setHasCheckedForLeads] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+
+    // ✅ Add these two state variables here
+    const [isTouchDevice, setIsTouchDevice] = useState(false);
+    const [tooltipOpen, setTooltipOpen] = useState(false);
+
+    /** Idle “pending leads” dashboard: recall queue + today’s activity */
+    const [pendingDash, setPendingDash] = useState<{
+      notConnected: { name: string; nextCallLabel: string } | null;
+      snoozed: { name: string; nextCallLabel: string } | null;
+      trialAcceptedToday: number;
+      notInterestedToday: number;
+      loading: boolean;
+    }>({
+      notConnected: null,
+      snoozed: null,
+      trialAcceptedToday: 0,
+      notInterestedToday: 0,
+      loading: true,
+    });
+
+    const [showNotInterestedDialog, setShowNotInterestedDialog] = useState(false);
+    const [showCallBackDialog, setShowCallBackDialog] = useState(false);
 
 
-  // Ensure modals are closed when component mounts or when in modal mode
-  useEffect(() => {
-    if (isInModal) {
-      setShowCallBackDialog(false);
-      setShowNotInterestedDialog(false);
-      setShowProfileModal(false);
-    }
-  }, [isInModal]);
-
-  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
-  const [whatsappPhone, setWhatsappPhone] = useState<string>("");
-  const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
-  const [lead, setLead] = useState<LeadState>({
-    leadStatus: "New",
-    notes: "",
-    selectedTags: [],
-    nextFollowUp: "",
-    leadStartTime: new Date(),
-  });
-  const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
-
-  // Sync actionButtonsVisible to parent when it changes (for modal mode)
-  useEffect(() => {
-    if (onActionButtonsVisibilityChange) {
-      onActionButtonsVisibilityChange(actionButtonsVisible);
-    }
-  }, [actionButtonsVisible, onActionButtonsVisibilityChange]);
-  const [processingAction, setProcessingAction] = useState<string | null>(null);
-  const [imageError, setImageError] = useState(false);
-  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
-  const [dailyLimitLoaded, setDailyLimitLoaded] = useState(false);
-  const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
-  /** RM's assigned group — same fresh pool as Lead Source Group List */
-  const [assignedGroupId, setAssignedGroupId] = useState<number | null>(null);
-  const [groupFreshLeads, setGroupFreshLeads] = useState<{
-    name: string;
-    count: number | null;
-    loaded: boolean;
-  }>({ name: "", count: null, loaded: false });
-
-  const isInitialized = useRef(false);
+    const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+    const [whatsappPhone, setWhatsappPhone] = useState<string>("");
+    const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
+    
+    const [lead, setLead] = useState<LeadState>({
+      leadStatus: "New",
+      notes: "",
+      selectedTags: [],
+      nextFollowUp: "",
+      leadStartTime: new Date(),
+    });
+    
+    const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
+    const [processingAction, setProcessingAction] = useState<string | null>(null);
+    const [imageError, setImageError] = useState(false);
+    const [dailyLimit, setDailyLimit] = useState<number | null>(null);
+    const [dailyLimitLoaded, setDailyLimitLoaded] = useState(false);
+    const [fetchedLeadsCount, setFetchedLeadsCount] = useState<number>(0);
+    
+    /** RM's assigned group — same fresh pool as Lead Source Group List */
+    const [assignedGroupId, setAssignedGroupId] = useState<number | null>(null);
+    const [groupFreshLeads, setGroupFreshLeads] = useState<{
+      name: string;
+      count: number | null;
+      loaded: boolean;
+    }>({
+      name: "",
+      count: null,
+      loaded: false,
+    });
+    
+    const isInitialized = useRef(false);
+    
+    // Ensure modals are closed when component mounts or when in modal mode
+    useEffect(() => {
+      if (isInModal) {
+        setShowCallBackDialog(false);
+        setShowNotInterestedDialog(false);
+        setShowProfileModal(false);
+      }
+    }, [isInModal]);
+    
+    // Detect touch devices
+    useEffect(() => {
+      const touch =
+        "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    
+      setIsTouchDevice(touch);
+    }, []);
+    
+    // Sync actionButtonsVisible to parent when it changes (for modal mode)
+    useEffect(() => {
+      if (onActionButtonsVisibilityChange) {
+        onActionButtonsVisibilityChange(actionButtonsVisible);
+      }
+    }, [actionButtonsVisible, onActionButtonsVisibilityChange]);
   // Store latest handlers in ref so useImperativeHandle always calls current versions
   const handlersRef = useRef<{
     handleActionButton: (action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later", extra?: any) => Promise<any>;
@@ -1755,22 +1790,20 @@ const LeadCardCarousel = forwardRef<LeadCardCarouselHandle, LeadCardCarouselProp
     )}
 
     {currentLead?.lead_source && (
-      <Tooltip>
-      <TooltipTrigger asChild>
-        <Info
-          className="h-4 w-4 cursor-pointer text-slate-400 hover:text-slate-700"
-        />
-      </TooltipTrigger>
+      <Popover>
+      <PopoverTrigger asChild>
+        <Info className="h-4 w-4 cursor-pointer text-slate-400 hover:text-slate-700" />
+      </PopoverTrigger>
     
-      <TooltipContent
+      <PopoverContent
         side="bottom"
-  className="w-56 rounded-xl border bg-white p-4 shadow-lg"
+        className="w-56 rounded-xl border bg-white p-4 shadow-lg"
       >
         <p className="text-sm">
           {currentLead.data?.lead_source_description}
         </p>
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
     )}
   </div>
   
