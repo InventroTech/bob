@@ -112,7 +112,7 @@ const OTHER_REASONS_OPTIONS = [
   "No Issue",
   "Number Update",
   "Partial Refund",
-  "Protocal Change",
+  "Protocol Change",
   "Refund Issued",
   "Refund Not Issued",
   "Subscription Information",
@@ -120,21 +120,35 @@ const OTHER_REASONS_OPTIONS = [
   "User Name Update",
   "User Photo Background Change",
   "User Photo Change",
-  "User photo/Protocal Size Issue",
+  "User photo/Protocol Size Issue",
   "Self Trial Completion",
 ];
 
+/** Normalize legacy misspellings so saved values still match the option list. */
+const OTHER_REASONS_ALIASES: Record<string, string> = {
+  "Protocal Change": "Protocol Change",
+  "User photo/Protocal Size Issue": "User photo/Protocol Size Issue",
+};
+
+const normalizeOtherReason = (reason: string): string =>
+  OTHER_REASONS_ALIASES[reason] ?? reason;
+
 const parseOtherReasons = (otherReasons: any): string[] => {
+  let reasons: string[] = [];
   if (!otherReasons) return [];
-  if (Array.isArray(otherReasons)) return otherReasons;
-  if (typeof otherReasons === "string") {
+  if (Array.isArray(otherReasons)) {
+    reasons = otherReasons;
+  } else if (typeof otherReasons === "string") {
     try {
-      return JSON.parse(otherReasons);
+      const parsed = JSON.parse(otherReasons);
+      reasons = Array.isArray(parsed) ? parsed : [];
     } catch {
-      return otherReasons.split(",").map((r: string) => r.trim()).filter(Boolean);
+      reasons = otherReasons.split(",").map((r: string) => r.trim()).filter(Boolean);
     }
   }
-  return [];
+  return reasons.map((reason) =>
+    typeof reason === "string" ? normalizeOtherReason(reason) : reason
+  );
 };
 
 // Function to format phone number
@@ -1718,13 +1732,17 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent
-                      portalled={!isInModal}
-                      className={cn("w-80 p-4", isInModal && "z-[100]")}
+                      // Always portal so the list isn't clipped by modal overflow:hidden.
+                      className={cn(
+                        "flex w-80 flex-col overflow-hidden p-4",
+                        isInModal && "z-[100]"
+                      )}
                       align="start"
+                      collisionPadding={16}
                       onWheel={(event) => event.stopPropagation()}
                     >
-                      <div className="space-y-3">
-                        <h4 className="font-medium">Select Other Reasons</h4>
+                      <div className="flex min-h-0 flex-col space-y-3">
+                        <h4 className="shrink-0 font-medium">Select Other Reasons</h4>
                         <div
                           className="max-h-60 space-y-2 overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
                           onWheel={(event) => event.stopPropagation()}
