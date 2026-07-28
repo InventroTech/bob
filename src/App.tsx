@@ -42,6 +42,7 @@ import UserHierarchyPage from "./pages/UserHierarchyPage";
 import BillingPage from "./pages/BillingPage";
 import EntityTypesPage from "./pages/EntityTypesPage";
 import BackgroundJobsPage from "./pages/BackgroundJobsPage";
+import PyroJobsPage from "./pages/PyroJobsPage";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -82,6 +83,7 @@ const App = () => (
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/entity-types" element={<EntityTypesPage />} />
             <Route path="/background-jobs" element={<BackgroundJobsPage />} />
+            <Route path="/pyro-jobs" element={<PyroJobsPage />} />
           </Route>
 
           {/* Custom App Routes */}

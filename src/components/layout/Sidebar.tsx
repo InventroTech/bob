@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Layout, Sparkles, UserPlus, Database, Users, Receipt, TableProperties, Workflow } from "lucide-react";
+import { Home, Layout, Sparkles, UserPlus, Database, Users, Receipt, TableProperties, Workflow, Timer } from "lucide-react";
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -42,6 +42,11 @@ const sidebarItems = [
     title: "Background Jobs",
     path: "/background-jobs",
     icon: Workflow,
+  },
+  {
+    title: "Pyro Jobs",
+    path: "/pyro-jobs",
+    icon: Timer,
   },
   {
     title: "Add User",
