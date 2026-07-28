@@ -1737,7 +1737,10 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       <div className="flex min-h-0 flex-col space-y-3">
                         <h4 className="shrink-0 font-medium">Select Other Reasons</h4>
                         <div
-                          className="max-h-60 space-y-2 overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
+                          className="max-h-56 overflow-y-auto overflow-x-hidden space-y-2 touch-auto"
+                          style={{
+                            WebkitOverflowScrolling: "touch",
+                          }}
                           onWheel={(event) => event.stopPropagation()}
                         >
                           {OTHER_REASONS_OPTIONS.map((reason) => (
