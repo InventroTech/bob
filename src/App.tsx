@@ -41,6 +41,7 @@ import OperationsProgramsPage from "./pages/OperationsProgramsPage";
 import UserHierarchyPage from "./pages/UserHierarchyPage";
 import BillingPage from "./pages/BillingPage";
 import EntityTypesPage from "./pages/EntityTypesPage";
+import BackgroundJobsPage from "./pages/BackgroundJobsPage";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -80,6 +81,7 @@ const App = () => (
             <Route path="/user-hierarchy" element={<UserHierarchyPage />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/entity-types" element={<EntityTypesPage />} />
+            <Route path="/background-jobs" element={<BackgroundJobsPage />} />
           </Route>
 
           {/* Custom App Routes */}
