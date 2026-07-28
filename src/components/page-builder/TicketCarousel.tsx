@@ -23,7 +23,6 @@ import {
   PieChart,
   Coffee,
   Waypoints,
-  MoreVertical,
   RefreshCw,
   Play,
   Pause,
@@ -39,12 +38,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { PendingTicketsCard, TicketStats } from "@/components/ui/PendingTicketsCard";
 import { SupportTicketTaskProgress } from "@/components/page-builder/SupportTicketTaskProgress";
 import { cn } from "@/lib/utils";
