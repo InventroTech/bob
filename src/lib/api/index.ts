@@ -9,6 +9,9 @@ export { apiClient, createApiClient, apiFetch } from './client';
 // Configuration
 export { API_CONFIG, getBaseUrl, getTenantSlug } from './config';
 
+// React Query keys
+export { queryKeys } from './queryKeys';
+
 // Errors
 export {
   ApiError,
@@ -49,4 +52,58 @@ export type {
   HierarchyUser,
   HierarchyAssignment,
 } from './services/membership';
+export {
+  backgroundJobsService,
+  enqueueBackgroundJob,
+  enqueueCseAssignedJob,
+  enqueueSaveSupportTicketJob,
+  getBackgroundJobStatus,
+  getJobPayloadTemplate,
+  listRunnableJobTypes,
+  rerunBackgroundJob,
+} from './services/backgroundJobs';
+export type {
+  BackgroundJobDetail,
+  ManualJobRunResult,
+} from './services/backgroundJobs';
+export {
+  enqueuePyroJob,
+  getPyroJobPayloadTemplate,
+  getPyroJobStatus,
+  listRunnablePyroJobTypes,
+  pyroJobsService,
+  rerunPyroJob,
+} from './services/pyroJobs';
+export type {
+  ManualPyroJobRunResult,
+  PyroJobDetail,
+} from './services/pyroJobs';
+export { crmLeadsApi } from './services/crmLeads';
+export type { RecallPreviewLead } from './services/crmLeads';
+export { crmRecordsApi } from './services/crmRecords';
+export type { CrmRecord } from './services/crmRecords';
+export { entityTypesApi } from './services/entityTypes';
+export type { TenantEntityType } from './services/entityTypes';
+export { teamAnalyticsApi } from './services/teamAnalytics';
+export { cseAnalyticsApi } from './services/cseAnalytics';
+export type {
+  CseOverviewData,
+  CseMemberData,
+  CseTimeSeriesPoint,
+  CseAttributeOption,
+  CseFilterOptions,
+  CseFilterParams,
+  AnalyticsBoardsResponse,
+} from './services/cseAnalytics';
+export {
+  SUPPORT_DAILY_LIMIT_SELF_TRIAL_KEY,
+  SUPPORT_DAILY_LIMIT_OTHER_KEY,
+  SUPPORT_RESOLVE_RATE_GOAL_KEY,
+  resolveDailyFreshLeadLimitFromKv,
+  resolveGroupIdFromKv,
+  resolveSupportDailyLimitsFromKv,
+  resolveSupportResolveRateGoalFromKv,
+  leadTypeAssignmentApi,
+  groupsApi,
+} from './services/userSettings';
 

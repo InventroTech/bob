@@ -1,5 +1,5 @@
 import React from "react";
-import { TicketCarousel } from "./TicketCarousel";
+import { TicketCarousel } from './ticket-carousel';
 
 interface TicketCarouselWrapperProps {
   config?: {

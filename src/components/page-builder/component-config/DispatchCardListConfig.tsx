@@ -48,7 +48,7 @@ interface Props {
   handleFilterOptionChange: (
     filterIndex: number,
     optionIndex: number,
-    field: keyof FilterConfig['options'][0],
+    field: string,
     value: string
   ) => void;
 }

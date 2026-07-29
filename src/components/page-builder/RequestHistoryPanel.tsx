@@ -3,7 +3,7 @@ import { ArrowRight } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { PRICE_FIELD_KEYS, formatPriceFieldRead } from '@/lib/currencyFormat';
+import { PRICE_FIELD_KEYS, formatPriceFieldRead } from '@/lib/utils/currencyFormat';
 
 export type RequestHistoryActor = {
   label?: string | null;

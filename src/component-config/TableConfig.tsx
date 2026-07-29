@@ -7,7 +7,7 @@ import { Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DynamicFilterConfig, FilterConfig } from './DynamicFilterConfig';
+import { DynamicFilterConfig, FilterConfig, FilterOption } from './DynamicFilterConfig';
 
 export type PaymentModalConfig = {
   conditionalButton: { attribute: string; operator: 'gt' | 'lt' | 'gte' | 'lte'; value: string; label: string; statusValue: string };
@@ -127,7 +127,7 @@ interface TableConfigProps {
   handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
   handleAddFilterOption: (filterIndex: number) => void;
   handleRemoveFilterOption: (filterIndex: number, optionIndex: number) => void;
-  handleFilterOptionChange: (filterIndex: number, optionIndex: number, field: keyof FilterConfig['options'][0], value: string) => void;
+  handleFilterOptionChange: (filterIndex: number, optionIndex: number, field: keyof FilterOption, value: string) => void;
   /**
    * `inventory` = All Requests style helpers (lean form fields).
    * Status transitions stay configured via Status action buttons.

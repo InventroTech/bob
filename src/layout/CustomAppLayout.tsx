@@ -8,7 +8,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
-import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
+import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
 import {
   SPOOF_CHANGED_EVENT,
   SPOOF_JWT_KEY,
@@ -19,7 +19,7 @@ import {
   getEffectiveToken,
   getSpoofUserLabel,
   isSpoofing,
-} from '@/lib/spoof';
+} from '@/lib/auth/spoof';
 import { icons } from 'lucide-react';
 import { CustomIcons } from '@/components/page-builder/NewCustomIcons';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon } from '@/components/icons/CustomIcons';

@@ -1,0 +1,352 @@
+import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
+import { formatOAuthLoginError, linkCustomAppUserIfNeeded, signInWithAppOAuth, type AppOAuthProvider } from '@/features/auth/pages/customAppAuthShared';
+
+const CustomAppAuthPage: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { session, loading: authLoading } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const authError = (location.state as { authError?: string } | null)?.authError;
+    if (authError) {
+      setError(authError);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (!authLoading && session) {
+      navigate(`/app/${tenantSlug}`, { replace: true });
+    }
+  }, [session, authLoading, navigate, tenantSlug]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        setError(signInError.message);
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user?.id && user?.email) {
+        const linkError = await linkCustomAppUserIfNeeded(session, user.id, user.email);
+        if (linkError) {
+          setError(linkError);
+          return;
+        }
+      }
+
+      toast.success('Login successful! Redirecting…');
+      navigate(`/app/${tenantSlug}`, { replace: true });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+
+    if (!tenantSlug) {
+      setError('Invalid tenant URL. Please use your organization login link.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { tenant_slug: tenantSlug },
+          emailRedirectTo: `${window.location.origin}/app/${tenantSlug}/auth/callback`,
+        },
+      });
+
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+
+      if (!data.session) {
+        setMessage('Signup successful. Please verify your email, then login.');
+        return;
+      }
+
+      if (data.user?.id && data.user?.email) {
+        const linkError = await linkCustomAppUserIfNeeded(session, data.user.id, data.user.email);
+        if (linkError) {
+          setError(linkError);
+          return;
+        }
+      }
+
+      toast.success('Signup successful! Redirecting…');
+      navigate(`/app/${tenantSlug}`, { replace: true });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOAuthLogin = async (provider: AppOAuthProvider) => {
+    if (!tenantSlug) {
+      setError('Invalid tenant URL. Please use your organization login link.');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    try {
+      const oauthError = await signInWithAppOAuth(tenantSlug, provider);
+      if (oauthError) {
+        setError(formatOAuthLoginError(oauthError));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
+      <div className="w-full max-w-sm p-6 bg-white rounded shadow space-y-4">
+        <h5>Login to Your App</h5>
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {message ? <p className="text-sm text-green-600">{message}</p> : null}
+
+        <Tabs defaultValue="signin" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="signin">Sign in</TabsTrigger>
+            <TabsTrigger value="signup">Sign up</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="signin" className="pt-3">
+            <form onSubmit={handleLogin} className="space-y-3">
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input
+                  placeholder="you@example.com"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-1">
+  <Label>Password</Label>
+
+  <div className="relative">
+    <Input
+      placeholder="••••••••"
+      type={showPassword ? 'text' : 'password'}
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      required
+      disabled={loading}
+      className="pr-10"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+      tabIndex={-1}
+    >
+      {showPassword ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      )}
+    </button>
+  </div>
+</div>
+              <div className="text-right">
+                <Link
+                  to={`/app/${tenantSlug}/auth/forgot-password`}
+                  className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Signing in...' : 'Sign in'}
+              </Button>
+            </form>
+
+            <div className="relative my-3">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-muted-foreground">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => handleOAuthLogin('google')}
+                disabled={loading}
+              >
+                <svg
+                  className="mr-2 h-4 w-4"
+                  aria-hidden="true"
+                  focusable="false"
+                  data-prefix="fab"
+                  data-icon="google"
+                  role="img"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 488 512"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"
+                  ></path>
+                </svg>
+                Continue with Google
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => handleOAuthLogin('custom:zoho')}
+                disabled={loading}
+              >
+                <svg
+                  className="mr-2 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                  focusable="false"
+                  role="img"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 48 48"
+                >
+                  <rect fill="#F0483E" x="4" y="4" width="18" height="18" rx="2" />
+                  <rect fill="#FFC843" x="26" y="4" width="18" height="18" rx="2" />
+                  <rect fill="#04A64B" x="4" y="26" width="18" height="18" rx="2" />
+                  <rect fill="#006AFF" x="26" y="26" width="18" height="18" rx="2" />
+                </svg>
+                Continue with Zoho
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="signup" className="pt-3">
+            <form onSubmit={handleSignUp} className="space-y-3">
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input
+                  placeholder="you@example.com"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-1">
+  <Label>Password</Label>
+
+  <div className="relative">
+    <Input
+      placeholder="Minimum 6 characters"
+      type={showPassword ? 'text' : 'password'}
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      required
+      minLength={6}
+      disabled={loading}
+      className="pr-10"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+      tabIndex={-1}
+    >
+      {showPassword ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      )}
+    </button>
+  </div>
+</div>
+<div className="space-y-1">
+  <Label>Confirm password</Label>
+
+  <div className="relative">
+    <Input
+      placeholder="Re-enter password"
+      type={showConfirmPassword ? 'text' : 'password'}
+      value={confirmPassword}
+      onChange={(e) => setConfirmPassword(e.target.value)}
+      required
+      minLength={6}
+      disabled={loading}
+      className="pr-10"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+      className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+      tabIndex={-1}
+    >
+      {showConfirmPassword ? (
+        <EyeOff className="h-4 w-4" />
+      ) : (
+        <Eye className="h-4 w-4" />
+      )}
+    </button>
+  </div>
+</div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Signing up...' : 'Create account'}
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+};
+
+export default CustomAppAuthPage;

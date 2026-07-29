@@ -1,5 +1,5 @@
 import React from 'react';
-import type { CrmRecord } from '@/lib/crmRecordsApi';
+import type { CrmRecord } from '@/lib/api/services/crmRecords';
 import { formatDispatchValue, getRecordData } from './formatDispatchValue';
 
 export type DispatchListCardFieldConfig = {

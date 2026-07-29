@@ -1,5 +1,5 @@
 import React from 'react';
-import CallAttemptMatrixPage from '../../pages/CallAttemptMatrixPage';
+import CallAttemptMatrixPage from '@/features/crm/pages/CallAttemptMatrixPage';
 
 interface CallAttemptMatrixComponentProps {
   config?: {

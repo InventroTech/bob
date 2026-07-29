@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { LeadTableComponent } from './LeadTableComponent';
-import { resolvePriorityFromRow } from '@/lib/inventoryPriority';
-import { mergeInventoryTrackingColumns } from '@/lib/shipmentTracking';
+import { LeadTableComponent } from './lead-table';
+import { resolvePriorityFromRow } from '@/lib/inventory/priority';
+import { mergeInventoryTrackingColumns } from '@/lib/inventory/shipmentTracking';
 
 export type MyRequestTableColumn = {
   key: string;

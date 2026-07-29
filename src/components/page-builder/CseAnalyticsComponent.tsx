@@ -21,7 +21,7 @@ import {
   type CseMemberData,
   type CseOverviewData,
   type CseTimeSeriesPoint,
-} from '@/lib/cseAnalyticsApi';
+} from '@/lib/api/services/cseAnalytics';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Calendar, ChevronDown, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -1052,7 +1052,7 @@ const CseAnalyticsComponent: React.FC<CseAnalyticsComponentProps> = ({ config = 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [boardType]);
 
   // Clean up any pending per-board save timers on unmount

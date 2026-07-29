@@ -181,12 +181,13 @@ export const DispatchDashboardComponent: React.FC<DispatchDashboardProps> = ({ c
   useEffect(() => {
     return onPopState(() => {
       if (recordsPanelRef.current?.handlePopState()) {
-        return;
+        return null;
       }
       const overlay = consumeBackNavigation();
       if (overlay === 'dispatchNav') {
         popViewFromHistory();
       }
+      return null;
     });
   }, [onPopState, consumeBackNavigation, popViewFromHistory]);
 

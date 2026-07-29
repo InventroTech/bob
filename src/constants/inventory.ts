@@ -15,7 +15,7 @@ export {
   SHIPMENT_STATUSES,
   DEFAULT_SHIPMENT_STATUS,
   type ShipmentStatus,
-} from '@/lib/shipmentTracking';
+} from '@/lib/inventory/shipmentTracking';
 
 /** Canonical inventory item statuses for dropdowns and filters. */
 export const INVENTORY_ITEM_STATUSES = [
