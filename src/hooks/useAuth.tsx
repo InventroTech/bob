@@ -70,12 +70,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Auth listener: set up ONCE (not on every pathname change)
   useEffect(() => {
     let cancelled = false;
-    const finishLoading = () => {
-      if (!cancelled) setLoading(false);
-    };
-
-    // Never leave the UI stuck on "Loading authentication..."
-    const loadingTimeout = window.setTimeout(finishLoading, 4000);
 
     supabase.auth
       .getSession()
@@ -103,8 +97,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearAccessToken();
       })
       .finally(() => {
-        window.clearTimeout(loadingTimeout);
-        finishLoading();
+        if (!cancelled) setLoading(false);
       });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
@@ -152,7 +145,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     return () => {
       cancelled = true;
-      window.clearTimeout(loadingTimeout);
       authListener?.subscription?.unsubscribe();
     };
   }, [navigate, getLoginUrl]);
