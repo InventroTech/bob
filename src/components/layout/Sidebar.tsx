@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import { Home, Layout, Sparkles, UserPlus, Database, Users, Receipt, TableProperties, Workflow, Timer } from "lucide-react";
 import {
@@ -16,8 +16,18 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { useTenant } from "@/hooks/useTenant";
+import { JOBS_ADMIN_ROLE_KEYS } from "@/features/jobs/types";
 
-const sidebarItems = [
+type SidebarItem = {
+  title: string;
+  path: string;
+  icon: React.ComponentType<{ className?: string }>;
+  /** When set, item is shown only for these role keys (uppercase). */
+  roles?: Set<string>;
+};
+
+const sidebarItems: SidebarItem[] = [
   {
     title: "Dashboard",
     path: "/",
@@ -42,11 +52,13 @@ const sidebarItems = [
     title: "Background Jobs",
     path: "/background-jobs",
     icon: Workflow,
+    roles: JOBS_ADMIN_ROLE_KEYS,
   },
   {
     title: "Pyro Jobs",
     path: "/pyro-jobs",
     icon: Timer,
+    roles: JOBS_ADMIN_ROLE_KEYS,
   },
   {
     title: "Add User",
@@ -66,6 +78,18 @@ const sidebarItems = [
 ];
 
 const Sidebar = () => {
+  const { customRole, membershipLoaded } = useTenant();
+  const normalizedRole = String(customRole || "").trim().toUpperCase();
+
+  const visibleItems = useMemo(() => {
+    if (!membershipLoaded) {
+      return sidebarItems.filter((item) => !item.roles);
+    }
+    return sidebarItems.filter(
+      (item) => !item.roles || item.roles.has(normalizedRole),
+    );
+  }, [membershipLoaded, normalizedRole]);
+
   return (
     <SidebarComponent collapsible="icon">
       <SidebarHeader className="flex flex-row items-center justify-between px-4 py-2 transition-all duration-200 group-data-[collapsible=icon]:px-2">
@@ -82,7 +106,7 @@ const Sidebar = () => {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {sidebarItems.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.path}>
                   <SidebarMenuButton asChild>
                     <NavLink

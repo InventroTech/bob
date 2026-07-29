@@ -1,7 +1,7 @@
 'use client';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import React, { ReactNode, useState } from 'react'; 
-import { LeadTableComponent } from './LeadTableComponent';
+import { LeadTableComponent } from './lead-table';
 import { LeadRecomendationTable } from './LeadRecomendationTable';
 interface CollapseCardProps {
   children?: ReactNode;

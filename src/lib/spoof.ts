@@ -159,12 +159,16 @@ export async function fetchPageConfig(
   pageId: string,
   tenantId: string,
   token: string
-): Promise<{ name: string; config: any } | null> {
+): Promise<{ name: string; config: any; header_title?: string } | null> {
   // Preferred: backend Pages API via pageService.
   try {
     const page = await pageService.getPageById(pageId, tenantId, true);
     if (page) {
-      return { name: page.name ?? '', config: page.config };
+      return {
+        name: page.name ?? '',
+        config: page.config,
+        header_title: page.header_title,
+      };
     }
   } catch (err) {
     console.warn('pageService.getPageById failed, falling back to Supabase REST:', err);
@@ -175,7 +179,7 @@ export async function fetchPageConfig(
   const params = new URLSearchParams({
     id: `eq.${pageId}`,
     tenant_id: `eq.${tenantId}`,
-    select: 'name,config',
+    select: 'name,config,header_title',
   });
   const res = await fetch(`${url}/rest/v1/pages?${params}`, {
     method: 'GET',

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { InventoryRequestFormComponent } from './InventoryRequestFormComponent';
+import { InventoryRequestFormComponent } from './inventory-request-form';
 
 type ProcurementRequestFormConfig = {
   entityType?: string;

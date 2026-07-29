@@ -1,5 +1,5 @@
 import React from 'react';
-import LeadGroupsPage from '../../pages/LeadGroupsPage';
+import LeadGroupsPage from '@/features/crm/pages/LeadGroupsPage';
 
 interface LeadAssignmentComponentProps {
   config?: {

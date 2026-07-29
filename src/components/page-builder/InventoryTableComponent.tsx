@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { LeadTableComponent } from './LeadTableComponent';
+import { LeadTableComponent } from './lead-table';
 import { mergeInventoryTrackingColumns } from '@/lib/shipmentTracking';
 
 interface RecordsTableProps {

@@ -10,8 +10,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ redirectTo = '/auth' })
   const { session, loading } = useAuth();
 
   if (loading) {
-    // Optional: Show a loading spinner or skeleton screen while checking auth state
-    return <div>Checking authentication...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        Checking authentication…
+      </div>
+    );
   }
 
   if (!session) {

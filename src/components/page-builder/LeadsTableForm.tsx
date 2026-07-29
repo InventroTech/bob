@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase'; 
 import DashboardLayout from '../layout/DashboardLayout';
-import { LeadTableComponent } from './LeadTableComponent';
+import { LeadTableComponent } from './lead-table';
 import Papa from 'papaparse';
 
 interface Lead {
@@ -221,7 +221,7 @@ export const LeadFormComponent = () => {
       phone: cleanedLead.phone?.trim(),
       email: cleanedLead.email?.trim().toLowerCase(),
       party: cleanedLead.party?.trim(),
-      lastconnected: cleanedLead.lastconnected ? new Date(cleanedLead.lastconnected).toISOString() : null
+      lastconnected: cleanedLead.lastconnected ? new Date(cleanedLead.lastconnected).toISOString() : undefined
     };
   };
 
@@ -404,7 +404,7 @@ export const LeadFormComponent = () => {
                 setMessage(error.message);
               }
             },
-            error: (error) => {
+            error: (error: Error) => {
               console.error('CSV parsing error:', error);
               setMessage(`Error parsing CSV: ${error.message}\\n\\nTips:\\n1. Make sure your CSV is properly formatted\\n2. Download the template for reference\\n3. Check for special characters or incorrect quotes`);
             }

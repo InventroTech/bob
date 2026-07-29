@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { CustomButton } from '@/components/ui/CustomButton';
 import {
@@ -7,6 +8,8 @@ import {
   type HierarchyUser,
   type HierarchyAssignment,
 } from '@/lib/api';
+import { queryKeys } from '@/lib/api/queryKeys';
+import { useMembershipHierarchy } from '@/features/membership/hooks/useMembership';
 import ReactFlow, {
   Background,
   ConnectionLineType,
@@ -238,11 +241,16 @@ function getDescendantIds(targetId: number, parentMap: Record<number, number | n
 
 function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentConfig }) {
   const { session } = useAuth();
-  const [users, setUsers] = useState<HierarchyUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+  const {
+    data,
+    isLoading: loading,
+    error: hierarchyError,
+    refetch: refetchHierarchy,
+  } = useMembershipHierarchy(Boolean(session?.access_token));
+  const users = data ?? [];
   const [managerOverrides, setManagerOverrides] = useState<Record<number, number | null>>({});
+  const [saving, setSaving] = useState(false);
   const [flowReady, setFlowReady] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectingSourceId, setConnectingSourceId] = useState<number | null>(null);
@@ -252,32 +260,26 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
   const title = config.title ?? 'User Hierarchy';
   const showDiagram = config.showDiagram !== false;
 
-  const fetchUsers = useCallback(async () => {
-    if (!session?.access_token) {
-      setUsers([]);
-      setLoadError('Session not ready. Please refresh this page.');
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoadError(null);
-      const data = await membershipService.getUsersForHierarchy();
-      setUsers(data);
-      setManagerOverrides({});
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch users';
-      toast.error(`Failed to load hierarchy: ${message}`);
-      setLoadError(message);
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [session?.access_token]);
+  const loadError = !session?.access_token
+    ? 'Session not ready. Please refresh this page.'
+    : hierarchyError instanceof Error
+      ? hierarchyError.message
+      : hierarchyError
+        ? 'Failed to fetch users'
+        : null;
 
   useEffect(() => {
-    setLoading(true);
-    fetchUsers();
-  }, [fetchUsers]);
+    if (!hierarchyError || !session?.access_token) return;
+    const message =
+      hierarchyError instanceof Error
+        ? hierarchyError.message
+        : 'Failed to fetch users';
+    toast.error(`Failed to load hierarchy: ${message}`);
+  }, [hierarchyError, session?.access_token]);
+
+  useEffect(() => {
+    setManagerOverrides({});
+  }, [data]);
 
   const getCurrentParent = (u: HierarchyUser): number | null => {
     if (u.membershipId in managerOverrides) return managerOverrides[u.membershipId];
@@ -430,7 +432,7 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
     [setReportManager]
   );
 
-  const onConnectStart = useCallback((_: unknown, params: { nodeId?: string }) => {
+  const onConnectStart = useCallback((_: unknown, params: { nodeId?: string | null }) => {
     setIsConnecting(true);
     setConnectingSourceId(params?.nodeId ? Number(params.nodeId) : null);
   }, []);
@@ -472,7 +474,10 @@ function UserHierarchyInner({ config = {} }: { config?: UserHierarchyComponentCo
       }));
       await membershipService.updateUserHierarchy(assignments);
       toast.success('Hierarchy saved.');
-      await fetchUsers();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.membership.hierarchy,
+      });
+      await refetchHierarchy();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save';
       toast.error(`Failed to save hierarchy: ${message}`);

@@ -1,5 +1,5 @@
 import React from "react";
-import LeadCardCarousel from "./LeadCardCarousel";
+import LeadCardCarousel from './lead-card-carousel';
 
 interface LeadCardCarouselWrapperProps {
   config?: {

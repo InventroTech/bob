@@ -75,7 +75,7 @@ export class NotificationsWsClient {
   private handlePayload(payload: RealtimePayload): void {
     this.onMessage(payload);
     if (payload.event === "record_updated") {
-      dispatchRecordUpdated(payload);
+      dispatchRecordUpdated(payload as import("./types").RecordUpdatedPayload);
     }
   }
 

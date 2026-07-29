@@ -24,7 +24,7 @@ import {
   formatDispatchValue,
   getRecordData,
 } from './formatDispatchValue';
-import type { CrmRecord } from '@/lib/crmRecordsApi';
+import type { CrmRecord } from '@/lib/api/services/crmRecords';
 
 const SECTION_ICONS: Record<DispatchSectionDef['icon'], React.ReactNode> = {
   cart: <ShoppingCart className="h-4 w-4 shrink-0" />,
@@ -104,7 +104,7 @@ function resolveDisplay(field: DispatchFieldDef, data: Record<string, unknown>):
     const isEmptyBool = text === DISPATCH_NO_DATA && !field.statusGreen;
     return {
       display: isEmptyBool ? DISPATCH_NO_DATA : text,
-      positive: positive || field.statusGreen,
+      positive: Boolean(positive || field.statusGreen),
       isEmpty: isEmptyBool,
     };
   }
@@ -114,7 +114,7 @@ function resolveDisplay(field: DispatchFieldDef, data: Record<string, unknown>):
 
   const positive =
     !isEmptyValue &&
-    field.statusGreen &&
+    !!field.statusGreen &&
     ['yes', 'sent', 'done', 'received', 'updated', 'true'].some((w) =>
       display.toLowerCase().includes(w)
     );
