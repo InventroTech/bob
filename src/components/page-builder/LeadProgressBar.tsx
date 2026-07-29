@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { leadTypeAssignmentApi } from '@/lib/api/services/userSettings';
 import { crmLeadsApi } from '@/lib/api/services/crmLeads';
 import { membershipService } from '@/lib/api/services/membership';
-import { useSpoofUserId } from '@/lib/spoof';
+import { useSpoofUserId } from '@/lib/auth/spoof';
 import { TrophyIcon } from '@/components/icons/CustomIcons';
 
 interface LeadProgressBarProps {

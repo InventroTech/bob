@@ -5,9 +5,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import type { MembershipUser } from '@/lib/api/services/membership';
 import { toast } from 'sonner';
-import { formatCurrencyDisplay } from '@/lib/currencyFormat';
-import { emptyShipmentTrackingFields } from '@/lib/shipmentTracking';
-import { formatInventoryPriorityLabel } from '@/lib/inventoryPriority';
+import { formatCurrencyDisplay } from '@/lib/utils/currencyFormat';
+import { emptyShipmentTrackingFields } from '@/lib/inventory/shipmentTracking';
+import { formatInventoryPriorityLabel } from '@/lib/inventory/priority';
 import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
 
 import {

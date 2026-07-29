@@ -3,7 +3,7 @@ import { useParams, useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { componentMap as staticComponentMap } from '@/features/page-builder/componentMap';
-import { fetchPageConfig } from '@/lib/spoof';
+import { fetchPageConfig } from '@/lib/auth/spoof';
 
 // Module-level cache to prevent duplicate page fetches across component remounts
 const pageCache = new Map<string, { data: any; timestamp: number }>();

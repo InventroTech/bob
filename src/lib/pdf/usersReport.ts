@@ -7,7 +7,7 @@ import {
   downloadPdfBytes,
   PDF_LETTERHEAD_BOTTOM_MARGIN_MM,
   PDF_LETTERHEAD_TOP_MARGIN_MM,
-} from '@/lib/pdfLetterhead';
+} from '@/lib/pdf/letterhead';
 
 export interface UsersReportRow {
   name: string;

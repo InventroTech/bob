@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
-import { mergeInventoryTrackingColumns } from '@/lib/shipmentTracking';
+import { mergeInventoryTrackingColumns } from '@/lib/inventory/shipmentTracking';
 
 interface RecordsTableProps {
   /**

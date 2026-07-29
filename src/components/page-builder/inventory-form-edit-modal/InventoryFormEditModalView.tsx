@@ -16,16 +16,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Trash2, History } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/currencyFormat';
-import { formatCalendarDate } from '@/lib/timeUtils';
+import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
+import { formatCalendarDate } from '@/lib/utils/timeUtils';
 import { cn } from '@/lib/utils';
-import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
+import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 import {
   resolvePriorityFromRow,
   inventoryPriorityFieldCardClassName,
   inventoryPriorityValueTextClassName,
-} from '@/lib/inventoryPriority';
-import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+} from '@/lib/inventory/priority';
+import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventory/statusStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal } from '@/components/config_components/StatusActionWarningModal';
@@ -35,7 +35,7 @@ import {
   SHIPMENT_STATUSES,
   shouldShowShipmentTrackingSection,
   publicTrackingLink,
-} from '@/lib/shipmentTracking';
+} from '@/lib/inventory/shipmentTracking';
 
 import type { InventoryFormEditModalModel } from './useInventoryFormEditModal';
 import {

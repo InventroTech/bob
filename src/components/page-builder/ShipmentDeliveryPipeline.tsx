@@ -7,8 +7,8 @@ import {
   normalizeShipmentStatus,
   type ShipmentTrackEvent,
   type ShipmentTrackDetails,
-} from '@/lib/shipmentTracking';
-import { getShipmentStatusLabel } from '@/lib/inventoryStatusStyles';
+} from '@/lib/inventory/shipmentTracking';
+import { getShipmentStatusLabel } from '@/lib/inventory/statusStyles';
 
 type ShipmentDeliveryPipelineProps = {
   status: unknown;

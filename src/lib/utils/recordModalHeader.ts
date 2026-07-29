@@ -3,7 +3,7 @@
  * Used by record table modals (detail, form edit, receive shipment).
  */
 
-import { formatCalendarDate } from '@/lib/timeUtils';
+import { formatCalendarDate } from '@/lib/utils/timeUtils';
 
 export type RecordModalTitleInput = {
   id?: number | string | null;

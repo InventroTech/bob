@@ -1,6 +1,6 @@
 /** Pure helpers for the lead table module. */
 
-import { formatCalendarDate } from '@/lib/timeUtils';
+import { formatCalendarDate } from '@/lib/utils/timeUtils';
 import { PLACEHOLDER_REGEX } from './constants';
 import type { LeadTableProps } from './types';
 

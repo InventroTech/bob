@@ -5,7 +5,7 @@ import {
   isInventoryApproverActor,
   isInventoryProcurementRole,
   isInventoryTeamLeadRole,
-} from './inventoryWorkflow';
+} from './workflow';
 
 describe('inventory Approve/Reject for team lead and PM', () => {
   it('plain requestor only gets Verify on REQ_TO_VERIFY', () => {

@@ -1,6 +1,6 @@
 /** Constants and helpers for the inventory form edit modal. */
 
-import { formatCurrencyDisplay, parseCurrencyInput } from '@/lib/currencyFormat';
+import { formatCurrencyDisplay, parseCurrencyInput } from '@/lib/utils/currencyFormat';
 
 export const TRACKING_FORM_KEYS = [
   'tracking_number',

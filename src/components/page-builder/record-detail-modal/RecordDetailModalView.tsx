@@ -26,16 +26,16 @@ import {
   formatPriceFieldRead,
   formatPriceForInput,
   PRICE_FIELD_KEYS,
-} from '@/lib/currencyFormat';
-import { convertGMTtoIST } from '@/lib/timeUtils';
+} from '@/lib/utils/currencyFormat';
+import { convertGMTtoIST } from '@/lib/utils/timeUtils';
 import { cn } from '@/lib/utils';
-import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventory/statusStyles';
 import {
   resolvePriorityFromRow,
   inventoryPriorityFieldCardClassName,
   inventoryPriorityValueTextClassName,
-} from '@/lib/inventoryPriority';
-import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
+} from '@/lib/inventory/priority';
+import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';

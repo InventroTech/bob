@@ -19,17 +19,17 @@ import { FilterService } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import type { CustomTableColumn } from '@/components/ui/CustomTable';
-import { buildActionApiRequest } from '@/lib/actionApiUtils';
-import { getEffectiveToken, useSpoofUserId } from '@/lib/spoof';
-import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/currencyFormat';
-import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
-import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventoryStatusStyles';
+import { buildActionApiRequest } from '@/lib/utils/actionApiUtils';
+import { getEffectiveToken, useSpoofUserId } from '@/lib/auth/spoof';
+import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
+import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
+import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventory/statusStyles';
 import {
   formatInventoryPriorityLabel,
   formatInventoryPriorityShortLabel,
   inventoryPriorityChipClassName,
   normalizeInventoryPriorityLevel,
-} from '@/lib/inventoryPriority';
+} from '@/lib/inventory/priority';
 import { Button } from '@/components/ui/button';
 
 import type { Column, LeadTableProps, PlaceholderAdapter } from './types';

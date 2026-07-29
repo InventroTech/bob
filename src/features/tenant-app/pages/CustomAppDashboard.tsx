@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
-import { getEffectiveToken, isSpoofing, getSpoofUserLabel, fetchPagesForRole } from '@/lib/spoof';
+import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
+import { getEffectiveToken, isSpoofing, getSpoofUserLabel, fetchPagesForRole } from '@/lib/auth/spoof';
 
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();

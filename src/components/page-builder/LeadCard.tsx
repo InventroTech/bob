@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { getEffectiveToken } from "@/lib/spoof";
+import { getEffectiveToken } from "@/lib/auth/spoof";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,7 +46,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WhatsAppTemplateModal } from "./WhatsAppTemplateModal";
-import { safeProfileImageUrl } from "@/lib/safeProfileImageUrl";
+import { safeProfileImageUrl } from "@/lib/utils/safeProfileImageUrl";
 
 interface Lead {
   id: number;

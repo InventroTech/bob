@@ -5,7 +5,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { authService } from '@/lib/api/services/auth';
-import { getRoleIdFromJWT } from '@/lib/jwt';
+import { getRoleIdFromJWT } from '@/lib/auth/jwt';
 import { formatOAuthLoginError, readOAuthCallbackError } from '@/features/auth/pages/customAppAuthShared';
 
 function redirectToLogin(

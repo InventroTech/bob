@@ -10,7 +10,7 @@ import {
   SPOOF_LABEL_KEY,
   clearSpoofLocalStorage,
   dispatchSpoofChanged,
-} from "@/lib/spoof";
+} from "@/lib/auth/spoof";
 
 interface UserInfo {
   name: string;
