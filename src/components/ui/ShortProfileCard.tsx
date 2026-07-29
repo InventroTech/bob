@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState } from 'react'
 import { User } from 'lucide-react'
-import { safeProfileImageUrl } from '@/lib/safeProfileImageUrl'
+import { safeProfileImageUrl } from '@/lib/utils/safeProfileImageUrl'
 
 interface ShortProfileCardProps {
   image?: string;

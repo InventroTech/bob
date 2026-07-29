@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { teamAnalyticsApi } from '@/lib/teamAnalyticsApi';
+import { teamAnalyticsApi } from '@/lib/api/services/teamAnalytics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Calendar, ChevronDown, ChevronUp } from 'lucide-react';

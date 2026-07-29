@@ -19,12 +19,20 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": [
         "warn",
         { allowConstantExport: true },
       ],
       "@typescript-eslint/no-unused-vars": "off",
       "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  // shadcn/ui co-exports variants + hooks with components
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "react-refresh/only-export-components": "off",
     },
   }
 );

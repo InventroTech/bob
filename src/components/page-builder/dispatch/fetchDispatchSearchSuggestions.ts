@@ -1,5 +1,5 @@
 import type { AxiosInstance } from 'axios';
-import type { CrmRecord } from '@/lib/crmRecordsApi';
+import type { CrmRecord } from '@/lib/api/services/crmRecords';
 import { getRecordData } from './formatDispatchValue';
 
 export type DispatchSearchSuggestion = {

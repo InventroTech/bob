@@ -29,6 +29,8 @@ export interface MembershipUser {
   date_joined?: string;
   role_id?: string;
   is_active?: boolean;
+  department?: string | null;
+  department_name?: string | null;
   role?: {
     id?: string;
     key?: string;
@@ -62,6 +64,7 @@ export interface User {
   email: string;
   created_at: string;
   role_id: string;
+  department?: string;
   role: {
     name: string;
   } | null;
@@ -231,6 +234,7 @@ export const membershipService = {
           email: user.email || 'No Email',
           role_id: user.role_id || user.role?.id || '',
           created_at: user.created_at || user.date_joined || new Date().toISOString(),
+          department: user.department ?? user.department_name ?? undefined,
           role: toRoleInfo(user),
         };
       });

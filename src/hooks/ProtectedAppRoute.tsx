@@ -3,7 +3,7 @@ import { useNavigate, Outlet, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/jwt';
+import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
 import { authService, membershipService } from '@/lib/api';
 import {
   forceSignOutRevokedUser,

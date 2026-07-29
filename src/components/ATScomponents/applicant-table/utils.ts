@@ -1,0 +1,118 @@
+/** Demo data and helpers for the applicant table. */
+
+import type { Application, Job } from './types';
+
+export const demoJobs: Job[] = [
+  { id: '1', title: 'Senior Frontend Developer', department: 'Engineering', location: 'Remote', type: 'full-time', status: 'active' },
+  { id: '2', title: 'Product Manager', department: 'Product', location: 'New York', type: 'full-time', status: 'active' },
+  { id: '3', title: 'UX Designer', department: 'Design', location: 'San Francisco', type: 'full-time', status: 'active' },
+  { id: '4', title: 'Data Analyst', department: 'Analytics', location: 'Remote', type: 'contract', status: 'active' },
+  { id: '5', title: 'Marketing Intern', department: 'Marketing', location: 'Chicago', type: 'internship', status: 'active' },
+];
+
+export const demoApplications: Application[] = [
+  {
+    id: '1',
+    jobId: '1',
+    jobTitle: 'Senior Frontend Developer',
+    applicantName: 'Sarah Johnson',
+    applicantEmail: 'sarah.johnson@email.com',
+    applicantPhone: '+1-555-0123',
+    status: 'reviewing',
+    submittedAt: '2024-01-15T10:30:00Z',
+    experience: '5 years',
+    location: 'New York, NY',
+    expectedSalary: '$120,000',
+    noticePeriod: '2 weeks',
+    rating: 4,
+    source: 'LinkedIn',
+    resumeUrl: 'https://example.com/resume-sarah-johnson.pdf',
+    coverLetter: 'Dear Hiring Manager,\n\nI am excited to apply for the Senior Frontend Developer position at your company. With 5 years of experience in React, TypeScript, and Node.js, I have successfully delivered multiple high-impact projects that have improved user engagement and business metrics.\n\nIn my current role, I led the development of a customer dashboard that increased user retention by 25%. I am passionate about creating intuitive user experiences and writing clean, maintainable code.\n\nI would love to discuss how my skills and experience can contribute to your team.\n\nBest regards,\nSarah Johnson',
+    responses: { skills: 'React, TypeScript, Node.js', portfolio: 'https://sarahjohnson.dev' }
+  },
+  {
+    id: '2',
+    jobId: '1',
+    jobTitle: 'Senior Frontend Developer',
+    applicantName: 'Michael Chen',
+    applicantEmail: 'michael.chen@email.com',
+    applicantPhone: '+1-555-0124',
+    status: 'interviewed',
+    submittedAt: '2024-01-14T14:20:00Z',
+    experience: '7 years',
+    location: 'San Francisco, CA',
+    expectedSalary: '$140,000',
+    noticePeriod: '1 month',
+    rating: 5,
+    interviewDate: '2024-01-20T15:00:00Z',
+    source: 'Company Website',
+    resumeUrl: 'https://example.com/resume-michael-chen.pdf',
+    coverLetter: 'Hello,\n\nI am writing to express my strong interest in the Senior Frontend Developer role. With 7 years of experience building scalable web applications, I have developed expertise in React, Vue.js, and Python.\n\nI have led cross-functional teams and mentored junior developers while maintaining high code quality standards. My recent project involved architecting a microservices-based frontend that serves over 1 million users daily.\n\nI am excited about the opportunity to contribute to your innovative team.\n\nThank you for your consideration,\nMichael Chen',
+    responses: { skills: 'React, Vue.js, Python', portfolio: 'https://michaelchen.io' }
+  },
+  {
+    id: '3',
+    jobId: '2',
+    jobTitle: 'Product Manager',
+    applicantName: 'Emily Rodriguez',
+    applicantEmail: 'emily.rodriguez@email.com',
+    applicantPhone: '+1-555-0125',
+    status: 'shortlisted',
+    submittedAt: '2024-01-13T09:15:00Z',
+    experience: '6 years',
+    location: 'Austin, TX',
+    expectedSalary: '$130,000',
+    noticePeriod: '3 weeks',
+    rating: 4,
+    source: 'Referral',
+    responses: { experience: 'Led 3 product launches', tools: 'Jira, Figma, Analytics' }
+  },
+  {
+    id: '4',
+    jobId: '1',
+    jobTitle: 'Senior Frontend Developer',
+    applicantName: 'David Kim',
+    applicantEmail: 'david.kim@email.com',
+    status: 'pending',
+    submittedAt: '2024-01-16T16:45:00Z',
+    experience: '3 years',
+    location: 'Seattle, WA',
+    expectedSalary: '$100,000',
+    noticePeriod: 'Immediate',
+    source: 'Indeed',
+    responses: { skills: 'React, JavaScript, CSS', github: 'https://github.com/davidkim' }
+  },
+  {
+    id: '5',
+    jobId: '3',
+    jobTitle: 'UX Designer',
+    applicantName: 'Lisa Wang',
+    applicantEmail: 'lisa.wang@email.com',
+    applicantPhone: '+1-555-0127',
+    status: 'accepted',
+    submittedAt: '2024-01-12T11:30:00Z',
+    experience: '4 years',
+    location: 'Los Angeles, CA',
+    expectedSalary: '$95,000',
+    noticePeriod: '2 weeks',
+    rating: 5,
+    source: 'Dribbble',
+    responses: { portfolio: 'https://lisawang.design', tools: 'Figma, Sketch, Principle' }
+  },
+  {
+    id: '6',
+    jobId: '2',
+    jobTitle: 'Product Manager',
+    applicantName: 'James Wilson',
+    applicantEmail: 'james.wilson@email.com',
+    status: 'rejected',
+    submittedAt: '2024-01-11T13:20:00Z',
+    experience: '2 years',
+    location: 'Boston, MA',
+    expectedSalary: '$110,000',
+    noticePeriod: '1 month',
+    rating: 2,
+    source: 'LinkedIn',
+    responses: { experience: 'Junior PM at startup', education: 'MBA from Harvard' }
+  }
+];

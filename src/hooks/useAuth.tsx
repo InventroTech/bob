@@ -1,9 +1,9 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
-import { setSentryUser, clearSentryUser } from '../lib/sentry';
+import { setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider';
 import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
 import {
@@ -69,21 +69,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Auth listener: set up ONCE (not on every pathname change)
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAccessToken(session?.access_token ?? null);
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) {
-        setSentryUser({ id: u.id, email: u.email, username: u.user_metadata?.username || u.email?.split('@')[0] });
-      } else {
-        clearSentryUser();
-      }
-      setLoading(false);
-    });
+    let cancelled = false;
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (cancelled) return;
+        setSession(session);
+        setAccessToken(session?.access_token ?? null);
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) {
+          setSentryUser({
+            id: u.id,
+            email: u.email,
+            username: u.user_metadata?.username || u.email?.split('@')[0],
+          });
+        } else {
+          clearSentryUser();
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('Failed to restore auth session:', err);
+        if (cancelled) return;
+        setSession(null);
+        setUser(null);
+        clearAccessToken();
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         console.log('Supabase auth state changed:', event);
 
         if (event === 'SIGNED_OUT') {
@@ -126,9 +144,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
 
     return () => {
+      cancelled = true;
       authListener?.subscription?.unsubscribe();
     };
-   
   }, [navigate, getLoginUrl]);
 
   // Proactive token refresh: keep JWT fresh every 10 minutes while user is active

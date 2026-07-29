@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
 import { useAuth } from "@/hooks/useAuth";
-import { getEffectiveToken } from "@/lib/spoof";
+import { getEffectiveToken } from "@/lib/auth/spoof";
 import { Loader2 } from "lucide-react";
 
 interface WhatsAppTemplate {
