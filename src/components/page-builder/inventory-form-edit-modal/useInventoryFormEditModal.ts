@@ -5,15 +5,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
-import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/currencyFormat';
-import { formatCalendarDate } from '@/lib/timeUtils';
+import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/utils/currencyFormat';
+import { formatCalendarDate } from '@/lib/utils/timeUtils';
 import {
   resolvePriorityFromRow,
   inventoryPriorityFieldCardClassName,
   inventoryPriorityValueTextClassName,
-} from '@/lib/inventoryPriority';
-import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventoryStatusStyles';
-import { urgencyToneButtonClassName } from '@/lib/urgencyButtonStyles';
+} from '@/lib/inventory/priority';
+import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventory/statusStyles';
+import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 import { cn } from '@/lib/utils';
 import {
   SHIPMENT_STATUSES,
@@ -26,11 +26,11 @@ import {
   publicTrackingLink,
   normalizeCourierLabel,
   type ShipmentTrackDetails,
-} from '@/lib/shipmentTracking';
+} from '@/lib/inventory/shipmentTracking';
 import {
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
-} from '@/lib/inventoryWorkflow';
+} from '@/lib/inventory/workflow';
 import type { RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import type { InventoryFormEditModalProps, StatusHistoryEntry } from './types';

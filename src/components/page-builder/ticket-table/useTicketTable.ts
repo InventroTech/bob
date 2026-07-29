@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { useRecordUpdated } from '@/hooks/useRecordUpdated';
-import { buildActionApiRequest } from '@/lib/actionApiUtils';
-import { convertGMTtoIST } from '@/lib/timeUtils';
+import { buildActionApiRequest } from '@/lib/utils/actionApiUtils';
+import { convertGMTtoIST } from '@/lib/utils/timeUtils';
 
 import type { Column, TicketTableProps } from './types';
 import {

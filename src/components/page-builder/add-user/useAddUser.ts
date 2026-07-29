@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
 import { leadTypeAssignmentApi, groupsApi } from '@/lib/api/services/userSettings';
-import { downloadUsersReportPdf } from '@/lib/usersReportPdf';
+import { downloadUsersReportPdf } from '@/lib/pdf/usersReport';
 import type {
   Role,
   User,

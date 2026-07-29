@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase } from './client';
 
 const PAGES_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS public.pages (

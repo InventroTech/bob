@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { convertGMTtoIST } from "@/lib/timeUtils";
+import { convertGMTtoIST } from "@/lib/utils/timeUtils";
 import { Badge } from "@/components/ui/badge";
 import { FaWhatsapp } from "react-icons/fa";
 import {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { forceLogoutIfDeletedSelf } from '@/lib/auth/deletedUserSession';
-import { getTenantIdFromJWT } from '@/lib/jwt';
+import { getTenantIdFromJWT } from '@/lib/auth/jwt';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { Trash2, Eye } from 'lucide-react';
 import { membershipService, type User } from '@/lib/api';
 import { queryKeys } from '@/lib/api/queryKeys';
-import { getEffectiveToken, dispatchSpoofChanged } from '@/lib/spoof';
+import { getEffectiveToken, dispatchSpoofChanged } from '@/lib/auth/spoof';
 import {
   useMembershipRoles,
   useMembershipUsers,

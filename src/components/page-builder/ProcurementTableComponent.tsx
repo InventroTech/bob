@@ -2,8 +2,8 @@
 
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
-import { resolvePriorityFromRow } from '@/lib/inventoryPriority';
-import { mergeInventoryTrackingColumns } from '@/lib/shipmentTracking';
+import { resolvePriorityFromRow } from '@/lib/inventory/priority';
+import { mergeInventoryTrackingColumns } from '@/lib/inventory/shipmentTracking';
 
 export type ProcurementTableColumn = {
   key: string;

@@ -25,7 +25,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { setupDatabase } from "@/lib/supabaseSetup";
+import { setupDatabase } from "@/lib/supabase/setup";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";

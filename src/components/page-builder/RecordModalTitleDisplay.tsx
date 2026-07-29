@@ -1,6 +1,6 @@
 'use client';
 
-import { getRecordModalTitleParts, type RecordModalTitleInput } from '@/lib/recordModalHeader';
+import { getRecordModalTitleParts, type RecordModalTitleInput } from '@/lib/utils/recordModalHeader';
 
 type RecordModalTitleDisplayProps = {
   record: RecordModalTitleInput | null | undefined;

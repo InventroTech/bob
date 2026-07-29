@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { useSpoofUserId } from "@/lib/spoof";
+import { useSpoofUserId } from "@/lib/auth/spoof";
 import { groupsApi } from '@/lib/api/services/userSettings';
 import { crmLeadsApi } from '@/lib/api/services/crmLeads';
 import { useRecordUpdated } from "@/hooks/useRecordUpdated";

@@ -1,9 +1,9 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
-import { setSentryUser, clearSentryUser } from '../lib/sentry';
+import { setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider';
 import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
 import {
@@ -89,7 +89,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           clearSentryUser();
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error('Failed to restore auth session:', err);
         if (cancelled) return;
         setSession(null);
@@ -101,7 +101,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         console.log('Supabase auth state changed:', event);
 
         if (event === 'SIGNED_OUT') {

@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Calendar, User, Send, Loader2, Plus, Trash2, Scale, RefreshCw, ExternalLink, MapPin } from 'lucide-react';
-import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/currencyFormat';
+import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
 import { Badge } from '@/components/ui/badge';
 
 import { REQUEST_CATEGORY_OPTIONS, PRIORITY_OPTIONS } from './constants';
