@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
-import { leadTypeAssignmentApi } from '@/lib/userSettingsApi';
-import { crmLeadsApi } from '@/lib/crmLeadsApi';
+import { leadTypeAssignmentApi } from '@/lib/api/services/userSettings';
+import { crmLeadsApi } from '@/lib/api/services/crmLeads';
 import { membershipService } from '@/lib/api/services/membership';
 import { useSpoofUserId } from '@/lib/spoof';
 import { TrophyIcon } from '@/components/icons/CustomIcons';
@@ -242,9 +242,9 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
       fetchWithRetry();
     };
 
-    window.addEventListener('trial-activated', handleTrialActivated as EventListener);
+    window.addEventListener('trial-activated', handleTrialActivated as unknown as EventListener);
     return () => {
-      window.removeEventListener('trial-activated', handleTrialActivated as EventListener);
+      window.removeEventListener('trial-activated', handleTrialActivated as unknown as EventListener);
     };
   }, [leadStats.trialActivated, session, activeUserId]);
 

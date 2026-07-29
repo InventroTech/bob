@@ -30,23 +30,60 @@ const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, resetError }) => {
     errorMessage.includes('Importing a module script failed') ||
     errorMessage.includes('error loading dynamically imported module');
 
-  React.useEffect(() => {
-    if (!isChunkError) return;
-    const lastReload = Number(sessionStorage.getItem(RELOAD_KEY) || '0');
-    if (Date.now() - lastReload < 10_000) return;
-    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-    window.location.reload();
-  }, [isChunkError]);
-
   const handleReload = () => {
-    window.location.reload();
+    try {
+      sessionStorage.removeItem(RELOAD_KEY);
+    } catch {
+      /* ignore */
+    }
+    window.location.href = window.location.pathname + window.location.search;
   };
 
   const handleReportError = () => {
-    // Error is already reported to Sentry via ErrorBoundary
-    // This is just for user feedback
     alert('Error has been reported. Thank you for your patience.');
   };
+
+  if (isChunkError) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          padding: '2rem',
+          textAlign: 'center',
+          fontFamily:
+            '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          color: '#6c757d',
+          fontSize: '0.875rem',
+        }}
+      >
+        <p style={{ marginBottom: '0.5rem', color: '#212529', fontWeight: 600 }}>
+          App modules need a refresh
+        </p>
+        <p style={{ marginBottom: '1rem' }}>
+          Dev server updated while this tab was open. Click reload (or press Cmd+Shift+R).
+        </p>
+        <button
+          onClick={handleReload}
+          style={{
+            padding: '0.625rem 1.25rem',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: 'white',
+            backgroundColor: '#111827',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Reload page
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -220,12 +257,12 @@ const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, resetError }) => {
 export const SentryErrorBoundary: React.FC<ErrorBoundaryProps> = ({ children }) => {
   return (
     <Sentry.ErrorBoundary
-      fallback={ErrorFallback}
+      fallback={ErrorFallback as React.ComponentProps<typeof Sentry.ErrorBoundary>['fallback']}
       showDialog={false} // We have our own UI
       beforeCapture={(scope, error, errorInfo) => {
         // Add additional context before capturing
         scope.setContext('react', {
-          componentStack: errorInfo.componentStack,
+          componentStack: typeof errorInfo === 'string' ? errorInfo : (errorInfo as { componentStack?: string })?.componentStack,
         });
       }}
     >

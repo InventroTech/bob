@@ -3,6 +3,7 @@
  * Centralized configuration for all API endpoints and base URLs
  */
 
+/** Canonical env: VITE_RENDER_API_URL. Others are legacy fallbacks. */
 export const API_CONFIG = {
   // Primary API endpoints
   RENDER_API: import.meta.env.VITE_RENDER_API_URL || '',

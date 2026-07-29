@@ -69,18 +69,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Auth listener: set up ONCE (not on every pathname change)
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAccessToken(session?.access_token ?? null);
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) {
-        setSentryUser({ id: u.id, email: u.email, username: u.user_metadata?.username || u.email?.split('@')[0] });
-      } else {
-        clearSentryUser();
-      }
-      setLoading(false);
-    });
+    let cancelled = false;
+    const finishLoading = () => {
+      if (!cancelled) setLoading(false);
+    };
+
+    // Never leave the UI stuck on "Loading authentication..."
+    const loadingTimeout = window.setTimeout(finishLoading, 4000);
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (cancelled) return;
+        setSession(session);
+        setAccessToken(session?.access_token ?? null);
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) {
+          setSentryUser({
+            id: u.id,
+            email: u.email,
+            username: u.user_metadata?.username || u.email?.split('@')[0],
+          });
+        } else {
+          clearSentryUser();
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to restore auth session:', err);
+        if (cancelled) return;
+        setSession(null);
+        setUser(null);
+        clearAccessToken();
+      })
+      .finally(() => {
+        window.clearTimeout(loadingTimeout);
+        finishLoading();
+      });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -126,9 +151,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
 
     return () => {
+      cancelled = true;
+      window.clearTimeout(loadingTimeout);
       authListener?.subscription?.unsubscribe();
     };
-   
   }, [navigate, getLoginUrl]);
 
   // Proactive token refresh: keep JWT fresh every 10 minutes while user is active

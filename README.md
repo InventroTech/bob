@@ -1,73 +1,144 @@
-# Welcome to your Lovable project
+# BOB
 
-## Project info
+BOB is the Pyro admin / page-builder frontend: a Vite + React SPA that talks to a Render REST API and Supabase Auth. There is no application backend in this repo.
 
-**URL**: https://lovable.dev/projects/94955220-1941-4f72-8327-b1876f9b4a20
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/94955220-1941-4f72-8327-b1876f9b4a20) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```text
+Browser (this repo)
+  ├── Supabase Auth (+ some tables)
+  ├── Render REST API  (VITE_RENDER_API_URL)
+  └── WebSocket realtime (optional)
 ```
 
-**Edit a file directly in GitHub**
+## Stack
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
+- React 18 + TypeScript (strict)
 - Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- Tailwind CSS + shadcn/ui
+- TanStack React Query
+- React Router
+- Axios (`src/lib/api`)
+- Supabase Auth
 
-## How can I deploy this project?
+## Setup
 
-Simply open [Lovable](https://lovable.dev/projects/94955220-1941-4f72-8327-b1876f9b4a20) and click on Share -> Publish.
+**Requirements:** Node.js 20+ and npm.
 
-## Can I connect a custom domain to my Lovable project?
+```sh
+git clone <repo-url>
+cd bob
+npm install
+```
 
-Yes it is!
+Copy or create a `.env` with:
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+| Variable | Purpose |
+|----------|---------|
+| `VITE_RENDER_API_URL` | Backend API base URL |
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Then:
+
+```sh
+npm run dev      # http://localhost:8080
+```
+
+### Scripts
+
+| Command | What it does |
+|---------|----------------|
+| `npm run dev` | Dev server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview production build |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest |
+
+Deployed as a SPA (e.g. Vercel). `vercel.json` rewrites all routes to `index.html`.
+
+## Project structure
+
+```text
+src/
+├── features/            # Product domains — pages + hooks live here
+│   ├── auth/
+│   ├── jobs/            # Reference feature (copy this pattern)
+│   ├── billing/
+│   ├── inventory/
+│   ├── membership/
+│   ├── crm/
+│   ├── analytics/
+│   ├── ats/
+│   ├── page-builder/
+│   ├── tenant-app/
+│   └── dashboard/
+├── components/
+│   ├── ui/              # Shared design system
+│   ├── layout/          # Admin shell (Sidebar, DashboardLayout)
+│   ├── page-builder/    # Builder widgets (split into folders)
+│   └── ATScomponents/   # ATS widgets
+├── lib/api/             # Only place for HTTP to the backend
+│   ├── client.ts        # Shared axios + auth interceptors
+│   ├── config.ts
+│   ├── queryKeys.ts
+│   └── services/        # One module per domain
+├── hooks/               # Auth, tenant, realtime, route guards
+├── layout/              # Tenant custom-app layout
+└── types/
+```
+
+`App.tsx` wires providers and all routes (importing pages from `src/features/`).
+
+## Architecture rules
+
+**Data flow**
+
+```text
+UI (feature page / component)
+  → feature hook (React Query) when needed
+  → lib/api/services/<domain>.ts
+  → apiClient
+  → Render API
+```
+
+- Put HTTP in `src/lib/api/services/`, not in components.
+- Do not call `fetch` or read `import.meta.env.VITE_*` in UI code.
+- Prefer React Query hooks in `src/features/<domain>/hooks/`.
+- Pages live under `src/features/<domain>/pages/` only.
+
+**Reference feature:** `src/features/jobs/` — thin pages, shared UI shell, adapters, API services.
+
+Large widgets are split as:
+
+```text
+types.ts + utils.ts + useX.ts + XView.tsx + index.tsx
+```
+
+Example: `@/components/page-builder/lead-table`.
+
+### Features
+
+| Feature | Responsibility |
+|---------|----------------|
+| `auth` | Login, signup, OAuth, custom-app login |
+| `jobs` | Background + Pyro job runners |
+| `billing` | Billing report |
+| `inventory` | Inventory request / PM / receive |
+| `membership` | Users, hierarchy, lead-type assignment |
+| `crm` | Entity types, lead groups, call matrix |
+| `analytics` | Team dashboard |
+| `ats` | Hiring jobs |
+| `page-builder` | Page builder, my pages, ops programs |
+| `tenant-app` | `/app/:slug` tenant UI |
+| `dashboard` | Home, profile, 404 |
+
+### Adding a feature
+
+1. Create `src/features/<name>/` with `pages/` (and hooks if needed).
+2. Add `src/lib/api/services/<name>.ts` using `apiClient`.
+3. Export from `src/lib/api/index.ts` if useful.
+4. Register routes in `src/App.tsx`.
+5. Add a Sidebar item when needed (use `roles` for ACL).
+
+## License
+
+Private.

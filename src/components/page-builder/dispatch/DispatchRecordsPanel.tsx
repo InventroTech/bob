@@ -13,7 +13,7 @@ import { useMobileBackStack } from '@/hooks/useMobileBackStack';
 import { ArrowLeft, ArrowUpDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
-import type { CrmRecord } from '@/lib/crmRecordsApi';
+import type { CrmRecord } from '@/lib/api/services/crmRecords';
 import type { DispatchCardListConfig } from '../DispatchCardListComponent';
 import { DispatchDetailView } from './DispatchDetailView';
 import { DispatchFilterSheet } from './DispatchFilterSheet';

@@ -55,7 +55,7 @@ interface DynamicFilterConfigProps {
   handleInputChange: (field: string, value: string | number | boolean) => void;
   handleFilterCountChange: (count: number) => void;
   handleFilterDelete: (index: number) => void;
-  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterOption[] | boolean) => void;
+  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterOption[] | boolean | undefined) => void;
   /** When switching options source (manual vs API), update all related fields in one go. */
   handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
   handleAddFilterOption: (filterIndex: number) => void;

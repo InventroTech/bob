@@ -575,7 +575,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     } else {
       setLead(prev => ({
         ...prev,
-        selectedTags: prev.selectedTags.filter((t) => t !== tag)
+        selectedTags: prev.selectedTags.filter((t: string) => t !== tag)
       }));
     }
   };
@@ -1058,7 +1058,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                   </Popover>
                   {lead.selectedTags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {lead.selectedTags.map((tag) => (
+                      {lead.selectedTags.map((tag: string) => (
                         <Badge key={tag} variant="secondary" className="text-xs">
                           {tag}
                         </Badge>
