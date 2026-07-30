@@ -1702,41 +1702,44 @@ export const TicketCarousel: React.FC<TicketCarouselProps> = ({
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent
-                      portalled={!isInModal}
-                      className={cn("w-80 p-4", isInModal && "z-[100]")}
-                      align="start"
-                      onWheel={(event) => event.stopPropagation()}
-                    >
-                      <div className="space-y-3">
-                        <h4 className="font-medium">Select Other Reasons</h4>
-                        <div
-                          className="max-h-56 overflow-y-auto overflow-x-hidden space-y-2 touch-auto"
-                          style={{
-                            WebkitOverflowScrolling: "touch",
-                          }}
-                          onWheel={(event) => event.stopPropagation()}
-                        >
-                          {OTHER_REASONS_OPTIONS.map((reason) => (
-                            <div key={reason} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`reason-${reason}`}
-                                checked={ticket.selectedOtherReasons.includes(reason)}
-                                onCheckedChange={(checked) =>
-                                  handleOtherReasonChange(reason, checked as boolean)
-                                }
-                                disabled={updating}
-                              />
-                              <label
-                                htmlFor={`reason-${reason}`}
-                                className="cursor-pointer text-sm leading-none"
-                              >
-                                {reason}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </PopoverContent>
+  portalled={!isInModal}
+  className={cn("w-80 p-4", isInModal && "z-[100]")}
+  align="start"
+  onWheel={(event) => event.stopPropagation()}
+  onTouchMove={(event) => event.stopPropagation()}
+>
+  <div className="space-y-3">
+    <h4 className="font-medium">Select Other Reasons</h4>
+    
+    <div
+      className="max-h-56 overflow-y-auto overflow-x-hidden space-y-2 overscroll-contain"
+      style={{
+        WebkitOverflowScrolling: "touch",
+      }}
+      onWheel={(event) => event.stopPropagation()}
+      onTouchMove={(event) => event.stopPropagation()}
+    >
+      {OTHER_REASONS_OPTIONS.map((reason) => (
+        <div key={reason} className="flex items-center space-x-2">
+          <Checkbox
+            id={`reason-${reason}`}
+            checked={ticket.selectedOtherReasons.includes(reason)}
+            onCheckedChange={(checked) =>
+              handleOtherReasonChange(reason, checked as boolean)
+            }
+            disabled={updating}
+          />
+          <label
+            htmlFor={`reason-${reason}`}
+            className="cursor-pointer text-sm leading-none"
+          >
+            {reason}
+          </label>
+        </div>
+      ))}
+    </div>
+  </div>
+</PopoverContent>
                   </Popover>
                   {ticket.selectedOtherReasons.length > 0 && (
                     <div className="flex flex-wrap gap-1">
