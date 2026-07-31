@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from './useAuth'; // Assuming useAuth is in the same directory
 import { Navigate, Outlet } from 'react-router-dom';
+import ChatWidget from '@/components/chatbot/ChatWidget';
 
 interface ProtectedRouteProps {
   redirectTo?: string;
@@ -22,8 +23,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ redirectTo = '/auth' })
     return <Navigate to={redirectTo} replace />;
   }
 
-  // User is logged in, render the child routes
-  return <Outlet />;
+  // User is logged in, render the child routes + floating assistant
+  return (
+    <>
+      <Outlet />
+      <ChatWidget />
+    </>
+  );
 };
 
-export default ProtectedRoute; 
+export default ProtectedRoute;
