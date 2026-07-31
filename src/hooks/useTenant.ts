@@ -4,6 +4,8 @@ import { membershipService } from '@/lib/api';
 
 export interface TenantContext {
   tenantId: string | null;
+  /** Slug from membership API (used for tenant-scoped config lookups). */
+  tenantSlug: string | null;
   role: 'owner' | 'editor' | 'viewer' | null;
   customRole: string | null;
   /** Tenant membership id for API placeholders (pyro_user_id, etc.). */
@@ -17,6 +19,7 @@ export interface TenantContext {
 export function useTenant(): TenantContext {
   const { user, session } = useAuth();
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [tenantSlug, setTenantSlug] = useState<string | null>(null);
   const [role, setRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
   const [customRole, setCustomRole] = useState<string | null>(null);
   const [membershipId, setMembershipId] = useState<string | null>(null);
@@ -39,6 +42,7 @@ export function useTenant(): TenantContext {
     async function fetchTenant() {
       if (!user || !session?.access_token) {
         setTenantId(null);
+        setTenantSlug(null);
         setRole(null);
         setCustomRole(null);
         setMembershipId(null);
@@ -49,16 +53,19 @@ export function useTenant(): TenantContext {
         const membership = await membershipService.getMyMembership();
         if (membership?.tenant_id) {
           setTenantId(membership.tenant_id);
+          const slug = membership.tenant_slug?.trim() || null;
+          setTenantSlug(slug);
           setRole('owner');
           if (membership.role_key) setCustomRole(membership.role_key);
           else await fetchCustomRole();
           const id = membership.tenant_membership_id;
           if (id != null) setMembershipId(String(id));
-          if (membership.tenant_slug && typeof window !== 'undefined') {
-            localStorage.setItem('tenant_slug', membership.tenant_slug);
+          if (slug && typeof window !== 'undefined') {
+            localStorage.setItem('tenant_slug', slug);
           }
         } else {
           setTenantId(null);
+          setTenantSlug(null);
           setRole(null);
           setCustomRole(null);
           setMembershipId(null);
@@ -83,5 +90,13 @@ export function useTenant(): TenantContext {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [user, session?.access_token, fetchCustomRole]);
 
-  return { tenantId, role, customRole, membershipId, membershipLoaded, refetchCustomRole: fetchCustomRole };
+  return {
+    tenantId,
+    tenantSlug,
+    role,
+    customRole,
+    membershipId,
+    membershipLoaded,
+    refetchCustomRole: fetchCustomRole,
+  };
 } 

@@ -18,12 +18,15 @@ import type {
   AddUserComponentProps,
 } from './types';
 import { isCseRole, patchSupportDailyKv } from './utils';
+import { customFieldKvKey, isBoundCustomField } from './userManagementConfig';
+import { useUserManagementConfig } from './useUserManagementConfig';
 
 export function useAddUser({ config }: AddUserComponentProps) {
   const { user, session } = useAuth();
   const navigate = useNavigate();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { tenantId } = useTenant();
+  const { schema } = useUserManagementConfig(config);
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
@@ -41,6 +44,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
     supportDailyLimitSelfTrial: '',
     supportDailyLimitOther: '',
     managerEmail: '',
+    customFields: {} as Record<string, string>,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [showRoleFields, setShowRoleFields] = useState(false);
@@ -181,6 +185,15 @@ export function useAddUser({ config }: AddUserComponentProps) {
         const resolveGoalRow = kv.find((r) => r.key === 'SUPPORT_RESOLVE_RATE_GOAL');
         const stLimitRow = kv.find((r) => r.key === 'SUPPORT_DAILY_LIMIT_SELF_TRIAL');
         const otherLimitRow = kv.find((r) => r.key === 'SUPPORT_DAILY_LIMIT_OTHER');
+        const custom_fields: Record<string, string> = {};
+        kv.forEach((row) => {
+          if (typeof row.key === 'string' && row.key.startsWith('CUSTOM_FIELD_')) {
+            const fieldKey = row.key.slice('CUSTOM_FIELD_'.length).toLowerCase();
+            if (row.value != null && row.value !== '') {
+              custom_fields[fieldKey] = String(row.value);
+            }
+          }
+        });
         mapped[emailKey] = {
           group_id: typeof groupRow?.value === 'number' ? groupRow.value : undefined,
           daily_target: typeof targetRow?.value === 'number' ? targetRow.value : undefined,
@@ -191,6 +204,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
             typeof stLimitRow?.value === 'number' ? stLimitRow.value : undefined,
           support_daily_limit_other:
             typeof otherLimitRow?.value === 'number' ? otherLimitRow.value : undefined,
+          custom_fields,
         };
       });
       setCoreSettingsMap(mapped);
@@ -266,6 +280,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
             ? (config?.support_daily_limit_other ?? '—')
             : '—',
           managerEmail: parentUser?.email || '—',
+          customFields: config?.custom_fields ?? {},
         };
       }),
     [users, coreSettingsMap, availableLeadGroups]
@@ -452,6 +467,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
       const selectedSupportResolveGoal = formData.supportResolveRateGoal;
       const selectedSupportStLimit = formData.supportDailyLimitSelfTrial;
       const selectedSupportOtherLimit = formData.supportDailyLimitOther;
+      const selectedCustomFields = { ...formData.customFields };
 
       setFormData({
         name: '',
@@ -464,6 +480,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
         supportDailyLimitSelfTrial: '',
         supportDailyLimitOther: '',
         managerEmail: '',
+        customFields: {},
       });
       setSelectedQueueType('lead');
       setSelectedRoleId('');
@@ -471,6 +488,36 @@ export function useAddUser({ config }: AddUserComponentProps) {
       // Refresh the users list
       await fetchUsers();
       await fetchCoreSettings();
+
+      if (createdMembershipId && Object.keys(selectedCustomFields).length > 0) {
+        try {
+          const customPayload: Record<string, string | number | boolean | null> = {};
+          for (const [key, value] of Object.entries(selectedCustomFields)) {
+            if (isBoundCustomField(key)) continue;
+            const def = schema.customFields.find((f) => f.key === key);
+            if (value === '' || value == null) {
+              customPayload[customFieldKvKey(key)] = null;
+            } else if (def?.type === 'number') {
+              customPayload[customFieldKvKey(key)] = Number(value);
+            } else if (def?.type === 'boolean') {
+              customPayload[customFieldKvKey(key)] = value === 'true' || value === '1';
+            } else {
+              customPayload[customFieldKvKey(key)] = value;
+            }
+          }
+          await leadTypeAssignmentApi.patchCoreKvSettings(
+            String(createdMembershipId),
+            customPayload
+          );
+          await fetchCoreSettings();
+        } catch (customErr: any) {
+          toast.error(
+            customErr?.response?.data?.detail ||
+              customErr?.message ||
+              'User created but custom fields may not have saved'
+          );
+        }
+      }
 
       if (
         selectedQueueType === 'ticket' &&
@@ -610,6 +657,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
           ? String(config.support_daily_limit_other)
           : '',
       managerEmail: usr.managerEmail && usr.managerEmail !== '—' ? usr.managerEmail : '',
+      customFields: { ...(usr.customFields || config?.custom_fields || {}) },
     });
   };
 
@@ -723,6 +771,35 @@ export function useAddUser({ config }: AddUserComponentProps) {
               patchError?.response?.data?.detail ||
                 patchError?.message ||
                 'User updated but failed to save support daily targets/limits'
+            );
+          }
+        }
+
+        if (Object.keys(editingRow.customFields || {}).length > 0) {
+          try {
+            const customPayload: Record<string, string | number | boolean | null> = {};
+            for (const [key, value] of Object.entries(editingRow.customFields)) {
+              if (isBoundCustomField(key)) continue;
+              const def = schema.customFields.find((f) => f.key === key);
+              if (value === '' || value == null) {
+                customPayload[customFieldKvKey(key)] = null;
+              } else if (def?.type === 'number') {
+                customPayload[customFieldKvKey(key)] = Number(value);
+              } else if (def?.type === 'boolean') {
+                customPayload[customFieldKvKey(key)] = value === 'true' || value === '1';
+              } else {
+                customPayload[customFieldKvKey(key)] = value;
+              }
+            }
+            await leadTypeAssignmentApi.patchCoreKvSettings(
+              String(editedUser.tenant_membership_id),
+              customPayload
+            );
+          } catch (customErr: any) {
+            toast.error(
+              customErr?.response?.data?.detail ||
+                customErr?.message ||
+                'User updated but custom fields may not have saved'
             );
           }
         }
