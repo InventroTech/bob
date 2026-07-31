@@ -35,6 +35,7 @@ import { WhatsAppTemplateConfig } from "@/components/page-builder/component-conf
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 import { DispatchCardListConfigPanel } from "@/components/page-builder/component-config/DispatchCardListConfig";
 import { DispatchDashboardConfigPanel } from "@/components/page-builder/component-config/DispatchDashboardConfig";
+import { AddUserConfig } from "@/components/page-builder/component-config/AddUserConfig";
 import type { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import type { CanvasComponentData, ComponentConfig } from "./componentMap";
 
@@ -115,6 +116,15 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     showDiagram?: boolean;
     // AddUser specific fields
     userScope?: 'all' | 'under_me';
+    umFormFields?: string[];
+    umColumns?: string[];
+    umCustomFields?: Array<{
+      key: string;
+      label: string;
+      type: 'string' | 'number' | 'boolean';
+      showInForm: boolean;
+      showInTable: boolean;
+    }>;
     // InventoryRequestForm specific fields
     initialStatus?: string;
     initialStatusText?: string;
@@ -210,6 +220,9 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     showDiagram: initialConfig.showDiagram !== false,
     // AddUser
     userScope: (initialConfig as any).userScope || 'all',
+    umFormFields: (initialConfig as any).umFormFields ?? undefined,
+    umColumns: (initialConfig as any).umColumns ?? undefined,
+    umCustomFields: (initialConfig as any).umCustomFields ?? undefined,
     // InventoryRequestForm (empty by default so user can set from config)
     initialStatus: (initialConfig as any).initialStatus ?? (initialConfig as any).defaultStatus ?? '',
     initialStatusText: (initialConfig as any).initialStatusText ?? '',
@@ -786,17 +799,11 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
 
       case 'addUser':
         return (
-          <div className="space-y-3">
-            <Label>User Scope</Label>
-            <select
-              className="h-9 w-full border rounded-md px-3 text-sm bg-white"
-              value={localConfig.userScope || 'all'}
-              onChange={(e) => handleInputChange('userScope', e.target.value)}
-            >
-              <option value="all">Show all users</option>
-              <option value="under_me">Show only users under me</option>
-            </select>
-          </div>
+          <AddUserConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+            handleConfigPatch={handleConfigPatch}
+          />
         );
 
       case 'userHierarchy':
