@@ -639,11 +639,18 @@ export function useAddUser({ config }: AddUserComponentProps) {
       leadGroup: usr.leadGroup && usr.leadGroup !== '—' ? usr.leadGroup : '',
       dailyTarget: cse
         ? ''
-        : usr.dailyTarget && usr.dailyTarget !== '—'
+        : usr.dailyTarget != null && usr.dailyTarget !== '—'
           ? String(usr.dailyTarget)
-          : '',
-      dailyLimit:
-        usr.dailyLimit && usr.dailyLimit !== '—' ? String(usr.dailyLimit) : '',
+          : config?.daily_target != null
+            ? String(config.daily_target)
+            : '',
+      dailyLimit: cse
+        ? ''
+        : usr.dailyLimit != null && usr.dailyLimit !== '—'
+          ? String(usr.dailyLimit)
+          : config?.daily_limit != null
+            ? String(config.daily_limit)
+            : '',
       supportResolveRateGoal:
         config?.support_resolve_rate_goal !== undefined
           ? String(config.support_resolve_rate_goal)
@@ -660,7 +667,6 @@ export function useAddUser({ config }: AddUserComponentProps) {
       customFields: { ...(usr.customFields || config?.custom_fields || {}) },
     });
   };
-
   const handleCancelRowEdit = () => {
     setEditingRowKey(null);
     setEditingRow(null);
