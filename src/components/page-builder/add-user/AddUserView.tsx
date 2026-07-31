@@ -10,6 +10,7 @@ import { Trash2, UserPlus, Pencil, Check, X, Search, Download } from 'lucide-rea
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
+import { formatResolveRateGoal, isCseRole } from './utils';
 import { useUserManagementConfig } from './useUserManagementConfig';
 import {
   getColumnLabel,
@@ -17,6 +18,28 @@ import {
   type UserManagementColumn,
   type UserManagementCustomField,
 } from './userManagementConfig';
+
+function SupportDailyDualDisplay({
+  selfTrial,
+  other,
+}: {
+  selfTrial?: string | number;
+  other?: string | number;
+}) {
+  const st = selfTrial === undefined || selfTrial === '—' ? null : selfTrial;
+  const ot = other === undefined || other === '—' ? null : other;
+  if (st === null && ot === null) return <>{'\u2014'}</>;
+  return (
+    <div className="text-sm leading-snug space-y-0.5">
+      <div>
+        <span className="text-gray-500">ST:</span> {st ?? '—'}
+      </div>
+      <div>
+        <span className="text-gray-500">Other:</span> {ot ?? '—'}
+      </div>
+    </div>
+  );
+}
 
 function SupportDailyDualInputs({
   selfTrial,
@@ -72,6 +95,7 @@ function boundCustomFieldDisplay(user: User, fieldKey: string): string {
     case 'lead_group':
       return user.leadGroup && user.leadGroup !== '—' ? String(user.leadGroup) : '—';
     case 'daily_target':
+    case 'target':
       return user.dailyTarget != null && user.dailyTarget !== '—'
         ? String(user.dailyTarget)
         : '—';
@@ -251,10 +275,193 @@ export function AddUserView(props: AddUserModel) {
     user: User,
     isEditing: boolean
   ) => {
+    const rowIsCse =
+      isEditing && editingRow
+        ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
+        : isCseRole(user.role);
+
     if (field.key === 'manager_email') {
       return (
         <TableCell key={`${user.uid}-cf-manager_email`}>
           {isEditing && editingRow ? renderManagerEditCell(user) : boundCustomFieldDisplay(user, field.key)}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'lead_group') {
+      return (
+        <TableCell key={`${user.uid}-cf-lead_group`}>
+          {isEditing && editingRow ? (
+            <select
+              className="h-9 w-full border rounded-md px-2 text-sm bg-white"
+              value={editingRow.leadGroup}
+              onChange={(e) =>
+                setEditingRow((prev) => (prev ? { ...prev, leadGroup: e.target.value } : prev))
+              }
+            >
+              <option value="">Select Group</option>
+              {availableLeadGroups.map((group) => (
+                <option key={group.name} value={group.name}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            boundCustomFieldDisplay(user, field.key)
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'daily_target' || field.key === 'target') {
+      return (
+        <TableCell key={`${user.uid}-cf-daily_target`}>
+          {isEditing && editingRow ? (
+            rowIsCse ? (
+              <Input
+                className="h-9"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={editingRow.supportResolveRateGoal}
+                onChange={(e) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, supportResolveRateGoal: e.target.value } : prev
+                  )
+                }
+                placeholder="Resolve %"
+              />
+            ) : (
+              <Input
+                className="h-9"
+                type="number"
+                min="0"
+                step="1"
+                value={editingRow.dailyTarget}
+                onChange={(e) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, dailyTarget: e.target.value } : prev
+                  )
+                }
+                placeholder="Daily target"
+              />
+            )
+          ) : rowIsCse ? (
+            formatResolveRateGoal(user.supportResolveRateGoal)
+          ) : (
+            boundCustomFieldDisplay(user, 'daily_target')
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'daily_limit') {
+      return (
+        <TableCell key={`${user.uid}-cf-daily_limit`}>
+          {isEditing && editingRow ? (
+            rowIsCse ? (
+              <SupportDailyDualInputs
+                selfTrial={editingRow.supportDailyLimitSelfTrial}
+                other={editingRow.supportDailyLimitOther}
+                onSelfTrialChange={(value) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, supportDailyLimitSelfTrial: value } : prev
+                  )
+                }
+                onOtherChange={(value) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, supportDailyLimitOther: value } : prev
+                  )
+                }
+              />
+            ) : (
+              <Input
+                className="h-9"
+                type="number"
+                min="0"
+                step="1"
+                value={editingRow.dailyLimit}
+                onChange={(e) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, dailyLimit: e.target.value } : prev
+                  )
+                }
+                placeholder="Daily limit"
+              />
+            )
+          ) : rowIsCse ? (
+            <SupportDailyDualDisplay
+              selfTrial={user.supportDailyLimitSelfTrial}
+              other={user.supportDailyLimitOther}
+            />
+          ) : (
+            boundCustomFieldDisplay(user, 'daily_limit')
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'resolve_rate_goal') {
+      return (
+        <TableCell key={`${user.uid}-cf-resolve_rate_goal`}>
+          {isEditing && editingRow ? (
+            rowIsCse ? (
+              <Input
+                className="h-9"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={editingRow.supportResolveRateGoal}
+                onChange={(e) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, supportResolveRateGoal: e.target.value } : prev
+                  )
+                }
+              />
+            ) : (
+              '—'
+            )
+          ) : rowIsCse ? (
+            formatResolveRateGoal(user.supportResolveRateGoal)
+          ) : (
+            '—'
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'support_daily_limits') {
+      return (
+        <TableCell key={`${user.uid}-cf-support_daily_limits`}>
+          {isEditing && editingRow ? (
+            rowIsCse ? (
+              <SupportDailyDualInputs
+                selfTrial={editingRow.supportDailyLimitSelfTrial}
+                other={editingRow.supportDailyLimitOther}
+                onSelfTrialChange={(value) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, supportDailyLimitSelfTrial: value } : prev
+                  )
+                }
+                onOtherChange={(value) =>
+                  setEditingRow((prev) =>
+                    prev ? { ...prev, supportDailyLimitOther: value } : prev
+                  )
+                }
+              />
+            ) : (
+              '—'
+            )
+          ) : rowIsCse ? (
+            <SupportDailyDualDisplay
+              selfTrial={user.supportDailyLimitSelfTrial}
+              other={user.supportDailyLimitOther}
+            />
+          ) : (
+            '—'
+          )}
         </TableCell>
       );
     }
@@ -454,28 +661,6 @@ export function AddUserView(props: AddUserModel) {
         <div className="flex items-center gap-2">
           <UserPlus className="h-5 w-5" />
           <h3 className="text-lg font-semibold">User Management</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="h-9 w-56 pl-8"
-              placeholder="Search users..."
-              value={userSearchTerm}
-              onChange={(e) => setUserSearchTerm(e.target.value)}
-            />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            onClick={handleDownloadUsersPdf}
-            disabled={usersPdfLoading || filteredUsersWithSettings.length === 0}
-          >
-            <Download className="h-4 w-4 mr-1" />
-            {usersPdfLoading ? '...' : 'PDF'}
-          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -872,9 +1057,39 @@ export function AddUserView(props: AddUserModel) {
           )}
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <h5 className="text-2xl font-semibold">Users</h5>
+            <div className="flex w-full flex-col gap-3 sm:max-w-md sm:flex-row sm:items-center">
+              <div className="relative w-full sm:flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={userSearchTerm}
+                  onChange={(e) => setUserSearchTerm(e.target.value)}
+                  placeholder="Search by name, email or role..."
+                  className="h-11 pl-9"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleDownloadUsersPdf()}
+                disabled={isLoading || usersPdfLoading || filteredUsersWithSettings.length === 0}
+                className="h-11 shrink-0 border-black text-black hover:bg-black hover:text-white"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {usersPdfLoading ? 'Generating…' : 'Download PDF'}
+              </Button>
+            </div>
+          </div>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading users...</p>
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
+            </div>
+          ) : users.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No users found</div>
+          ) : filteredUsersWithSettings.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No users match your search</div>
           ) : (
             <div className="rounded-md border overflow-x-auto">
               <Table>
