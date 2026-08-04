@@ -33,6 +33,12 @@ export const FALLBACK_ECOMMERCE_SOURCES: EcommerceSource[] = [
 /** 6-digit Indian PIN code for marketplace delivery ETAs. */
 export const DEFAULT_DELIVERY_PINCODE = '562149';
 
+/** Default ship-to address (editable on the form). */
+export const DEFAULT_DELIVERY_ADDRESS =
+  'Unmannd Autonomy Pvt Ltd, Bengaluru, Karnataka 562149';
+
+
+
 export const REQUEST_CATEGORY_OPTIONS = [
   { value: 'Domestic', label: 'Domestic' },
   { value: 'International', label: 'International' },
@@ -61,6 +67,9 @@ export const PRIORITY_OPTIONS = [
 ] as const;
 
 export const REQUIRED_ITEM_FIELDS: Array<{ key: keyof FormItem; label: string }> = [
+  { key: 'product_link', label: 'Item link' },
+  { key: 'item_name_freeform', label: 'Item name' },
+  { key: 'specifications', label: 'Specifications' },
   { key: 'quantity_required', label: 'Quantity' },
   { key: 'estimated_cost', label: 'Estimated cost' },
   { key: 'vendor', label: 'Vendor' },

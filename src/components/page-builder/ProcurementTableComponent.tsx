@@ -46,7 +46,7 @@ export const DEFAULT_PROCUREMENT_TABLE_COLUMNS: ProcurementTableColumn[] = [
   { key: 'estimated_cost', label: 'Estimated Cost', type: 'text' },
   { key: 'vendor', label: 'Vendor', type: 'text' },
   { key: 'request_date', label: 'Request Date', type: 'date' },
-  { key: 'required_date', label: 'Requirement Date', type: 'date' },
+  { key: 'eta', label: 'ETA', type: 'date' },
   { key: 'urgency_level', label: 'Priority', type: 'chip' },
   { key: 'status', label: 'Status', type: 'chip' },
 ];
