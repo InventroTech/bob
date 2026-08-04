@@ -103,6 +103,10 @@ function boundCustomFieldDisplay(user: User, fieldKey: string): string {
       return user.dailyLimit != null && user.dailyLimit !== '—'
         ? String(user.dailyLimit)
         : '—';
+    case 'state':
+      return user.state && user.state !== '—' ? user.state : '—';
+    case 'district':
+      return user.district && user.district !== '—' ? user.district : '—';
     case 'resolve_rate_goal':
       return user.supportResolveRateGoal != null && user.supportResolveRateGoal !== '—'
         ? String(user.supportResolveRateGoal)
@@ -181,6 +185,8 @@ export function AddUserView(props: AddUserModel) {
   const showLeadGroupForm = showCustomForm('lead_group');
   const showDailyTargetForm = showCustomForm('daily_target');
   const showDailyLimitForm = showCustomForm('daily_limit');
+  const showStateForm = showCustomForm('state');
+  const showDistrictForm = showCustomForm('district');
   const showResolveGoalForm = showCustomForm('resolve_rate_goal');
   const showSupportLimitsForm = showCustomForm('support_daily_limits');
 
@@ -197,7 +203,9 @@ export function AddUserView(props: AddUserModel) {
     showLeadGroupForm ||
     showQueueTypeForm ||
     showLeadTargets ||
-    showTicketTargets;
+    showTicketTargets ||
+    showStateForm ||
+    showDistrictForm;
   const renderManagerEditCell = (user: User) => (
     <div className="relative" ref={editManagerDropdownRef}>
       <div className="flex gap-1">
@@ -397,6 +405,48 @@ export function AddUserView(props: AddUserModel) {
             />
           ) : (
             boundCustomFieldDisplay(user, 'daily_limit')
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'state') {
+      return (
+        <TableCell key={`${user.uid}-cf-state`}>
+          {isEditing && editingRow ? (
+            <Input
+              className="h-9"
+              value={editingRow.state}
+              onChange={(e) =>
+                setEditingRow((prev) =>
+                  prev ? { ...prev, state: e.target.value } : prev
+                )
+              }
+              placeholder="State"
+            />
+          ) : (
+            boundCustomFieldDisplay(user, 'state')
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'district') {
+      return (
+        <TableCell key={`${user.uid}-cf-district`}>
+          {isEditing && editingRow ? (
+            <Input
+              className="h-9"
+              value={editingRow.district}
+              onChange={(e) =>
+                setEditingRow((prev) =>
+                  prev ? { ...prev, district: e.target.value } : prev
+                )
+              }
+              placeholder="District"
+            />
+          ) : (
+            boundCustomFieldDisplay(user, 'district')
           )}
         </TableCell>
       );
@@ -967,6 +1017,37 @@ export function AddUserView(props: AddUserModel) {
                   )}
                 </>
               ) : null}
+
+              {showStateForm && (
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Input
+                    id="state"
+                    name="state"
+                    className="h-11"
+                    value={formData.state}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, state: e.target.value }))
+                    }
+                    placeholder="State"
+                  />
+                </div>
+              )}
+              {showDistrictForm && (
+                <div className="space-y-2">
+                  <Label htmlFor="district">District</Label>
+                  <Input
+                    id="district"
+                    name="district"
+                    className="h-11"
+                    value={formData.district}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, district: e.target.value }))
+                    }
+                    placeholder="District"
+                  />
+                </div>
+              )}
 
               {customFormFields.map((field) => (
                 <div key={field.key} className="space-y-2">

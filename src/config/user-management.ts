@@ -3,7 +3,26 @@
  * Page widget config (saved with the page) overrides this at runtime.
  * Built-ins: name, email, department, role (+ created_at/actions on table).
  * Former CRM extras live under customFields so tenants can edit them in the panel.
+ * state / district are bound custom fields stored in user_kv_settings as STATE / DISTRICT
+ * (same path as GROUP / DAILY_LIMIT via user create-update).
  */
+
+const STATE_DISTRICT_CUSTOM_FIELDS = [
+  {
+    key: "state",
+    label: "State",
+    type: "string" as const,
+    showInForm: true,
+    showInTable: true,
+  },
+  {
+    key: "district",
+    label: "District",
+    type: "string" as const,
+    showInForm: true,
+    showInTable: true,
+  },
+];
 
 const CRM_CUSTOM_FIELDS_FULL = [
   {
@@ -55,6 +74,7 @@ const CRM_CUSTOM_FIELDS_FULL = [
     showInForm: true,
     showInTable: false,
   },
+  ...STATE_DISTRICT_CUSTOM_FIELDS,
 ];
 
 const userManagementConfig = {
@@ -94,6 +114,7 @@ const userManagementConfig = {
           showInForm: true,
           showInTable: true,
         },
+        ...STATE_DISTRICT_CUSTOM_FIELDS,
       ],
     },
     "beta-crm": {
@@ -107,6 +128,7 @@ const userManagementConfig = {
           showInForm: true,
           showInTable: true,
         },
+        ...STATE_DISTRICT_CUSTOM_FIELDS,
       ],
     },
   },

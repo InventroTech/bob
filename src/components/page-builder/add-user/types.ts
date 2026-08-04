@@ -14,6 +14,8 @@ export interface User {
   created_at: string;
   role?: Role;
   department?: string;
+  state?: string;
+  district?: string;
   lead_group_name?: string;
   leadGroup?: string;
   dailyTarget?: string | number;
@@ -31,6 +33,8 @@ export interface UserCoreSettingsSummary {
   group_id?: number;
   daily_target?: number;
   daily_limit?: number;
+  state?: string;
+  district?: string;
   support_resolve_rate_goal?: number;
   support_daily_limit_self_trial?: number;
   support_daily_limit_other?: number;
@@ -50,6 +54,8 @@ export interface RowEditState {
   name: string;
   email: string;
   department: string;
+  state: string;
+  district: string;
   roleId: string;
   leadGroup: string;
   dailyTarget: string;

@@ -18,7 +18,7 @@ import type {
   AddUserComponentProps,
 } from './types';
 import { isCseRole, patchSupportDailyKv } from './utils';
-import { customFieldKvKey, isBoundCustomField } from './userManagementConfig';
+import { customFieldKvKey, isBoundCustomField, CORE_USER_KV_KEYS } from './userManagementConfig';
 import { useUserManagementConfig } from './useUserManagementConfig';
 
 export function useAddUser({ config }: AddUserComponentProps) {
@@ -37,6 +37,8 @@ export function useAddUser({ config }: AddUserComponentProps) {
     name: '',
     email: '',
     department: '',
+    state: '',
+    district: '',
     leadGroup: '',
     dailyTarget: '',
     dailyLimit: '',
@@ -182,22 +184,37 @@ export function useAddUser({ config }: AddUserComponentProps) {
         const groupRow = kv.find((r) => r.key === 'GROUP');
         const targetRow = kv.find((r) => r.key === 'DAILY_TARGET');
         const limitRow = kv.find((r) => r.key === 'DAILY_LIMIT');
+        const stateRow = kv.find((r) => r.key === 'STATE');
+        const districtRow = kv.find((r) => r.key === 'DISTRICT');
         const resolveGoalRow = kv.find((r) => r.key === 'SUPPORT_RESOLVE_RATE_GOAL');
         const stLimitRow = kv.find((r) => r.key === 'SUPPORT_DAILY_LIMIT_SELF_TRIAL');
         const otherLimitRow = kv.find((r) => r.key === 'SUPPORT_DAILY_LIMIT_OTHER');
         const custom_fields: Record<string, string> = {};
         kv.forEach((row) => {
-          if (typeof row.key === 'string' && row.key.startsWith('CUSTOM_FIELD_')) {
-            const fieldKey = row.key.slice('CUSTOM_FIELD_'.length).toLowerCase();
-            if (row.value != null && row.value !== '') {
-              custom_fields[fieldKey] = String(row.value);
-            }
+          if (typeof row.key !== 'string') return;
+          let fieldKey: string | null = null;
+          if (row.key.startsWith('CUSTOM_FIELD_')) {
+            // Legacy prefix — prefer bare keys going forward.
+            fieldKey = row.key.slice('CUSTOM_FIELD_'.length).toLowerCase();
+          } else if (/^[A-Z][A-Z0-9_]*$/.test(row.key) && !CORE_USER_KV_KEYS.has(row.key)) {
+            fieldKey = row.key.toLowerCase();
+          }
+          if (fieldKey && row.value != null && row.value !== '') {
+            custom_fields[fieldKey] = String(row.value);
           }
         });
         mapped[emailKey] = {
           group_id: typeof groupRow?.value === 'number' ? groupRow.value : undefined,
           daily_target: typeof targetRow?.value === 'number' ? targetRow.value : undefined,
           daily_limit: typeof limitRow?.value === 'number' ? limitRow.value : undefined,
+          state:
+            typeof stateRow?.value === 'string' && stateRow.value
+              ? stateRow.value
+              : undefined,
+          district:
+            typeof districtRow?.value === 'string' && districtRow.value
+              ? districtRow.value
+              : undefined,
           support_resolve_rate_goal:
             typeof resolveGoalRow?.value === 'number' ? resolveGoalRow.value : undefined,
           support_daily_limit_self_trial:
@@ -270,6 +287,8 @@ export function useAddUser({ config }: AddUserComponentProps) {
           leadGroup: groupFromKv || usr.lead_group_name || '—',
           dailyTarget: isCse ? '—' : (config?.daily_target ?? '—'),
           dailyLimit: isCse ? '—' : (config?.daily_limit ?? '—'),
+          state: config?.state || '—',
+          district: config?.district || '—',
           supportResolveRateGoal: isCse
             ? (config?.support_resolve_rate_goal ?? '—')
             : '—',
@@ -403,6 +422,8 @@ export function useAddUser({ config }: AddUserComponentProps) {
       };
       if (formData.department?.trim()) payload.department = formData.department.trim();
       if (formData.leadGroup?.trim()) payload.lead_group_name = formData.leadGroup.trim();
+      if (formData.state?.trim()) payload.state = formData.state.trim();
+      if (formData.district?.trim()) payload.district = formData.district.trim();
       if (selectedQueueType !== 'ticket' || !isCseRole(selectedRole)) {
         if (formData.dailyTarget !== '') payload.daily_target = Number(formData.dailyTarget);
         if (formData.dailyLimit !== '') payload.daily_limit = Number(formData.dailyLimit);
@@ -473,6 +494,8 @@ export function useAddUser({ config }: AddUserComponentProps) {
         name: '',
         email: '',
         department: '',
+        state: '',
+        district: '',
         leadGroup: '',
         dailyTarget: '',
         dailyLimit: '',
@@ -635,6 +658,8 @@ export function useAddUser({ config }: AddUserComponentProps) {
       name: usr.name || '',
       email: usr.email || '',
       department: usr.department || '',
+      state: usr.state && usr.state !== '—' ? usr.state : '',
+      district: usr.district && usr.district !== '—' ? usr.district : '',
       roleId: usr.role_id || '',
       leadGroup: usr.leadGroup && usr.leadGroup !== '—' ? usr.leadGroup : '',
       dailyTarget: cse
@@ -712,6 +737,8 @@ export function useAddUser({ config }: AddUserComponentProps) {
       };
       if (editingRow.department.trim()) payload.department = editingRow.department.trim();
       if (editingRow.leadGroup.trim()) payload.lead_group_name = editingRow.leadGroup.trim();
+      if (editingRow.state.trim()) payload.state = editingRow.state.trim();
+      if (editingRow.district.trim()) payload.district = editingRow.district.trim();
       if (!isCseRole(editedRole)) {
         if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
         if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
