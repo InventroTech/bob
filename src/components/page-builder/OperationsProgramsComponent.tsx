@@ -43,6 +43,34 @@ const PUSH_ENTITY_LABELS: Record<PushEntityType, string> = {
 
 const LOG_PREFIX = '[OperationsPrograms]';
 
+const DISTRICTS = [
+  'Alluri Sitharama Raju', 'Anakapalli', 'Annamayya', 'Anantapur', 'Bapatla', 'Chittoor',
+  'East Godavari', 'Eluru', 'Guntur', 'Kakinada', 'Konaseema (Amalapuram)', 'Krishna',
+  'Kurnool', 'Machilipatnam', 'Nandyal', 'Narasaraopet', 'NTR', 'Ongole', 'Palnadu',
+  'Parvathipuram Manyam', 'Prakasam', 'Rajampet', 'Sri Potti Sriramulu Nellore',
+  'Sri Sathya Sai', 'Srikakulam', 'Tirupati', 'Vijayawada', 'Visakhapatnam', 'Vizianagaram',
+  'West Godavari', 'YSR Kadapa', 'Adilabad', 'Bhadradri Kothagudem', 'Hanumakonda',
+  'Hyderabad', 'Jagtial', 'Jangaon', 'Jayashankar Bhupalpally', 'Jogulamba Gadwal',
+  'Kamareddy', 'Karimnagar', 'Khammam', 'Komaram Bheem Asifabad', 'Mahabubabad',
+  'Mahabubnagar', 'Mancherial', 'Medak', 'Medchal-Malkajgiri', 'Mulugu', 'Nagarkurnool',
+  'Nalgonda', 'Narayanpet', 'Nirmal', 'Nizamabad', 'Peddapalli', 'Rajanna Sircilla',
+  'Rangareddy', 'Sangareddy', 'Secunderabad', 'Siddipet', 'Suryapet', 'Vikarabad',
+  'Wanaparthy', 'Warangal', 'Yadadri Bhuvanagiri', 'Ariyalur', 'Arni', 'Arakkonam',
+  'Chengalpattu', 'Chennai', 'Chidambaram', 'Coimbatore', 'Cuddalore', 'Dharmapuri',
+  'Dindigul', 'Erode', 'Kallakurichi', 'Kancheepuram', 'Kanyakumari', 'Karur',
+  'Krishnagiri', 'Madurai', 'Mayiladuthurai', 'Nagapattinam', 'Namakkal', 'Nilgiris',
+  'Perambalur', 'Pollachi', 'Pudukkottai', 'Ramanathapuram', 'Ranipet', 'Salem',
+  'Sivaganga', 'Sriperumbudur', 'Tenkasi', 'Thanjavur', 'Theni', 'Thoothukudi',
+  'Tiruchirappalli', 'Tirunelveli', 'Tirupattur', 'Tiruppur', 'Tiruvallur', 'Tiruvarur',
+  'Vellore', 'Viluppuram', 'Virudhunagar', 'Bagalkot', 'Bengaluru Central',
+  'Bengaluru North', 'Bengaluru Rural', 'Bengaluru South', 'Bengaluru Urban', 'Belagavi',
+  'Bellary', 'Bidar', 'Chamarajanagar', 'Chikkaballapur', 'Chikkamagaluru', 'Chikodi',
+  'Chitradurga', 'Dakshina Kannada', 'Davanagere', 'Dharwad', 'Gadag', 'Hassan',
+  'Haveri', 'Kalaburagi', 'Kodagu', 'Kolar', 'Koppal', 'Mandya', 'Mysuru', 'Raichur',
+  'Ramanagara', 'Shivamogga', 'Tumakuru', 'Udupi', 'Uttara Kannada', 'Vijayapura',
+  'Vijayanagara', 'Yadgir',
+];
+
 function maskSecret(value: string): string {
   if (!value) return '(empty)';
   if (value.length <= 8) return '***';
@@ -183,6 +211,11 @@ function generateRandomLead(): Record<string, unknown> {
       affiliated_party: parties[Math.floor(Math.random() * parties.length)],
       user_profile_link: `https://www.thecircleapp.in/admin/users/${Math.random().toString(36).substring(7)}`,
       display_pic_url: 'https://a-cdn.thecircleapp.in/capture/01K4QKP9EAD7SBB794NBY1MQ94.png',
+      has_upi_autopay_app: Math.random() > 0.5 ? true : null,
+      subscription_time_stamp: null,
+      release_build_number: 0,
+      subscribed_package: '',
+      district: DISTRICTS[Math.floor(Math.random() * DISTRICTS.length)],
     },
   };
 }
