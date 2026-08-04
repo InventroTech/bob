@@ -100,10 +100,10 @@ export function LeadTableView(props: LeadTableModel) {
 
   return (
     <>
-    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
+    <div className="w-full max-w-full min-w-0 border-2 border-gray-200 rounded-lg bg-white p-2">
         {/* Filter Section */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
+        <div className="mb-2">
+          <div className="flex justify-between items-center mb-2 gap-4 flex-wrap">
             <h5>
               {config?.title || ""}
             </h5>
@@ -134,13 +134,13 @@ export function LeadTableView(props: LeadTableModel) {
         </div>
 
         {/* Filter Section */}
-        <div className="mb-4">
+        <div className="mb-2">
 
           {showFilters && (
-            <div className="bg-gray-50 p-4 rounded-lg border">
+            <div className="bg-gray-50 p-3 rounded-lg border">
               {/* Use new dynamic filter system if filters are configured */}
               {hasActiveFilters ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <DynamicFilterBuilder
                     filters={effectiveFilters}
                     filterContext={{
@@ -199,7 +199,7 @@ export function LeadTableView(props: LeadTableModel) {
 
         {/* Table Section */}
         {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full relative overflow-x-auto">
+        <div className="w-full max-w-full min-w-0 relative">
           {/* Loading Overlay */}
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
@@ -221,6 +221,7 @@ export function LeadTableView(props: LeadTableModel) {
               actionApiMethod: col.actionApiMethod,
               actionApiHeaders: col.actionApiHeaders,
               actionApiPayload: col.actionApiPayload,
+              align: col.align,
             })) as CustomTableColumn[]}
             data={filteredData}
             loading={tableLoading}
@@ -230,13 +231,14 @@ export function LeadTableView(props: LeadTableModel) {
             headerBgColor="bg-black"
             headerTextColor="text-white"
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
+            stackBelow="xl"
           />
         </div>
         
         {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
         {filteredData.length > 0 &&
           (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
             <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
 
             <div className="flex items-center gap-2">

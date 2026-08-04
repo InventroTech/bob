@@ -63,12 +63,21 @@ export const convertGMTtoIST = (
 
 /**
  * Format a date-only value (YYYY-MM-DD) as a calendar day without timezone shift.
- * Example: 2026-07-24 → "24 July 2026"
+ * Example: 2026-07-24 → "24 JULY 2026"
  * Full timestamps still go through convertGMTtoIST.
  */
 export const formatCalendarDate = (dateString: string): string => {
   if (!dateString) return 'N/A';
   const trimmed = String(dateString).trim();
+  const toUpperMonth = (formatted: string) =>
+    String(formatted)
+      .replace(/,?\s*\d{1,2}:\d{2}.*$/, '')
+      .trim()
+      .replace(
+        /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/gi,
+        (m) => m.toUpperCase()
+      );
+
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
   if (dateOnly) {
     const year = Number(dateOnly[1]);
@@ -76,17 +85,18 @@ export const formatCalendarDate = (dateString: string): string => {
     const day = Number(dateOnly[3]);
     const local = new Date(year, month, day);
     if (Number.isNaN(local.getTime())) return 'Invalid date';
-    return local.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+    return toUpperMonth(
+      local.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    );
   }
   const formatted = convertGMTtoIST(trimmed, 'date', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
-  // convertGMTtoIST may still append time; strip time portion if present.
-  return String(formatted).replace(/,?\s*\d{1,2}:\d{2}.*$/, '').trim() || formatted;
+  return toUpperMonth(String(formatted)) || formatted;
 };

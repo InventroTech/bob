@@ -22,6 +22,7 @@ import type { CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/utils/actionApiUtils';
 import { getEffectiveToken, useSpoofUserId } from '@/lib/auth/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
+import { formatCalendarDate } from '@/lib/utils/timeUtils';
 import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventory/statusStyles';
 import {
@@ -254,14 +255,23 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   // Helper function to build URL with query string (handles endpoints that already have query params)
   const buildUrlWithParams = useCallback((endpoint: string, params: URLSearchParams) => {
-    const queryString = params.toString();
+    const merged = new URLSearchParams(params);
+    const forced = config?.forceQueryParams;
+    if (forced) {
+      Object.entries(forced).forEach(([key, value]) => {
+        const v = String(value ?? '').trim();
+        if (!key || !v) return;
+        merged.set(key, v);
+      });
+    }
+    const queryString = merged.toString();
     if (!queryString) return endpoint;
-    
+
     // Check if endpoint already has query parameters
     const hasQueryParams = endpoint.includes('?');
     const separator = hasQueryParams ? '&' : '?';
     return `${endpoint}${separator}${queryString}`;
-  }, []);
+  }, [config?.forceQueryParams]);
 
   // Normalize filters to ensure non-empty, unique keys
   const normalizedFilters = useMemo(() => {
@@ -670,6 +680,24 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         displayValue = formatCurrencyDisplay(n);
       }
     }
+
+    // Keep Requirement Date in the same calendar format as Request Date
+    // (e.g. "31 July 2026"), even if the column type is text in Page Builder.
+    const calendarDateAccessors = new Set([
+      'request_date',
+      'requested_date',
+      'required_date',
+      'requirement_date',
+      'eta',
+    ]);
+    if (
+      calendarDateAccessors.has(String(column.accessor || '')) &&
+      displayValue &&
+      displayValue !== 'N/A' &&
+      /^\d{4}-\d{2}-\d{2}/.test(displayValue.trim())
+    ) {
+      displayValue = formatCalendarDate(displayValue);
+    }
     
     // Helper function to truncate text based on column width
     const truncateText = (text: string, columnIndex: number) => {
@@ -842,30 +870,18 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       headerLower === 'item name' ||
       headerLower === 'item';
 
-    // Item name: product thumbnail from product_image URL (not person avatar)
+    // Item name: always use default placeholder thumbnail (no person avatar)
     if (isItemNameColumn) {
-      const productImage =
-        String(
-          row.product_image ||
-            row.data?.product_image ||
-            (Array.isArray(row.price_comparisons)
-              ? row.price_comparisons.find((q: { image?: string }) => q?.image)?.image
-              : '') ||
-            (Array.isArray(row.data?.price_comparisons)
-              ? row.data.price_comparisons.find((q: { image?: string }) => q?.image)?.image
-              : '') ||
-            ''
-        ).trim();
-      const subtitle = String(
-        row.vendor || row.data?.vendor || row.specifications || row.data?.specifications || ''
-      ).trim();
       const itemName =
         displayValue && displayValue !== 'N/A' ? displayValue : String(row.item_name_freeform || '').trim();
       return (
         <ShortProfileCard
-          image={productImage || undefined}
           name={itemName || 'Unnamed item'}
-          address={subtitle}
+          nameTitle={itemName || undefined}
+          compact
+          wrapName
+          useDefaultItemImage
+          className="mx-auto"
         />
       );
     }
@@ -1079,6 +1095,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         </span>
       );
     }
+    if (calendarDateAccessors.has(String(column.accessor || ''))) {
+      return (
+        <span className="inline-block text-sm whitespace-nowrap uppercase text-center" title={displayValue}>
+          {displayValue}
+        </span>
+      );
+    }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
   }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell]);
 
@@ -1094,10 +1117,35 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   // Status column appears only if you add a column with key "status" in the Columns config (shows data.status).
   // "Status action buttons" in config are used only in the row-click modal (record detail / form modal), not as a table column.
   const tableColumns: Column[] = useMemo(() => {
-    const mapped = config?.columns?.map(col => ({
-      header: col.label,
-      accessor: col.key,
-      type: (col.type === 'chip' ? 'chip' : col.type === 'link' ? 'link' : col.type === 'action' ? 'action' : 'text') as Column['type'],
+    const leftAlignKeys = new Set([
+      'specifications',
+      'comments',
+      'requester_name',
+      'department',
+      'project_purpose',
+    ]);
+    const mapped = (config?.columns ?? [])
+      .filter((col) => {
+        const key = String(col.key || '').trim();
+        return key !== 'tracking_details' && key !== 'tracking_number' && key !== 'courier_name';
+      })
+      .map(col => {
+        const key = String(col.key || '').trim();
+        const isRequirementDate = key === 'required_date' || key === 'requirement_date';
+        const resolvedKey = isRequirementDate ? 'eta' : key;
+        return {
+      header:
+        resolvedKey === 'eta'
+          ? 'ETA'
+          : col.label,
+      accessor: resolvedKey,
+      type: (col.type === 'chip'
+        ? 'chip'
+        : col.type === 'link'
+          ? 'link'
+          : col.type === 'action'
+            ? 'action'
+            : 'text') as Column['type'],
       linkField: col.linkField,
       editableInTable: col.editableInTable,
       openCard: col.openCard,
@@ -1105,8 +1153,19 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       actionApiMethod: col.actionApiMethod,
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
-    })) ?? [];
-    const base: Column[] = (mapped.length > 0 ? mapped : defaultColumns) as Column[];
+      // Keep date / short columns centered under stacked headers (e.g. ETA).
+      align: (leftAlignKeys.has(String(col.key || '')) ? 'left' : 'center') as Column['align'],
+    };
+    });
+    // Drop duplicate ETA if both requirement date and eta were in config.
+    const deduped: typeof mapped = [];
+    const seenKeys = new Set<string>();
+    for (const col of mapped) {
+      if (seenKeys.has(col.accessor)) continue;
+      seenKeys.add(col.accessor);
+      deduped.push(col);
+    }
+    const base: Column[] = (deduped.length > 0 ? deduped : defaultColumns) as Column[];
     return base;
   }, [config?.columns, config?.tableType, effectiveStatusButtons]);
 

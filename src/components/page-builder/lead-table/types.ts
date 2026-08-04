@@ -14,6 +14,7 @@ export interface Column {
   actionApiMethod?: string;
   actionApiHeaders?: string;
   actionApiPayload?: string;
+  align?: 'left' | 'center' | 'right';
   /** For type status_buttons: buttons that set record data[targetAttribute] (default status). */
   statusButtons?: Array<{
     label: string;
@@ -63,6 +64,11 @@ export interface LeadTableProps {
       lead_status?: string[];
       lead_stage?: string[];
     };
+    /**
+     * Always sent on list API fetches (overwrites same keys from UI filters).
+     * Example: { status: 'NEW_REQUEST,ON_HOLD' }
+     */
+    forceQueryParams?: Record<string, string>;
     entityType?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
     detailMode?: 'lead_card' | 'inventory_request' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';

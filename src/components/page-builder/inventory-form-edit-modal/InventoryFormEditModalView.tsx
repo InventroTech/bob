@@ -252,6 +252,9 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 : '';
               const isLineTotal = field.key === 'line_total' || field.key === 'computed_price';
               const isRequestDateField = field.key === 'request_date' || field.key === 'requested_date';
+              const isRequiredDateField =
+                field.key === 'required_date' || field.key === 'requirement_date';
+              const isCalendarDateField = isRequestDateField || isRequiredDateField;
               const lineTotalDisplay = (() => {
                 if (!isLineTotal) return '';
                 const qtyRaw =
@@ -266,17 +269,22 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 if (!Number.isFinite(qty) || !Number.isFinite(cost)) return '—';
                 return formatCurrencyDisplay(Math.round(qty * cost * 100) / 100);
               })();
-              const requestDateDisplay = isRequestDateField
-                ? formatCalendarDate(
-                    String(
-                      formData.request_date ??
-                        formData.requested_date ??
-                        (record?.data as any)?.request_date ??
-                        (record?.data as any)?.requested_date ??
-                        displayStr ??
-                        ''
-                    )
+              const calendarDateRaw = isCalendarDateField
+                ? String(
+                    formData[field.key] ??
+                      (record?.data as any)?.[field.key] ??
+                      (isRequestDateField
+                        ? formData.request_date ??
+                          formData.requested_date ??
+                          (record?.data as any)?.request_date ??
+                          (record?.data as any)?.requested_date
+                        : undefined) ??
+                      displayStr ??
+                      ''
                   )
+                : '';
+              const calendarDateDisplay = isCalendarDateField
+                ? formatCalendarDate(calendarDateRaw)
                 : '';
               const isTextarea = TEXTAREA_KEYS.has(field.key);
               const isNumber = NUMBER_KEYS.has(field.key);
@@ -287,7 +295,9 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                   ? 'Price'
                   : isRequestDateField
                     ? 'Requested Date'
-                    : field.label || field.key.replace(/_/g, ' ');
+                    : isRequiredDateField
+                      ? 'Requirement Date'
+                      : field.label || field.key.replace(/_/g, ' ');
 
               const fieldNode = (
                 <div
@@ -306,13 +316,21 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     >
                       {lineTotalDisplay}
                     </div>
-                  ) : isRequestDateField ? (
+                  ) : isRequestDateField || (isRequiredDateField && !isEnabled) ? (
                     <div
                       className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm text-foreground"
                       role="status"
                     >
-                      {requestDateDisplay || '—'}
+                      {calendarDateDisplay || '—'}
                     </div>
+                  ) : isRequiredDateField && isEnabled ? (
+                    <Input
+                      type="date"
+                      className="h-9 text-sm rounded-md"
+                      value={String(calendarDateRaw || '').slice(0, 10)}
+                      onChange={(e) => setField(field.key, e.target.value)}
+                      disabled={!isEnabled}
+                    />
                   ) : field.key === 'comments' ? (
                     (() => {
                       const existingRaw = (record?.data && typeof record.data === 'object' ? (record.data as any).comments : undefined) as unknown;
