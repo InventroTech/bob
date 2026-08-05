@@ -49,6 +49,10 @@ import {
 } from "@dnd-kit/core";
 import { DraggableSidebarItem } from "@/components/page-builder/DraggableSidebarItem";
 import { DEFAULT_PROCUREMENT_TABLE_CONFIG } from "@/components/page-builder/ProcurementTableComponent";
+import { DEFAULT_PENDING_APPROVAL_TABLE_CONFIG } from "@/components/page-builder/PendingApprovalTableComponent";
+import { DEFAULT_REJECTED_TABLE_CONFIG } from "@/components/page-builder/RejectedTableComponent";
+import { DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG } from "@/components/page-builder/VendorIdentifiedTableComponent";
+import { DEFAULT_PROCUREMENT_DASHBOARD_CONFIG } from "@/components/page-builder/ProcurementDashboardComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { useAuth } from "@/hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
@@ -168,7 +172,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'myRequestTable', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'myRequestTable', 'pendingApprovalTable', 'rejectedTable', 'vendorIdentifiedTable', 'procurementDashboard', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -339,6 +343,23 @@ useEffect(() => {
                   ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
                   columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
                 } as ComponentConfig)
+              : componentType === 'pendingApprovalTable'
+                ? ({
+                    ...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG,
+                    columns: [...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG.columns],
+                  } as ComponentConfig)
+              : componentType === 'rejectedTable'
+                ? ({
+                    ...DEFAULT_REJECTED_TABLE_CONFIG,
+                    columns: [...DEFAULT_REJECTED_TABLE_CONFIG.columns],
+                  } as ComponentConfig)
+              : componentType === 'vendorIdentifiedTable'
+                ? ({
+                    ...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG,
+                    columns: [...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG.columns],
+                  } as ComponentConfig)
+              : componentType === 'procurementDashboard'
+                ? ({ ...DEFAULT_PROCUREMENT_DASHBOARD_CONFIG } as ComponentConfig)
               : componentType === 'procurementRequestForm'
                 ? ({ entityType: 'unmannd_request' } as ComponentConfig)
                 : {},
@@ -369,6 +390,23 @@ useEffect(() => {
                 ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
                 columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
               } as ComponentConfig)
+            : componentType === 'pendingApprovalTable'
+              ? ({
+                  ...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG,
+                  columns: [...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG.columns],
+                } as ComponentConfig)
+            : componentType === 'rejectedTable'
+              ? ({
+                  ...DEFAULT_REJECTED_TABLE_CONFIG,
+                  columns: [...DEFAULT_REJECTED_TABLE_CONFIG.columns],
+                } as ComponentConfig)
+            : componentType === 'vendorIdentifiedTable'
+              ? ({
+                  ...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG,
+                  columns: [...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG.columns],
+                } as ComponentConfig)
+            : componentType === 'procurementDashboard'
+              ? ({ ...DEFAULT_PROCUREMENT_DASHBOARD_CONFIG } as ComponentConfig)
             : componentType === 'procurementRequestForm'
               ? ({ entityType: 'unmannd_request' } as ComponentConfig)
               : {},
@@ -776,6 +814,26 @@ useEffect(() => {
                           id="myRequestTable"
                           label="My Request Table"
                           icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="pendingApprovalTable"
+                          label="Pending Approval Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="rejectedTable"
+                          label="Rejected Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="vendorIdentifiedTable"
+                          label="Vendor Identified Table"
+                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="procurementDashboard"
+                          label="Procurement Dashboard"
+                          icon={<LayoutDashboard className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="dispatchCardList"
