@@ -293,6 +293,18 @@ export const leadTypeAssignmentApi = {
     );
     return Array.isArray(response.data) ? response.data : [];
   },
+
+  /** Patch arbitrary core-KV keys (used for tenant custom User Management fields). */
+  async patchCoreKvSettings(
+    userId: string,
+    data: Record<string, string | number | boolean | null>
+  ): Promise<UserCoreKVSetting[]> {
+    const response = await apiClient.patch(
+      `/user-settings/users/${userId}/core-kv-settings/`,
+      data
+    );
+    return Array.isArray(response.data) ? response.data : [];
+  },
 };
 
 export const groupsApi = {

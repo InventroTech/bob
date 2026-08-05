@@ -124,6 +124,17 @@ export interface ComponentConfig {
   // UserHierarchy specific fields
   showTable?: boolean;
   showDiagram?: boolean;
+  // AddUser / User Management
+  userScope?: 'all' | 'under_me';
+  umFormFields?: string[];
+  umColumns?: string[];
+  umCustomFields?: Array<{
+    key: string;
+    label: string;
+    type: 'string' | 'number' | 'boolean';
+    showInForm: boolean;
+    showInTable: boolean;
+  }>;
   // InventoryRequestForm specific fields
   entityType?: string;
   initialStatus?: string;
