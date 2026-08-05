@@ -106,9 +106,10 @@ export interface CustomTableProps {
 
   /**
    * Below this Tailwind breakpoint, rows stack columns vertically (cards)
-   * instead of a wide horizontal table. Default: lg.
+   * instead of a wide horizontal table. Pass falsy / omit to always keep the
+   * normal table (with horizontal scroll on small screens).
    */
-  stackBelow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  stackBelow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | false;
 }
 
 /**
@@ -140,7 +141,7 @@ function renderStackedHeader(header: string, align: 'left' | 'center' | 'right' 
 /**
  * CustomTable Component
  * A reusable table component with consistent styling and behavior.
- * On narrower viewports, columns stack downward as cards.
+ * Optionally stacks columns as cards below a breakpoint when `stackBelow` is set.
  */
 export const CustomTable: React.FC<CustomTableProps> = ({
   columns,
@@ -154,7 +155,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   hoverable = true,
   className,
   tableClassName,
-  stackBelow = 'lg',
+  stackBelow = false,
 }) => {
   const defaultRenderCell = (row: any, column: CustomTableColumn, _columnIndex: number) => {
     const value = row[column.accessor];
@@ -186,8 +187,11 @@ export const CustomTable: React.FC<CustomTableProps> = ({
 
   const cellRenderer = renderCell || defaultRenderCell;
 
-  const stackVisible =
-    stackBelow === 'sm'
+  const useStackedCards = Boolean(stackBelow);
+
+  const stackVisible = !useStackedCards
+    ? 'hidden'
+    : stackBelow === 'sm'
       ? 'sm:hidden'
       : stackBelow === 'md'
         ? 'md:hidden'
@@ -197,8 +201,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
             ? '2xl:hidden'
             : 'lg:hidden';
 
-  const tableVisible =
-    stackBelow === 'sm'
+  const tableVisible = !useStackedCards
+    ? 'block'
+    : stackBelow === 'sm'
       ? 'hidden sm:block'
       : stackBelow === 'md'
         ? 'hidden md:block'

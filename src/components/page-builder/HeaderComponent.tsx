@@ -11,8 +11,8 @@ export const HeaderComponent: React.FC<HeaderComponentProps> = ({ config }) => {
   const title = config?.title ?? '';
 
   return (
-    <div className="w-full py-1.5">
-      <h2 className="!m-0 !text-lg !font-semibold !leading-snug text-gray-900 px-4 pb-1.5 border-b border-gray-200">
+    <div className="w-full py-4">
+      <h2 className="text-3xl font-bold text-gray-900 mb-0 pb-3 px-6 border-b border-gray-300">
         {title}
       </h2>
     </div>
