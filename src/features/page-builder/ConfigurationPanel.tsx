@@ -36,6 +36,7 @@ import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadC
 import { DispatchCardListConfigPanel } from "@/components/page-builder/component-config/DispatchCardListConfig";
 import { DispatchDashboardConfigPanel } from "@/components/page-builder/component-config/DispatchDashboardConfig";
 import { AddUserConfig } from "@/components/page-builder/component-config/AddUserConfig";
+import { ProcurementDashboardConfigPanel } from "@/components/page-builder/component-config/ProcurementDashboardConfig";
 import type { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import type { CanvasComponentData, ComponentConfig } from "./componentMap";
 
@@ -604,6 +605,14 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
       case 'dispatchDashboard':
         return (
           <DispatchDashboardConfigPanel
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'procurementDashboard':
+        return (
+          <ProcurementDashboardConfigPanel
             localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />

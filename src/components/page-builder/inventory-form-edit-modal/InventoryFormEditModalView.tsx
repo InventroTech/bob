@@ -50,8 +50,113 @@ import {
   TEXTAREA_KEYS,
   NUMBER_KEYS,
   PRICE_KEYS,
+  sortUnmanndFormFields,
+  unmanndFieldColClass,
+  resolveVendorDisplayName,
 } from './utils';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
+import { getRecordModalTitleParts } from '@/lib/utils/recordModalHeader';
+
+/** Unmannd modal chrome — design navy header/footer + white ID block. */
+const UNMANND_NAVY = '#1A44A1';
+const UNMANND_ID_BG = '#FFFFFF';
+const UNMANND_ID_TEXT = '#1E3A5F';
+
+function UnmanndModalHeader({
+  record,
+  formModalTitle,
+  productLink,
+  canShowHistoryButton,
+  applyingStatusValue,
+  saving,
+  onHistory,
+}: {
+  record: any;
+  formModalTitle?: string;
+  productLink?: string;
+  canShowHistoryButton: boolean;
+  applyingStatusValue: string | null;
+  saving: boolean;
+  onHistory: () => void;
+}) {
+  const parts = getRecordModalTitleParts(record);
+  const href = (productLink ?? '').trim();
+  const canOpenProduct = looksLikeUrl(href);
+
+  return (
+    <div
+      className="flex min-h-[4.25rem] items-stretch overflow-visible pr-12 text-white sm:pr-16"
+      style={{ backgroundColor: UNMANND_NAVY }}
+    >
+      {parts ? (
+        <div
+          className="my-1.5 ml-0 mr-1.5 flex w-[5.25rem] shrink-0 items-center justify-center self-stretch rounded-lg px-2 font-mono text-base font-extrabold tabular-nums tracking-tight sm:w-[6.5rem] sm:text-lg"
+          style={{
+            backgroundColor: UNMANND_ID_BG,
+            color: UNMANND_ID_TEXT,
+            border: '2px solid #000000',
+          }}
+          title="Request Number"
+        >
+          #{parts.idNum}
+        </div>
+      ) : null}
+
+      <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+          {parts ? (
+            canOpenProduct ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 text-lg font-semibold leading-snug tracking-tight text-white underline-offset-2 hover:underline sm:text-xl"
+                title="Open product link"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span className="line-clamp-2 break-words">{parts.itemName}</span>
+              </a>
+            ) : (
+              <span
+                className="min-w-0 text-lg font-semibold leading-snug tracking-tight text-white sm:text-xl"
+                title={parts.itemName === '—' ? undefined : parts.itemName}
+              >
+                <span className="line-clamp-2 break-words">{parts.itemName}</span>
+              </span>
+            )
+          ) : (
+            <span className="text-xl font-semibold text-white">
+              {formModalTitle ?? 'Edit request'}
+            </span>
+          )}
+        </div>
+        <div className="mr-1 flex w-[7.5rem] shrink-0 flex-col items-stretch gap-1 sm:mr-3">
+          {parts ? (
+            <time
+              className="text-center text-[11px] font-semibold uppercase leading-none tracking-wide text-white/90 sm:text-xs"
+              dateTime={parts.dateTimeAttr}
+            >
+              {parts.dateDisplay}
+            </time>
+          ) : null}
+          {canShowHistoryButton ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 w-full gap-1.5 rounded-full border-transparent bg-white px-2.5 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]"
+              disabled={applyingStatusValue != null || saving}
+              onClick={onHistory}
+            >
+              <History className="h-3.5 w-3.5" />
+              History
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
   const {
@@ -72,6 +177,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
     showDeleteRequestButton,
     showHistoryButton,
     onDeleted,
+    uiVariant = 'default',
     _formModalDescription,
     toast,
     user,
@@ -185,9 +291,47 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
   if (!record) return null;
 
+  const isUnmannd = uiVariant === 'unmannd';
+  const orderedFields = isUnmannd ? sortUnmanndFormFields(formModalFields) : formModalFields;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full">
+      <DialogContent
+        className={cn(
+          'max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full',
+          isUnmannd &&
+            'gap-0 overflow-hidden border-0 p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:text-white [&>button]:opacity-90 [&>button]:hover:opacity-100'
+        )}
+      >
+        {isUnmannd ? (
+          <>
+            <DialogHeader className="space-y-0 p-0 text-left">
+              <DialogTitle className="sr-only">
+                {record?.id != null ? `Request #${record.id}` : formModalTitle ?? 'Edit request'}
+              </DialogTitle>
+              <UnmanndModalHeader
+                record={record}
+                formModalTitle={formModalTitle}
+                productLink={String(
+                  formData.product_link ??
+                    (record?.data as any)?.product_link ??
+                    (record as any)?.product_link ??
+                    ''
+                )}
+                canShowHistoryButton={!!canShowHistoryButton}
+                applyingStatusValue={applyingStatusValue}
+                saving={saving}
+                onHistory={handleOpenHistory}
+              />
+              <DialogDescription className="sr-only">
+                {_formModalDescription ??
+                  (hasEditableField
+                    ? 'Edit fields below. Use an action button to save and set status, or Save to save changes only.'
+                    : 'View and update using action buttons.')}
+              </DialogDescription>
+            </DialogHeader>
+          </>
+        ) : (
         <DialogHeader>
           <div className="flex items-center justify-between gap-3 pr-10">
             <DialogTitle className="pr-2 text-left leading-snug">
@@ -219,12 +363,20 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
               : 'View and update using action buttons.')}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 min-h-0 overflow-y-auto px-1 py-4 space-y-4">
-          {formModalFields.length === 0 ? (
+        )}
+        <div className={cn('flex-1 min-h-0 overflow-y-auto space-y-4', isUnmannd ? 'bg-[#F7F8FA] px-5 py-4 sm:px-6' : 'px-1 py-4')}>
+          {orderedFields.length === 0 ? (
             <p className="text-sm text-muted-foreground">No fields configured. Add fields in table config.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
-            {formModalFields
+            <div
+              className={cn(
+                'grid gap-x-6 gap-y-4',
+                isUnmannd
+                  ? 'grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3'
+                  : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+              )}
+            >
+            {orderedFields
               .filter((field) => {
                 if (field.key === 'cart_id') return false;
                 // Rendered inline just after Price (line_total / computed_price).
@@ -236,7 +388,10 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
               .map((field) => {
               const value = formData[field.key];
               const displayStr = PRICE_KEYS.has(field.key) ? formatPriceFieldDisplay(value) : formatDisplayValue(value);
-              const normalizedVendorValue = field.key === 'vendor' ? toVendorStorageName(displayStr) : '';
+              const normalizedVendorValue =
+                field.key === 'vendor'
+                  ? resolveVendorDisplayName(formData.vendor ?? formData.vendor_name ?? displayStr)
+                  : '';
               const isEnabled = field.enabled && canEditFields;
               const isLinkField = field.link === true || isLinkLikeFieldKey(field.key);
               const hasUrl = looksLikeUrl(displayStr);
@@ -286,9 +441,23 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
               const calendarDateDisplay = isCalendarDateField
                 ? formatCalendarDate(calendarDateRaw)
                 : '';
-              const isTextarea = TEXTAREA_KEYS.has(field.key);
+              const isTextarea =
+                TEXTAREA_KEYS.has(field.key) &&
+                !(
+                  isUnmannd &&
+                  (field.key === 'item_name_freeform' ||
+                    field.key === 'project_purpose' ||
+                    field.key === 'specifications')
+                );
               const isNumber = NUMBER_KEYS.has(field.key);
-              const spanFullWidth = TEXTAREA_KEYS.has(field.key);
+              const spanFullWidth =
+                TEXTAREA_KEYS.has(field.key) &&
+                !(
+                  isUnmannd &&
+                  (field.key === 'item_name_freeform' ||
+                    field.key === 'project_purpose' ||
+                    field.key === 'specifications')
+                );
               const fieldLabel = isPriorityField
                 ? 'Priority'
                 : isLineTotal
@@ -301,7 +470,13 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
               const fieldNode = (
                 <div
-                  className={cn('space-y-1.5 min-w-0', spanFullWidth && 'md:col-span-2 xl:col-span-3')}
+                  className={cn(
+                    'space-y-1.5 min-w-0',
+                    isUnmannd
+                      ? unmanndFieldColClass(field.key) ||
+                          (spanFullWidth ? 'md:col-span-2 xl:col-span-3' : '')
+                      : spanFullWidth && 'md:col-span-2 xl:col-span-3'
+                  )}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
                     <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -342,13 +517,17 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
                       const newCommentValue = typeof formData.comments === 'string' ? formData.comments : '';
                       return (
-                        <div className="space-y-2">
-                          <div className="space-y-2">
-                            {history.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">No comments yet.</p>
-                            ) : (
-                              history.map((c, idx) => (
-                                <div key={idx} className="rounded-md border border-border/60 bg-muted/20 p-2 space-y-1">
+                        <div className={cn('space-y-2', isUnmannd && 'space-y-1.5')}>
+                          {history.length > 0 ? (
+                            <div className={cn('space-y-2', isUnmannd && 'max-h-24 space-y-1.5 overflow-y-auto')}>
+                              {history.map((c, idx) => (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    'rounded-md border border-border/60 bg-muted/20 space-y-1',
+                                    isUnmannd ? 'p-1.5' : 'p-2'
+                                  )}
+                                >
                                   <div className="flex flex-wrap items-center gap-2">
                                     {c.name ? (
                                       <span className="text-[11px] font-medium px-2 py-0.5 rounded border border-border/60 bg-background">
@@ -363,16 +542,27 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                                   </div>
                                   <div className="text-sm whitespace-pre-wrap">{c.comment}</div>
                                 </div>
-                              ))
-                            )}
-                          </div>
-                          <Textarea
-                            className="min-h-[80px] text-sm rounded-md"
-                            value={newCommentValue}
-                            onChange={(e) => setField('comments', e.target.value)}
-                            disabled={!isEnabled}
-                            placeholder="Add a new comment..."
-                          />
+                              ))}
+                            </div>
+                          ) : null}
+                          {isUnmannd ? (
+                            <Textarea
+                              className="min-h-[52px] resize-none text-sm rounded-md bg-white"
+                              rows={2}
+                              value={newCommentValue}
+                              onChange={(e) => setField('comments', e.target.value)}
+                              disabled={!isEnabled}
+                              placeholder="Add a new comment..."
+                            />
+                          ) : (
+                            <Textarea
+                              className="min-h-[80px] text-sm rounded-md"
+                              value={newCommentValue}
+                              onChange={(e) => setField('comments', e.target.value)}
+                              disabled={!isEnabled}
+                              placeholder="Add a new comment..."
+                            />
+                          )}
                         </div>
                       );
                     })()
@@ -394,22 +584,22 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                           <SelectValue placeholder="Select or add vendor" />
                         </SelectTrigger>
                         <SelectContent>
+                          {normalizedVendorValue &&
+                          !vendors.some((v) => toVendorStorageName(v.name) === normalizedVendorValue) ? (
+                            <SelectItem value={normalizedVendorValue}>
+                              {normalizedVendorValue}
+                            </SelectItem>
+                          ) : null}
                           {vendorsLoading ? (
-                            <SelectItem value="__loading__" disabled>Loading…</SelectItem>
+                            <SelectItem value="__loading__" disabled>
+                              Loading…
+                            </SelectItem>
                           ) : (
-                            <>
-                              {normalizedVendorValue &&
-                                !vendors.some((v) => toVendorStorageName(v.name) === normalizedVendorValue) ? (
-                                  <SelectItem value={normalizedVendorValue}>
-                                    {normalizedVendorValue}
-                                  </SelectItem>
-                                ) : null}
-                              {vendors.map((v) => (
-                                <SelectItem key={v.id} value={toVendorStorageName(v.name)}>
-                                  {toVendorStorageName(v.name)}
-                                </SelectItem>
-                              ))}
-                            </>
+                            vendors.map((v) => (
+                              <SelectItem key={v.id} value={toVendorStorageName(v.name)}>
+                                {toVendorStorageName(v.name)}
+                              </SelectItem>
+                            ))
                           )}
                         </SelectContent>
                       </Select>
@@ -587,7 +777,12 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 return (
                   <React.Fragment key={field.key}>
                     {fieldNode}
-                    <div className="space-y-1.5 min-w-0">
+                    <div
+                      className={cn(
+                        'space-y-1.5 min-w-0',
+                        isUnmannd && unmanndFieldColClass('negotiated_value')
+                      )}
+                    >
                       <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         Negotiated value
                       </Label>
@@ -632,6 +827,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
               }
 
               if (
+                !isUnmannd &&
                 isRequester &&
                 primaryQuantityFieldKey != null &&
                 field.key === primaryQuantityFieldKey
@@ -661,6 +857,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
           {/* Shipment tracking — ops paste tracking from vendor site */}
           {isInventoryRequest &&
+            !isUnmannd &&
             !isPaymentModal &&
             !isRequester &&
             shouldShowShipmentTrackingSection(
@@ -800,7 +997,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
             )}
 
           {/* Final price (form-style modal only; not shown for Inventory Payment modal — use modal fields for total_price/unit_price there) */}
-          {!paymentButtonConfig && effectiveShowFinalPrice && (
+          {!isUnmannd && !paymentButtonConfig && effectiveShowFinalPrice && (
             <div className="space-y-3 pt-2 border-t border-border/60 max-w-none">
               <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Final price
@@ -923,14 +1120,27 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
             </div>
           )}
         </div>
-        <DialogFooter className="border-t pt-4 gap-3 flex-wrap flex-col sm:flex-row sm:items-center sm:justify-between">
+        <DialogFooter
+          className={cn(
+            'gap-3 flex-wrap flex-col sm:flex-row sm:items-center sm:justify-between',
+            isUnmannd
+              ? 'mt-0 min-h-[4.25rem] border-0 px-4 py-3 sm:px-5'
+              : 'border-t pt-4'
+          )}
+          style={isUnmannd ? { backgroundColor: UNMANND_NAVY } : undefined}
+        >
           <div className="flex flex-wrap gap-2 items-center">
             {canShowDeleteRequestButton ? (
               <Button
                 type="button"
                 variant="outline"
                 size="default"
-                className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70 h-9 rounded-md"
+                className={cn(
+                  'gap-2 h-9 rounded-md',
+                  isUnmannd
+                    ? 'border-white/50 bg-transparent text-white hover:bg-white/10 hover:text-white'
+                    : 'border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70'
+                )}
                 disabled={deleting || applyingStatusValue != null || saving}
                 onClick={handleDeleteRequest}
               >
@@ -952,13 +1162,21 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                   .map((f) => {
                   const key = f.key.trim();
                   return (
-                    <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded-md border bg-background">
+                    <label
+                      key={key}
+                      className={cn(
+                        'inline-flex items-center gap-2 px-2 py-1 rounded-md border',
+                        isUnmannd ? 'border-white/30 bg-white/10' : 'bg-background'
+                      )}
+                    >
                       <Checkbox
                         checked={flagValues[key] === true}
                         onCheckedChange={(checked) => setFlagValues((prev) => ({ ...prev, [key]: checked === true }))}
                         disabled={!!applyingStatusValue}
                       />
-                      <span className="text-xs text-muted-foreground">{f.label}</span>
+                      <span className={cn('text-xs', isUnmannd ? 'text-white/80' : 'text-muted-foreground')}>
+                        {f.label}
+                      </span>
                     </label>
                   );
                 })}
@@ -980,7 +1198,9 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     size="default"
                     className={cn(
                       'gap-2 h-9 rounded-md',
-                      urgencyToneButtonClassName(btn.statusValue, urgencyHighlighted),
+                      isUnmannd
+                        ? 'border-white/40 bg-white text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]'
+                        : urgencyToneButtonClassName(btn.statusValue, urgencyHighlighted),
                     )}
                     disabled={!!applyingStatusValue}
                     onClick={() => {
@@ -1003,9 +1223,13 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
             {canEditFields && hasEditableField && effectiveShowSaveButton && (
               <Button
                 type="button"
-                variant="default"
+                variant={isUnmannd ? 'outline' : 'default'}
                 size="default"
-                className="gap-2 h-9 rounded-md"
+                className={cn(
+                  'gap-2 h-9 rounded-md',
+                  isUnmannd &&
+                    'border-white/40 bg-white text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]'
+                )}
                 disabled={saving || applyingStatusValue != null}
                 onClick={handleSaveAll}
               >

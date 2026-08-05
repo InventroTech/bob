@@ -48,7 +48,10 @@ export const DEFAULT_VENDOR_IDENTIFIED_TABLE_COLUMNS: VendorIdentifiedTableColum
   { key: 'status', label: 'Status', type: 'chip' },
 ];
 
-/** Status always shown on Vendor Identified Table (hardcoded). */
+/**
+ * Suggested status for Pending Orders / Vendor Identified page (not forced in code).
+ * Put it on the API endpoint, e.g. `?status=VENDOR_IDENTIFIED`.
+ */
 export const VENDOR_IDENTIFIED_TABLE_STATUSES = ['VENDOR_IDENTIFIED'] as const;
 
 /** Defaults applied when the component is first dropped in Page Builder. */
@@ -59,9 +62,6 @@ export const DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG = {
   tableType: 'itemsTable' as const,
   detailMode: 'record_form_modal' as const,
   emptyMessage: 'No vendor identified requests found',
-  forceQueryParams: {
-    status: VENDOR_IDENTIFIED_TABLE_STATUSES.join(','),
-  },
   formModalFields: [
     { key: 'status', label: 'Status', enabled: false },
     { key: 'item_name_freeform', label: 'Item', enabled: false },
@@ -73,7 +73,7 @@ export const DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG = {
     { key: 'urgency_level', label: 'Urgency Level', enabled: false },
     { key: 'department', label: 'Department', enabled: false },
     { key: 'project_purpose', label: 'Project', enabled: false },
-    { key: 'category', label: 'Category', enabled: false },
+    { key: 'category', label: 'Shipment Type', enabled: false },
     { key: 'specifications', label: 'Specifications', enabled: true },
     { key: 'product_link', label: 'Item link', enabled: true, link: true },
     { key: 'comments', label: 'Comments', enabled: true },
@@ -107,7 +107,8 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
 }
 
 /**
- * Vendor Identified table for Page Builder — always filters to status=VENDOR_IDENTIFIED.
+ * Vendor Identified / Pending Orders table for Page Builder.
+ * Status filtering is not hardcoded — set it on the API endpoint or table filters.
  */
 export const VendorIdentifiedTableComponent: React.FC<VendorIdentifiedTableProps> = ({
   config,
@@ -143,10 +144,6 @@ export const VendorIdentifiedTableComponent: React.FC<VendorIdentifiedTableProps
       tableType: config?.tableType === 'default' ? 'default' : 'itemsTable',
       detailMode,
       emptyMessage: config?.emptyMessage ?? 'No vendor identified requests found',
-      // Always restrict to VENDOR_IDENTIFIED — not overridable from Page Builder config.
-      forceQueryParams: {
-        status: VENDOR_IDENTIFIED_TABLE_STATUSES.join(','),
-      },
       formModalFields:
         Array.isArray(config?.formModalFields) && (config.formModalFields as unknown[]).length > 0
           ? config.formModalFields

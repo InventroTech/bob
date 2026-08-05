@@ -44,6 +44,10 @@ export {
   DEFAULT_VENDOR_IDENTIFIED_TABLE_COLUMNS,
   DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG,
 } from './VendorIdentifiedTableComponent';
+export {
+  ProcurementDashboardComponent,
+  DEFAULT_PROCUREMENT_DASHBOARD_CONFIG,
+} from './ProcurementDashboardComponent';
 export { InventoryRequestFormComponent } from './inventory-request-form';
 export { ProcurementRequestFormComponent } from './ProcurementRequestFormComponent';
 export { DispatchCardListComponent } from './DispatchCardListComponent';

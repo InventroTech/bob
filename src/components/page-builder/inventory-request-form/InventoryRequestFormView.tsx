@@ -269,7 +269,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
 
             <div className="space-y-1.5">
               <Label htmlFor="request-category" className="text-sm font-medium">
-                Category <span className="text-destructive">*</span>
+                Shipment Type <span className="text-destructive">*</span>
               </Label>
               {wrapShake(
                 'requestCategory',
@@ -284,7 +284,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     id="request-category"
                     className="h-10"
                   >
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder="Select shipment type" />
                   </SelectTrigger>
                   <SelectContent>
                     {REQUEST_CATEGORY_OPTIONS.map((opt) => (
@@ -823,7 +823,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                 htmlFor="request-category-default"
                 className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
               >
-                Category <span className="text-destructive">*</span>
+                Shipment Type <span className="text-destructive">*</span>
               </Label>
               {wrapShake(
                 'requestCategory',
@@ -835,7 +835,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   }}
                 >
                   <SelectTrigger id="request-category-default" className="h-10">
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder="Select shipment type" />
                   </SelectTrigger>
                   <SelectContent>
                     {REQUEST_CATEGORY_OPTIONS.map((opt) => (
