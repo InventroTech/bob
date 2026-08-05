@@ -77,6 +77,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   hoverable = true,
   className,
   tableClassName,
+  stackBelow = 'lg',
 }) => {
   const defaultRenderCell = (row: any, column: CustomTableColumn, _columnIndex: number) => {
     const value = row[column.accessor];
@@ -107,6 +108,34 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   };
 
   const cellRenderer = renderCell || defaultRenderCell;
+
+  const stackVisible =
+    stackBelow === 'sm'
+      ? 'sm:hidden'
+      : stackBelow === 'md'
+        ? 'md:hidden'
+        : stackBelow === 'xl'
+          ? 'xl:hidden'
+          : stackBelow === '2xl'
+            ? '2xl:hidden'
+            : 'lg:hidden';
+
+  const tableVisible =
+    stackBelow === 'sm'
+      ? 'hidden sm:block'
+      : stackBelow === 'md'
+        ? 'hidden md:block'
+        : stackBelow === 'xl'
+          ? 'hidden xl:block'
+          : stackBelow === '2xl'
+            ? 'hidden 2xl:block'
+            : 'hidden lg:block';
+
+  const emptyOrLoading = (
+    <div className="px-4 py-8 text-center text-sm text-gray-500">
+      {loading ? 'Loading...' : emptyMessage}
+    </div>
+  );
 
   return (
     <div className={cn('w-full max-w-full min-w-0', className)}>
