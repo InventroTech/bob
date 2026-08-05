@@ -6,6 +6,7 @@ import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search } from 
 import LeadCardCarousel from '../lead-card-carousel';
 import { RecordDetailModal } from '../record-detail-modal';
 import { InventoryFormEditModal } from '../inventory-form-edit-modal';
+import { UnmanndRequestDetailModal } from '../unmannd-request-detail-modal';
 import { ReceiveShipmentDetailModal } from '../ReceiveShipmentDetailModal';
 import { AssignLeadModal } from '../AssignLeadModal';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,17 @@ export function LeadTableView(props: LeadTableModel) {
     apiClient,
   } = props;
 
+  const isUnmanndEntity =
+    config?.entityType === 'unmannd_request' ||
+    /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
+      String(config?.apiEndpoint || effectiveApiEndpoint || '')
+    );
+  const useUnmanndDetailModal =
+    useFormModal &&
+    isUnmanndEntity &&
+    effectiveDetailMode !== 'receive_shipments' &&
+    effectiveDetailMode !== 'inventory_payment_modal';
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -98,49 +110,53 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
+  const tableTitle = (config?.title || '').trim();
+
   return (
     <>
-    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
-        {/* Filter Section */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-            <h5>
-              {config?.title || ""}
+    <div className="w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5">
+        {/* Toolbar — tight under page header so All Requests fits with less scroll */}
+        <div
+          className={`flex items-center gap-3 flex-wrap ${
+            tableTitle ? 'justify-between' : 'justify-end'
+          }`}
+        >
+          {tableTitle ? (
+            <h5 className="!m-0 !text-sm !font-semibold !leading-none text-gray-900">
+              {tableTitle}
             </h5>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search..."
-                  value={displaySearchTerm}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-9 h-9"
-                />
-              </div>
-              <CustomButton
-                variant="outline"
-                size="sm"
-                icon={<Filter className="h-4 w-4" />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowFilters(!showFilters);
-                }}
-              >
-                {showFilters ? 'Hide Filters' : 'Show Filters'}
-              </CustomButton>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search..."
+                value={displaySearchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9 h-8"
+              />
             </div>
+            <CustomButton
+              variant="outline"
+              size="sm"
+              icon={<Filter className="h-4 w-4" />}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowFilters(!showFilters);
+              }}
+            >
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </CustomButton>
           </div>
         </div>
 
-        {/* Filter Section */}
-        <div className="mb-4">
-
-          {showFilters && (
-            <div className="bg-gray-50 p-4 rounded-lg border">
+        {showFilters && (
+          <div className="mt-2 mb-1.5">
+            <div className="bg-gray-50 p-2.5 rounded-lg border">
               {/* Use new dynamic filter system if filters are configured */}
               {hasActiveFilters ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <DynamicFilterBuilder
                     filters={effectiveFilters}
                     filterContext={{
@@ -192,14 +208,14 @@ export function LeadTableView(props: LeadTableModel) {
                 </div>
               ) : (<h5>No filters configured</h5>)}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
 
 
         {/* Table Section */}
         {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full relative overflow-x-auto">
+        <div className="w-full max-w-full min-w-0 relative mt-1.5">
           {/* Loading Overlay */}
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
@@ -221,6 +237,7 @@ export function LeadTableView(props: LeadTableModel) {
               actionApiMethod: col.actionApiMethod,
               actionApiHeaders: col.actionApiHeaders,
               actionApiPayload: col.actionApiPayload,
+              align: col.align,
             })) as CustomTableColumn[]}
             data={filteredData}
             loading={tableLoading}
@@ -230,13 +247,14 @@ export function LeadTableView(props: LeadTableModel) {
             headerBgColor="bg-black"
             headerTextColor="text-white"
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
+            stackBelow="xl"
           />
         </div>
         
         {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
         {filteredData.length > 0 &&
           (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
             <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
 
             <div className="flex items-center gap-2">
@@ -472,8 +490,91 @@ export function LeadTableView(props: LeadTableModel) {
         />
       )}
 
+      {/* Unmannd All Requests — branded detail modal (dark header/footer). */}
+      {useUnmanndDetailModal && (
+        <UnmanndRequestDetailModal
+          open={isRecordDetailModalOpen}
+          onOpenChange={(open) => {
+            setIsRecordDetailModalOpen(open);
+            if (!open) setSelectedRecord(null);
+          }}
+          record={selectedRecord}
+          entityType="unmannd_request"
+          formModalFields={
+            ((config?.formModalFields?.length
+              ? config.formModalFields
+              : DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS) ?? []
+            ).map((field) => {
+              if (field.key === 'urgency_level' || field.key === 'priority') {
+                return { ...field, label: 'Priority', enabled: false };
+              }
+              const vendorEditable = (config?.formModalFields?.length
+                ? config.formModalFields
+                : DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS
+              ).some((f) => f.key === 'vendor' && f.enabled);
+              if (field.key === 'product_link' && vendorEditable) {
+                return { ...field, enabled: true, link: true };
+              }
+              return field;
+            })
+          }
+          formModalTitle={config?.formModalTitle}
+          formModalDescription={config?.formModalDescription}
+          actionButtons={config?.statusButtons}
+          showSaveButton={config?.showFormModalSaveButton}
+          inventoryWorkflowMode={config?.inventoryWorkflowMode}
+          showFinalPriceSection={config?.showFinalPriceSection}
+          modalFlags={config?.modalFlags}
+          onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
+            ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
+                const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+                const url = `${base}/${recordId}/`;
+                const currentFromSelected = selectedRecord && selectedRecord.id === recordId ? selectedRecord : null;
+                const currentFromList = currentFromSelected == null ? data.find((r: any) => r.id === recordId) : null;
+                const existingData =
+                  (currentFromSelected?.data as Record<string, unknown> | undefined) ||
+                  (currentFromList?.data as Record<string, unknown> | undefined) ||
+                  {};
+                const fullData = patch.data != null ? { ...existingData, ...patch.data } : existingData;
+                const body = patch.data != null ? { ...patch, data: fullData } : patch;
+                const response = await apiClient.patch(url, body);
+                const updated = response.data;
+                setSelectedRecord((prev: any) =>
+                  prev?.id === recordId ? { ...prev, ...updated, data: updated?.data ?? fullData } : prev,
+                );
+                setData((prev) =>
+                  prev.map((r: any) =>
+                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
+                  ),
+                );
+                setFilteredData((prev) =>
+                  prev.map((r: any) =>
+                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
+                  ),
+                );
+              }
+            : undefined}
+          onRecordUpdated={async (recordId: number) => {
+            try { await fetchFilteredData(); } catch (e) { console.error('Error refreshing table after form modal update', e); }
+          }}
+          showDeleteRequestButton={config?.showDeleteRequestButton}
+          showHistoryButton={config?.showHistoryButton ?? true}
+          onDeleted={async (recordId: number) => {
+            setData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setSelectedRecord(null);
+            setIsRecordDetailModalOpen(false);
+            try {
+              await fetchFilteredData();
+            } catch (e) {
+              console.error('Error refreshing table after delete:', e);
+            }
+          }}
+        />
+      )}
+
       {/* Form-style edit modal (inventory form layout + action buttons) */}
-      {effectiveDetailMode !== 'receive_shipments' && useFormModal && (
+      {effectiveDetailMode !== 'receive_shipments' && useFormModal && !useUnmanndDetailModal && (
         <InventoryFormEditModal
           open={isRecordDetailModalOpen}
           onOpenChange={(open) => {

@@ -68,6 +68,11 @@ export interface InventoryFormEditModalProps {
   showHistoryButton?: boolean;
   /** Called after a successful delete (e.g. refresh table). */
   onDeleted?: (recordId: number) => void;
+  /**
+   * Visual chrome for Unmannd “All Requests” redesign (dark header/footer).
+   * Default keeps the classic light modal used by inventory_request.
+   */
+  uiVariant?: 'default' | 'unmannd';
 }
 
 export type StatusHistoryEntry = {

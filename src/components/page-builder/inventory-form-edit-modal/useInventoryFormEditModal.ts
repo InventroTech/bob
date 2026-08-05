@@ -39,6 +39,7 @@ import {
   RECORDS_URL,
   ADD_VENDOR_VALUE,
   toVendorStorageName,
+  resolveVendorDisplayName,
   looksLikeUrl,
   isLinkLikeFieldKey,
   formatDisplayValue,
@@ -69,6 +70,7 @@ export function useInventoryFormEditModal({
   showDeleteRequestButton,
   showHistoryButton,
   onDeleted,
+  uiVariant = 'default',
 }: InventoryFormEditModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -447,12 +449,24 @@ export function useInventoryFormEditModal({
         initial[f.key] = Array.isArray(val) ? '' : val !== undefined && val !== null ? val : '';
         return;
       }
-      if ((f.key === 'vendor' || f.key === 'vendor_name') && typeof val === 'string') {
-        initial[f.key] = toVendorStorageName(val);
+      if (f.key === 'vendor' || f.key === 'vendor_name') {
+        const fromField = resolveVendorDisplayName(val);
+        const fromAlt =
+          f.key === 'vendor'
+            ? resolveVendorDisplayName(data.vendor_name ?? recordAny.vendor_name)
+            : resolveVendorDisplayName(data.vendor ?? recordAny.vendor);
+        initial[f.key] = fromField || fromAlt || '';
         return;
       }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
+    // Ensure `vendor` is populated even if only `vendor_name` exists on the record.
+    if (!initial.vendor) {
+      const fallback = resolveVendorDisplayName(
+        data.vendor ?? data.vendor_name ?? recordAny.vendor ?? recordAny.vendor_name
+      );
+      if (fallback) initial.vendor = fallback;
+    }
     if (data.extra_charges != null && data.extra_charges !== '') {
       const parsedExtraCharges = toCurrencyNumber(data.extra_charges);
       if (parsedExtraCharges != null) {
@@ -1175,6 +1189,7 @@ export function useInventoryFormEditModal({
     showDeleteRequestButton,
     showHistoryButton,
     onDeleted,
+    uiVariant,
     _formModalDescription,
     toast,
     user,

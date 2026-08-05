@@ -68,6 +68,11 @@ export interface InventoryRequestFormConfig {
   defaultStatus?: string;
   /** Options shown in the Priority / Urgency picker. Saved as `urgency_level`. */
   urgencyOptions?: Array<{ value: string; label: string }>;
+  /**
+   * After successful create, navigate to the role page whose name matches this
+   * (default: "My Request" / "My Requests").
+   */
+  redirectAfterSubmitPageName?: string;
 }
 
 export interface VendorOption {
