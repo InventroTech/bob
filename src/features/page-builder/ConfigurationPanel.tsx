@@ -35,6 +35,7 @@ import { WhatsAppTemplateConfig } from "@/components/page-builder/component-conf
 import { FileUploadConfig } from "@/components/ATScomponents/configs/FileUploadConfig";
 import { DispatchCardListConfigPanel } from "@/components/page-builder/component-config/DispatchCardListConfig";
 import { DispatchDashboardConfigPanel } from "@/components/page-builder/component-config/DispatchDashboardConfig";
+import { ProcurementDashboardConfigPanel } from "@/components/page-builder/component-config/ProcurementDashboardConfig";
 import { AddUserConfig } from "@/components/page-builder/component-config/AddUserConfig";
 import type { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import type { CanvasComponentData, ComponentConfig } from "./componentMap";
@@ -228,6 +229,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     initialStatusText: (initialConfig as any).initialStatusText ?? '',
     defaultStatus: (initialConfig as any).defaultStatus ?? '',
     urgencyOptions: (initialConfig as any).urgencyOptions ?? undefined,
+    redirectAfterSubmitPageName: (initialConfig as any).redirectAfterSubmitPageName ?? '',
     // Records table: items table + status buttons
     tableType: (initialConfig as any).tableType || 'default',
     statusButtons: (initialConfig as any).statusButtons ?? [],
@@ -608,9 +610,20 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
           />
         );
 
+      case 'procurementDashboard':
+        return (
+          <ProcurementDashboardConfigPanel
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
       case 'inventoryTable':
       case 'procurementTable':
       case 'myRequestTable':
+      case 'pendingApprovalTable':
+      case 'rejectedTable':
+      case 'vendorIdentifiedTable':
         return (
           <TableConfig
             profile="inventory"
@@ -865,6 +878,18 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Friendly status label saved as <code className="bg-muted px-1 rounded">data.status_text</code> on create.
+              </p>
+            </div>
+
+            <div>
+              <Label>Redirect after submit (page name)</Label>
+              <Input
+                value={(localConfig as { redirectAfterSubmitPageName?: string }).redirectAfterSubmitPageName ?? ''}
+                onChange={(e) => handleInputChange('redirectAfterSubmitPageName', e.target.value)}
+                placeholder="My Requests"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                After Create Request, go to this sidebar page. Defaults to “My Request” / “My Requests”.
               </p>
             </div>
 

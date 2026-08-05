@@ -323,22 +323,54 @@ export function normalizeTrackingPaste(raw: string): NormalizeTrackingPasteResul
 export const INVENTORY_REQUEST_TRACKING_COLUMNS = [
   { key: 'shipment_status', label: 'Shipment', type: 'chip' as const },
   { key: 'tracking_link', label: 'Track', type: 'link' as const },
-  { key: 'tracking_number', label: 'Tracking no', type: 'text' as const },
-  { key: 'eta', label: 'ETA', type: 'date' as const },
-  { key: 'courier_name', label: 'Courier', type: 'text' as const },
 ] as const;
 
 /**
  * Merge tracking columns into an inventory_request table column list
  * without duplicating keys already configured.
+ * Requirement Date is replaced by ETA (shown in that slot); ETA / Tracking No / Courier are not appended at the end.
  */
-export function mergeInventoryTrackingColumns<T extends { key: string }>(
+export function mergeInventoryTrackingColumns<T extends { key: string; label?: string; type?: string }>(
   columns: T[] | undefined | null
 ): Array<T | (typeof INVENTORY_REQUEST_TRACKING_COLUMNS)[number]> {
   const existing = Array.isArray(columns) ? [...columns] : [];
-  const keys = new Set(existing.map((c) => String(c.key || '').trim()).filter(Boolean));
+  const remapped = existing
+    .filter((c) => {
+      const key = String(c.key || '').trim();
+      // Drop legacy Details, Tracking No, Courier, and trailing ETA (ETA lives where Requirement Date was).
+      return (
+        key &&
+        key !== 'tracking_details' &&
+        key !== 'eta' &&
+        key !== 'tracking_number' &&
+        key !== 'courier_name'
+      );
+    })
+    .map((c) => {
+      const key = String(c.key || '').trim();
+      if (key === 'required_date' || key === 'requirement_date') {
+        return {
+          ...c,
+          key: 'eta',
+          label: 'ETA',
+          type: (c.type as string) || 'date',
+        } as T;
+      }
+      return c;
+    });
+
+  // If remapping created a duplicate eta, keep the first.
+  const seen = new Set<string>();
+  const cleaned = remapped.filter((c) => {
+    const key = String(c.key || '').trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const keys = new Set(cleaned.map((c) => String(c.key || '').trim()).filter(Boolean));
   const extras = INVENTORY_REQUEST_TRACKING_COLUMNS.filter((c) => !keys.has(c.key));
-  return [...existing, ...extras];
+  return [...cleaned, ...extras];
 }
 
 export function shouldShowShipmentTrackingSection(

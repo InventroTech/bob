@@ -68,6 +68,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     setPriceCompareProfile,
     liveCompareLoadingByItemId,
     linkFetchLoadingByItemId,
+    fieldShakeNonce,
+    clearFieldShake,
     priceCompareStatusByItemId,
     focusedItemNameId,
     setFocusedItemNameId,
@@ -109,6 +111,19 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     isFormEmpty,
   } = props;
 
+  const shakeN = (fieldKey: string) => fieldShakeNonce[fieldKey] ?? 0;
+  const isShaking = (fieldKey: string) => shakeN(fieldKey) > 0;
+  const wrapShake = (fieldKey: string, node: React.ReactNode, className = '') => (
+    <div
+      key={`${fieldKey}-${shakeN(fieldKey)}`}
+      data-shake-key={fieldKey}
+      className={`${className}${isShaking(fieldKey) ? ' animate-inventory-link-shake' : ''}`.trim()}
+    >
+      {node}
+    </div>
+  );
+  const itemKey = (itemId: string, field: string) => `item:${itemId}:${field}`;
+
   const addVendorDialog = (
     <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
       <DialogContent className="max-w-md">
@@ -149,7 +164,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
   );
 
   const sectionLabel = (title: string) => (
-    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
   );
 
   const renderProjectField = (opts: {
@@ -160,61 +175,65 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
       <Label htmlFor={opts.id} className={opts.labelClassName}>
         Project <span className="text-destructive">*</span>
       </Label>
-      <div className="relative">
-        <Textarea
-          id={opts.id}
-          placeholder={
-            projectSuggestions.length > 0
-              ? 'Select a previous project or type a new one'
-              : 'Project name or description'
-          }
-          value={projectPurpose}
-          onFocus={() => {
-            if (projectSuggestions.length > 0 || projectSuggestionsLoading) {
-              setProjectSuggestionsOpen(true);
+      {wrapShake(
+        'projectPurpose',
+        <div className="relative">
+          <Input
+            id={opts.id}
+            placeholder={
+              projectSuggestions.length > 0
+                ? 'Select a previous project or type a new one'
+                : 'Project name'
             }
-          }}
-          onBlur={() => {
-            window.setTimeout(() => setProjectSuggestionsOpen(false), 150);
-          }}
-          onChange={(e) => {
-            setProjectPurpose(e.target.value);
-            setProjectSuggestionsOpen(true);
-          }}
-          rows={2}
-          className="resize-y min-h-[64px]"
-          autoComplete="off"
-        />
-        {projectSuggestionsOpen &&
-          (projectSuggestionsLoading || filteredProjectSuggestions.length > 0) && (
-            <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-background shadow-md">
-              {projectSuggestionsLoading && projectSuggestions.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-muted-foreground">Loading projects…</div>
-              ) : (
-                filteredProjectSuggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-muted"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setProjectPurpose(suggestion);
-                      setProjectSuggestionsOpen(false);
-                    }}
-                  >
-                    {suggestion}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-      </div>
+            value={projectPurpose}
+            onFocus={() => {
+              if (projectSuggestions.length > 0 || projectSuggestionsLoading) {
+                setProjectSuggestionsOpen(true);
+              }
+            }}
+            onBlur={() => {
+              window.setTimeout(() => setProjectSuggestionsOpen(false), 150);
+            }}
+            onChange={(e) => {
+              setProjectPurpose(e.target.value);
+              clearFieldShake('projectPurpose');
+              setProjectSuggestionsOpen(true);
+            }}
+            className="h-10"
+            autoComplete="off"
+          />
+          {projectSuggestionsOpen &&
+            (projectSuggestionsLoading || filteredProjectSuggestions.length > 0) && (
+              <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-background shadow-md">
+                {projectSuggestionsLoading && projectSuggestions.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">Loading projects…</div>
+                ) : (
+                  filteredProjectSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-muted"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setProjectPurpose(suggestion);
+                        clearFieldShake('projectPurpose');
+                        setProjectSuggestionsOpen(false);
+                      }}
+                    >
+                      {suggestion}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+        </div>
+      )}
     </div>
   );
 
   if (isProcurement) {
     return (
-      <Card className="overflow-hidden border border-border shadow-sm">
+      <Card className="max-w-full min-w-0 overflow-x-hidden border border-border shadow-sm">
         <form onSubmit={handleSubmit} className="flex flex-col">
           <div className="border-b border-border/60 bg-muted/25 px-6 py-5">
             <h2 className="text-lg font-semibold tracking-tight">New Request</h2>
@@ -250,25 +269,32 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
 
             <div className="space-y-1.5">
               <Label htmlFor="request-category" className="text-sm font-medium">
-                Category <span className="text-destructive">*</span>
+                Shipment Type <span className="text-destructive">*</span>
               </Label>
-              <Select
-                value={requestCategory || undefined}
-                onValueChange={(v) =>
-                  setRequestCategory(v === 'International' ? 'International' : 'Domestic')
-                }
-              >
-                <SelectTrigger id="request-category" className="h-10">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REQUEST_CATEGORY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {wrapShake(
+                'requestCategory',
+                <Select
+                  value={requestCategory || undefined}
+                  onValueChange={(v) => {
+                    setRequestCategory(v === 'International' ? 'International' : 'Domestic');
+                    clearFieldShake('requestCategory');
+                  }}
+                >
+                  <SelectTrigger
+                    id="request-category"
+                    className="h-10"
+                  >
+                    <SelectValue placeholder="Select shipment type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REQUEST_CATEGORY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {renderProjectField({
@@ -276,11 +302,52 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
               labelClassName: 'text-sm font-medium',
             })}
 
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="delivery-pincode-procurement" className="text-sm font-medium">
+                  Delivery PIN code <span className="text-destructive">*</span>
+                </Label>
+                {wrapShake(
+                  'deliveryPincode',
+                  <Input
+                    id="delivery-pincode-procurement"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="e.g. 560001"
+                    value={deliveryPincode}
+                    onChange={(e) => {
+                      setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      clearFieldShake('deliveryPincode');
+                    }}
+                    className="h-10"
+                  />
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="delivery-address-procurement" className="text-sm font-medium">
+                  Delivery address <span className="text-destructive">*</span>
+                </Label>
+                {wrapShake(
+                  'deliveryAddress',
+                  <Input
+                    id="delivery-address-procurement"
+                    placeholder="Building, street, city"
+                    value={deliveryAddress}
+                    onChange={(e) => {
+                      setDeliveryAddress(e.target.value);
+                      clearFieldShake('deliveryAddress');
+                    }}
+                    className="h-10"
+                  />
+                )}
+              </div>
+            </div>
+
             <div className="space-y-5">
               {items.map((item, itemIndex) => (
                 <div
                   key={item.id}
-                  className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm"
+                  className="rounded-xl border border-border/70 bg-card shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
                     <Badge variant="outline" className="font-medium">
@@ -304,7 +371,59 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                       {sectionLabel('Item details')}
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Item name</Label>
+                          <Label className="text-xs font-medium">
+                            Item link <span className="text-destructive">*</span>
+                          </Label>
+                          {wrapShake(
+                            itemKey(item.id, 'product_link'),
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <Input
+                                type="url"
+                                placeholder="https://… (Amazon, Robu, vendor page, etc.)"
+                                value={item.product_link}
+                                onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                                onBlur={(e) => {
+                                  const url = e.target.value.trim();
+                                  if (looksLikeProductUrl(url)) {
+                                    void fetchDetailsFromItemLink(item.id, url);
+                                  }
+                                }}
+                                className='h-10 flex-1'
+                                disabled={!!linkFetchLoadingByItemId[item.id]}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-10 shrink-0 gap-1.5"
+                                disabled={
+                                  !!linkFetchLoadingByItemId[item.id] ||
+                                  !looksLikeProductUrl(item.product_link)
+                                }
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() =>
+                                  void fetchDetailsFromItemLink(item.id, item.product_link, { force: true })
+                                }
+                              >
+                                {linkFetchLoadingByItemId[item.id] ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                                Fetch details
+                              </Button>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Paste a product URL to auto-fill item name, specifications, vendor, and cost.
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">
+                            Item name <span className="text-destructive">*</span>
+                          </Label>
+                          {wrapShake(
+                            itemKey(item.id, 'item_name_freeform'),
                           <div className="relative">
                             <Input
                               placeholder="Describe the item"
@@ -388,64 +507,29 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                                 </div>
                               )}
                           </div>
+                          )}
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Specifications</Label>
+                          <Label className="text-sm font-medium">
+                            Specifications <span className="text-destructive">*</span>
+                          </Label>
+                          {wrapShake(
+                            itemKey(item.id, 'specifications'),
                           <Input
                             placeholder="e.g. 30 cm, USB A to Mini B, gold-plated"
                             value={item.specifications}
                             onChange={(e) => updateItem(item.id, 'specifications', e.target.value)}
                             className="h-10"
                           />
+                          )}
                           <p className="text-xs text-muted-foreground">
                             Filled automatically from the item link when available.
                           </p>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-sm font-medium">Item link</Label>
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <Input
-                              type="url"
-                              placeholder="https://… (Amazon, Robu, vendor page, etc.)"
-                              value={item.product_link}
-                              onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                              onBlur={(e) => {
-                                const url = e.target.value.trim();
-                                if (looksLikeProductUrl(url)) {
-                                  void fetchDetailsFromItemLink(item.id, url);
-                                }
-                              }}
-                              className="h-10 flex-1"
-                              disabled={!!linkFetchLoadingByItemId[item.id]}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-10 shrink-0 gap-1.5"
-                              disabled={
-                                !!linkFetchLoadingByItemId[item.id] ||
-                                !looksLikeProductUrl(item.product_link)
-                              }
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() =>
-                                void fetchDetailsFromItemLink(item.id, item.product_link, { force: true })
-                              }
-                            >
-                              {linkFetchLoadingByItemId[item.id] ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <RefreshCw className="h-4 w-4" />
-                              )}
-                              Fetch details
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Paste a product URL to auto-fill item name, specifications, vendor, and cost.
-                          </p>
-                        </div>
                         <div className="space-y-1.5 sm:w-32">
                           <Label className="text-sm font-medium">Quantity *</Label>
+                          {wrapShake(
+                            itemKey(item.id, 'quantity_required'),
                           <Input
                             type="number"
                             min={1}
@@ -458,6 +542,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                             placeholder="0"
                             className="h-10"
                           />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -467,6 +552,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                         <div className="space-y-3">
                           <Label className="text-sm font-medium">Estimated cost *</Label>
+                          {wrapShake(
+                            itemKey(item.id, 'estimated_cost'),
                           <div className="flex flex-wrap items-center gap-2">
                             <Input
                               type="text"
@@ -514,15 +601,18 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                               </SelectContent>
                             </Select>
                           </div>
+                          )}
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-sm font-medium">Vendor *</Label>
+                          {wrapShake(
+                            itemKey(item.id, 'vendor'),
                           <div className="flex items-start gap-2">
                             <div className="relative min-w-0 flex-1">
                               <Input
                                 value={item.vendor}
                                 placeholder="Search or add vendor"
-                                className="h-10 w-full"
+                                className='h-10 w-full'
                                 onFocus={() => {
                                   setFocusedVendorId(item.id);
                                   setVendorQuery(item.vendor || '');
@@ -596,6 +686,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                               + Add vendor
                             </Button>
                           </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -605,11 +696,13 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label className="text-sm font-medium">Priority *</Label>
+                          {wrapShake(
+                            itemKey(item.id, 'urgency_level'),
                           <Select
                             value={item.urgency_level || undefined}
                             onValueChange={(v) => updateItem(item.id, 'urgency_level', v)}
                           >
-                            <SelectTrigger className="h-10">
+                            <SelectTrigger className='h-10'>
                               <SelectValue placeholder="Select priority" />
                             </SelectTrigger>
                             <SelectContent>
@@ -620,6 +713,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                               ))}
                             </SelectContent>
                           </Select>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -686,10 +780,10 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
   }
 
   return (
-    <Card className="overflow-hidden border border-border/60 shadow-md">
+    <Card className="max-w-full min-w-0 overflow-x-hidden border border-border/60 shadow-md">
       <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-6 pt-6">
-          <section className="space-y-4">
+        <CardContent className="space-y-3 px-4 pt-3 pb-2">
+          <section className="space-y-2">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
@@ -724,30 +818,34 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                 className="h-10 bg-muted/50 font-medium"
               />
             </div>
-            <div className="space-y-2">
+              <div className="space-y-2">
               <Label
                 htmlFor="request-category-default"
                 className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
               >
-                Category <span className="text-destructive">*</span>
+                Shipment Type <span className="text-destructive">*</span>
               </Label>
-              <Select
-                value={requestCategory || undefined}
-                onValueChange={(v) =>
-                  setRequestCategory(v === 'International' ? 'International' : 'Domestic')
-                }
-              >
-                <SelectTrigger id="request-category-default" className="h-10">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REQUEST_CATEGORY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {wrapShake(
+                'requestCategory',
+                <Select
+                  value={requestCategory || undefined}
+                  onValueChange={(v) => {
+                    setRequestCategory(v === 'International' ? 'International' : 'Domestic');
+                    clearFieldShake('requestCategory');
+                  }}
+                >
+                  <SelectTrigger id="request-category-default" className="h-10">
+                    <SelectValue placeholder="Select shipment type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REQUEST_CATEGORY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             {renderProjectField({
               id: 'project-purpose-default',
@@ -763,15 +861,21 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   <MapPin className="h-3.5 w-3.5" />
                   Delivery PIN code <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  id="delivery-pincode"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="e.g. 560001"
-                  value={deliveryPincode}
-                  onChange={(e) => setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="h-10 font-medium"
-                />
+                {wrapShake(
+                  'deliveryPincode',
+                  <Input
+                    id="delivery-pincode"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="e.g. 560001"
+                    value={deliveryPincode}
+                    onChange={(e) => {
+                      setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      clearFieldShake('deliveryPincode');
+                    }}
+                    className="h-10 font-medium"
+                  />
+                )}
                 <p className="text-[11px] text-muted-foreground">
                   Required for live delivery dates (Amazon and similar).
                 </p>
@@ -781,15 +885,21 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   htmlFor="delivery-address"
                   className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider"
                 >
-                  Delivery address
+                  Delivery address <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  id="delivery-address"
-                  placeholder="Building, street, city"
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                  className="h-10 font-medium"
-                />
+                {wrapShake(
+                  'deliveryAddress',
+                  <Input
+                    id="delivery-address"
+                    placeholder="Building, street, city"
+                    value={deliveryAddress}
+                    onChange={(e) => {
+                      setDeliveryAddress(e.target.value);
+                      clearFieldShake('deliveryAddress');
+                    }}
+                    className="h-10 font-medium"
+                  />
+                )}
                 <p className="text-[11px] text-muted-foreground">
                   Where this order should be delivered.
                 </p>
@@ -797,7 +907,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
             </div>
           </section>
 
-          <section className="space-y-4 border-t pt-6">
+          <section className="space-y-2 border-t pt-3">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Items</Label>
             </div>
@@ -822,7 +932,60 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Item name</Label>
+                    <Label className="text-xs font-medium">
+                      Item link <span className="text-destructive">*</span>
+                    </Label>
+                    {wrapShake(
+                      itemKey(item.id, 'product_link'),
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Input
+                          type="url"
+                          placeholder="https://… (Amazon, Robu, vendor page, etc.)"
+                          value={item.product_link}
+                          onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                          onBlur={(e) => {
+                            const url = e.target.value.trim();
+                            if (looksLikeProductUrl(url)) {
+                              void fetchDetailsFromItemLink(item.id, url);
+                            }
+                          }}
+                          className='h-9 flex-1'
+                          disabled={!!linkFetchLoadingByItemId[item.id]}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 shrink-0 gap-1.5"
+                          disabled={
+                            !!linkFetchLoadingByItemId[item.id] ||
+                            !looksLikeProductUrl(item.product_link)
+                          }
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() =>
+                            void fetchDetailsFromItemLink(item.id, item.product_link, { force: true })
+                          }
+                        >
+                          {linkFetchLoadingByItemId[item.id] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                          Fetch details
+                        </Button>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Paste a product URL to auto-fill item name, specifications, vendor, and cost.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs font-medium">
+                      Item name <span className="text-destructive">*</span>
+                    </Label>
+                    {wrapShake(
+                      itemKey(item.id, 'item_name_freeform'),
                     <div className="relative">
                       <Input
                         placeholder="Describe the item"
@@ -902,62 +1065,24 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Specifications</Label>
+                    <Label className="text-xs font-medium">
+                      Specifications <span className="text-destructive">*</span>
+                    </Label>
+                    {wrapShake(
+                      itemKey(item.id, 'specifications'),
                     <Input
                       placeholder="e.g. 30 cm, USB A to Mini B, gold-plated, with cable"
                       value={item.specifications}
                       onChange={(e) => updateItem(item.id, 'specifications', e.target.value)}
                       className="h-9"
                     />
+                    )}
                     <p className="text-[11px] text-muted-foreground">
                       Filled automatically from the item link when available.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Item link</Label>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <Input
-                        type="url"
-                        placeholder="https://… (Amazon, Robu, vendor page, etc.)"
-                        value={item.product_link}
-                        onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                        onBlur={(e) => {
-                          const url = e.target.value.trim();
-                          if (looksLikeProductUrl(url)) {
-                            void fetchDetailsFromItemLink(item.id, url);
-                          }
-                        }}
-                        className="h-9 flex-1"
-                        disabled={!!linkFetchLoadingByItemId[item.id]}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 shrink-0 gap-1.5"
-                        disabled={
-                          !!linkFetchLoadingByItemId[item.id] ||
-                          !looksLikeProductUrl(item.product_link)
-                        }
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() =>
-                          void fetchDetailsFromItemLink(item.id, item.product_link, { force: true })
-                        }
-                      >
-                        {linkFetchLoadingByItemId[item.id] ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                        Fetch details
-                      </Button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Paste a product URL to auto-fill item name, specifications, vendor, and cost.
                     </p>
                   </div>
 
@@ -1054,7 +1179,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                           htmlFor={`delivery-address-${item.id}`}
                           className="text-[10px] text-muted-foreground uppercase tracking-wide"
                         >
-                          Delivery address
+                          Delivery address <span className="text-destructive">*</span>
                         </Label>
                         <Input
                           id={`delivery-address-${item.id}`}
@@ -1203,6 +1328,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   <div className="flex flex-wrap items-end gap-4 sm:col-span-2 w-full">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium">Quantity *</Label>
+                      {wrapShake(
+                        itemKey(item.id, 'quantity_required'),
                       <Input
                         type="number"
                         min={1}
@@ -1213,11 +1340,14 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                           updateItem(item.id, 'quantity_required', v === '' ? '' : Number(v));
                         }}
                         placeholder="0"
-                        className="h-9 w-24"
+                        className='h-9 w-24'
                       />
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium">Estimated cost *</Label>
+                      {wrapShake(
+                        itemKey(item.id, 'estimated_cost'),
                       <div className="flex items-center gap-2">
                         <Input
                           type="text"
@@ -1242,7 +1372,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                               updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
                             }
                           }}
-                          className="h-9 min-w-[7.5rem] font-mono tabular-nums"
+                          className='h-9 min-w-[7.5rem] font-mono tabular-nums'
                         />
                         <Select
                           value={item.price_currency || 'INR'}
@@ -1257,15 +1387,18 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                           </SelectContent>
                         </Select>
                       </div>
+                      )}
                     </div>
-                    <div className="space-y-1.5 flex-1 min-w-[180px]">
+                    <div className="space-y-1.5 flex-1 min-w-0 basis-[180px]">
                       <Label className="text-xs font-medium">Vendor *</Label>
+                      {wrapShake(
+                        itemKey(item.id, 'vendor'),
                       <div className="flex items-center gap-2">
                         <div className="relative w-full">
                             <Input
                               value={item.vendor}
                               placeholder="Search or add vendor"
-                              className="h-9 w-full"
+                              className='h-9 w-full'
                               onFocus={() => {
                                 setFocusedVendorId(item.id);
                                 setVendorQuery(item.vendor || '');
@@ -1340,15 +1473,18 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                           + Add vendor
                         </Button>
                       </div>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Priority *</Label>
+                    {wrapShake(
+                      itemKey(item.id, 'urgency_level'),
                     <Select
                       value={item.urgency_level || undefined}
                       onValueChange={(v) => updateItem(item.id, 'urgency_level', v)}
                     >
-                      <SelectTrigger className="h-9">
+                      <SelectTrigger className='h-9'>
                         <SelectValue placeholder="Select priority" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1359,6 +1495,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                         ))}
                       </SelectContent>
                     </Select>
+                    )}
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label className="text-xs font-medium">Comments (optional)</Label>
