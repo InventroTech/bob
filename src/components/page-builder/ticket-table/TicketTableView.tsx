@@ -548,7 +548,7 @@ return (
           </div>
         )}
 
-        <div className="overflow-hidden w-full">
+        <div className="overflow-x-auto w-full max-w-full min-w-0">
           <table className="min-w-full bg-white">
             <thead>
               <tr className="bg-black border-b border-gray-200">
