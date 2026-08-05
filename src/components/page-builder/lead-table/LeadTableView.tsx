@@ -100,11 +100,19 @@ export function LeadTableView(props: LeadTableModel) {
 
   return (
     <>
-    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
+      {/* ADDED: Mobile Page Title - Only visible on small screens (md:hidden) */}
+      <div className="md:hidden w-full pb-3 px-4 pt-4">
+        <h2 className="text-2xl font-bold text-gray-900">
+          {config?.title || "All Leads"}
+        </h2>
+      </div>
+
+      <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
         {/* Filter Section */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-            <h5>
+            {/* UPDATED: Added 'hidden md:block' so it doesn't show twice on mobile */}
+            <h5 className="hidden md:block">
               {config?.title || ""}
             </h5>
             <div className="flex items-center gap-2">
@@ -135,7 +143,6 @@ export function LeadTableView(props: LeadTableModel) {
 
         {/* Filter Section */}
         <div className="mb-4">
-
           {showFilters && (
             <div className="bg-gray-50 p-4 rounded-lg border">
               {/* Use new dynamic filter system if filters are configured */}
@@ -157,8 +164,9 @@ export function LeadTableView(props: LeadTableModel) {
                     }}
                     onFiltersChange={(params) => {
                       // Add pagination parameters to URL for complete bookmarkable state
+                      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
                       params.set('page', '1');
-                      params.set('page_size', '10');
+                      params.set('page_size', isMobile ? '7' : '10');
 
                       // Only add entity_type if using generic records endpoint and entityType is configured
                       if ((effectiveApiEndpoint ?? '').includes('/crm-records/records') && config?.entityType) {
@@ -195,48 +203,102 @@ export function LeadTableView(props: LeadTableModel) {
           )}
         </div>
 
-
-
         {/* Table Section */}
         {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full relative overflow-x-auto">
-          {/* Loading Overlay */}
-          {tableLoading && (
-            <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-600"></span>
-              </div>
-            </div>
-          )}
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-4">
+  {filteredData.map((item, index) => {
+    const lead = item;
 
-          <CustomTable
-            columns={tableColumns.map(col => ({
-              header: col.header,
-              accessor: col.accessor,
-              type: col.type,
-              linkField: col.linkField,
-              editableInTable: col.editableInTable,
-              openCard: col.openCard,
-              actionApiEndpoint: col.actionApiEndpoint,
-              actionApiMethod: col.actionApiMethod,
-              actionApiHeaders: col.actionApiHeaders,
-              actionApiPayload: col.actionApiPayload,
-            })) as CustomTableColumn[]}
-            data={filteredData}
-            loading={tableLoading}
-            emptyMessage={config?.emptyMessage || 'No data found'}
-            onRowClick={!isInPageBuilder && effectiveDetailMode !== 'none' ? handleRowClick : undefined}
-            renderCell={renderCell}
-            headerBgColor="bg-black"
-            headerTextColor="text-white"
-            hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
-          />
+    return (
+      <div
+  key={lead.id || index}
+  className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+  onClick={() => {
+    setSelectedLead(item);
+    setIsLeadModalOpen(true);
+  }}
+>
+        <div className="space-y-2">
+
+          <div>
+            <p className="text-xs text-gray-500">Name</p>
+            <p className="font-semibold">{lead.name}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500">Praja ID</p>
+            <p>{lead.praja_id}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500">Phone Number</p>
+            <p>{lead.phone_number}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500">Party</p>
+            <p>{lead.affiliated_party}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500">Lead Score</p>
+            <p>{lead.lead_score}</p>
+          </div>
+          <Button
+  className="w-full mt-4"
+  onClick={(e) => {
+    e.stopPropagation();
+    setSelectedLead(item);
+    setIsLeadModalOpen(true);
+  }}
+>
+  View Profile
+</Button>
+
         </div>
+      </div>
+    );
+  })}
+</div>
+        <div className="hidden md:block w-full relative overflow-x-auto">
+  {/* Loading Overlay */}
+  {tableLoading && (
+    <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+      <div className="flex items-center space-x-2">
+        <span className="text-gray-600"></span>
+      </div>
+    </div>
+  )}
+
+  <CustomTable
+    columns={tableColumns.map(col => ({
+      header: col.header,
+      accessor: col.accessor,
+      type: col.type,
+      linkField: col.linkField,
+      editableInTable: col.editableInTable,
+      openCard: col.openCard,
+      actionApiEndpoint: col.actionApiEndpoint,
+      actionApiMethod: col.actionApiMethod,
+      actionApiHeaders: col.actionApiHeaders,
+      actionApiPayload: col.actionApiPayload,
+    })) as CustomTableColumn[]}
+    data={filteredData}
+    loading={tableLoading}
+    emptyMessage={config?.emptyMessage || 'No data found'}
+    onRowClick={!isInPageBuilder && effectiveDetailMode !== 'none' ? handleRowClick : undefined}
+    renderCell={renderCell}
+    headerBgColor="bg-black"
+    headerTextColor="text-white"
+    hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
+  />
+</div>
         
         {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
         {filteredData.length > 0 &&
           (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
+            <div className="flex justify-between items-center pt-4 pb-2 border-t border-gray-200 sticky bottom-0 bg-white z-20">
             <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
 
             <div className="flex items-center gap-2">
