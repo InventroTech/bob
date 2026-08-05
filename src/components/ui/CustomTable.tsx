@@ -1,114 +1,38 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 
-export interface CustomTableColumn {
-  /**
-   * Column header text
-   */
+export type CustomTableColumn = {
   header: string;
-
-  /**
-   * Column accessor/key for data
-   */
   accessor: string;
-
-  /**
-   * Column type for rendering
-   */
-  type?: 'text' | 'chip' | 'link' | 'action';
-
-  /**
-   * Field to use as link (for link type)
-   */
+  type?: 'text' | 'number' | 'date' | 'chip' | 'link' | 'action';
   linkField?: string;
-  /** Whether this column is editable inline in table (used by custom renderers). */
   editableInTable?: boolean;
-
-  /**
-   * For action type: open detail card (lead/ticket) on click
-   */
-  openCard?: boolean | string;
-
-  /**
-   * For action type: API endpoint to call when action button is clicked
-   */
+  openCard?: boolean;
   actionApiEndpoint?: string;
   actionApiMethod?: string;
   actionApiHeaders?: string;
   actionApiPayload?: string;
-
-  /**
-   * Custom width
-   */
-  width?: string;
-
-  /**
-   * Text alignment
-   */
   align?: 'left' | 'center' | 'right';
-}
+  width?: string;
+};
 
 export interface CustomTableProps {
-  /**
-   * Table columns configuration
-   */
   columns: CustomTableColumn[];
-
-  /**
-   * Table data rows
-   */
   data: any[];
-
-  /**
-   * Loading state
-   */
   loading?: boolean;
-
-  /**
-   * Empty state message
-   */
   emptyMessage?: string;
-
-  /**
-   * Row click handler
-   */
   onRowClick?: (row: any) => void;
-
-  /**
-   * Custom cell renderer
-   */
   renderCell?: (row: any, column: CustomTableColumn, columnIndex: number) => React.ReactNode;
-
-  /**
-   * Table header background color
-   */
   headerBgColor?: string;
-
-  /**
-   * Table header text color
-   */
   headerTextColor?: string;
-
-  /**
-   * Row hover effect
-   */
   hoverable?: boolean;
-
-  /**
-   * Additional CSS classes for the table wrapper
-   */
   className?: string;
-
-  /**
-   * Additional CSS classes for the table element
-   */
   tableClassName?: string;
-
   /**
-   * Below this Tailwind breakpoint, rows stack columns vertically (cards)
-   * instead of a wide horizontal table. Default: lg.
+   * @deprecated Stacked card layout is removed. Prop kept for call-site compatibility.
+   * Tables always render as a normal table with horizontal scroll on small screens.
    */
-  stackBelow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  stackBelow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | false;
 }
 
 /**
@@ -138,9 +62,8 @@ function renderStackedHeader(header: string, align: 'left' | 'center' | 'right' 
 }
 
 /**
- * CustomTable Component
- * A reusable table component with consistent styling and behavior.
- * On narrower viewports, columns stack downward as cards.
+ * CustomTable — always a normal HTML table.
+ * Small screens scroll horizontally (no stacked field cards).
  */
 export const CustomTable: React.FC<CustomTableProps> = ({
   columns,
@@ -216,65 +139,25 @@ export const CustomTable: React.FC<CustomTableProps> = ({
 
   return (
     <div className={cn('w-full max-w-full min-w-0', className)}>
-      {/* Narrow / not-fullscreen: columns stack downward as cards */}
-      <div className={cn('space-y-3', stackVisible)}>
-        {loading || data.length === 0 ? (
-          emptyOrLoading
-        ) : (
-          data.map((row: any, rowIdx: number) => (
-            <div
-              key={rowIdx}
-              role={onRowClick ? 'button' : undefined}
-              tabIndex={onRowClick ? 0 : undefined}
-              onClick={() => onRowClick?.(row)}
-              onKeyDown={(e) => {
-                if (!onRowClick) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onRowClick(row);
-                }
-              }}
-              className={cn(
-                'rounded-lg border border-gray-200 bg-white p-3 shadow-sm',
-                hoverable && onRowClick && 'cursor-pointer hover:bg-gray-50',
-                onRowClick && 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20'
-              )}
-            >
-              <dl className="space-y-2.5">
-                {columns.map((col, colIdx) => (
-                  <div
-                    key={colIdx}
-                    className="grid grid-cols-[minmax(6rem,8.5rem)_minmax(0,1fr)] items-start gap-2 border-b border-gray-100 pb-2 last:border-0 last:pb-0"
-                  >
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      {col.header}
-                    </dt>
-                    <dd className="min-w-0 text-sm text-gray-800">{cellRenderer(row, col, colIdx)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Wide / fullscreen: normal table */}
-      <div className={cn('overflow-x-auto overflow-y-hidden', tableVisible)}>
-        <table className={cn('min-w-full bg-white', tableClassName)}>
+      <div className="w-full max-w-full min-w-0 overflow-x-auto overflow-y-hidden">
+        <table className={cn('min-w-max w-full bg-white', tableClassName)}>
           <thead>
             <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
               {columns.map((col, idx) => (
                 <th
                   key={idx}
                   className={cn(
-                    'text-sm font-medium py-2 text-center',
+                    'text-sm font-medium py-2 text-center whitespace-nowrap',
                     col.align === 'left' ? 'pl-2 pr-4 text-left' : 'px-4',
                     col.align === 'right' && 'px-4 text-right',
                     col.width && `w-[${col.width}]`
                   )}
                   style={col.width ? { width: col.width } : undefined}
                 >
-                  {renderStackedHeader(col.header, col.align === 'left' || col.align === 'right' ? col.align : 'center')}
+                  {renderStackedHeader(
+                    col.header,
+                    col.align === 'left' || col.align === 'right' ? col.align : 'center'
+                  )}
                 </th>
               ))}
             </tr>
@@ -307,7 +190,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     <td
                       key={colIdx}
                       className={cn(
-                        'text-sm py-2 align-middle',
+                        'text-sm py-2 align-middle whitespace-nowrap',
                         col.align === 'left' ? 'pl-2 pr-4 text-left' : 'px-4 text-center',
                         col.align === 'right' && 'px-4 text-right'
                       )}

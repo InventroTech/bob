@@ -154,7 +154,7 @@ const CustomAppPage: React.FC = () => {
     );
 
   return (
-    <div className="w-full max-w-full min-w-0 overflow-x-hidden">
+    <div className="w-full max-w-full min-w-0">
       {/* Fixed Header — compact so request tables start closer to the title */}
       {headerTitle && !hidePageHeader && (
         <div className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white max-md:hidden">
