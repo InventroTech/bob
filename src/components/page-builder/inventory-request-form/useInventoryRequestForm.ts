@@ -9,6 +9,9 @@ import { toast } from 'sonner';
 import { formatCurrencyDisplay } from '@/lib/utils/currencyFormat';
 import { emptyShipmentTrackingFields } from '@/lib/inventory/shipmentTracking';
 import { formatInventoryPriorityLabel } from '@/lib/inventory/priority';
+import {
+  isInventoryTeamLeadRole,
+} from '@/lib/inventory/workflow';
 import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
 import { supabase } from '@/lib/supabase';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
@@ -53,23 +56,68 @@ import {
 
 const normalizePageName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
 
-/** Prefer exact My Request(s), else first page whose name contains "my request". */
-function pickMyRequestPageId(
+function isApproverLikeRole(roleName: string | null | undefined): boolean {
+  if (isInventoryTeamLeadRole(roleName)) return true;
+  const r = String(roleName ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  // Procurement Manager (and similar) — not generic "manager".
+  return r.includes('procurement');
+}
+
+function pickPageIdByNames(
   pages: Array<{ id: string; name: string }>,
-  preferredName?: string
+  exactNames: string[],
+  fuzzyIncludes: string[]
+): string | null {
+  for (const exact of exactNames) {
+    const hit = pages.find((p) => normalizePageName(p.name) === exact);
+    if (hit) return hit.id;
+  }
+  for (const fuzzy of fuzzyIncludes) {
+    const hit = pages.find((p) => normalizePageName(p.name).includes(fuzzy));
+    if (hit) return hit.id;
+  }
+  return null;
+}
+
+/**
+ * After create:
+ * - Prefer Page Builder override `redirectAfterSubmitPageName` when set
+ * - Prefer My Request(s) for all roles (including TL / Procurement Manager)
+ * - Approver roles fall back to All Request(s) if My Request page is missing
+ */
+function pickPostCreatePageId(
+  pages: Array<{ id: string; name: string }>,
+  preferredName: string | undefined,
+  roleName: string | null | undefined
 ): string | null {
   if (!pages.length) return null;
   const preferred = preferredName ? normalizePageName(preferredName) : '';
   if (preferred) {
     const exactPreferred = pages.find((p) => normalizePageName(p.name) === preferred);
     if (exactPreferred) return exactPreferred.id;
+    const fuzzyPreferred = pages.find((p) => normalizePageName(p.name).includes(preferred));
+    if (fuzzyPreferred) return fuzzyPreferred.id;
   }
-  const exact =
-    pages.find((p) => normalizePageName(p.name) === 'my requests') ||
-    pages.find((p) => normalizePageName(p.name) === 'my request');
-  if (exact) return exact.id;
-  const fuzzy = pages.find((p) => normalizePageName(p.name).includes('my request'));
-  return fuzzy?.id ?? null;
+
+  const myRequest = pickPageIdByNames(
+    pages,
+    ['my requests', 'my request'],
+    ['my request']
+  );
+  if (myRequest) return myRequest;
+
+  if (isApproverLikeRole(roleName)) {
+    return pickPageIdByNames(
+      pages,
+      ['all requests', 'all request'],
+      ['all request']
+    );
+  }
+
+  return null;
 }
 
 export function useInventoryRequestForm({
@@ -1197,7 +1245,7 @@ export function useInventoryRequestForm({
 
     if (!requestCategory) {
       missingKeys.push('requestCategory');
-      missingLabels.push('Category');
+      missingLabels.push('Shipment Type');
     }
     if (!projectPurpose.trim()) {
       missingKeys.push('projectPurpose');
@@ -1333,7 +1381,7 @@ export function useInventoryRequestForm({
       }
       rememberProjectSuggestion(projectPurpose);
 
-      // Go to My Requests after create (custom app page, or standalone inventory route).
+      // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
       let redirected = false;
       if (tenantSlug) {
         try {
@@ -1356,13 +1404,13 @@ export function useInventoryRequestForm({
               pages = data ?? [];
             }
           }
-          const pageId = pickMyRequestPageId(pages, redirectPageName);
+          const pageId = pickPostCreatePageId(pages, redirectPageName, myRoleName);
           if (pageId) {
             navigate(`/app/${tenantSlug}/pages/${pageId}`);
             redirected = true;
           }
         } catch (navErr) {
-          console.warn('Could not navigate to My Requests page', navErr);
+          console.warn('Could not navigate after request create', navErr);
         }
       } else {
         navigate('/inventory/requests');

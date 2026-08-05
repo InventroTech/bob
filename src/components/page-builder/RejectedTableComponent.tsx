@@ -48,7 +48,10 @@ export const DEFAULT_REJECTED_TABLE_COLUMNS: RejectedTableColumn[] = [
   { key: 'status', label: 'Status', type: 'chip' },
 ];
 
-/** Status always shown on Rejected Table (hardcoded). */
+/**
+ * Suggested status for a Rejected page (not forced in code).
+ * Put it on the API endpoint, e.g. `?status=REJECTED`.
+ */
 export const REJECTED_TABLE_STATUSES = ['REJECTED'] as const;
 
 /** Defaults applied when the component is first dropped in Page Builder. */
@@ -59,9 +62,6 @@ export const DEFAULT_REJECTED_TABLE_CONFIG = {
   tableType: 'itemsTable' as const,
   detailMode: 'record_form_modal' as const,
   emptyMessage: 'No rejected requests found',
-  forceQueryParams: {
-    status: REJECTED_TABLE_STATUSES.join(','),
-  },
   formModalFields: [
     { key: 'status', label: 'Status', enabled: false },
     { key: 'item_name_freeform', label: 'Item', enabled: false },
@@ -73,7 +73,7 @@ export const DEFAULT_REJECTED_TABLE_CONFIG = {
     { key: 'urgency_level', label: 'Urgency Level', enabled: false },
     { key: 'department', label: 'Department', enabled: false },
     { key: 'project_purpose', label: 'Project', enabled: false },
-    { key: 'category', label: 'Category', enabled: false },
+    { key: 'category', label: 'Shipment Type', enabled: false },
     { key: 'specifications', label: 'Specifications', enabled: true },
     { key: 'product_link', label: 'Item link', enabled: true, link: true },
     { key: 'comments', label: 'Comments', enabled: true },
@@ -105,7 +105,8 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
 }
 
 /**
- * Rejected table for Page Builder — always filters to status=REJECTED.
+ * Rejected table for Page Builder.
+ * Status filtering is not hardcoded — set it on the API endpoint or table filters.
  */
 export const RejectedTableComponent: React.FC<RejectedTableProps> = ({ config }) => {
   const mergedConfig = useMemo(() => {
@@ -139,10 +140,6 @@ export const RejectedTableComponent: React.FC<RejectedTableProps> = ({ config })
       tableType: config?.tableType === 'default' ? 'default' : 'itemsTable',
       detailMode,
       emptyMessage: config?.emptyMessage ?? 'No rejected requests found',
-      // Always restrict to REJECTED — not overridable from Page Builder config.
-      forceQueryParams: {
-        status: REJECTED_TABLE_STATUSES.join(','),
-      },
       formModalFields:
         Array.isArray(config?.formModalFields) && (config.formModalFields as unknown[]).length > 0
           ? config.formModalFields

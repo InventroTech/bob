@@ -48,7 +48,10 @@ export const DEFAULT_PENDING_APPROVAL_TABLE_COLUMNS: PendingApprovalTableColumn[
   { key: 'status', label: 'Status', type: 'chip' },
 ];
 
-/** Statuses always shown on Pending Approval Table (hardcoded). */
+/**
+ * Suggested statuses for a Pending Approval page (not forced in code).
+ * Put them on the API endpoint, e.g. `?status=NEW_REQUEST,ON_HOLD`.
+ */
 export const PENDING_APPROVAL_STATUSES = ['NEW_REQUEST', 'ON_HOLD'] as const;
 
 /** Defaults applied when the component is first dropped in Page Builder. */
@@ -59,9 +62,6 @@ export const DEFAULT_PENDING_APPROVAL_TABLE_CONFIG = {
   tableType: 'itemsTable' as const,
   detailMode: 'record_form_modal' as const,
   emptyMessage: 'No pending approvals found',
-  forceQueryParams: {
-    status: PENDING_APPROVAL_STATUSES.join(','),
-  },
   formModalFields: [
     { key: 'status', label: 'Status', enabled: false },
     { key: 'item_name_freeform', label: 'Item', enabled: false },
@@ -73,7 +73,7 @@ export const DEFAULT_PENDING_APPROVAL_TABLE_CONFIG = {
     { key: 'urgency_level', label: 'Urgency Level', enabled: false },
     { key: 'department', label: 'Department', enabled: false },
     { key: 'project_purpose', label: 'Project', enabled: false },
-    { key: 'category', label: 'Category', enabled: false },
+    { key: 'category', label: 'Shipment Type', enabled: false },
     { key: 'specifications', label: 'Specifications', enabled: true },
     { key: 'product_link', label: 'Item link', enabled: true, link: true },
     { key: 'comments', label: 'Comments', enabled: true },
@@ -106,7 +106,8 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
 
 /**
  * Pending Approval table for Page Builder.
- * Fixed starter columns — no shipment tracking merge.
+ * Status filtering is not hardcoded — set it on the API endpoint or table filters
+ * (same pattern as other tables / Pending Leads config).
  */
 export const PendingApprovalTableComponent: React.FC<PendingApprovalTableProps> = ({ config }) => {
   const mergedConfig = useMemo(() => {
@@ -141,10 +142,6 @@ export const PendingApprovalTableComponent: React.FC<PendingApprovalTableProps> 
       tableType: config?.tableType === 'default' ? 'default' : 'itemsTable',
       detailMode,
       emptyMessage: config?.emptyMessage ?? 'No pending approvals found',
-      // Always restrict to pending statuses — not overridable from Page Builder config.
-      forceQueryParams: {
-        status: PENDING_APPROVAL_STATUSES.join(','),
-      },
       formModalFields:
         Array.isArray(config?.formModalFields) && (config.formModalFields as unknown[]).length > 0
           ? config.formModalFields
