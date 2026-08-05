@@ -247,6 +247,7 @@ export function LeadTableView(props: LeadTableModel) {
             headerBgColor="bg-black"
             headerTextColor="text-white"
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
+            stackBelow="xl"
           />
         </div>
         
