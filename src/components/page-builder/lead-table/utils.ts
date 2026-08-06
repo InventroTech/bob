@@ -193,20 +193,40 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
               break;
             }
             const entityType = String(config?.entityType || '');
-            // Request / requirement / inventory / unmannd: show calendar day (e.g. Jul 22, 2026), not "12 hours ago".
+            // Request / requirement / inventory / unmannd: show calendar day (e.g. 24 July 2026), not "12 hours ago".
             const useCalendarDate =
               entityType.startsWith('inventory_') ||
               entityType === 'unmannd_request' ||
               col.key === 'request_date' ||
+              col.key === 'requested_date' ||
               col.key === 'required_date' ||
+              col.key === 'requirement_date' ||
               col.key === 'created_at';
             transformedLead[col.key] = useCalendarDate
               ? formatCalendarDate(String(value))
               : formatRelativeTime(String(value));
             break;
           }
-          default:
-            transformedLead[col.key] = value !== null && value !== undefined ? value : 'N/A';
+          default: {
+            // Even if Page Builder marks these as text, keep the same calendar format as Request Date.
+            const calendarKeys = new Set([
+              'request_date',
+              'requested_date',
+              'required_date',
+              'requirement_date',
+              'eta',
+            ]);
+            if (
+              calendarKeys.has(col.key) &&
+              value !== null &&
+              value !== undefined &&
+              String(value).trim() !== ''
+            ) {
+              transformedLead[col.key] = formatCalendarDate(String(value));
+            } else {
+              transformedLead[col.key] = value !== null && value !== undefined ? value : 'N/A';
+            }
+          }
         }
       }
     });

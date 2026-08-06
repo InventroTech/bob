@@ -23,6 +23,8 @@ export interface User {
   supportDailyLimitOther?: string | number;
   user_parent_id?: number | null;
   managerEmail?: string;
+  /** Tenant-defined custom field values (key → display value). */
+  customFields?: Record<string, string>;
 }
 
 export interface UserCoreSettingsSummary {
@@ -32,6 +34,7 @@ export interface UserCoreSettingsSummary {
   support_resolve_rate_goal?: number;
   support_daily_limit_self_trial?: number;
   support_daily_limit_other?: number;
+  custom_fields?: Record<string, string>;
 }
 
 export interface LeadGroupOption {
@@ -55,10 +58,23 @@ export interface RowEditState {
   supportDailyLimitSelfTrial: string;
   supportDailyLimitOther: string;
   managerEmail: string;
+  customFields: Record<string, string>;
 }
 
 export interface AddUserComponentConfig {
   userScope?: 'all' | 'under_me';
+  /** Form fields for this page (saved with page config — shared). */
+  umFormFields?: string[];
+  /** Table columns for this page (saved with page config — shared). */
+  umColumns?: string[];
+  /** Custom fields for this page (saved with page config — shared). */
+  umCustomFields?: Array<{
+    key: string;
+    label: string;
+    type: 'string' | 'number' | 'boolean';
+    showInForm: boolean;
+    showInTable: boolean;
+  }>;
 }
 
 export interface AddUserComponentProps {

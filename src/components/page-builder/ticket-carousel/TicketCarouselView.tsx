@@ -524,62 +524,64 @@ export function TicketCarouselView(props: TicketCarouselModel) {
                 )}
               >
                 <div className="space-y-3">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="h-11 w-full justify-between rounded-xl border-slate-200 bg-white"
-                        disabled={updating}
-                      >
-                        <span className="text-sm">
-                          {ticket.selectedOtherReasons.length > 0
-                            ? `${ticket.selectedOtherReasons.length} reason(s) selected`
-                            : "Select other reasons"}
-                        </span>
-                        <ChevronDown className="h-4 w-4 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      // Always portal so the list isn't clipped by modal overflow:hidden.
-                      className={cn(
-                        "flex w-80 flex-col overflow-hidden p-4",
-                        isInModal && "z-[100]"
-                      )}
-                      align="start"
-                      collisionPadding={16}
-                      onWheel={(event) => event.stopPropagation()}
-                    >
-                      <div className="flex min-h-0 flex-col space-y-3">
-                        <h4 className="shrink-0 font-medium">Select Other Reasons</h4>
-                        <div
-                          className="max-h-56 overflow-y-auto overflow-x-hidden space-y-2 touch-auto"
-                          style={{
-                            WebkitOverflowScrolling: "touch",
-                          }}
-                          onWheel={(event) => event.stopPropagation()}
-                        >
-                          {OTHER_REASONS_OPTIONS.map((reason) => (
-                            <div key={reason} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`reason-${reason}`}
-                                checked={ticket.selectedOtherReasons.includes(reason)}
-                                onCheckedChange={(checked) =>
-                                  handleOtherReasonChange(reason, checked as boolean)
-                                }
-                                disabled={updating}
-                              />
-                              <label
-                                htmlFor={`reason-${reason}`}
-                                className="cursor-pointer text-sm leading-none"
-                              >
-                                {reason}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                <Popover>
+  <PopoverTrigger asChild>
+    <Button
+      variant="outline"
+      className="h-11 w-full justify-between rounded-xl border-slate-200 bg-white"
+      disabled={updating}
+    >
+      <span className="text-sm">
+        {ticket.selectedOtherReasons.length > 0
+          ? `${ticket.selectedOtherReasons.length} reason(s) selected`
+          : "Select other reasons"}
+      </span>
+      <ChevronDown className="h-4 w-4 opacity-50" />
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent
+    // Always portal so the list isn't clipped by modal overflow:hidden.
+    className={cn(
+      "flex w-80 flex-col overflow-hidden p-4",
+      isInModal && "z-[100]"
+    )}
+    align="start"
+    collisionPadding={16}
+    onWheel={(event) => event.stopPropagation()}
+    onTouchMove={(event) => event.stopPropagation()}
+  >
+    <div className="flex min-h-0 flex-col space-y-3">
+      <h4 className="shrink-0 font-medium">Select Other Reasons</h4>
+      <div
+        className="max-h-56 overflow-y-auto overflow-x-hidden space-y-2 overscroll-contain"
+        style={{
+          WebkitOverflowScrolling: "touch",
+        }}
+        onWheel={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
+      >
+        {OTHER_REASONS_OPTIONS.map((reason) => (
+          <div key={reason} className="flex items-center space-x-2">
+            <Checkbox
+              id={`reason-${reason}`}
+              checked={ticket.selectedOtherReasons.includes(reason)}
+              onCheckedChange={(checked) =>
+                handleOtherReasonChange(reason, checked as boolean)
+              }
+              disabled={updating}
+            />
+            <label
+              htmlFor={`reason-${reason}`}
+              className="cursor-pointer text-sm leading-none"
+            >
+              {reason}
+            </label>
+          </div>
+        ))}
+      </div>
+    </div>
+  </PopoverContent>
+</Popover>
                   {ticket.selectedOtherReasons.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {ticket.selectedOtherReasons.map((reason: string) => (

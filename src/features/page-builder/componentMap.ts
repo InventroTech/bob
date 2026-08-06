@@ -13,6 +13,10 @@ import {
   InventoryTableComponent,
   ProcurementTableComponent,
   MyRequestTableComponent,
+  PendingApprovalTableComponent,
+  RejectedTableComponent,
+  VendorIdentifiedTableComponent,
+  ProcurementDashboardComponent,
   InventoryRequestFormComponent,
   ProcurementRequestFormComponent,
   TeamDashboardComponent,
@@ -120,6 +124,17 @@ export interface ComponentConfig {
   // UserHierarchy specific fields
   showTable?: boolean;
   showDiagram?: boolean;
+  // AddUser / User Management
+  userScope?: 'all' | 'under_me';
+  umFormFields?: string[];
+  umColumns?: string[];
+  umCustomFields?: Array<{
+    key: string;
+    label: string;
+    type: 'string' | 'number' | 'boolean';
+    showInForm: boolean;
+    showInTable: boolean;
+  }>;
   // InventoryRequestForm specific fields
   entityType?: string;
   initialStatus?: string;
@@ -151,6 +166,10 @@ export const componentMap: Record<string, React.FC<any>> = {
   inventoryTable: InventoryTableComponent,
   procurementTable: ProcurementTableComponent,
   myRequestTable: MyRequestTableComponent,
+  pendingApprovalTable: PendingApprovalTableComponent,
+  rejectedTable: RejectedTableComponent,
+  vendorIdentifiedTable: VendorIdentifiedTableComponent,
+  procurementDashboard: ProcurementDashboardComponent,
   collapseCard: CollapseCard,
   leadCarousel: LeadCardCarouselWrapper,
   oeLeadsTable: OeLeadsTable,

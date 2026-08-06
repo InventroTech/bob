@@ -1,113 +1,69 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 
-export interface CustomTableColumn {
-  /**
-   * Column header text
-   */
+export type CustomTableColumn = {
   header: string;
-  
-  /**
-   * Column accessor/key for data
-   */
   accessor: string;
-  
-  /**
-   * Column type for rendering
-   */
-  type?: 'text' | 'chip' | 'link' | 'action';
-  
-  /**
-   * Field to use as link (for link type)
-   */
+  type?: 'text' | 'number' | 'date' | 'chip' | 'link' | 'action';
   linkField?: string;
-  /** Whether this column is editable inline in table (used by custom renderers). */
   editableInTable?: boolean;
-  
-  /**
-   * For action type: open detail card (lead/ticket) on click
-   */
-  openCard?: boolean | string;
-  
-  /**
-   * For action type: API endpoint to call when action button is clicked
-   */
+  openCard?: boolean;
   actionApiEndpoint?: string;
   actionApiMethod?: string;
   actionApiHeaders?: string;
   actionApiPayload?: string;
-  
-  /**
-   * Custom width
-   */
-  width?: string;
-  
-  /**
-   * Text alignment
-   */
   align?: 'left' | 'center' | 'right';
-}
+  width?: string;
+};
 
 export interface CustomTableProps {
-  /**
-   * Table columns configuration
-   */
   columns: CustomTableColumn[];
-  
-  /**
-   * Table data rows
-   */
   data: any[];
-  
-  /**
-   * Loading state
-   */
   loading?: boolean;
-  
-  /**
-   * Empty state message
-   */
   emptyMessage?: string;
-  
-  /**
-   * Row click handler
-   */
   onRowClick?: (row: any) => void;
-  
-  /**
-   * Custom cell renderer
-   */
   renderCell?: (row: any, column: CustomTableColumn, columnIndex: number) => React.ReactNode;
-  
-  /**
-   * Table header background color
-   */
   headerBgColor?: string;
-  
-  /**
-   * Table header text color
-   */
   headerTextColor?: string;
-  
-  /**
-   * Row hover effect
-   */
   hoverable?: boolean;
-  
-  /**
-   * Additional CSS classes for the table wrapper
-   */
   className?: string;
-  
-  /**
-   * Additional CSS classes for the table element
-   */
   tableClassName?: string;
+  /**
+   * @deprecated Stacked card layout is removed. Prop kept for call-site compatibility.
+   * Tables always render as a normal table with horizontal scroll on small screens.
+   */
+  stackBelow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | false;
 }
 
 /**
- * CustomTable Component
- * A reusable table component with consistent styling and behavior
+ * Stack multi-word headers (e.g. "Request Date").
+ * Centered under the column by default; left-aligned columns keep words left.
+ */
+function renderStackedHeader(header: string, align: 'left' | 'center' | 'right' = 'center') {
+  const words = String(header || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length <= 1) return header;
+  return (
+    <span
+      className={cn(
+        'inline-flex flex-col gap-0.5 leading-tight',
+        align === 'left' && 'items-start',
+        align === 'right' && 'items-end',
+        align === 'center' && 'items-center justify-center'
+      )}
+    >
+      {words.map((word, i) => (
+        <span key={`${word}-${i}`}>{word}</span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * CustomTable — always a normal HTML table.
+ * Small screens scroll horizontally (no stacked field cards).
  */
 export const CustomTable: React.FC<CustomTableProps> = ({
   columns,
@@ -122,9 +78,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   className,
   tableClassName,
 }) => {
-  const defaultRenderCell = (row: any, column: CustomTableColumn, columnIndex: number) => {
+  const defaultRenderCell = (row: any, column: CustomTableColumn, _columnIndex: number) => {
     const value = row[column.accessor];
-    
+
     if (column.type === 'link' && column.linkField && row[column.linkField]) {
       return (
         <a
@@ -138,7 +94,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
         </a>
       );
     }
-    
+
     if (column.type === 'chip' && value) {
       return (
         <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
@@ -146,74 +102,79 @@ export const CustomTable: React.FC<CustomTableProps> = ({
         </span>
       );
     }
-    
+
     return <span>{value || 'N/A'}</span>;
   };
 
   const cellRenderer = renderCell || defaultRenderCell;
 
   return (
-    <div className={cn('w-full overflow-x-auto', className)}>
-      <table className={cn('min-w-full bg-white', tableClassName)}>
-        <thead>
-          <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
-            {columns.map((col, idx) => (
-              <th
-                key={idx}
-                className={cn(
-                  'text-sm font-medium px-4 py-3 text-left',
-                  col.align === 'center' && 'text-center',
-                  col.align === 'right' && 'text-right',
-                  col.width && `w-[${col.width}]`
-                )}
-                style={col.width ? { width: col.width } : undefined}
-              >
-                {col.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="text-gray-600 text-sm bg-white">
-          {loading ? (
-            <tr>
-              <td colSpan={columns.length} className="text-center py-8 text-sm text-gray-500">
-                Loading...
-              </td>
+    <div className={cn('w-full max-w-full min-w-0', className)}>
+      <div className="w-full max-w-full min-w-0 overflow-x-auto overflow-y-hidden">
+        <table className={cn('min-w-max w-full bg-white', tableClassName)}>
+          <thead>
+            <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
+              {columns.map((col, idx) => (
+                <th
+                  key={idx}
+                  className={cn(
+                    'text-sm font-medium py-2 text-center whitespace-nowrap',
+                    col.align === 'left' ? 'pl-2 pr-4 text-left' : 'px-4',
+                    col.align === 'right' && 'px-4 text-right',
+                    col.width && `w-[${col.width}]`
+                  )}
+                  style={col.width ? { width: col.width } : undefined}
+                >
+                  {renderStackedHeader(
+                    col.header,
+                    col.align === 'left' || col.align === 'right' ? col.align : 'center'
+                  )}
+                </th>
+              ))}
             </tr>
-          ) : data.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} className="text-center py-8 text-sm text-gray-500">
-                {emptyMessage}
-              </td>
-            </tr>
-          ) : (
-            data.map((row: any, rowIdx: number) => (
-              <tr
-                key={rowIdx}
-                onClick={() => onRowClick?.(row)}
-                className={cn(
-                  'border-b border-gray-200 bg-white',
-                  hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
-                  !hoverable && 'hover:bg-transparent'
-                )}
-              >
-                {columns.map((col, colIdx) => (
-                  <td
-                    key={colIdx}
-                    className={cn(
-                      'text-sm px-4 py-3 text-left',
-                      col.align === 'center' && 'text-center',
-                      col.align === 'right' && 'text-right'
-                    )}
-                  >
-                    {cellRenderer(row, col, colIdx)}
-                  </td>
-                ))}
+          </thead>
+          <tbody className="text-gray-600 text-sm bg-white">
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length} className="text-center py-8 text-sm text-gray-500">
+                  Loading...
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : data.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="text-center py-8 text-sm text-gray-500">
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : (
+              data.map((row: any, rowIdx: number) => (
+                <tr
+                  key={rowIdx}
+                  onClick={() => onRowClick?.(row)}
+                  className={cn(
+                    'border-b border-gray-200 bg-white',
+                    hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
+                    !hoverable && 'hover:bg-transparent'
+                  )}
+                >
+                  {columns.map((col, colIdx) => (
+                    <td
+                      key={colIdx}
+                      className={cn(
+                        'text-sm py-2 align-middle whitespace-nowrap',
+                        col.align === 'left' ? 'pl-2 pr-4 text-left' : 'px-4 text-center',
+                        col.align === 'right' && 'px-4 text-right'
+                      )}
+                    >
+                      {cellRenderer(row, col, colIdx)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

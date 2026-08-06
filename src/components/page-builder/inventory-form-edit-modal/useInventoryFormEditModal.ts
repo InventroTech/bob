@@ -39,6 +39,7 @@ import {
   RECORDS_URL,
   ADD_VENDOR_VALUE,
   toVendorStorageName,
+  resolveVendorDisplayName,
   looksLikeUrl,
   isLinkLikeFieldKey,
   formatDisplayValue,
@@ -69,6 +70,7 @@ export function useInventoryFormEditModal({
   showDeleteRequestButton,
   showHistoryButton,
   onDeleted,
+  uiVariant = 'default',
 }: InventoryFormEditModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -178,9 +180,18 @@ export function useInventoryFormEditModal({
         courier: result.courier_name,
       });
       const patch: Record<string, unknown> = {};
-      if (result.tracking_number) {
-        setField('tracking_number', result.tracking_number);
-        patch.tracking_number = result.tracking_number;
+      // Never overwrite a real AWB with HTML-scrape junk like "Shipment".
+      const incomingNumber = String(result.tracking_number ?? '').trim();
+      const looksLikeValidAwb =
+        incomingNumber.length >= 8 &&
+        incomingNumber.length <= 40 &&
+        /\d/.test(incomingNumber) &&
+        !/^(shipment|tracking|delivered|delivery|exception|aftership|bluedart|package|courier|status|transit|ordered)$/i.test(
+          incomingNumber
+        );
+      if (looksLikeValidAwb) {
+        setField('tracking_number', incomingNumber);
+        patch.tracking_number = incomingNumber;
       }
       // Always fill tracking link when the user only pasted an AWB.
       if (result.tracking_link) {
@@ -447,12 +458,24 @@ export function useInventoryFormEditModal({
         initial[f.key] = Array.isArray(val) ? '' : val !== undefined && val !== null ? val : '';
         return;
       }
-      if ((f.key === 'vendor' || f.key === 'vendor_name') && typeof val === 'string') {
-        initial[f.key] = toVendorStorageName(val);
+      if (f.key === 'vendor' || f.key === 'vendor_name') {
+        const fromField = resolveVendorDisplayName(val);
+        const fromAlt =
+          f.key === 'vendor'
+            ? resolveVendorDisplayName(data.vendor_name ?? recordAny.vendor_name)
+            : resolveVendorDisplayName(data.vendor ?? recordAny.vendor);
+        initial[f.key] = fromField || fromAlt || '';
         return;
       }
       initial[f.key] = val !== undefined && val !== null ? val : '';
     });
+    // Ensure `vendor` is populated even if only `vendor_name` exists on the record.
+    if (!initial.vendor) {
+      const fallback = resolveVendorDisplayName(
+        data.vendor ?? data.vendor_name ?? recordAny.vendor ?? recordAny.vendor_name
+      );
+      if (fallback) initial.vendor = fallback;
+    }
     if (data.extra_charges != null && data.extra_charges !== '') {
       const parsedExtraCharges = toCurrencyNumber(data.extra_charges);
       if (parsedExtraCharges != null) {
@@ -1175,6 +1198,7 @@ export function useInventoryFormEditModal({
     showDeleteRequestButton,
     showHistoryButton,
     onDeleted,
+    uiVariant,
     _formModalDescription,
     toast,
     user,

@@ -1,6 +1,7 @@
 /** State, effects, and handlers for the inventory request form. */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import type { MembershipUser } from '@/lib/api/services/membership';
@@ -8,13 +9,20 @@ import { toast } from 'sonner';
 import { formatCurrencyDisplay } from '@/lib/utils/currencyFormat';
 import { emptyShipmentTrackingFields } from '@/lib/inventory/shipmentTracking';
 import { formatInventoryPriorityLabel } from '@/lib/inventory/priority';
+import {
+  isInventoryTeamLeadRole,
+} from '@/lib/inventory/workflow';
 import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
+import { supabase } from '@/lib/supabase';
+import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
+import { getEffectiveToken, fetchPagesForRole } from '@/lib/auth/spoof';
 
 import {
   RECORDS_URL,
   PRICE_COMPARE_URL,
   FALLBACK_ECOMMERCE_SOURCES,
   DEFAULT_DELIVERY_PINCODE,
+  DEFAULT_DELIVERY_ADDRESS,
   PRIORITY_OPTIONS,
   REQUIRED_ITEM_FIELDS,
 } from './constants';
@@ -46,22 +54,92 @@ import {
   isExactEnoughProductMatch,
 } from './utils';
 
+const normalizePageName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+function isApproverLikeRole(roleName: string | null | undefined): boolean {
+  if (isInventoryTeamLeadRole(roleName)) return true;
+  const r = String(roleName ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  // Procurement Manager (and similar) — not generic "manager".
+  return r.includes('procurement');
+}
+
+function pickPageIdByNames(
+  pages: Array<{ id: string; name: string }>,
+  exactNames: string[],
+  fuzzyIncludes: string[]
+): string | null {
+  for (const exact of exactNames) {
+    const hit = pages.find((p) => normalizePageName(p.name) === exact);
+    if (hit) return hit.id;
+  }
+  for (const fuzzy of fuzzyIncludes) {
+    const hit = pages.find((p) => normalizePageName(p.name).includes(fuzzy));
+    if (hit) return hit.id;
+  }
+  return null;
+}
+
+/**
+ * After create:
+ * - Prefer Page Builder override `redirectAfterSubmitPageName` when set
+ * - Prefer My Request(s) for all roles (including TL / Procurement Manager)
+ * - Approver roles fall back to All Request(s) if My Request page is missing
+ */
+function pickPostCreatePageId(
+  pages: Array<{ id: string; name: string }>,
+  preferredName: string | undefined,
+  roleName: string | null | undefined
+): string | null {
+  if (!pages.length) return null;
+  const preferred = preferredName ? normalizePageName(preferredName) : '';
+  if (preferred) {
+    const exactPreferred = pages.find((p) => normalizePageName(p.name) === preferred);
+    if (exactPreferred) return exactPreferred.id;
+    const fuzzyPreferred = pages.find((p) => normalizePageName(p.name).includes(preferred));
+    if (fuzzyPreferred) return fuzzyPreferred.id;
+  }
+
+  const myRequest = pickPageIdByNames(
+    pages,
+    ['my requests', 'my request'],
+    ['my request']
+  );
+  if (myRequest) return myRequest;
+
+  if (isApproverLikeRole(roleName)) {
+    return pickPageIdByNames(
+      pages,
+      ['all requests', 'all request'],
+      ['all request']
+    );
+  }
+
+  return null;
+}
+
 export function useInventoryRequestForm({
   config,
   variant = 'default',
 }: InventoryRequestFormProps) {
   const isProcurement = variant === 'procurement';
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const navigate = useNavigate();
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
 
   const entityType = config?.entityType ?? 'inventory_request';
-  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'NEW_REQUEST';  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
+  const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'NEW_REQUEST';
+  const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
+  const redirectPageName = config?.redirectAfterSubmitPageName;
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
   const [projectPurpose, setProjectPurpose] = useState('');
   const [requestCategory, setRequestCategory] = useState<RequestCategory>('');
   const [deliveryPincode, setDeliveryPincode] = useState(DEFAULT_DELIVERY_PINCODE);
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState(DEFAULT_DELIVERY_ADDRESS);
   const [myRoleName, setMyRoleName] = useState<string>('');
   const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
   // team_lead / manager store authz_tenantmembership.id
@@ -102,6 +180,10 @@ export function useInventoryRequestForm({
   const [liveCompareLoadingByItemId, setLiveCompareLoadingByItemId] = useState<Record<string, boolean>>({});
   /** Per-item loading while resolving product details from a pasted item link. */
   const [linkFetchLoadingByItemId, setLinkFetchLoadingByItemId] = useState<Record<string, boolean>>({});
+  /** Shake nounce for header/item fields that failed validation (or link fetch). */
+  const [fieldShakeNonce, setFieldShakeNonce] = useState<Record<string, number>>({});
+  /** First missing field to focus after validation shake re-render. */
+  const pendingFocusFieldKeyRef = useRef<string | null>(null);
   /** Last item-link URL successfully fetched per item (skip duplicate blur fetches). */
   const [lastFetchedLinkByItemId, setLastFetchedLinkByItemId] = useState<Record<string, string>>({});
   /** Shown when live search finds no close product match. */
@@ -469,6 +551,50 @@ export function useInventoryRequestForm({
     setItems((prev) =>
       prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
     );
+    const shakeKey = `item:${id}:${String(field)}`;
+    setFieldShakeNonce((prev) => {
+      if (!prev[shakeKey]) return prev;
+      const next = { ...prev };
+      delete next[shakeKey];
+      return next;
+    });
+  }, []);
+
+  const shakeFields = useCallback((keys: string[]) => {
+    if (keys.length === 0) return;
+    pendingFocusFieldKeyRef.current = keys[0];
+    setFieldShakeNonce((prev) => {
+      const next = { ...prev };
+      for (const key of keys) {
+        next[key] = (next[key] ?? 0) + 1;
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const key = pendingFocusFieldKeyRef.current;
+    if (!key) return;
+    pendingFocusFieldKeyRef.current = null;
+    const timer = window.setTimeout(() => {
+      const wrap = document.querySelector(`[data-shake-key="${CSS.escape(key)}"]`);
+      if (!wrap) return;
+      wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const focusable = wrap.querySelector<HTMLElement>(
+        'input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), button[role="combobox"], [role="combobox"]'
+      );
+      focusable?.focus({ preventScroll: true });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [fieldShakeNonce]);
+
+  const clearFieldShake = useCallback((key: string) => {
+    setFieldShakeNonce((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }, []);
 
   const removeQuote = useCallback((itemId: string, quoteId: string) => {
@@ -512,6 +638,13 @@ export function useInventoryRequestForm({
   /**
    * Fetch product title / price / vendor from a pasted item link via price-compare (urls only).
    */
+  const shakeItemLink = useCallback(
+    (itemId: string) => {
+      shakeFields([`item:${itemId}:product_link`]);
+    },
+    [shakeFields]
+  );
+
   const fetchDetailsFromItemLink = useCallback(
     async (itemId: string, rawUrl?: string, options?: { force?: boolean }) => {
       const item = items.find((i) => i.id === itemId);
@@ -519,7 +652,10 @@ export function useInventoryRequestForm({
 
       const url = String(rawUrl ?? item.product_link ?? '').trim();
       if (!looksLikeProductUrl(url)) {
-        if (url) toast.error('Enter a valid product URL (https://…).');
+        shakeItemLink(itemId);
+        if (url) {
+          toast.error('Enter a valid product URL (https://…).');
+        }
         return;
       }
 
@@ -542,6 +678,7 @@ export function useInventoryRequestForm({
         );
         const data = res.data;
         if (data?.error) {
+          shakeItemLink(itemId);
           toast.error(data.error);
           return;
         }
@@ -554,6 +691,7 @@ export function useInventoryRequestForm({
             (data?.results ?? []).find((r) => r.error)?.error ||
             data?.errors?.[0] ||
             'Could not fetch product details from this link.';
+          shakeItemLink(itemId);
           toast.error(String(errMsg));
           return;
         }
@@ -582,6 +720,7 @@ export function useInventoryRequestForm({
 
         const quote = quoteFromLiveResult(matched, ecommerceSources);
         if (!quote) {
+          shakeItemLink(itemId);
           toast.error('Could not read a price from this link.');
           return;
         }
@@ -623,6 +762,7 @@ export function useInventoryRequestForm({
         });
         setLastFetchedLinkByItemId((prev) => ({ ...prev, [itemId]: normalizedUrl }));
         setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'found' }));
+        clearFieldShake(`item:${itemId}:product_link`);
 
         toast.success(
           title
@@ -630,6 +770,7 @@ export function useInventoryRequestForm({
             : `Loaded price ${formatCurrencyDisplay(quote.price)} ${quote.currency} from link`
         );
       } catch (err: unknown) {
+        shakeItemLink(itemId);
         const msg =
           err && typeof err === 'object' && 'message' in err
             ? String((err as { message: unknown }).message)
@@ -639,7 +780,7 @@ export function useInventoryRequestForm({
         setLinkFetchLoadingByItemId((prev) => ({ ...prev, [itemId]: false }));
       }
     },
-    [items, deliveryPincode, ecommerceSources, lastFetchedLinkByItemId]
+    [items, deliveryPincode, ecommerceSources, lastFetchedLinkByItemId, shakeItemLink, clearFieldShake]
   );
 
   /** Apply live API results into quote rows for one item. */
@@ -1078,22 +1219,6 @@ export function useInventoryRequestForm({
       return;
     }
 
-    if (!requestCategory) {
-      toast.error('Please select a category (Domestic or International).');
-      return;
-    }
-
-    if (!projectPurpose.trim()) {
-      toast.error('Please fill in the Project.');
-      return;
-    }
-
-    const hasAtLeastOneNamedItem = items.some((i) => (i.item_name_freeform ?? '').trim() !== '');
-    if (!hasAtLeastOneNamedItem) {
-      toast.error('Add at least one item.');
-      return;
-    }
-
     const isMissingRequired = (item: FormItem, field: keyof FormItem): boolean => {
       if (field === 'quantity_required') {
         return item.quantity_required === '' || Number(item.quantity_required) <= 0;
@@ -1105,39 +1230,66 @@ export function useInventoryRequestForm({
       return value == null || String(value).trim() === '';
     };
 
-    const firstInvalid = items.find((item) => {
-      // Ignore completely empty rows created via "Add item" button.
-      const hasAnyInput =
-        (item.item_name_freeform ?? '').trim() !== '' ||
-        item.quantity_required !== '' ||
-        (item.urgency_level ?? '').trim() !== '' ||
-        (item.vendor ?? '').trim() !== '' ||
-        (item.estimated_cost ?? '') !== '' ||
-        (item.product_link ?? '').trim() !== '' ||
-        (item.comments ?? '').trim() !== '';
-      if (!hasAnyInput) return false;
-      return REQUIRED_ITEM_FIELDS.some((f) => isMissingRequired(item, f.key));
-    });
+    const itemHasAnyInput = (item: FormItem): boolean =>
+      (item.item_name_freeform ?? '').trim() !== '' ||
+      item.quantity_required !== '' ||
+      (item.urgency_level ?? '').trim() !== '' ||
+      (item.vendor ?? '').trim() !== '' ||
+      (item.estimated_cost ?? '') !== '' ||
+      (item.product_link ?? '').trim() !== '' ||
+      (item.specifications ?? '').trim() !== '' ||
+      (item.comments ?? '').trim() !== '';
 
-    if (firstInvalid) {
-      const missing = REQUIRED_ITEM_FIELDS
-        .filter((f) => isMissingRequired(firstInvalid, f.key))
-        .map((f) => f.label);
-      toast.error(`Please fill mandatory fields: ${missing.join(', ')}`);
+    const missingKeys: string[] = [];
+    const missingLabels: string[] = [];
+
+    if (!requestCategory) {
+      missingKeys.push('requestCategory');
+      missingLabels.push('Shipment Type');
+    }
+    if (!projectPurpose.trim()) {
+      missingKeys.push('projectPurpose');
+      missingLabels.push('Project');
+    }
+    if (!normalizeIndianPincode(deliveryPincode)) {
+      missingKeys.push('deliveryPincode');
+      missingLabels.push('Delivery PIN code');
+    }
+    if (!deliveryAddress.trim()) {
+      missingKeys.push('deliveryAddress');
+      missingLabels.push('Delivery address');
+    }
+
+    const rowsToValidate = items.filter(itemHasAnyInput);
+    if (rowsToValidate.length === 0) {
+      const firstId = items[0]?.id;
+      if (firstId) {
+        for (const f of REQUIRED_ITEM_FIELDS) {
+          missingKeys.push(`item:${firstId}:${String(f.key)}`);
+        }
+        missingLabels.push('Item details');
+      } else {
+        missingLabels.push('Add at least one item');
+      }
+    } else {
+      for (const item of rowsToValidate) {
+        for (const f of REQUIRED_ITEM_FIELDS) {
+          if (isMissingRequired(item, f.key)) {
+            missingKeys.push(`item:${item.id}:${String(f.key)}`);
+            missingLabels.push(f.label);
+          }
+        }
+      }
+    }
+
+    if (missingKeys.length > 0 || missingLabels.length > 0) {
+      if (missingKeys.length > 0) shakeFields(missingKeys);
+      const uniqueLabels = [...new Set(missingLabels)];
+      toast.error(`Please fill mandatory fields: ${uniqueLabels.join(', ')}`);
       return;
     }
 
-    const validItems = items.filter((item) => {
-      const hasAnyInput =
-        (item.item_name_freeform ?? '').trim() !== '' ||
-        item.quantity_required !== '' ||
-        (item.urgency_level ?? '').trim() !== '' ||
-        (item.vendor ?? '').trim() !== '' ||
-        (item.estimated_cost ?? '') !== '' ||
-        (item.product_link ?? '').trim() !== '' ||
-        (item.comments ?? '').trim() !== '';
-      return hasAnyInput;
-    });
+    const validItems = rowsToValidate;
 
     const requesterId = user.id;
 
@@ -1228,7 +1380,55 @@ export function useInventoryRequestForm({
         );
       }
       rememberProjectSuggestion(projectPurpose);
-      setItems([newEmptyItem()]);
+
+      // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
+      let redirected = false;
+      if (tenantSlug) {
+        try {
+          const token = await getEffectiveToken(session?.access_token ?? null);
+          const tenantId = token ? getTenantIdFromJWT(token) : null;
+          const roleId = token ? getRoleIdFromJWT(token) : null;
+          let pages: Array<{ id: string; name: string }> = [];
+          if (token && tenantId && roleId) {
+            const spoofToken =
+              typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
+            if (spoofToken) {
+              pages = await fetchPagesForRole(tenantId, roleId, spoofToken);
+            } else {
+              const { data } = await supabase
+                .from('pages')
+                .select('id, name')
+                .eq('tenant_id', tenantId)
+                .eq('role', roleId)
+                .order('display_order', { ascending: true });
+              pages = data ?? [];
+            }
+          }
+          const pageId = pickPostCreatePageId(pages, redirectPageName, myRoleName);
+          if (pageId) {
+            navigate(`/app/${tenantSlug}/pages/${pageId}`);
+            redirected = true;
+          }
+        } catch (navErr) {
+          console.warn('Could not navigate after request create', navErr);
+        }
+      } else {
+        navigate('/inventory/requests');
+        redirected = true;
+      }
+
+      if (!redirected) {
+        setItems([newEmptyItem()]);
+        setProjectPurpose('');
+        setRequestCategory('');
+        setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
+        setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
+        setPriceDraftByItemId({});
+        setPriceCompareStatusByItemId({});
+        setLinkFetchLoadingByItemId({});
+        setFieldShakeNonce({});
+        setLastFetchedLinkByItemId({});
+      }
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'message' in err
@@ -1252,9 +1452,10 @@ export function useInventoryRequestForm({
     setProjectPurpose('');
     setRequestCategory('');
     setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
-    setDeliveryAddress('');
+    setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
     setPriceCompareStatusByItemId({});
     setLinkFetchLoadingByItemId({});
+    setFieldShakeNonce({});
     setLastFetchedLinkByItemId({});
     cancelSpecPrompt();
     toast.success('Form cleared.');
@@ -1314,6 +1515,8 @@ export function useInventoryRequestForm({
     setPriceCompareProfile,
     liveCompareLoadingByItemId,
     linkFetchLoadingByItemId,
+    fieldShakeNonce,
+    clearFieldShake,
     priceCompareStatusByItemId,
     focusedItemNameId,
     setFocusedItemNameId,
