@@ -855,11 +855,9 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
             </div>
           )}
 
-          {/* Shipment tracking — ops paste tracking from vendor site */}
+          {/* Shipment tracking — visible to requestor / TL / PM (read-only); paste/edit for ops editors only */}
           {isInventoryRequest &&
-            !isUnmannd &&
             !isPaymentModal &&
-            !isRequester &&
             shouldShowShipmentTrackingSection(
               formData.status ?? (record?.data as any)?.status,
               {
@@ -877,13 +875,13 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                   ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Paste a tracking link or AWB in Paste tracking, then click Apply. We look up the
-                  carrier and update the delivery pipeline when scans are available. Pipeline is
-                  read-only.
+                  {canEditFields
+                    ? 'Paste a tracking link or AWB in Paste tracking, then click Apply. We look up the carrier and update the delivery pipeline when scans are available. Pipeline is read-only.'
+                    : 'Delivery pipeline and tracking details for this request. Refresh to pull the latest carrier scans when available.'}
                 </p>
                 <ShipmentDeliveryPipeline
                   status={formData.shipment_status}
-                  disabled={!canUpdate || !!applyingStatusValue || trackingLiveLoading}
+                  disabled={!canEditFields || !!applyingStatusValue || trackingLiveLoading}
                   statusDetail={trackingStatusDetail}
                   details={trackingDetails}
                   liveLoading={trackingLiveLoading}
@@ -891,41 +889,43 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     void refreshLiveTracking();
                   }}
                 />
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Paste tracking
-                  </Label>
-                  <div className="flex flex-wrap gap-2">
-                    <Input
-                      className="h-9 text-sm rounded-md flex-1 min-w-[12rem]"
-                      value={trackingPasteDraft}
-                      onChange={(e) => setTrackingPasteDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return;
-                        e.preventDefault();
-                        if (!trackingPasteDraft.trim() || trackingLiveLoading) return;
-                        void applyTrackingPaste(trackingPasteDraft);
-                      }}
-                      placeholder="https://… or tracking number"
-                      disabled={!canUpdate || trackingLiveLoading}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9"
-                      disabled={!canUpdate || !trackingPasteDraft.trim() || trackingLiveLoading}
-                      onClick={() => {
-                        void applyTrackingPaste(trackingPasteDraft);
-                      }}
-                    >
-                      {trackingLiveLoading ? 'Tracking…' : 'Apply'}
-                    </Button>
+                {canEditFields ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Paste tracking
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                        className="h-9 text-sm rounded-md flex-1 min-w-[12rem]"
+                        value={trackingPasteDraft}
+                        onChange={(e) => setTrackingPasteDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          if (!trackingPasteDraft.trim() || trackingLiveLoading) return;
+                          void applyTrackingPaste(trackingPasteDraft);
+                        }}
+                        placeholder="https://… or tracking number"
+                        disabled={trackingLiveLoading}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        disabled={!trackingPasteDraft.trim() || trackingLiveLoading}
+                        onClick={() => {
+                          void applyTrackingPaste(trackingPasteDraft);
+                        }}
+                      >
+                        {trackingLiveLoading ? 'Tracking…' : 'Apply'}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Type or paste here, then click Apply. Nothing is applied until then.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Type or paste here, then click Apply. Nothing is applied until then.
-                  </p>
-                </div>
+                ) : null}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
                   <div className="space-y-1.5 min-w-0">
                     <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -936,8 +936,8 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       value={String(formData.tracking_number ?? '')}
                       readOnly
                       tabIndex={-1}
-                      disabled={!canUpdate || trackingLiveLoading}
-                      placeholder="Filled from Paste tracking"
+                      disabled={!canEditFields || trackingLiveLoading}
+                      placeholder={canEditFields ? 'Filled from Paste tracking' : '—'}
                     />
                   </div>
                   <div className="space-y-1.5 min-w-0">
@@ -949,8 +949,8 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       value={String(formData.tracking_link ?? '')}
                       readOnly
                       tabIndex={-1}
-                      disabled={!canUpdate || trackingLiveLoading}
-                      placeholder="Filled from Paste tracking"
+                      disabled={!canEditFields || trackingLiveLoading}
+                      placeholder={canEditFields ? 'Filled from Paste tracking' : '—'}
                     />
                   </div>
                   <div className="space-y-1.5 min-w-0">
@@ -962,7 +962,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       onValueChange={(v) => {
                         setField('courier_name', v === '__auto__' ? '' : v);
                       }}
-                      disabled={!canUpdate || trackingLiveLoading}
+                      disabled={!canEditFields || trackingLiveLoading}
                     >
                       <SelectTrigger className="h-9 w-full text-sm rounded-md">
                         <SelectValue placeholder="Auto-detect" />
@@ -989,7 +989,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       className="h-9 text-sm rounded-md"
                       value={String(formData.eta ?? '').slice(0, 10)}
                       onChange={(e) => setField('eta', e.target.value)}
-                      disabled={!canUpdate || trackingLiveLoading}
+                      disabled={!canEditFields || trackingLiveLoading}
                     />
                   </div>
                 </div>
