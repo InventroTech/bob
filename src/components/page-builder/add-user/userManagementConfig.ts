@@ -214,6 +214,7 @@ export const CORE_USER_KV_KEYS = new Set([
   "SUPPORT_RESOLVE_RATE_GOAL",
   "STATE",
   "DISTRICT",
+  "PARTY",
 ]);
 
 /**
@@ -230,6 +231,7 @@ export const BOUND_CUSTOM_FIELD_KEYS = new Set([
   "queue_type",
   "state",
   "district",
+  "party",
 ]);
 
 export function isBoundCustomField(key: string): boolean {
