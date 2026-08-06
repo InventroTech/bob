@@ -110,16 +110,20 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
       <DialogPortal>
         {/* No overlay - modal slides in from right without blocking main content */}
         <DialogPrimitive.Content
-          className={cn(
-            "fixed inset-y-0 right-0 left-auto top-0 h-full w-full max-w-[320px] translate-x-0 translate-y-0 rounded-none border-l border-[#ded8d2] bg-[#f9f6f2] p-0 shadow-2xl z-[200]",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
-            "sm:w-[320px]"
-          )}
+  onWheel={(e) => e.stopPropagation()}
+  onTouchMove={(e) => e.stopPropagation()}
+  className={cn(
+    "fixed inset-y-0 right-0 left-auto top-0 h-screen w-full max-w-[320px]",
+    "rounded-none border-l border-[#ded8d2] bg-[#f9f6f2] p-0 shadow-2xl z-[200]",
+    "flex flex-col overflow-hidden",
+    "data-[state=open]:animate-in data-[state=closed]:animate-out",
+    "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+    "sm:w-[320px]"
+  )}
           aria-describedby="callback-dialog-description"
           style={{ zIndex: 200 }}
         >
-          <div className="flex h-full flex-col overflow-hidden">
+          <div className="flex h-screen flex-col">
             <div className="border-b border-[#e7e1db] px-4 py-4 flex-shrink-0 flex items-center justify-between">
               <div className="space-y-1">
                 <DialogPrimitive.Title className="text-[20px] font-semibold text-black">Select time</DialogPrimitive.Title>
@@ -132,7 +136,12 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
                 <span className="sr-only">Close</span>
               </DialogPrimitive.Close>
             </div>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 min-h-0">
+            <div
+  className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-6"
+  style={{
+    WebkitOverflowScrolling: "touch",
+  }}
+>
             {callbackSlotSections.map((section) => (
               <div key={section.label} className="space-y-3">
                 <p className="text-sm font-semibold text-[#9b8f84]">{section.label}</p>

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search } from 'lucide-react';
+import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X } from 'lucide-react';
 import LeadCardCarousel from '../lead-card-carousel';
 import { RecordDetailModal } from '../record-detail-modal';
 import { InventoryFormEditModal } from '../inventory-form-edit-modal';
@@ -79,6 +79,19 @@ export function LeadTableView(props: LeadTableModel) {
     apiClient,
   } = props;
 
+  // DYNAMIC TITLE LOGIC based on URL path
+  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  let displayTitle = config?.title;
+  
+  if (!displayTitle) {
+    if (pathname.includes('follow')) {
+      displayTitle = "Follow Up Leads";
+    } else if (pathname.includes('pending')) {
+      displayTitle = "Pending Leads";
+    } else {
+      displayTitle = "All Leads";
+    }
+  }
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
@@ -114,18 +127,23 @@ export function LeadTableView(props: LeadTableModel) {
 
   return (
     <>
-    <div className="w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5">
+      {/* Mobile Page Title - Dynamically changes based on URL */}
+      <div className="md:hidden w-full pb-3 px-4 pt-4">
+        <h2 className="text-2xl font-bold text-gray-900">
+          {displayTitle}
+        </h2>
+      </div>
+
+      <div className="w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5">
         {/* Toolbar — tight under page header so All Requests fits with less scroll */}
         <div
           className={`flex items-center gap-3 flex-wrap ${
-            tableTitle ? 'justify-between' : 'justify-end'
+            tableTitle || displayTitle ? 'justify-between' : 'justify-end'
           }`}
         >
-          {tableTitle ? (
-            <h5 className="!m-0 !text-sm !font-semibold !leading-none text-gray-900">
-              {tableTitle}
-            </h5>
-          ) : null}
+          <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
+            {displayTitle || tableTitle}
+          </h5>
           <div className="flex items-center gap-2">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -173,8 +191,9 @@ export function LeadTableView(props: LeadTableModel) {
                     }}
                     onFiltersChange={(params) => {
                       // Add pagination parameters to URL for complete bookmarkable state
+                      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
                       params.set('page', '1');
-                      params.set('page_size', '10');
+                      params.set('page_size', isMobile ? '7' : '10');
 
                       // Only add entity_type if using generic records endpoint and entityType is configured
                       if ((effectiveApiEndpoint ?? '').includes('/crm-records/records') && config?.entityType) {
@@ -206,16 +225,74 @@ export function LeadTableView(props: LeadTableModel) {
                     )}
                   </div>
                 </div>
-              ) : (<h5>No filters configured</h5>)}
+              ) : (
+                <h5>No filters configured</h5>
+              )}
             </div>
           </div>
         )}
 
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-4 mt-1.5">
+          {filteredData.map((item, index) => {
+            const lead = item;
 
+            return (
+              <div
+                key={lead.id || index}
+                className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => {
+                  if (!isInPageBuilder && effectiveDetailMode !== 'none') {
+                    handleRowClick(item);
+                  }
+                }}
+              >
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Name</p>
+                    <p className="font-semibold">{lead.name}</p>
+                  </div>
 
-        {/* Table Section */}
-        {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full max-w-full min-w-0 relative mt-1.5">
+                  <div>
+                    <p className="text-xs text-gray-500">Praja ID</p>
+                    <p>{lead.praja_id}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Phone Number</p>
+                    <p>{lead.phone_number}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Party</p>
+                    <p>{lead.affiliated_party}</p>
+                  </div>
+
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Lead Score</p>
+                    <p>{lead.lead_score}</p>
+                  </div>
+
+                  <div className="col-span-2">
+                    <Button
+                      className="w-full mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedLead(item);
+                        setIsLeadModalOpen(true);
+                      }}
+                    >
+                      View Profile
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block w-full max-w-full min-w-0 relative mt-1.5">
           {/* Loading Overlay */}
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
@@ -226,7 +303,7 @@ export function LeadTableView(props: LeadTableModel) {
           )}
 
           <CustomTable
-            columns={tableColumns.map(col => ({
+            columns={tableColumns.map((col) => ({
               header: col.header,
               accessor: col.accessor,
               type: col.type,
@@ -249,36 +326,36 @@ export function LeadTableView(props: LeadTableModel) {
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
           />
         </div>
-        
+
         {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
         {filteredData.length > 0 &&
           (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
-          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
-            <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
+            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+              <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
 
-            <div className="flex items-center gap-2">
-              <CustomButton
-                variant="outline"
-                size="sm"
-                onClick={handlePreviousPage}
-                disabled={!pagination.previousPageLink || tableLoading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </CustomButton>
-              
-              <CustomButton
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={!pagination.nextPageLink || tableLoading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </CustomButton>
+              <div className="flex items-center gap-2">
+                <CustomButton
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreviousPage}
+                  disabled={!pagination.previousPageLink || tableLoading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </CustomButton>
+
+                <CustomButton
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={!pagination.nextPageLink || tableLoading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </CustomButton>
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
 
       {/* Lead Modal with LeadCard */}

@@ -129,7 +129,7 @@ interface GroupAssignmentUser {
   leadGroupName: string;
 }
 
-const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHeader = true }) => {
+const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHeader = true, config }) => {
   const { session } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [users, setUsers] = useState<LeadTypeAssignment[]>([]);
@@ -484,189 +484,102 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
   }, [selectedGroupForDrawer, membershipUsers]);
 
   return (
-    <div className={`space-y-6 ${className}`}>
-      <div className="flex items-start justify-between gap-4">
-        {showHeader ? (
-          <div>
-            <h5 className="text-4xl font-semibold">Lead Groups</h5>
-            <p className="text-muted-foreground">
-              Configure which tickets and leads each agent should receive. Select a user and set filters.
-            </p>
-          </div>
-        ) : (
-          <div />
-        )}
-        <div className="flex w-full max-w-md items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search group"
-              className="pl-9"
-            />
-          </div>
-          <Button className="bg-black text-white hover:bg-black" onClick={() => setShowCreateForm((p) => !p)}>
-            {showCreateForm ? "Close" : "Create Group"}
-          </Button>
-        </div>
+    <>
+      {/* Mobile Title - Only visible on small screens */}
+      <div className="md:hidden w-full pb-3 px-4 pt-4">
+        <h2 className="text-2xl font-bold text-gray-900">
+          {config?.title || "Lead Groups"}
+        </h2>
       </div>
 
-      {showCreateForm && (
-        <Card className="border border-gray-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-3xl font-medium">Lead Group Creation</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Group Name</Label>
-              <Input value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="Enter group name" />
+      <div className={`space-y-6 ${className}`}>
+        <div className="flex items-start justify-between gap-4 px-4 md:px-0">
+          {showHeader ? (
+            <div className="hidden md:block">
+              <h5 className="text-4xl font-semibold">Lead Groups</h5>
+              <p className="text-muted-foreground">
+                Configure which tickets and leads each agent should receive. Select a user and set filters.
+              </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Select Queue Type</Label>
-                <select
-                  className="h-10 w-full border rounded-md px-3"
-                  value={form.queue_type}
-                  onChange={(e) => {
-                    const nextQueueType = e.target.value;
-                    setForm((prev) => ({
-                      ...prev,
-                      queue_type: nextQueueType,
-                      lead_sources: nextQueueType === "ticket" ? [] : prev.lead_sources,
-                      lead_statuses: nextQueueType === "ticket" ? [] : prev.lead_statuses,
-                    }));
-                  }}
-                >
-                  <option value="">Select</option>
-                  {(queueTypes.length ? queueTypes : ["lead", "ticket"]).map((q) => (
-                    <option key={q} value={q}>
-                      {q}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>State</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between font-normal">
-                      <span className="truncate">
-                        {form.states.length > 0 ? `${form.states.length} selected` : "Select"}
-                      </span>
-                      <ChevronDown className="h-4 w-4 opacity-60" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-[280px] p-2">
-                    <div className="max-h-56 overflow-y-auto space-y-2">
-                      {leadStates.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No state options</p>
-                      ) : (
-                        leadStates.map((stateValue) => (
-                          <div key={stateValue} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`state-${stateValue}`}
-                              checked={form.states.includes(stateValue)}
-                              onCheckedChange={() => toggleState(stateValue)}
-                            />
-                            <Label htmlFor={`state-${stateValue}`} className="font-normal cursor-pointer">
-                              {stateValue}
-                            </Label>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-2">
-                <Label>Party</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between font-normal">
-                      <span className="truncate">
-                        {form.party.length > 0 ? `${form.party.length} selected` : "Select"}
-                      </span>
-                      <ChevronDown className="h-4 w-4 opacity-60" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-[280px] p-2">
-                    <div className="max-h-56 overflow-y-auto space-y-2">
-                      {parties.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No party options</p>
-                      ) : (
-                        parties.map((partyValue) => (
-                          <div key={partyValue} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`party-${partyValue}`}
-                              checked={form.party.includes(partyValue)}
-                              onCheckedChange={() => toggleParty(partyValue)}
-                            />
-                            <Label htmlFor={`party-${partyValue}`} className="font-normal cursor-pointer">
-                              {partyValue}
-                            </Label>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              {form.queue_type !== "ticket" && (
-                <>
+          ) : (
+            <div />
+          )}
+          <div className="flex w-full max-w-md items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search group"
+                className="pl-9"
+              />
+            </div>
+            <Button className="bg-black text-white hover:bg-black shrink-0" onClick={() => setShowCreateForm((p) => !p)}>
+              {showCreateForm ? "Close" : "Create Group"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="px-4 md:px-0">
+          {showCreateForm && (
+            <Card className="border border-gray-200 shadow-sm mb-6">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-2xl md:text-3xl font-medium">Lead Group Creation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Group Name</Label>
+                  <Input value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="Enter group name" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label>Lead Source</Label>
-                    <SearchableMultiSelect
-                      label="Lead Sources"
-                      options={leadSources}
-                      selected={form.lead_sources}
-                      onToggle={toggleLeadSource}
-                      onSelectAllMatching={(values) =>
+                    <Label>Select Queue Type</Label>
+                    <select
+                      className="h-10 w-full border rounded-md px-3"
+                      value={form.queue_type}
+                      onChange={(e) => {
+                        const nextQueueType = e.target.value;
                         setForm((prev) => ({
                           ...prev,
-                          lead_sources: Array.from(new Set([...prev.lead_sources, ...values])),
-                        }))
-                      }
-                      onClearAllMatching={(values) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          lead_sources: prev.lead_sources.filter((v) => !values.includes(v)),
-                        }))
-                      }
-                    />
+                          queue_type: nextQueueType,
+                          lead_sources: nextQueueType === "ticket" ? [] : prev.lead_sources,
+                          lead_statuses: nextQueueType === "ticket" ? [] : prev.lead_statuses,
+                        }));
+                      }}
+                    >
+                      <option value="">Select</option>
+                      {(queueTypes.length ? queueTypes : ["lead", "ticket"]).map((q) => (
+                        <option key={q} value={q}>
+                          {q}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Lead Status</Label>
+                    <Label>State</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-between font-normal">
                           <span className="truncate">
-                            {form.lead_statuses.length > 0 ? `${form.lead_statuses.length} selected` : "Select"}
+                            {form.states.length > 0 ? `${form.states.length} selected` : "Select"}
                           </span>
                           <ChevronDown className="h-4 w-4 opacity-60" />
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent align="start" className="w-[280px] p-2">
                         <div className="max-h-56 overflow-y-auto space-y-2">
-                          {leadStatuses.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">No lead status options</p>
+                          {leadStates.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No state options</p>
                           ) : (
-                            leadStatuses.map((status) => (
-                              <div key={status} className="flex items-center gap-2">
+                            leadStates.map((stateValue) => (
+                              <div key={stateValue} className="flex items-center gap-2">
                                 <Checkbox
-                                  id={`status-${status}`}
-                                  checked={form.lead_statuses.includes(status)}
-                                  onCheckedChange={() =>
-                                    setForm((prev) => ({
-                                      ...prev,
-                                      lead_statuses: prev.lead_statuses.includes(status)
-                                        ? prev.lead_statuses.filter((item) => item !== status)
-                                        : [...prev.lead_statuses, status],
-                                    }))
-                                  }
+                                  id={`state-${stateValue}`}
+                                  checked={form.states.includes(stateValue)}
+                                  onCheckedChange={() => toggleState(stateValue)}
                                 />
-                                <Label htmlFor={`status-${status}`} className="font-normal cursor-pointer">
-                                  {status}
+                                <Label htmlFor={`state-${stateValue}`} className="font-normal cursor-pointer">
+                                  {stateValue}
                                 </Label>
                               </div>
                             ))
@@ -675,293 +588,529 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                       </PopoverContent>
                     </Popover>
                   </div>
-                </>
-              )}
-              <div className="col-span-full flex justify-end gap-2">
-                <Button className="bg-black text-white hover:bg-black" onClick={handleCreate} disabled={saving}>
-                  {saving ? "Saving..." : "Save changes"}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="text-red-600 hover:text-red-700"
-                  onClick={() => resetForm()}
-                  disabled={saving}
-                >
-                  Remove All
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="border border-gray-200 shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-3xl font-medium">Lead Source Group List</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {filteredGroups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No groups created yet.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-black hover:bg-black">
-                    <TableHead className="text-white font-medium">Group</TableHead>
-                    <TableHead className="text-white font-medium">Queue</TableHead>
-                    <TableHead className="text-white font-medium">Party</TableHead>
-                    <TableHead className="text-white font-medium">State</TableHead>
-                    <TableHead className="text-white font-medium">Lead Sources</TableHead>
-                    <TableHead className="text-white font-medium text-right">Fresh Leads Available</TableHead>
-                    <TableHead className="text-white font-medium">Lead Status</TableHead>
-                    <TableHead className="text-white font-medium text-right"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredGroups.map((group) => {
-                    const isEditing = editingGroup?.id === group.id;
-                    const conditions = getConditionsLabel(group);
-                    const partyValues = Array.isArray(group.group_data?.party)
-                      ? group.group_data.party
-                      : group.group_data?.party
-                        ? [String(group.group_data.party)]
-                        : [];
-                    const leadSources = Array.isArray(group.group_data?.lead_sources)
-                      ? group.group_data.lead_sources
-                      : [];
-                    const leadStatuses = Array.isArray(group.group_data?.lead_statuses)
-                      ? group.group_data.lead_statuses
-                      : [];
-                    return (
-                      <TableRow key={group.id}>
-                        <TableCell className="font-medium">
-                          <button
-                            type="button"
-                            className="text-left text-blue-700 hover:text-blue-900 hover:underline"
-                            onClick={() => setSelectedGroupForDrawer(group)}
-                          >
-                            {group.name}
-                          </button>
-                        </TableCell>
-                        <TableCell>
-                          {group.group_data?.queue_type || "-"}
-                        </TableCell>
-                        <TableCell>
-                          {isEditing && editingGroup ? (
-                            renderEditMultiSelect(
-                              "party",
-                              parties,
-                              editingGroup.party,
-                              (value) =>
-                                setEditingGroup((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        party: prev.party.includes(value)
-                                          ? prev.party.filter((item) => item !== value)
-                                          : [...prev.party, value],
-                                      }
-                                    : prev
-                                )
-                            )
-                          ) : (
-                            renderCompactChipList(partyValues, `${group.id}-party`)
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {isEditing && editingGroup ? (
-                            renderEditMultiSelect(
-                              "state",
-                              leadStates,
-                              editingGroup.states,
-                              (value) =>
-                                setEditingGroup((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        states: prev.states.includes(value)
-                                          ? prev.states.filter((item) => item !== value)
-                                          : [...prev.states, value],
-                                      }
-                                    : prev
-                                )
-                            )
-                          ) : (
-                            renderCompactChipList(conditions.chips, `${group.id}-state`)
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {isEditing && editingGroup ? (
-                            <SearchableMultiSelect
-                              label="Lead Sources"
-                              options={getLeadSourceOptions(editingGroup.lead_sources)}
-                              selected={editingGroup.lead_sources}
-                              triggerClassName="h-9 w-full min-w-[220px] justify-between font-normal"
-                              onToggle={(value) =>
-                                setEditingGroup((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        lead_sources: prev.lead_sources.includes(value)
-                                          ? prev.lead_sources.filter((item) => item !== value)
-                                          : [...prev.lead_sources, value],
-                                      }
-                                    : prev
-                                )
-                              }
-                              onSelectAllMatching={(values) =>
-                                setEditingGroup((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        lead_sources: Array.from(new Set([...prev.lead_sources, ...values])),
-                                      }
-                                    : prev
-                                )
-                              }
-                              onClearAllMatching={(values) =>
-                                setEditingGroup((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        lead_sources: prev.lead_sources.filter((v) => !values.includes(v)),
-                                      }
-                                    : prev
-                                )
-                              }
-                            />
-                          ) : (
-                            renderCompactChipList(leadSources, `${group.id}-source`)
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">
-                          {formatFreshLeadsCount(group)}
-                        </TableCell>
-                        <TableCell>
-                          {isEditing && editingGroup ? (
-                            renderEditMultiSelect(
-                              "status",
-                              leadStatuses,
-                              editingGroup.lead_statuses,
-                              (value) =>
-                                setEditingGroup((prev) =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        lead_statuses: prev.lead_statuses.includes(value)
-                                          ? prev.lead_statuses.filter((item) => item !== value)
-                                          : [...prev.lead_statuses, value],
-                                      }
-                                    : prev
-                                )
-                            )
-                          ) : (
-                            renderCompactChipList(leadStatuses, `${group.id}-status`)
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex items-center justify-end gap-2">
-                            {isEditing ? (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
-                                  onClick={handleSaveGroupEdit}
-                                  disabled={isUpdatingGroup}
-                                  title="Save changes"
-                                >
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
-                                  onClick={handleCancelGroupEdit}
-                                  disabled={isUpdatingGroup}
-                                  title="Cancel editing"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
-                                onClick={() => handleEditGroup(group)}
-                                title="Edit group"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700"
-                              onClick={() => handleDelete(group.id)}
-                              disabled={isEditing}
-                              title="Delete group"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      <Sheet open={!!selectedGroupForDrawer} onOpenChange={(open) => !open && setSelectedGroupForDrawer(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Group Details</SheetTitle>
-            <SheetDescription>
-              Full configuration and users assigned to this group.
-            </SheetDescription>
-          </SheetHeader>
-
-          {selectedGroupForDrawer && (
-            <div className="mt-6 space-y-6">
-              <div className="rounded-lg border p-4 space-y-2">
-                <p className="text-sm font-semibold text-gray-900">Configuration</p>
-                <p className="text-sm"><span className="font-medium">Group Name:</span> {selectedGroupForDrawer.name}</p>
-                <p className="text-sm"><span className="font-medium">Queue Type:</span> {selectedGroupForDrawer.group_data?.queue_type || "-"}</p>
-                <p className="text-sm"><span className="font-medium">Party:</span> {toList(selectedGroupForDrawer.group_data?.party).join(", ") || "-"}</p>
-                <p className="text-sm"><span className="font-medium">States:</span> {toList(selectedGroupForDrawer.group_data?.states).join(", ") || "-"}</p>
-                <p className="text-sm"><span className="font-medium">Lead Sources:</span> {toList(selectedGroupForDrawer.group_data?.lead_sources).join(", ") || "-"}</p>
-                <p className="text-sm">
-                  <span className="font-medium">Fresh Leads Available:</span>{" "}
-                  {formatFreshLeadsCount(selectedGroupForDrawer)}
-                </p>
-                <p className="text-sm"><span className="font-medium">Lead Statuses:</span> {toList(selectedGroupForDrawer.group_data?.lead_statuses).join(", ") || "-"}</p>
-              </div>
-
-              <div className="rounded-lg border p-4 space-y-3">
-                <p className="text-sm font-semibold text-gray-900">Assigned Users ({usersForSelectedGroup.length})</p>
-                {usersForSelectedGroup.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No users assigned to this group.</p>
-                ) : (
                   <div className="space-y-2">
-                    {usersForSelectedGroup.map((u) => (
-                      <div key={`${u.email}-${u.name}`} className="rounded-md border p-3">
-                        <p className="text-sm"><span className="font-medium">Name:</span> {u.name}</p>
-                        <p className="text-sm"><span className="font-medium">Email:</span> {u.email}</p>
-                        <p className="text-sm"><span className="font-medium">Role:</span> {u.roleName}</p>
-                      </div>
-                    ))}
+                    <Label>Party</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <span className="truncate">
+                            {form.party.length > 0 ? `${form.party.length} selected` : "Select"}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-60" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-[280px] p-2">
+                        <div className="max-h-56 overflow-y-auto space-y-2">
+                          {parties.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No party options</p>
+                          ) : (
+                            parties.map((partyValue) => (
+                              <div key={partyValue} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`party-${partyValue}`}
+                                  checked={form.party.includes(partyValue)}
+                                  onCheckedChange={() => toggleParty(partyValue)}
+                                />
+                                <Label htmlFor={`party-${partyValue}`} className="font-normal cursor-pointer">
+                                  {partyValue}
+                                </Label>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                )}
-              </div>
-            </div>
+                  {form.queue_type !== "ticket" && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Lead Source</Label>
+                        <SearchableMultiSelect
+                          label="Lead Sources"
+                          options={leadSources}
+                          selected={form.lead_sources}
+                          onToggle={toggleLeadSource}
+                          onSelectAllMatching={(values) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              lead_sources: Array.from(new Set([...prev.lead_sources, ...values])),
+                            }))
+                          }
+                          onClearAllMatching={(values) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              lead_sources: prev.lead_sources.filter((v) => !values.includes(v)),
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Lead Status</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-between font-normal">
+                              <span className="truncate">
+                                {form.lead_statuses.length > 0 ? `${form.lead_statuses.length} selected` : "Select"}
+                              </span>
+                              <ChevronDown className="h-4 w-4 opacity-60" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-[280px] p-2">
+                            <div className="max-h-56 overflow-y-auto space-y-2">
+                              {leadStatuses.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">No lead status options</p>
+                              ) : (
+                                leadStatuses.map((status) => (
+                                  <div key={status} className="flex items-center gap-2">
+                                    <Checkbox
+                                      id={`status-${status}`}
+                                      checked={form.lead_statuses.includes(status)}
+                                      onCheckedChange={() =>
+                                        setForm((prev) => ({
+                                          ...prev,
+                                          lead_statuses: prev.lead_statuses.includes(status)
+                                            ? prev.lead_statuses.filter((item) => item !== status)
+                                            : [...prev.lead_statuses, status],
+                                        }))
+                                      }
+                                    />
+                                    <Label htmlFor={`status-${status}`} className="font-normal cursor-pointer">
+                                      {status}
+                                    </Label>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </>
+                  )}
+                  <div className="col-span-full flex justify-end gap-2 mt-2">
+                    <Button className="bg-black text-white hover:bg-black" onClick={handleCreate} disabled={saving}>
+                      {saving ? "Saving..." : "Save changes"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => resetForm()}
+                      disabled={saving}
+                    >
+                      Remove All
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
-        </SheetContent>
-      </Sheet>
-    </div>
+
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-2xl md:text-3xl font-medium">Lead Source Group List</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {filteredGroups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No groups created yet.</p>
+              ) : (
+                <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-black hover:bg-black">
+                        <TableHead className="text-white font-medium whitespace-nowrap">Group</TableHead>
+                        <TableHead className="text-white font-medium whitespace-nowrap">Queue</TableHead>
+                        <TableHead className="text-white font-medium min-w-[200px]">Party</TableHead>
+                        <TableHead className="text-white font-medium min-w-[150px]">State</TableHead>
+                        <TableHead className="text-white font-medium min-w-[200px]">Lead Sources</TableHead>
+                        <TableHead className="text-white font-medium text-right whitespace-nowrap">Fresh Leads</TableHead>
+                        <TableHead className="text-white font-medium min-w-[200px]">Lead Status</TableHead>
+                        <TableHead className="text-white font-medium text-right min-w-[120px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredGroups.map((group) => {
+                        const isEditing = editingGroup?.id === group.id;
+                        const conditions = getConditionsLabel(group);
+                        const partyValues = Array.isArray(group.group_data?.party)
+                          ? group.group_data.party
+                          : group.group_data?.party
+                            ? [String(group.group_data.party)]
+                            : [];
+                        const leadSources = Array.isArray(group.group_data?.lead_sources)
+                          ? group.group_data.lead_sources
+                          : [];
+                        const leadStatuses = Array.isArray(group.group_data?.lead_statuses)
+                          ? group.group_data.lead_statuses
+                          : [];
+                        return (
+                          <TableRow key={group.id}>
+                            <TableCell className="font-medium">
+                              <button
+                                type="button"
+                                className="text-left text-blue-700 hover:text-blue-900 hover:underline"
+                                onClick={() => setSelectedGroupForDrawer(group)}
+                              >
+                                {group.name}
+                              </button>
+                            </TableCell>
+                            <TableCell>
+                              {group.group_data?.queue_type || "-"}
+                            </TableCell>
+                            <TableCell>
+                              {isEditing && editingGroup ? (
+                                renderEditMultiSelect(
+                                  "party",
+                                  parties,
+                                  editingGroup.party,
+                                  (value) =>
+                                    setEditingGroup((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            party: prev.party.includes(value)
+                                              ? prev.party.filter((item) => item !== value)
+                                              : [...prev.party, value],
+                                          }
+                                        : prev
+                                    )
+                                )
+                              ) : (
+                                renderCompactChipList(partyValues, `${group.id}-party`)
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {isEditing && editingGroup ? (
+                                renderEditMultiSelect(
+                                  "state",
+                                  leadStates,
+                                  editingGroup.states,
+                                  (value) =>
+                                    setEditingGroup((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            states: prev.states.includes(value)
+                                              ? prev.states.filter((item) => item !== value)
+                                              : [...prev.states, value],
+                                          }
+                                        : prev
+                                    )
+                                )
+                              ) : (
+                                renderCompactChipList(conditions.chips, `${group.id}-state`)
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {isEditing && editingGroup ? (
+                                <SearchableMultiSelect
+                                  label="Lead Sources"
+                                  options={getLeadSourceOptions(editingGroup.lead_sources)}
+                                  selected={editingGroup.lead_sources}
+                                  triggerClassName="h-9 w-full min-w-[220px] justify-between font-normal"
+                                  onToggle={(value) =>
+                                    setEditingGroup((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            lead_sources: prev.lead_sources.includes(value)
+                                              ? prev.lead_sources.filter((item) => item !== value)
+                                              : [...prev.lead_sources, value],
+                                          }
+                                        : prev
+                                    )
+                                  }
+                                  onSelectAllMatching={(values) =>
+                                    setEditingGroup((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            lead_sources: Array.from(new Set([...prev.lead_sources, ...values])),
+                                          }
+                                        : prev
+                                    )
+                                  }
+                                  onClearAllMatching={(values) =>
+                                    setEditingGroup((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            lead_sources: prev.lead_sources.filter((v) => !values.includes(v)),
+                                          }
+                                        : prev
+                                    )
+                                  }
+                                />
+                              ) : (
+                                renderCompactChipList(leadSources, `${group.id}-source`)
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium">
+                              {formatFreshLeadsCount(group)}
+                            </TableCell>
+                            <TableCell>
+                              {isEditing && editingGroup ? (
+                                renderEditMultiSelect(
+                                  "status",
+                                  leadStatuses,
+                                  editingGroup.lead_statuses,
+                                  (value) =>
+                                    setEditingGroup((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            lead_statuses: prev.lead_statuses.includes(value)
+                                              ? prev.lead_statuses.filter((item) => item !== value)
+                                              : [...prev.lead_statuses, value],
+                                          }
+                                        : prev
+                                    )
+                                )
+                              ) : (
+                                renderCompactChipList(leadStatuses, `${group.id}-status`)
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="inline-flex items-center justify-end gap-2">
+                                {isEditing ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+                                      onClick={handleSaveGroupEdit}
+                                      disabled={isUpdatingGroup}
+                                      title="Save changes"
+                                    >
+                                      <Check className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                                      onClick={handleCancelGroupEdit}
+                                      disabled={isUpdatingGroup}
+                                      title="Cancel editing"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                                    onClick={() => handleEditGroup(group)}
+                                    title="Edit group"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700"
+                                  onClick={() => handleDelete(group.id)}
+                                  disabled={isEditing}
+                                  title="Delete group"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+        {/* Mobile Cards */}
+        <div className="md:hidden space-y-4 mt-4">
+          {filteredGroups.map((group) => {
+            const isEditing = editingGroup?.id === group.id;
+
+            const conditions = getConditionsLabel(group);
+
+            const partyValues = Array.isArray(group.group_data?.party)
+              ? group.group_data.party
+              : group.group_data?.party
+              ? [String(group.group_data.party)]
+              : [];
+
+            const leadSources = Array.isArray(group.group_data?.lead_sources)
+              ? group.group_data.lead_sources
+              : [];
+
+            const leadStatuses = Array.isArray(group.group_data?.lead_statuses)
+              ? group.group_data.lead_statuses
+              : [];
+
+            return (
+              <Card key={group.id} className="border border-gray-200 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+                    {/* Group */}
+                    <div>
+                      <p className="text-sm text-gray-500">Group</p>
+                      <button
+                        type="button"
+                        className="font-semibold text-left text-blue-700 hover:text-blue-900 hover:underline"
+                        onClick={() => setSelectedGroupForDrawer(group)}
+                      >
+                        {group.name}
+                      </button>
+                    </div>
+
+                    {/* Queue */}
+                    <div>
+                      <p className="text-sm text-gray-500">Queue</p>
+                      <p className="font-medium">
+                        {group.group_data?.queue_type || "-"}
+                      </p>
+                    </div>
+
+                    {/* Party */}
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-500 mb-1">Party</p>
+                      {renderCompactChipList(
+                        partyValues,
+                        `${group.id}-party-mobile`
+                      )}
+                    </div>
+
+                    {/* State */}
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-500 mb-1">State</p>
+                      {renderCompactChipList(
+                        conditions.chips,
+                        `${group.id}-state-mobile`
+                      )}
+                    </div>
+
+                    {/* Lead Sources */}
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-500 mb-1">Lead Sources</p>
+                      {renderCompactChipList(
+                        leadSources,
+                        `${group.id}-source-mobile`
+                      )}
+                    </div>
+
+                    {/* Fresh Leads */}
+                    <div>
+                      <p className="text-sm text-gray-500">Fresh Leads</p>
+                      <p className="font-semibold">
+                        {formatFreshLeadsCount(group)}
+                      </p>
+                    </div>
+
+                    {/* Lead Status */}
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">Lead Status</p>
+                      {renderCompactChipList(
+                        leadStatuses,
+                        `${group.id}-status-mobile`
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Edit / Delete */}
+                  <div className="flex justify-end gap-2 pt-4 mt-4 border-t">
+                    {isEditing ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                          onClick={handleSaveGroupEdit}
+                          disabled={isUpdatingGroup}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={handleCancelGroupEdit}
+                          disabled={isUpdatingGroup}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleEditGroup(group)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="text-red-500 border-red-200 hover:bg-red-50"
+                      onClick={() => handleDelete(group.id)}
+                      disabled={isEditing}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+        <Sheet open={!!selectedGroupForDrawer} onOpenChange={(open) => !open && setSelectedGroupForDrawer(null)}>
+          <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Group Details</SheetTitle>
+              <SheetDescription>
+                Full configuration and users assigned to this group.
+              </SheetDescription>
+            </SheetHeader>
+
+            {selectedGroupForDrawer && (
+              <div className="mt-6 space-y-6">
+                <div className="rounded-lg border p-4 space-y-2">
+                  <p className="text-sm font-semibold text-gray-900">Configuration</p>
+                  <p className="text-sm"><span className="font-medium">Group Name:</span> {selectedGroupForDrawer.name}</p>
+                  <p className="text-sm"><span className="font-medium">Queue Type:</span> {selectedGroupForDrawer.group_data?.queue_type || "-"}</p>
+                  <p className="text-sm"><span className="font-medium">Party:</span> {toList(selectedGroupForDrawer.group_data?.party).join(", ") || "-"}</p>
+                  <p className="text-sm"><span className="font-medium">States:</span> {toList(selectedGroupForDrawer.group_data?.states).join(", ") || "-"}</p>
+                  <p className="text-sm"><span className="font-medium">Lead Sources:</span> {toList(selectedGroupForDrawer.group_data?.lead_sources).join(", ") || "-"}</p>
+                  <p className="text-sm">
+                    <span className="font-medium">Fresh Leads Available:</span>{" "}
+                    {formatFreshLeadsCount(selectedGroupForDrawer)}
+                  </p>
+                  <p className="text-sm"><span className="font-medium">Lead Statuses:</span> {toList(selectedGroupForDrawer.group_data?.lead_statuses).join(", ") || "-"}</p>
+                </div>
+
+                <div className="rounded-lg border p-4 space-y-3">
+                  <p className="text-sm font-semibold text-gray-900">Assigned Users ({usersForSelectedGroup.length})</p>
+                  {usersForSelectedGroup.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No users assigned to this group.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {usersForSelectedGroup.map((u) => (
+                        <div key={`${u.email}-${u.name}`} className="rounded-md border p-3">
+                          <p className="text-sm"><span className="font-medium">Name:</span> {u.name}</p>
+                          <p className="text-sm"><span className="font-medium">Email:</span> {u.email}</p>
+                          <p className="text-sm"><span className="font-medium">Role:</span> {u.roleName}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </SheetContent>
+        </Sheet>
+      </div>
+    </>
   );
 };
 
