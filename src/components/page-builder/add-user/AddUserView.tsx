@@ -1207,47 +1207,48 @@ export function AddUserView(props: AddUserModel) {
                     </Card>
                   );
                 })}
-              </div>         
-            </>
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-black hover:bg-black">
-                    {schema.columns
-                      .filter((column) => column !== 'actions')
-                      .map((column) => (
-                        <TableHead key={column} className="text-white font-medium">
-                          {getColumnLabel(column)}
+              </div>
+
+              <div className="hidden md:block rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-black hover:bg-black">
+                      {schema.columns
+                        .filter((column) => column !== 'actions')
+                        .map((column) => (
+                          <TableHead key={column} className="text-white font-medium">
+                            {getColumnLabel(column)}
+                          </TableHead>
+                        ))}
+                      {customTableFields.map((field) => (
+                        <TableHead key={`cf-${field.key}`} className="text-white font-medium">
+                          {field.label}
                         </TableHead>
                       ))}
-                    {customTableFields.map((field) => (
-                      <TableHead key={`cf-${field.key}`} className="text-white font-medium">
-                        {field.label}
-                      </TableHead>
-                    ))}
-                    {schema.columns.includes('actions') && (
-                      <TableHead className="text-white font-medium text-right" />
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsersWithSettings.map((user, index) => {
-                    const isEditing = editingRowKey === getRowKey(user) && !!editingRow;
-                    return (
-                      <TableRow key={`${user.uid}-${index}`}>
-                        {schema.columns
-                          .filter((column) => column !== 'actions')
-                          .map((column) => renderColumnCell(column, user))}
-                        {customTableFields.map((field) =>
-                          renderCustomTableCell(field, user, isEditing)
-                        )}
-                        {schema.columns.includes('actions') && renderColumnCell('actions', user)}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                      {schema.columns.includes('actions') && (
+                        <TableHead className="text-white font-medium text-right" />
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsersWithSettings.map((user, index) => {
+                      const isEditing = editingRowKey === getRowKey(user) && !!editingRow;
+                      return (
+                        <TableRow key={`${user.uid}-${index}`}>
+                          {schema.columns
+                            .filter((column) => column !== 'actions')
+                            .map((column) => renderColumnCell(column, user))}
+                          {customTableFields.map((field) =>
+                            renderCustomTableCell(field, user, isEditing)
+                          )}
+                          {schema.columns.includes('actions') && renderColumnCell('actions', user)}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </div>
       </CardContent>
