@@ -257,65 +257,58 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
   }
 
   return (
-    <Card className="p-4 bg-white border border-gray-200 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-4 md:gap-6">
+    <Card className="p-4 bg-white border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between w-full">
         {/* Left Section: Title and Description */}
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h5>
+        <div className="w-full flex-1 flex flex-col gap-1.5">
+          <h5 className="text-lg font-semibold m-0">
             {config?.title || "Target Progress"}
           </h5>
           {isBelow ? (
-            <p className="text-body text-muted-foreground">
+            <p className="text-sm text-muted-foreground m-0">
               {remainingTrials} trial subscriptions remaining for today.
             </p>
           ) : (
-            <p className="text-body">
-              Hurray! You achieved your target (<span className="text-body-bold">{targetCount}</span>). Trying for more will give you additional incentives.
+            <p className="text-sm m-0">
+              Hurray! You achieved your target (<span className="font-semibold text-slate-900">{targetCount}</span>). Trying for more will give you additional incentives.
             </p>
           )}
         </div>
 
-        {/* Progress + take a break (aligned with target row, break at far right) */}
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          <div className="flex flex-col items-end gap-2">
+        {/* Progress + take a break */}
+        <div className="w-full md:w-auto flex shrink-0 mt-2 md:mt-0">
+          {/* Replaced fixed w-48 with full responsive width on mobile, and added right padding to protect the trophy icon */}
+          <div className="flex w-full md:w-[240px] flex-col items-start md:items-end gap-2 pr-4 md:pr-6">
+            
             {/* Progress Count Bubble */}
-            {isBelow ? (
-              <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-                <span className="text-body-sm-medium text-green-800">
-                  {trialActivated}/{targetCount} Trial subscriptions
-                </span>
-              </div>
-            ) : isAchieved && !isOverdone ? (
-              <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-                <span className="text-body-sm-medium text-green-800">
-                  {targetCount}/{targetCount} Target Achieved
-                </span>
-              </div>
-            ) : (
-              <div className="w-48 bg-green-100 rounded-lg px-3 py-1.5">
-                <span className="text-body-sm-medium text-green-800">
-                  {trialActivated - targetCount} More Than Daily Target
-                </span>
-              </div>
-            )}
+            <div className="w-full bg-green-100 rounded-lg px-3 py-2 text-center flex items-center justify-center">
+              <span className="text-sm font-medium text-green-800 leading-none">
+                {isBelow 
+                  ? `${trialActivated}/${targetCount} Trial subscriptions` 
+                  : isAchieved && !isOverdone 
+                    ? `${targetCount}/${targetCount} Target Achieved`
+                    : `${trialActivated - targetCount} More Than Daily Target`
+                }
+              </span>
+            </div>
 
             {/* Progress Bar */}
-            <div className="relative w-48 overflow-visible py-2">
-              <div className="relative h-2.5 rounded-full bg-gray-200">
-                {/* Progress fill - shows actual progress, capped at 100% visually */}
+            <div className="relative w-full overflow-visible py-2 mt-1">
+              <div className="relative h-2.5 rounded-full bg-gray-200 w-full">
+                {/* Progress fill */}
                 <div
-                  className="h-full rounded-full transition-all duration-300"
+                  className="absolute left-0 top-0 h-full rounded-full transition-all duration-300"
                   style={{
                     width: `${Math.min(displayProgress, 100)}%`,
                     backgroundColor: progressBarColor,
                   }}
                 />
-                {/* Trophy icon - at 100% when just achieved, fixed under "e" when overdone */}
+                {/* Trophy icon */}
                 {isAchieved && (
                   <div
                     className="absolute top-1/2 z-20"
                     style={{
-                      left: isOverdone ? '85%' : '100%', // Fixed under "e" for overflow, at end for just achieved
+                      left: isOverdone ? '85%' : '100%', 
                       transform: 'translate(-50%, -50%)',
                     }}
                   >
@@ -325,11 +318,8 @@ export const LeadProgressBar: React.FC<LeadProgressBarProps> = ({ config }) => {
               </div>
             </div>
           </div>
-
-
         </div>
       </div>
     </Card>
   );
 };
-

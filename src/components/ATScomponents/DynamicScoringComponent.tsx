@@ -6,9 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Play, Loader2, Edit2, Save, X } from 'lucide-react';
+import { Plus, Trash2, Play, Edit2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -839,8 +838,9 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
           </CardHeader>
         )}
         <CardContent className="space-y-6">
-          {/* Scoring Rules Table */}
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          
+          {/* Desktop Table View */}
+          <div className="hidden md:block border border-gray-200 rounded-lg overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50">
@@ -1006,6 +1006,179 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
             </Table>
           </div>
 
+          {/* Mobile Cards View */}
+          <div className="md:hidden space-y-4">
+            {rules.map((rule, index) => {
+              const isNewRule =
+                !rule.id ||
+                (typeof rule.id === "string" && rule.id.startsWith("rule_"));
+
+              const fieldsDisabled =
+                !isNewRule && editingRuleId !== rule.id;
+
+              const valueFieldDisabled =
+                fieldsDisabled || !scoringOperatorNeedsValue(rule.operator);
+
+              return (
+                <Card key={rule.id || index} className="border rounded-xl shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="space-y-4">
+                      
+                      {/* Row 1 */}
+                      <div className="grid grid-cols-[65%_35%] gap-3">
+                        {/* Attribute */}
+                        <div>
+                          <p className="text-sm text-gray-500 mb-1">Attribute</p>
+                          <Select
+                            value={rule.attribute}
+                            onValueChange={(value) => handleRuleChange(rule, 'attribute', value)}
+                            disabled={loadingAttributes || fieldsDisabled}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {attributes.map((attr) => (
+                                <SelectItem key={attr} value={attr}>
+                                  {attr}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Operator */}
+                        <div>
+                          <p className="text-sm text-gray-500 mb-1">Operator</p>
+                          <Select
+                            value={rule.operator}
+                            onValueChange={(value) => handleRuleChange(rule, 'operator', value)}
+                            disabled={fieldsDisabled}
+                          >
+                            <SelectTrigger className="w-full px-2">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {OPERATORS.map((op) => (
+                                <SelectItem key={op.value} value={op.value}>
+                                  {op.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Row 2 */}
+                      <div className="w-full">
+                        <p className="text-sm text-gray-500 mb-1">Value</p>
+                        <Input
+                          type="text"
+                          value={rule.value}
+                          onChange={(e) => handleRuleChange(rule, 'value', e.target.value)}
+                          placeholder={
+                            scoringOperatorNeedsValue(rule.operator)
+                              ? 'Enter value'
+                              : '—'
+                          }
+                          className="w-full min-w-0 text-sm break-words"
+                          disabled={valueFieldDisabled}
+                        />
+                      </div>
+
+                      {/* Row 3 */}
+                      <div className="w-full">
+                        <p className="text-sm text-gray-500 mb-1">Weight</p>
+                        <Input
+                          type="number"
+                          value={rule.weight}
+                          onChange={(e) => handleRuleChange(rule, 'weight', parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          className="w-full"
+                          disabled={fieldsDisabled}
+                        />
+                      </div>
+
+                    </div>
+
+                    {/* Action Buttons for Mobile */}
+                    <div className="flex justify-end gap-2 mt-5">
+                      {isNewRule ? (
+                        <>
+                          <CustomButton
+                            variant="outline"
+                            size="sm"
+                            icon={<Save className="h-4 w-4" />}
+                            onClick={() => handleSaveRule(rule)}
+                            className="hover:bg-green-50 hover:text-green-700"
+                            title="Save new rule"
+                          />
+                          <CustomButton
+                            variant="outline"
+                            size="sm"
+                            icon={<X className="h-4 w-4" />}
+                            onClick={() => {
+                              if (rules.length === 1) {
+                                toast.error('At least one rule is required');
+                                return;
+                              }
+                              setRules(rules.filter((_, i) => i !== index));
+                              toast.success('Rule removed');
+                            }}
+                            disabled={rules.length === 1}
+                            className="hover:bg-gray-50"
+                            title="Cancel (remove rule)"
+                          />
+                        </>
+                      ) : (
+                        editingRuleId === rule.id ? (
+                          <>
+                            <CustomButton
+                              variant="outline"
+                              size="sm"
+                              icon={<Save className="h-4 w-4" />}
+                              onClick={() => handleSaveRule(rule)}
+                              className="hover:bg-green-50 hover:text-green-700"
+                              title="Save rule"
+                            />
+                            <CustomButton
+                              variant="outline"
+                              size="sm"
+                              icon={<X className="h-4 w-4" />}
+                              onClick={() => setEditingRuleId(null)}
+                              className="hover:bg-gray-50"
+                              title="Cancel editing"
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <CustomButton
+                              variant="outline"
+                              size="sm"
+                              icon={<Edit2 className="h-4 w-4" />}
+                              onClick={() => setEditingRuleId(rule.id || null)}
+                              className="hover:bg-blue-50 hover:text-blue-700"
+                              title="Edit rule"
+                            />
+                            <CustomButton
+                              variant="outline"
+                              size="sm"
+                              icon={<Trash2 className="h-4 w-4" />}
+                              onClick={() => handleDeleteRule(rule.id!)}
+                              className="hover:bg-red-50 hover:text-red-700"
+                              title="Delete rule"
+                            />
+                          </>
+                        )
+                      )}
+                    </div>
+
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
           {/* Add Rule Button */}
           <div className="flex items-center gap-4">
             <CustomButton
@@ -1046,4 +1219,3 @@ export const DynamicScoringComponent: React.FC<DynamicScoringComponentProps> = (
     </div>
   );
 };
-

@@ -1091,45 +1091,164 @@ export function AddUserView(props: AddUserModel) {
           ) : filteredUsersWithSettings.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">No users match your search</div>
           ) : (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-black hover:bg-black">
-                    {schema.columns
-                      .filter((column) => column !== 'actions')
-                      .map((column) => (
-                        <TableHead key={column} className="text-white font-medium">
-                          {getColumnLabel(column)}
+
+            <>
+              {/* ========================= MOBILE UI ========================= */}
+              <div className="md:hidden space-y-4">
+                {filteredUsersWithSettings.map((user, index) => {
+                  const rowIsCse =
+                    editingRowKey === getRowKey(user) && editingRow
+                      ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
+                      : isCseRole(user.role);
+
+                  return (
+                    <Card
+                      key={`${user.uid}-${index}`}
+                      className="rounded-xl border shadow-sm"
+                    >
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500">Name</p>
+                            <p className="font-semibold text-sm">{user.name}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Email</p>
+                            <p className="break-words text-sm">{user.email}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Role</p>
+                            <p className="text-sm">{user.role?.name || "No Role"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Lead Group</p>
+                            <p className="text-sm">{user.leadGroup || "-"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Target</p>
+                            <p className="text-sm">
+                              {rowIsCse
+                                ? formatResolveRateGoal(user.supportResolveRateGoal)
+                                : user.dailyTarget || "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Daily Limit</p>
+                            {rowIsCse ? (
+                              <SupportDailyDualDisplay
+                                selfTrial={user.supportDailyLimitSelfTrial}
+                                other={user.supportDailyLimitOther}
+                              />
+                            ) : (
+                              <p className="text-sm">{user.dailyLimit || "-"}</p>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Manager Email</p>
+                            <p className="break-words text-sm">{user.managerEmail || "-"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Created At</p>
+                            <p className="text-sm">
+                              {format(
+                                new Date(
+                                  new Date(user.created_at).getTime() +
+                                  5.5 * 60 * 60 * 1000
+                                ),
+                                "MMM d, yyyy h:mm a"
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-5 mt-2">
+                          {editingRowKey === getRowKey(user) ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="border-green-200 bg-green-50 text-green-700"
+                                onClick={handleSaveRowEdit}
+                                disabled={isUpdatingRow}
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={handleCancelRowEdit}
+                                disabled={isUpdatingRow}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => handleEditUser(user)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="text-red-500 border-red-200"
+                            onClick={() => handleDeleteUser(user.email, user.uid)}
+                            disabled={editingRowKey === getRowKey(user)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              <div className="hidden md:block rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-black hover:bg-black">
+                      {schema.columns
+                        .filter((column) => column !== 'actions')
+                        .map((column) => (
+                          <TableHead key={column} className="text-white font-medium">
+                            {getColumnLabel(column)}
+                          </TableHead>
+                        ))}
+                      {customTableFields.map((field) => (
+                        <TableHead key={`cf-${field.key}`} className="text-white font-medium">
+                          {field.label}
                         </TableHead>
                       ))}
-                    {customTableFields.map((field) => (
-                      <TableHead key={`cf-${field.key}`} className="text-white font-medium">
-                        {field.label}
-                      </TableHead>
-                    ))}
-                    {schema.columns.includes('actions') && (
-                      <TableHead className="text-white font-medium text-right" />
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsersWithSettings.map((user, index) => {
-                    const isEditing = editingRowKey === getRowKey(user) && !!editingRow;
-                    return (
-                      <TableRow key={`${user.uid}-${index}`}>
-                        {schema.columns
-                          .filter((column) => column !== 'actions')
-                          .map((column) => renderColumnCell(column, user))}
-                        {customTableFields.map((field) =>
-                          renderCustomTableCell(field, user, isEditing)
-                        )}
-                        {schema.columns.includes('actions') && renderColumnCell('actions', user)}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                      {schema.columns.includes('actions') && (
+                        <TableHead className="text-white font-medium text-right" />
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsersWithSettings.map((user, index) => {
+                      const isEditing = editingRowKey === getRowKey(user) && !!editingRow;
+                      return (
+                        <TableRow key={`${user.uid}-${index}`}>
+                          {schema.columns
+                            .filter((column) => column !== 'actions')
+                            .map((column) => renderColumnCell(column, user))}
+                          {customTableFields.map((field) =>
+                            renderCustomTableCell(field, user, isEditing)
+                          )}
+                          {schema.columns.includes('actions') && renderColumnCell('actions', user)}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </div>
       </CardContent>
