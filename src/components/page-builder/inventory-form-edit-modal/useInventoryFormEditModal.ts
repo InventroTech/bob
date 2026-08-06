@@ -180,9 +180,18 @@ export function useInventoryFormEditModal({
         courier: result.courier_name,
       });
       const patch: Record<string, unknown> = {};
-      if (result.tracking_number) {
-        setField('tracking_number', result.tracking_number);
-        patch.tracking_number = result.tracking_number;
+      // Never overwrite a real AWB with HTML-scrape junk like "Shipment".
+      const incomingNumber = String(result.tracking_number ?? '').trim();
+      const looksLikeValidAwb =
+        incomingNumber.length >= 8 &&
+        incomingNumber.length <= 40 &&
+        /\d/.test(incomingNumber) &&
+        !/^(shipment|tracking|delivered|delivery|exception|aftership|bluedart|package|courier|status|transit|ordered)$/i.test(
+          incomingNumber
+        );
+      if (looksLikeValidAwb) {
+        setField('tracking_number', incomingNumber);
+        patch.tracking_number = incomingNumber;
       }
       // Always fill tracking link when the user only pasted an AWB.
       if (result.tracking_link) {
