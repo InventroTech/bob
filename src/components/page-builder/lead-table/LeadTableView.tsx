@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search } from 'lucide-react';
+import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X } from 'lucide-react';
 import LeadCardCarousel from '../lead-card-carousel';
 import { RecordDetailModal } from '../record-detail-modal';
 import { InventoryFormEditModal } from '../inventory-form-edit-modal';
@@ -78,6 +78,20 @@ export function LeadTableView(props: LeadTableModel) {
     apiClient,
   } = props;
 
+  // DYNAMIC TITLE LOGIC based on URL path
+  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  let displayTitle = config?.title;
+  
+  if (!displayTitle) {
+    if (pathname.includes('follow')) {
+      displayTitle = "Follow Up Leads";
+    } else if (pathname.includes('pending')) {
+      displayTitle = "Pending Leads";
+    } else {
+      displayTitle = "All Leads";
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -100,10 +114,10 @@ export function LeadTableView(props: LeadTableModel) {
 
   return (
     <>
-      {/* ADDED: Mobile Page Title - Only visible on small screens (md:hidden) */}
+      {/* Mobile Page Title - Dynamically changes based on URL */}
       <div className="md:hidden w-full pb-3 px-4 pt-4">
         <h2 className="text-2xl font-bold text-gray-900">
-          {config?.title || "All Leads"}
+          {displayTitle}
         </h2>
       </div>
 
@@ -111,9 +125,9 @@ export function LeadTableView(props: LeadTableModel) {
         {/* Filter Section */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-            {/* UPDATED: Added 'hidden md:block' so it doesn't show twice on mobile */}
+            {/* Desktop Page Title - Dynamically changes based on URL */}
             <h5 className="hidden md:block">
-              {config?.title || ""}
+              {displayTitle}
             </h5>
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -207,93 +221,94 @@ export function LeadTableView(props: LeadTableModel) {
         {/* Always use server-side pagination - backend handles search */}
         {/* Mobile Card View */}
         <div className="md:hidden space-y-4">
-  {filteredData.map((item, index) => {
-    const lead = item;
+          {filteredData.map((item, index) => {
+            const lead = item;
 
-    return (
-      <div
-  key={lead.id || index}
-  className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
-  onClick={() => {
-    setSelectedLead(item);
-    setIsLeadModalOpen(true);
-  }}
->
-        <div className="space-y-2">
+            return (
+              <div
+                key={lead.id || index}
+                className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => {
+                  if (!isInPageBuilder && effectiveDetailMode !== "none") {
+                    handleRowClick(item);
+                  }
+                }}
+              >
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
 
-          <div>
-            <p className="text-xs text-gray-500">Name</p>
-            <p className="font-semibold">{lead.name}</p>
-          </div>
+<div>
+  <p className="text-xs text-gray-500">Name</p>
+  <p className="font-semibold">{lead.name}</p>
+</div>
 
-          <div>
-            <p className="text-xs text-gray-500">Praja ID</p>
-            <p>{lead.praja_id}</p>
-          </div>
+<div>
+  <p className="text-xs text-gray-500">Praja ID</p>
+  <p>{lead.praja_id}</p>
+</div>
 
-          <div>
-            <p className="text-xs text-gray-500">Phone Number</p>
-            <p>{lead.phone_number}</p>
-          </div>
+<div>
+  <p className="text-xs text-gray-500">Phone Number</p>
+  <p>{lead.phone_number}</p>
+</div>
 
-          <div>
-            <p className="text-xs text-gray-500">Party</p>
-            <p>{lead.affiliated_party}</p>
-          </div>
+<div>
+  <p className="text-xs text-gray-500">Party</p>
+  <p>{lead.affiliated_party}</p>
+</div>
 
-          <div>
-            <p className="text-xs text-gray-500">Lead Score</p>
-            <p>{lead.lead_score}</p>
-          </div>
-          <Button
-  className="w-full mt-4"
-  onClick={(e) => {
-    e.stopPropagation();
-    setSelectedLead(item);
-    setIsLeadModalOpen(true);
-  }}
->
-  View Profile
-</Button>
+<div className="col-span-2">
+  <p className="text-xs text-gray-500">Lead Score</p>
+  <p>{lead.lead_score}</p>
+</div>
+                  <Button
+                    className="w-full mt-4"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedLead(item);
+                      setIsLeadModalOpen(true);
+                    }}
+                  >
+                    View Profile
+                  </Button>
 
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
-    );
-  })}
-</div>
         <div className="hidden md:block w-full relative overflow-x-auto">
-  {/* Loading Overlay */}
-  {tableLoading && (
-    <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
-      <div className="flex items-center space-x-2">
-        <span className="text-gray-600"></span>
-      </div>
-    </div>
-  )}
+          {/* Loading Overlay */}
+          {tableLoading && (
+            <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <span className="text-gray-600"></span>
+              </div>
+            </div>
+          )}
 
-  <CustomTable
-    columns={tableColumns.map(col => ({
-      header: col.header,
-      accessor: col.accessor,
-      type: col.type,
-      linkField: col.linkField,
-      editableInTable: col.editableInTable,
-      openCard: col.openCard,
-      actionApiEndpoint: col.actionApiEndpoint,
-      actionApiMethod: col.actionApiMethod,
-      actionApiHeaders: col.actionApiHeaders,
-      actionApiPayload: col.actionApiPayload,
-    })) as CustomTableColumn[]}
-    data={filteredData}
-    loading={tableLoading}
-    emptyMessage={config?.emptyMessage || 'No data found'}
-    onRowClick={!isInPageBuilder && effectiveDetailMode !== 'none' ? handleRowClick : undefined}
-    renderCell={renderCell}
-    headerBgColor="bg-black"
-    headerTextColor="text-white"
-    hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
-  />
-</div>
+          <CustomTable
+            columns={tableColumns.map(col => ({
+              header: col.header,
+              accessor: col.accessor,
+              type: col.type,
+              linkField: col.linkField,
+              editableInTable: col.editableInTable,
+              openCard: col.openCard,
+              actionApiEndpoint: col.actionApiEndpoint,
+              actionApiMethod: col.actionApiMethod,
+              actionApiHeaders: col.actionApiHeaders,
+              actionApiPayload: col.actionApiPayload,
+            })) as CustomTableColumn[]}
+            data={filteredData}
+            loading={tableLoading}
+            emptyMessage={config?.emptyMessage || 'No data found'}
+            onRowClick={!isInPageBuilder && effectiveDetailMode !== 'none' ? handleRowClick : undefined}
+            renderCell={renderCell}
+            headerBgColor="bg-black"
+            headerTextColor="text-white"
+            hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
+          />
+        </div>
         
         {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
         {filteredData.length > 0 &&

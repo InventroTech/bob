@@ -927,46 +927,143 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
           </Card>
         </div>
         {/* Mobile Cards */}
-<div className="md:hidden space-y-4 mt-4">
-  {filteredGroups.map((group) => {
-    const partyValues = Array.isArray(group.group_data?.party)
-      ? group.group_data.party
-      : group.group_data?.party
-      ? [String(group.group_data.party)]
-      : [];
+        <div className="md:hidden space-y-4 mt-4">
+          {filteredGroups.map((group) => {
+            const isEditing = editingGroup?.id === group.id;
 
-    return (
-      <Card key={group.id} className="border border-gray-200 shadow-sm">
-        <CardContent className="p-4 space-y-2">
-          <div>
-            <p className="text-xs text-gray-500">Group</p>
-            <p className="font-semibold">{group.name}</p>
-          </div>
+            const conditions = getConditionsLabel(group);
 
-          <div>
-            <p className="text-xs text-gray-500">Queue</p>
-            <p>{group.group_data?.queue_type || "-"}</p>
-          </div>
+            const partyValues = Array.isArray(group.group_data?.party)
+              ? group.group_data.party
+              : group.group_data?.party
+              ? [String(group.group_data.party)]
+              : [];
 
-          <div>
-            <p className="text-xs text-gray-500">Party</p>
-            {renderCompactChipList(
-              partyValues,
-              `${group.id}-party-mobile`
-            )}
-          </div>
+            const leadSources = Array.isArray(group.group_data?.lead_sources)
+              ? group.group_data.lead_sources
+              : [];
 
-          <div>
-            <p className="text-xs text-gray-500">Fresh Leads</p>
-            <p className="font-semibold">
-              {formatFreshLeadsCount(group)}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  })}
-</div>
+            const leadStatuses = Array.isArray(group.group_data?.lead_statuses)
+              ? group.group_data.lead_statuses
+              : [];
+
+            return (
+              <Card key={group.id} className="border border-gray-200 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+                    {/* Group */}
+                    <div>
+                      <p className="text-sm text-gray-500">Group</p>
+                      <button
+                        type="button"
+                        className="font-semibold text-left text-blue-700 hover:text-blue-900 hover:underline"
+                        onClick={() => setSelectedGroupForDrawer(group)}
+                      >
+                        {group.name}
+                      </button>
+                    </div>
+
+                    {/* Queue */}
+                    <div>
+                      <p className="text-sm text-gray-500">Queue</p>
+                      <p className="font-medium">
+                        {group.group_data?.queue_type || "-"}
+                      </p>
+                    </div>
+
+                    {/* Party */}
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-500 mb-1">Party</p>
+                      {renderCompactChipList(
+                        partyValues,
+                        `${group.id}-party-mobile`
+                      )}
+                    </div>
+
+                    {/* State */}
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-500 mb-1">State</p>
+                      {renderCompactChipList(
+                        conditions.chips,
+                        `${group.id}-state-mobile`
+                      )}
+                    </div>
+
+                    {/* Lead Sources */}
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-500 mb-1">Lead Sources</p>
+                      {renderCompactChipList(
+                        leadSources,
+                        `${group.id}-source-mobile`
+                      )}
+                    </div>
+
+                    {/* Fresh Leads */}
+                    <div>
+                      <p className="text-sm text-gray-500">Fresh Leads</p>
+                      <p className="font-semibold">
+                        {formatFreshLeadsCount(group)}
+                      </p>
+                    </div>
+
+                    {/* Lead Status */}
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">Lead Status</p>
+                      {renderCompactChipList(
+                        leadStatuses,
+                        `${group.id}-status-mobile`
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Edit / Delete */}
+                  <div className="flex justify-end gap-2 pt-4 mt-4 border-t">
+                    {isEditing ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                          onClick={handleSaveGroupEdit}
+                          disabled={isUpdatingGroup}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={handleCancelGroupEdit}
+                          disabled={isUpdatingGroup}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleEditGroup(group)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="text-red-500 border-red-200 hover:bg-red-50"
+                      onClick={() => handleDelete(group.id)}
+                      disabled={isEditing}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
         <Sheet open={!!selectedGroupForDrawer} onOpenChange={(open) => !open && setSelectedGroupForDrawer(null)}>
           <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
             <SheetHeader>

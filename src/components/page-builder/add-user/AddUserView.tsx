@@ -529,234 +529,93 @@ export function AddUserView(props: AddUserModel) {
               No users match your search
             </div>
           ) : (
-            <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-black hover:!bg-black text-white hover:text-white">
-                    <TableHead className="text-white font-medium">Name</TableHead>
-                    <TableHead className="text-white font-medium">Email</TableHead>
-                    <TableHead className="text-white font-medium">Role</TableHead>
-                    <TableHead className="text-white font-medium">Group</TableHead>
-                    <TableHead className="text-white font-medium">Target</TableHead>
-                    <TableHead className="text-white font-medium">Daily Limit</TableHead>
-                    <TableHead className="text-white font-medium">Manager Email</TableHead>
-                    <TableHead className="text-white font-medium">Created at</TableHead>
-                    <TableHead className="text-white font-medium text-right"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsersWithSettings.map((user, index) => {
-                    const rowIsCse =
-                      editingRowKey === getRowKey(user) && editingRow
-                        ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
-                        : isCseRole(user.role);
-                    return (
-                      <TableRow key={`${user.uid}-${index}`}>
-                        <TableCell className="text-body-medium">
-                          {user.name}
-                        </TableCell>
-                        <TableCell>
-                          {user.email}
-                        </TableCell>
-                        <TableCell>
-                          {user.role?.name || 'No Role'}
-                        </TableCell>
-                        <TableCell>
-                          {editingRowKey === getRowKey(user) && editingRow ? (
-                            <select
-                              className="h-9 w-full border rounded-md px-2 text-sm bg-white"
-                              value={editingRow.leadGroup}
-                              onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, leadGroup: e.target.value }) : prev)}
-                            >
-                              <option value="">Select Group</option>
-                              {availableLeadGroups
-                                .map((group) => (
-                                  <option key={group.name} value={group.name}>
-                                    {group.name}
-                                  </option>
-                                ))}
-                            </select>
-                          ) : user.leadGroup}
-                        </TableCell>
-                        <TableCell>
-                          {editingRowKey === getRowKey(user) && editingRow ? (
-                            rowIsCse ? (
-                              <Input
-                                className="h-9"
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="1"
-                                value={editingRow.supportResolveRateGoal}
-                                onChange={(e) =>
-                                  setEditingRow((prev) =>
-                                    prev ? ({ ...prev, supportResolveRateGoal: e.target.value }) : prev
-                                  )
-                                }
+            <>
+              {/* ========================= MOBILE UI ========================= */}
+              <div className="md:hidden space-y-4">
+                {filteredUsersWithSettings.map((user, index) => {
+                  const rowIsCse =
+                    editingRowKey === getRowKey(user) && editingRow
+                      ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
+                      : isCseRole(user.role);
+
+                  return (
+                    <Card
+                      key={`${user.uid}-${index}`}
+                      className="rounded-xl border shadow-sm"
+                    >
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500">Name</p>
+                            <p className="font-semibold text-sm">{user.name}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Email</p>
+                            <p className="break-words text-sm">{user.email}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Role</p>
+                            <p className="text-sm">{user.role?.name || "No Role"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Lead Group</p>
+                            <p className="text-sm">{user.leadGroup || "-"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Target</p>
+                            <p className="text-sm">
+                              {rowIsCse
+                                ? formatResolveRateGoal(user.supportResolveRateGoal)
+                                : user.dailyTarget || "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Daily Limit</p>
+                            {rowIsCse ? (
+                              <SupportDailyDualDisplay
+                                selfTrial={user.supportDailyLimitSelfTrial}
+                                other={user.supportDailyLimitOther}
                               />
                             ) : (
-                              <Input
-                                className="h-9"
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={editingRow.dailyTarget}
-                                onChange={(e) =>
-                                  setEditingRow((prev) =>
-                                    prev ? ({ ...prev, dailyTarget: e.target.value }) : prev
-                                  )
-                                }
-                              />
-                            )
-                          ) : rowIsCse ? (
-                            <>{formatResolveRateGoal(user.supportResolveRateGoal)}</>
-                          ) : (
-                            user.dailyTarget
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingRowKey === getRowKey(user) && editingRow ? (
-                            rowIsCse ? (
-                              <SupportDailyDualInputs
-                                selfTrial={editingRow.supportDailyLimitSelfTrial}
-                                other={editingRow.supportDailyLimitOther}
-                                onSelfTrialChange={(value) =>
-                                  setEditingRow((prev) =>
-                                    prev ? ({ ...prev, supportDailyLimitSelfTrial: value }) : prev
-                                  )
-                                }
-                                onOtherChange={(value) =>
-                                  setEditingRow((prev) =>
-                                    prev ? ({ ...prev, supportDailyLimitOther: value }) : prev
-                                  )
-                                }
-                              />
-                            ) : (
-                              <Input
-                                className="h-9"
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={editingRow.dailyLimit}
-                                onChange={(e) =>
-                                  setEditingRow((prev) =>
-                                    prev ? ({ ...prev, dailyLimit: e.target.value }) : prev
-                                  )
-                                }
-                              />
-                            )
-                          ) : rowIsCse ? (
-                            <SupportDailyDualDisplay
-                              selfTrial={user.supportDailyLimitSelfTrial}
-                              other={user.supportDailyLimitOther}
-                            />
-                          ) : (
-                            user.dailyLimit
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingRowKey === getRowKey(user) && editingRow ? (
-                            <div className="relative" ref={editManagerDropdownRef}>
-                              <div className="flex gap-1">
-                                <div className="relative flex-1">
-                                  <Input
-                                    className="h-9 pr-8 text-sm"
-                                    placeholder="Search manager..."
-                                    value={showEditManagerDropdown ? editManagerSearch : editingRow.managerEmail}
-                                    onChange={(e) => {
-                                      setEditManagerSearch(e.target.value);
-                                      setShowEditManagerDropdown(true);
-                                    }}
-                                    onFocus={() => {
-                                      setEditManagerSearch('');
-                                      setShowEditManagerDropdown(true);
-                                    }}
-                                    autoComplete="off"
-                                  />
-                                  <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                                </div>
-                                {editingRow.managerEmail && (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-9 w-9 shrink-0 border-gray-200 text-gray-500 hover:text-gray-700"
-                                    onClick={() => {
-                                      setEditingRow((prev) => prev ? ({ ...prev, managerEmail: '' }) : prev);
-                                      setEditManagerSearch('');
-                                      setShowEditManagerDropdown(false);
-                                    }}
-                                    title="Clear manager"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                              </div>
-                              {showEditManagerDropdown && (
-                                <div className="absolute z-50 mt-1 w-64 max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
-                                  {users
-                                    .filter((u) => {
-                                      if (u.email === user.email) return false;
-                                      if (!editManagerSearch.trim()) return true;
-                                      const q = editManagerSearch.toLowerCase();
-                                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
-                                    })
-                                    .map((u) => (
-                                      <button
-                                        key={u.uid}
-                                        type="button"
-                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-gray-100"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                          setEditingRow((prev) => prev ? ({ ...prev, managerEmail: u.email }) : prev);
-                                          setEditManagerSearch('');
-                                          setShowEditManagerDropdown(false);
-                                        }}
-                                      >
-                                        <span className="font-medium truncate">{u.name}</span>
-                                        <span className="text-gray-400 truncate">{u.email}</span>
-                                      </button>
-                                    ))}
-                                  {users.filter((u) => {
-                                    if (u.email === user.email) return false;
-                                    if (!editManagerSearch.trim()) return true;
-                                    const q = editManagerSearch.toLowerCase();
-                                    return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
-                                  }).length === 0 && (
-                                    <div className="px-3 py-1.5 text-xs text-gray-400">No users found</div>
-                                  )}
-                                </div>
+                              <p className="text-sm">{user.dailyLimit || "-"}</p>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Manager Email</p>
+                            <p className="break-words text-sm">{user.managerEmail || "-"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Created At</p>
+                            <p className="text-sm">
+                              {format(
+                                new Date(
+                                  new Date(user.created_at).getTime() +
+                                  5.5 * 60 * 60 * 1000
+                                ),
+                                "MMM d, yyyy h:mm a"
                               )}
-                            </div>
-                          ) : user.managerEmail}
-                        </TableCell>
-                        <TableCell>
-                        {format(
-  new Date(new Date(user.created_at).getTime() + 5.5 * 60 * 60 * 1000),
-  'MMM d, yyyy h:mm a'
-)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex items-center justify-end gap-2">
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-5 mt-2">
                           {editingRowKey === getRowKey(user) ? (
                             <>
                               <Button
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+                                className="border-green-200 bg-green-50 text-green-700"
                                 onClick={handleSaveRowEdit}
                                 disabled={isUpdatingRow}
-                                title="Save changes"
                               >
                                 <Check className="h-4 w-4" />
                               </Button>
+
                               <Button
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
                                 onClick={handleCancelRowEdit}
                                 disabled={isUpdatingRow}
-                                title="Cancel editing"
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -765,31 +624,291 @@ export function AddUserView(props: AddUserModel) {
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
                               onClick={() => handleEditUser(user)}
-                              title="Edit row"
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
                           )}
+
                           <Button
                             variant="outline"
                             size="icon"
-                            className="h-8 w-8 border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700"
+                            className="text-red-500 border-red-200"
                             onClick={() => handleDeleteUser(user.email, user.uid)}
-                            title="Delete user"
                             disabled={editingRowKey === getRowKey(user)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* ========================= DESKTOP UI ========================= */}
+              <div className="hidden md:block overflow-x-auto border border-gray-200 rounded-xl bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-black hover:!bg-black text-white hover:text-white">
+                      <TableHead className="text-white font-medium">Name</TableHead>
+                      <TableHead className="text-white font-medium">Email</TableHead>
+                      <TableHead className="text-white font-medium">Role</TableHead>
+                      <TableHead className="text-white font-medium">Group</TableHead>
+                      <TableHead className="text-white font-medium">Target</TableHead>
+                      <TableHead className="text-white font-medium">Daily Limit</TableHead>
+                      <TableHead className="text-white font-medium">Manager Email</TableHead>
+                      <TableHead className="text-white font-medium">Created at</TableHead>
+                      <TableHead className="text-white font-medium text-right"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsersWithSettings.map((user, index) => {
+                      const rowIsCse =
+                        editingRowKey === getRowKey(user) && editingRow
+                          ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
+                          : isCseRole(user.role);
+                      return (
+                        <TableRow key={`${user.uid}-${index}`}>
+                          <TableCell className="text-body-medium">
+                            {user.name}
+                          </TableCell>
+                          <TableCell>
+                            {user.email}
+                          </TableCell>
+                          <TableCell>
+                            {user.role?.name || 'No Role'}
+                          </TableCell>
+                          <TableCell>
+                            {editingRowKey === getRowKey(user) && editingRow ? (
+                              <select
+                                className="h-9 w-full border rounded-md px-2 text-sm bg-white"
+                                value={editingRow.leadGroup}
+                                onChange={(e) => setEditingRow((prev) => prev ? ({ ...prev, leadGroup: e.target.value }) : prev)}
+                              >
+                                <option value="">Select Group</option>
+                                {availableLeadGroups
+                                  .map((group) => (
+                                    <option key={group.name} value={group.name}>
+                                      {group.name}
+                                    </option>
+                                  ))}
+                              </select>
+                            ) : user.leadGroup}
+                          </TableCell>
+                          <TableCell>
+                            {editingRowKey === getRowKey(user) && editingRow ? (
+                              rowIsCse ? (
+                                <Input
+                                  className="h-9"
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="1"
+                                  value={editingRow.supportResolveRateGoal}
+                                  onChange={(e) =>
+                                    setEditingRow((prev) =>
+                                      prev ? ({ ...prev, supportResolveRateGoal: e.target.value }) : prev
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <Input
+                                  className="h-9"
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={editingRow.dailyTarget}
+                                  onChange={(e) =>
+                                    setEditingRow((prev) =>
+                                      prev ? ({ ...prev, dailyTarget: e.target.value }) : prev
+                                    )
+                                  }
+                                />
+                              )
+                            ) : rowIsCse ? (
+                              <>{formatResolveRateGoal(user.supportResolveRateGoal)}</>
+                            ) : (
+                              user.dailyTarget
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {editingRowKey === getRowKey(user) && editingRow ? (
+                              rowIsCse ? (
+                                <SupportDailyDualInputs
+                                  selfTrial={editingRow.supportDailyLimitSelfTrial}
+                                  other={editingRow.supportDailyLimitOther}
+                                  onSelfTrialChange={(value) =>
+                                    setEditingRow((prev) =>
+                                      prev ? ({ ...prev, supportDailyLimitSelfTrial: value }) : prev
+                                    )
+                                  }
+                                  onOtherChange={(value) =>
+                                    setEditingRow((prev) =>
+                                      prev ? ({ ...prev, supportDailyLimitOther: value }) : prev
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <Input
+                                  className="h-9"
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={editingRow.dailyLimit}
+                                  onChange={(e) =>
+                                    setEditingRow((prev) =>
+                                      prev ? ({ ...prev, dailyLimit: e.target.value }) : prev
+                                    )
+                                  }
+                                />
+                              )
+                            ) : rowIsCse ? (
+                              <SupportDailyDualDisplay
+                                selfTrial={user.supportDailyLimitSelfTrial}
+                                other={user.supportDailyLimitOther}
+                              />
+                            ) : (
+                              user.dailyLimit
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {editingRowKey === getRowKey(user) && editingRow ? (
+                              <div className="relative" ref={editManagerDropdownRef}>
+                                <div className="flex gap-1">
+                                  <div className="relative flex-1">
+                                    <Input
+                                      className="h-9 pr-8 text-sm"
+                                      placeholder="Search manager..."
+                                      value={showEditManagerDropdown ? editManagerSearch : editingRow.managerEmail}
+                                      onChange={(e) => {
+                                        setEditManagerSearch(e.target.value);
+                                        setShowEditManagerDropdown(true);
+                                      }}
+                                      onFocus={() => {
+                                        setEditManagerSearch('');
+                                        setShowEditManagerDropdown(true);
+                                      }}
+                                      autoComplete="off"
+                                    />
+                                    <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                                  </div>
+                                  {editingRow.managerEmail && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-9 w-9 shrink-0 border-gray-200 text-gray-500 hover:text-gray-700"
+                                      onClick={() => {
+                                        setEditingRow((prev) => prev ? ({ ...prev, managerEmail: '' }) : prev);
+                                        setEditManagerSearch('');
+                                        setShowEditManagerDropdown(false);
+                                      }}
+                                      title="Clear manager"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                                {showEditManagerDropdown && (
+                                  <div className="absolute z-50 mt-1 w-64 max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                                    {users
+                                      .filter((u) => {
+                                        if (u.email === user.email) return false;
+                                        if (!editManagerSearch.trim()) return true;
+                                        const q = editManagerSearch.toLowerCase();
+                                        return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                      })
+                                      .map((u) => (
+                                        <button
+                                          key={u.uid}
+                                          type="button"
+                                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-gray-100"
+                                          onMouseDown={(e) => e.preventDefault()}
+                                          onClick={() => {
+                                            setEditingRow((prev) => prev ? ({ ...prev, managerEmail: u.email }) : prev);
+                                            setEditManagerSearch('');
+                                            setShowEditManagerDropdown(false);
+                                          }}
+                                        >
+                                          <span className="font-medium truncate">{u.name}</span>
+                                          <span className="text-gray-400 truncate">{u.email}</span>
+                                        </button>
+                                      ))}
+                                    {users.filter((u) => {
+                                      if (u.email === user.email) return false;
+                                      if (!editManagerSearch.trim()) return true;
+                                      const q = editManagerSearch.toLowerCase();
+                                      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                    }).length === 0 && (
+                                      <div className="px-3 py-1.5 text-xs text-gray-400">No users found</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : user.managerEmail}
+                          </TableCell>
+                          <TableCell>
+                          {format(
+                            new Date(new Date(user.created_at).getTime() + 5.5 * 60 * 60 * 1000),
+                            'MMM d, yyyy h:mm a'
+                          )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center justify-end gap-2">
+                            {editingRowKey === getRowKey(user) ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800"
+                                  onClick={handleSaveRowEdit}
+                                  disabled={isUpdatingRow}
+                                  title="Save changes"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                                  onClick={handleCancelRowEdit}
+                                  disabled={isUpdatingRow}
+                                  title="Cancel editing"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                                onClick={() => handleEditUser(user)}
+                                title="Edit row"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 border-red-200 bg-white text-red-500 hover:bg-red-50 hover:text-red-700"
+                              onClick={() => handleDeleteUser(user.email, user.uid)}
+                              title="Delete user"
+                              disabled={editingRowKey === getRowKey(user)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </div>
       </CardContent>
