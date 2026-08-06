@@ -29,40 +29,51 @@ export function transformTicketForCarousel(row: any) {
 }
 
 // Status color mapping - matching design colors
-export const getStatusColor = (status: string) => {
-  const statusLower = status.toLowerCase();
+export const getStatusColor = (status?: string) => {
+  const statusLower = (status ?? "").toLowerCase();
+
   switch (statusLower) {
-    case 'paid':
-    case 'active':
-      return 'bg-green-50 text-green-700 border-green-200';
-    case 'auto pay not set':
-    case 'autopay_setup_no_layout':
-    case 'auto_pay_not_set_up':
-      return 'bg-orange-50 text-orange-700 border-orange-200';
-    case 'in trial':
-    case 'in_trial':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
-    case 'trial expired':
-    case 'trial_expired':
-      return 'bg-red-50 text-red-700 border-red-200';
-    case 'open':
-    case 'pending':
-      return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-    case 'in progress':
-    case 'wip':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
-    case 'resolved':
-    case 'completed':
-      return 'bg-green-50 text-green-700 border-green-200';
-    case 'closed':
-      return 'bg-gray-50 text-gray-700 border-gray-200';
-    case 'cancelled':
-    case 'failed':
-      return 'bg-red-50 text-red-700 border-red-200';
-    case 'not paid':
-      return 'bg-red-50 text-red-700 border-red-200';
+    case "paid":
+    case "active":
+      return "bg-green-50 text-green-700 border-green-200";
+
+    case "auto pay not set":
+    case "autopay_setup_no_layout":
+    case "auto_pay_not_set_up":
+      return "bg-orange-50 text-orange-700 border-orange-200";
+
+    case "in trial":
+    case "in_trial":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+
+    case "trial expired":
+    case "trial_expired":
+      return "bg-red-50 text-red-700 border-red-200";
+
+    case "open":
+    case "pending":
+      return "bg-yellow-50 text-yellow-700 border-yellow-200";
+
+    case "in progress":
+    case "wip":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+
+    case "resolved":
+    case "completed":
+      return "bg-green-50 text-green-700 border-green-200";
+
+    case "closed":
+      return "bg-gray-50 text-gray-700 border-gray-200";
+
+    case "cancelled":
+    case "failed":
+      return "bg-red-50 text-red-700 border-red-200";
+
+    case "not paid":
+      return "bg-red-50 text-red-700 border-red-200";
+
     default:
-      return 'bg-gray-50 text-gray-700 border-gray-200';
+      return "bg-gray-50 text-gray-700 border-gray-200";
   }
 };
 
@@ -89,29 +100,81 @@ export const getDisplayName = (email: string | null): string => {
 // Function to format relative time
 // Using formatRelativeTimeIST from timeUtils for consistent GMT to IST conversion
 
-// Function to format poster status with better UI
-export const formatPosterStatus = (poster: string): { label: string; color: string; bgColor: string } => {
-  switch (poster) {
-    case 'in_trial':
-      return { label: 'In Trial', color: 'text-blue-600', bgColor: 'bg-blue-50' };
-    case 'paid':
-      return { label: 'Paid', color: 'text-green-600', bgColor: 'bg-green-50' };
-    case 'in_trial_extension':
-      return { label: 'Trial Extended', color: 'text-purple-600', bgColor: 'bg-purple-50' };
-    case 'in_premium_extension':
-      return { label: 'Premium Extended', color: 'text-indigo-600', bgColor: 'bg-indigo-50' };
-    case 'trial_expired':
-      return { label: 'Trial Expired', color: 'text-red-600', bgColor: 'bg-red-50' };
-    case 'in_grace_period':
-      return { label: 'Grace Period', color: 'text-orange-600', bgColor: 'bg-orange-50' };
-    case 'auto_pay_not_set_up':
-      return { label: 'Auto-pay Not Set', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
-    case 'autopay_setup_no_layout':
-      return { label: 'Auto-pay No Layout', color: 'text-amber-600', bgColor: 'bg-amber-50' };
-    case 'free':
-      return { label: 'Free', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+export const formatPosterStatus = (
+  poster?: string
+): { label: string; color: string; bgColor: string } => {
+  const value = poster ?? "";
+
+  switch (value) {
+    case "in_trial":
+      return {
+        label: "In Trial",
+        color: "text-blue-600",
+        bgColor: "bg-blue-50",
+      };
+
+    case "paid":
+      return {
+        label: "Paid",
+        color: "text-green-600",
+        bgColor: "bg-green-50",
+      };
+
+    case "in_trial_extension":
+      return {
+        label: "Trial Extended",
+        color: "text-purple-600",
+        bgColor: "bg-purple-50",
+      };
+
+    case "in_premium_extension":
+      return {
+        label: "Premium Extended",
+        color: "text-indigo-600",
+        bgColor: "bg-indigo-50",
+      };
+
+    case "trial_expired":
+      return {
+        label: "Trial Expired",
+        color: "text-red-600",
+        bgColor: "bg-red-50",
+      };
+
+    case "in_grace_period":
+      return {
+        label: "Grace Period",
+        color: "text-orange-600",
+        bgColor: "bg-orange-50",
+      };
+
+    case "auto_pay_not_set_up":
+      return {
+        label: "Auto-pay Not Set",
+        color: "text-yellow-600",
+        bgColor: "bg-yellow-50",
+      };
+
+    case "autopay_setup_no_layout":
+      return {
+        label: "Auto-pay No Layout",
+        color: "text-amber-600",
+        bgColor: "bg-amber-50",
+      };
+
+    case "free":
+      return {
+        label: "Free",
+        color: "text-gray-600",
+        bgColor: "bg-gray-50",
+      };
+
     default:
-      return { label: poster || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-50' };
+      return {
+        label: value || "Unknown",
+        color: "text-gray-600",
+        bgColor: "bg-gray-50",
+      };
   }
 };
 
