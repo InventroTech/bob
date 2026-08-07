@@ -19,6 +19,20 @@ export const toVendorStorageName = (name: string): string =>
     .replace(/\s+/g, ' ')
     .toUpperCase();
 
+/** Normalize vendor from record data (string, vendor_name, or nested object). */
+export function resolveVendorDisplayName(raw: unknown): string {
+  if (raw == null || raw === '') return '';
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    return toVendorStorageName(String(raw));
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    const name = o.vendor_name ?? o.name ?? o.label ?? o.value;
+    if (name != null && name !== '') return toVendorStorageName(String(name));
+  }
+  return '';
+}
+
 export function looksLikeUrl(value: string): boolean {
   const v = (value || '').trim();
   if (!v) return false;
@@ -66,7 +80,74 @@ export function toCurrencyNumber(value: unknown): number | null {
 }
 
 /** Keys that we render as textarea (multi-line). */
-export const TEXTAREA_KEYS = new Set(['comments', 'notes', 'description', 'item_name_freeform', 'project_purpose']);
+export const TEXTAREA_KEYS = new Set([
+  'comments',
+  'notes',
+  'description',
+  'item_name_freeform',
+  'project_purpose',
+  'specifications',
+]);
+
+/** Preferred field order for Unmannd All Requests modal redesign. */
+export const UNMANND_FORM_FIELD_ORDER = [
+  'item_name_freeform',
+  'status',
+  'quantity_required',
+  'quantity',
+  'estimated_cost',
+  'line_total',
+  'computed_price',
+  'negotiated_value',
+  'vendor',
+  'request_date',
+  'requested_date',
+  'urgency_level',
+  'priority',
+  'department',
+  'category',
+  'specifications',
+  'product_link',
+  'project_purpose',
+  'comments',
+] as const;
+
+export function sortUnmanndFormFields<T extends { key: string }>(fields: T[]): T[] {
+  const rank = new Map(UNMANND_FORM_FIELD_ORDER.map((k, i) => [k, i]));
+  return [...fields].sort((a, b) => {
+    const ai = rank.has(a.key) ? rank.get(a.key)! : 1000;
+    const bi = rank.has(b.key) ? rank.get(b.key)! : 1000;
+    if (ai !== bi) return ai - bi;
+    return 0;
+  });
+}
+
+export function unmanndFieldColClass(key: string): string {
+  // Exact mock layout on a 3-column grid:
+  // Item(2) + Status(1)
+  // Qty | Cost | Price
+  // Negotiated | Vendor | Date
+  // Priority | Dept | Shipment Type
+  // Specs(1) | Product link(2)
+  // Project(3)
+  // Comments(3)
+  if (key === 'item_name_freeform') return 'md:col-span-2';
+  if (key === 'status') return 'md:col-span-1';
+  if (key === 'quantity_required' || key === 'quantity') return 'md:col-span-1';
+  if (key === 'estimated_cost') return 'md:col-span-1';
+  if (key === 'line_total' || key === 'computed_price') return 'md:col-span-1';
+  if (key === 'negotiated_value') return 'md:col-span-1';
+  if (key === 'vendor') return 'md:col-span-1';
+  if (key === 'request_date' || key === 'requested_date') return 'md:col-span-1';
+  if (key === 'urgency_level' || key === 'priority') return 'md:col-span-1';
+  if (key === 'department') return 'md:col-span-1';
+  if (key === 'category') return 'md:col-span-1';
+  if (key === 'specifications') return 'md:col-span-1';
+  if (key === 'product_link') return 'md:col-span-2';
+  if (key === 'project_purpose') return 'md:col-span-3';
+  if (key === 'comments') return 'md:col-span-3';
+  return 'md:col-span-1';
+}
 
 /** Keys that are typically numbers. */
 export const NUMBER_KEYS = new Set([

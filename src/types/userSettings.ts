@@ -103,3 +103,18 @@ export interface PatchSupportDailyLimitsPayload {
   support_daily_limit_other?: number | null;
   support_resolve_rate_goal?: number | null;
 }
+
+/** Circle catalog option for User Management state/district/party selects. */
+export interface GeoPartyCatalogOption {
+  value: number;
+  label: string;
+  name: string;
+  state_id?: number;
+}
+
+export interface GeoPartyCatalog {
+  version?: number;
+  states: GeoPartyCatalogOption[];
+  districts: GeoPartyCatalogOption[];
+  parties: GeoPartyCatalogOption[];
+}

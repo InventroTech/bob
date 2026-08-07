@@ -2,10 +2,11 @@
 
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search } from 'lucide-react';
+import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X } from 'lucide-react';
 import LeadCardCarousel from '../lead-card-carousel';
 import { RecordDetailModal } from '../record-detail-modal';
 import { InventoryFormEditModal } from '../inventory-form-edit-modal';
+import { UnmanndRequestDetailModal } from '../unmannd-request-detail-modal';
 import { ReceiveShipmentDetailModal } from '../ReceiveShipmentDetailModal';
 import { AssignLeadModal } from '../AssignLeadModal';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,55 @@ export function LeadTableView(props: LeadTableModel) {
     apiClient,
   } = props;
 
+  // DYNAMIC TITLE LOGIC based on URL path
+  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
+  const forceEntityType = String(
+    (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
+      ?.entity_type || ''
+  ).trim();
+  const isInventoryLikeForTitle =
+    config?.entityType === 'unmannd_request' ||
+    config?.entityType === 'inventory_request' ||
+    forceEntityType === 'unmannd_request' ||
+    forceEntityType === 'inventory_request' ||
+    /(?:^|[?&])entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(endpointForTitle) ||
+    Boolean(
+      Array.isArray(config?.columns) &&
+        config.columns.some((col: { key?: string }) =>
+          ['item_name_freeform', 'item_name', 'quantity_required', 'urgency_level'].includes(
+            String(col?.key || '')
+          )
+        )
+    );
+  // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
+  const configuredTitle = (config?.title || '').trim();
+  let displayTitle =
+    isInventoryLikeForTitle &&
+    (!configuredTitle || configuredTitle.toLowerCase() === 'all leads')
+      ? undefined
+      : configuredTitle || undefined;
+
+  if (!displayTitle && !isInventoryLikeForTitle) {
+    if (pathname.includes('follow')) {
+      displayTitle = "Follow Up Leads";
+    } else if (pathname.includes('pending')) {
+      displayTitle = "Pending Leads";
+    } else {
+      displayTitle = "All Leads";
+    }
+  }
+  const isUnmanndEntity =
+    config?.entityType === 'unmannd_request' ||
+    /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
+      String(config?.apiEndpoint || effectiveApiEndpoint || '')
+    );
+  const useUnmanndDetailModal =
+    useFormModal &&
+    isUnmanndEntity &&
+    effectiveDetailMode !== 'receive_shipments' &&
+    effectiveDetailMode !== 'inventory_payment_modal';
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -98,49 +148,65 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
+  const tableTitle =
+    isInventoryLikeForTitle && configuredTitle.toLowerCase() === 'all leads'
+      ? ''
+      : configuredTitle;
+
   return (
     <>
-    <div className="w-full border-2 border-gray-200 rounded-lg bg-white p-4">
-        {/* Filter Section */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-            <h5>
-              {config?.title || ""}
+      {/* Mobile Page Title - Dynamically changes based on URL */}
+      {displayTitle ? (
+        <div className="md:hidden w-full pb-3 px-4 pt-4">
+          <h2 className="text-2xl font-bold text-gray-900">
+            {displayTitle}
+          </h2>
+        </div>
+      ) : null}
+
+      <div className="w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5">
+        {/* Toolbar — tight under page header so All Requests fits with less scroll */}
+        <div
+          className={`flex items-center gap-3 flex-wrap ${
+            tableTitle || displayTitle ? 'justify-between' : 'justify-end'
+          }`}
+        >
+          {(displayTitle || tableTitle) ? (
+            <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
+              {displayTitle || tableTitle}
             </h5>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search..."
-                  value={displaySearchTerm}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-9 h-9"
-                />
-              </div>
-              <CustomButton
-                variant="outline"
-                size="sm"
-                icon={<Filter className="h-4 w-4" />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowFilters(!showFilters);
-                }}
-              >
-                {showFilters ? 'Hide Filters' : 'Show Filters'}
-              </CustomButton>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search..."
+                value={displaySearchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9 h-8"
+              />
             </div>
+            <CustomButton
+              variant="outline"
+              size="sm"
+              icon={<Filter className="h-4 w-4" />}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowFilters(!showFilters);
+              }}
+            >
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </CustomButton>
           </div>
         </div>
 
-        {/* Filter Section */}
-        <div className="mb-4">
-
-          {showFilters && (
-            <div className="bg-gray-50 p-4 rounded-lg border">
+        {showFilters && (
+          <div className="mt-2 mb-1.5">
+            <div className="bg-gray-50 p-2.5 rounded-lg border">
               {/* Use new dynamic filter system if filters are configured */}
               {hasActiveFilters ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <DynamicFilterBuilder
                     filters={effectiveFilters}
                     filterContext={{
@@ -157,8 +223,9 @@ export function LeadTableView(props: LeadTableModel) {
                     }}
                     onFiltersChange={(params) => {
                       // Add pagination parameters to URL for complete bookmarkable state
+                      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
                       params.set('page', '1');
-                      params.set('page_size', '10');
+                      params.set('page_size', isMobile ? '7' : '10');
 
                       // Only add entity_type if using generic records endpoint and entityType is configured
                       if ((effectiveApiEndpoint ?? '').includes('/crm-records/records') && config?.entityType) {
@@ -190,16 +257,74 @@ export function LeadTableView(props: LeadTableModel) {
                     )}
                   </div>
                 </div>
-              ) : (<h5>No filters configured</h5>)}
+              ) : (
+                <h5>No filters configured</h5>
+              )}
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-4 mt-1.5">
+          {filteredData.map((item, index) => {
+            const lead = item;
+
+            return (
+              <div
+                key={lead.id || index}
+                className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => {
+                  if (!isInPageBuilder && effectiveDetailMode !== 'none') {
+                    handleRowClick(item);
+                  }
+                }}
+              >
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Name</p>
+                    <p className="font-semibold">{lead.name}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Praja ID</p>
+                    <p>{lead.praja_id}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Phone Number</p>
+                    <p>{lead.phone_number}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Party</p>
+                    <p>{lead.affiliated_party}</p>
+                  </div>
+
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Lead Score</p>
+                    <p>{lead.lead_score}</p>
+                  </div>
+
+                  <div className="col-span-2">
+                    <Button
+                      className="w-full mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedLead(item);
+                        setIsLeadModalOpen(true);
+                      }}
+                    >
+                      View Profile
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-
-
-        {/* Table Section */}
-        {/* Always use server-side pagination - backend handles search */}
-        <div className="w-full relative overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block w-full max-w-full min-w-0 relative mt-1.5">
           {/* Loading Overlay */}
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
@@ -210,7 +335,7 @@ export function LeadTableView(props: LeadTableModel) {
           )}
 
           <CustomTable
-            columns={tableColumns.map(col => ({
+            columns={tableColumns.map((col) => ({
               header: col.header,
               accessor: col.accessor,
               type: col.type,
@@ -221,6 +346,7 @@ export function LeadTableView(props: LeadTableModel) {
               actionApiMethod: col.actionApiMethod,
               actionApiHeaders: col.actionApiHeaders,
               actionApiPayload: col.actionApiPayload,
+              align: col.align,
             })) as CustomTableColumn[]}
             data={filteredData}
             loading={tableLoading}
@@ -232,36 +358,36 @@ export function LeadTableView(props: LeadTableModel) {
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
           />
         </div>
-        
+
         {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
         {filteredData.length > 0 &&
           (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
-            <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
+            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+              <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
 
-            <div className="flex items-center gap-2">
-              <CustomButton
-                variant="outline"
-                size="sm"
-                onClick={handlePreviousPage}
-                disabled={!pagination.previousPageLink || tableLoading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </CustomButton>
-              
-              <CustomButton
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={!pagination.nextPageLink || tableLoading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </CustomButton>
+              <div className="flex items-center gap-2">
+                <CustomButton
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreviousPage}
+                  disabled={!pagination.previousPageLink || tableLoading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </CustomButton>
+
+                <CustomButton
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={!pagination.nextPageLink || tableLoading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </CustomButton>
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
 
       {/* Lead Modal with LeadCard */}
@@ -368,13 +494,13 @@ export function LeadTableView(props: LeadTableModel) {
                     }}
                   />
                 </div>
-                {/* Action bar fixed in dialog footer - only show when actionButtonsVisible is true AND CallBackModal is not open */}
+                {/* Action bar at bottom of modal — 4 equal columns so Call Back Later stays on-screen */}
                 {actionButtonsVisible && !isCallBackModalOpen && (
-                <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-4 flex flex-wrap items-center gap-3">
+                <div className="shrink-0 border-t border-slate-200 bg-white px-3 md:px-4 lg:px-6 py-3 md:py-4 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-2 lg:gap-3 w-full max-w-full box-border">
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -386,13 +512,13 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Trial Activated
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Trial Activated</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -404,13 +530,13 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <MessageCircle className="h-4 w-4" />
-                    Not Interested
+                    <MessageCircle className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Not Interested</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -422,13 +548,13 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <AlertCircle className="h-4 w-4" />
-                    Not Connected
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Not Connected</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -440,8 +566,8 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <Clock className="h-4 w-4" />
-                    Call Back Later
+                    <Clock className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Call Back Later</span>
                   </Button>
                 </div>
                 )}
@@ -472,8 +598,91 @@ export function LeadTableView(props: LeadTableModel) {
         />
       )}
 
+      {/* Unmannd All Requests — branded detail modal (dark header/footer). */}
+      {useUnmanndDetailModal && (
+        <UnmanndRequestDetailModal
+          open={isRecordDetailModalOpen}
+          onOpenChange={(open) => {
+            setIsRecordDetailModalOpen(open);
+            if (!open) setSelectedRecord(null);
+          }}
+          record={selectedRecord}
+          entityType="unmannd_request"
+          formModalFields={
+            ((config?.formModalFields?.length
+              ? config.formModalFields
+              : DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS) ?? []
+            ).map((field) => {
+              if (field.key === 'urgency_level' || field.key === 'priority') {
+                return { ...field, label: 'Priority', enabled: false };
+              }
+              const vendorEditable = (config?.formModalFields?.length
+                ? config.formModalFields
+                : DEFAULT_INVENTORY_REQUEST_FORM_MODAL_FIELDS
+              ).some((f) => f.key === 'vendor' && f.enabled);
+              if (field.key === 'product_link' && vendorEditable) {
+                return { ...field, enabled: true, link: true };
+              }
+              return field;
+            })
+          }
+          formModalTitle={config?.formModalTitle}
+          formModalDescription={config?.formModalDescription}
+          actionButtons={config?.statusButtons}
+          showSaveButton={config?.showFormModalSaveButton}
+          inventoryWorkflowMode={config?.inventoryWorkflowMode}
+          showFinalPriceSection={config?.showFinalPriceSection}
+          modalFlags={config?.modalFlags}
+          onUpdate={effectiveApiEndpoint && (effectiveApiEndpoint.includes('/crm-records/records') || effectiveApiEndpoint.includes('/records/'))
+            ? async (recordId: number, patch: { data?: Record<string, unknown> }) => {
+                const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+                const url = `${base}/${recordId}/`;
+                const currentFromSelected = selectedRecord && selectedRecord.id === recordId ? selectedRecord : null;
+                const currentFromList = currentFromSelected == null ? data.find((r: any) => r.id === recordId) : null;
+                const existingData =
+                  (currentFromSelected?.data as Record<string, unknown> | undefined) ||
+                  (currentFromList?.data as Record<string, unknown> | undefined) ||
+                  {};
+                const fullData = patch.data != null ? { ...existingData, ...patch.data } : existingData;
+                const body = patch.data != null ? { ...patch, data: fullData } : patch;
+                const response = await apiClient.patch(url, body);
+                const updated = response.data;
+                setSelectedRecord((prev: any) =>
+                  prev?.id === recordId ? { ...prev, ...updated, data: updated?.data ?? fullData } : prev,
+                );
+                setData((prev) =>
+                  prev.map((r: any) =>
+                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
+                  ),
+                );
+                setFilteredData((prev) =>
+                  prev.map((r: any) =>
+                    r.id === recordId ? { ...r, ...updated, data: updated?.data ?? fullData } : r,
+                  ),
+                );
+              }
+            : undefined}
+          onRecordUpdated={async (recordId: number) => {
+            try { await fetchFilteredData(); } catch (e) { console.error('Error refreshing table after form modal update', e); }
+          }}
+          showDeleteRequestButton={config?.showDeleteRequestButton}
+          showHistoryButton={config?.showHistoryButton ?? true}
+          onDeleted={async (recordId: number) => {
+            setData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setFilteredData((prev) => prev.filter((r: any) => r.id !== recordId));
+            setSelectedRecord(null);
+            setIsRecordDetailModalOpen(false);
+            try {
+              await fetchFilteredData();
+            } catch (e) {
+              console.error('Error refreshing table after delete:', e);
+            }
+          }}
+        />
+      )}
+
       {/* Form-style edit modal (inventory form layout + action buttons) */}
-      {effectiveDetailMode !== 'receive_shipments' && useFormModal && (
+      {effectiveDetailMode !== 'receive_shipments' && useFormModal && !useUnmanndDetailModal && (
         <InventoryFormEditModal
           open={isRecordDetailModalOpen}
           onOpenChange={(open) => {

@@ -214,12 +214,12 @@ const CustomAppPage: React.FC = () => {
     );
 
   return (
-    <div className="w-full">
-      {/* Fixed Header */}
+    <div className="w-full max-w-full min-w-0">
+      {/* Fixed Header — compact so request tables start closer to the title */}
       {headerTitle && !hidePageHeader && (
-        <div className="sticky top-0 z-40 w-full border-b border-gray-300 bg-white shadow-sm max-md:hidden">
-          <div className="px-6 py-4">
-            <h2 className="text-3xl font-bold text-gray-900">
+        <div className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white max-md:hidden">
+          <div className="px-4 py-1.5">
+            <h2 className="!m-0 !text-lg !font-semibold !leading-snug text-gray-900">
               {headerTitle}
             </h2>
           </div>
@@ -227,8 +227,8 @@ const CustomAppPage: React.FC = () => {
       )}
       
       {/* Page Content */}
-      <div className="w-full">
-        <div>
+      <div className="w-full max-w-full min-w-0">
+        <div className="max-w-full min-w-0 pt-1">
           {Array.isArray(page.config)
             ? (page.config as any[]).map((component) => {
                 const Renderer = componentMap[component.type];

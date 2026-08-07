@@ -342,7 +342,7 @@ const CustomAppLayout: React.FC = () => {
 
   return (
     <div
-      className="flex min-h-screen"
+      className="flex h-svh w-full overflow-hidden"
       style={{
         ['--sidebar-width' as string]: `${sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded}px`
       }}
@@ -524,10 +524,15 @@ const CustomAppLayout: React.FC = () => {
         </aside>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content — sidebar is fixed, so width must subtract its offset (margin alone overflows). */}
       <main
-        className="flex-1 bg-white transition-all duration-200 overflow-auto"
-        style={{ marginLeft: mainMarginLeft, paddingTop: isMobile ? 56 : 0 }}
+        className="min-w-0 h-full overflow-x-auto overflow-y-auto bg-white transition-all duration-200"
+        style={{
+          marginLeft: mainMarginLeft,
+          width: `calc(100% - ${mainMarginLeft}px)`,
+          maxWidth: `calc(100% - ${mainMarginLeft}px)`,
+          paddingTop: isMobile ? 56 : 0,
+        }}
       >
         {spoofBannerVisible && spoofLabel && (
           <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">

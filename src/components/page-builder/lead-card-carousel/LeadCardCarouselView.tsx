@@ -109,8 +109,6 @@ const TaskProgressList: React.FC<{ steps: TaskStep[]; rejectReason?: string }> =
   );
 };
 
-
-
 const LeadInfoTile: React.FC<{
   icon: React.ElementType;
   label: string;
@@ -150,9 +148,7 @@ const LeadInfoTile: React.FC<{
   return <div className={className}>{content}</div>;
 };
 
-
-
-export function LeadCardCarouselView(props: LeadCardCarouselModel) {
+export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: () => void }) {
   const {
     config,
     isInModal,
@@ -202,6 +198,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
     onCallBackModalChange,
     setRefreshingLead,
     fetchFreshLeadForCard,
+    onClose,
   } = props;
 
   // Pending card
@@ -479,11 +476,24 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
   ].filter(Boolean);
   const titleFont = { fontFamily: "Georgia, serif" };
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
-  // Showing the lead card
+  
   return (
     <div className={cn("flex w-full flex-col relative", !isInModal && "overflow-hidden md:overflow-hidden")}>
       <div className={cn("relative w-full", !isInModal && "overflow-hidden md:overflow-hidden")}>
         <Card className={cn("relative flex w-full flex-col bg-white border-0 shadow-none", !isInModal && "overflow-hidden md:overflow-hidden")}>
+          
+          {/* Absolute Mobile Close Button - No touch restrictions, high z-index */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 z-[100] md:hidden shadow-sm"
+              aria-label="Close modal"
+            >
+              <X className="h-5 w-5 text-gray-700" />
+            </button>
+          )}
+
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -492,12 +502,13 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
               </div>
             </div>
           )}
+          
           {/* Header Section */}
-          <div className="w-full border-b border-slate-200 px-2 py-1.5 bg-white" style={bodyFont}>
-            <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="w-full border-b border-slate-200 px-2 py-2 md:py-1.5 bg-white" style={bodyFont}>
+            <div className="relative flex flex-wrap items-start justify-between gap-2">
               <div
                 className={cn(
-                  "flex items-center gap-1.5",
+                  "flex items-center gap-1.5 pr-12 md:pr-0", // Keeps text from overlapping the floating close button
                   profileClickable && "cursor-pointer"
                 )}
                 onClick={profileClickable ? handleOpenProfile : undefined}
@@ -524,41 +535,41 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
                   )}
                 </div>
                 <div className="space-y-1">
-                <div className="flex flex-col gap-0.5">
-  <div className="flex items-center gap-2">
-    {currentLead?.user_profile_link ? (
-      <a
-        href={currentLead.user_profile_link}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-2xl font-semibold text-slate-900 hover:text-primary"
-        style={titleFont}
-      >
-        {getLeadName(currentLead)}
-      </a>
-    ) : (
-      <h5>{getLeadName(currentLead)}</h5>
-    )}
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      {currentLead?.user_profile_link ? (
+                        <a
+                          href={currentLead.user_profile_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-2xl font-semibold text-slate-900 hover:text-primary"
+                          style={titleFont}
+                        >
+                          {getLeadName(currentLead)}
+                        </a>
+                      ) : (
+                        <h5>{getLeadName(currentLead)}</h5>
+                      )}
 
-    {currentLead?.lead_source && (
-      <Popover>
-      <PopoverTrigger asChild>
-        <Info className="h-4 w-4 cursor-pointer text-slate-400 hover:text-slate-700" />
-      </PopoverTrigger>
-    
-      <PopoverContent
-        side="bottom"
-        className="w-56 rounded-xl border bg-white p-4 shadow-lg"
-      >
-        <p className="text-sm">
-          {currentLead.data?.lead_source_description}
-        </p>
-      </PopoverContent>
-    </Popover>
-    )}
-  </div>
+                      {currentLead?.lead_source && (
+                        <Popover>
+                        <PopoverTrigger asChild>
+                          <Info className="h-4 w-4 cursor-pointer text-slate-400 hover:text-slate-700" />
+                        </PopoverTrigger>
+                      
+                        <PopoverContent
+                          side="bottom"
+                          className="w-56 rounded-xl border bg-white p-4 shadow-lg"
+                        >
+                          <p className="text-sm">
+                            {currentLead.data?.lead_source_description}
+                          </p>
+                        </PopoverContent>
+                      </Popover>
+                      )}
+                    </div>
   
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                       {currentLead?.affiliated_party && (
                         <span className="font-medium text-slate-700">
                           {currentLead.affiliated_party}
@@ -584,7 +595,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3 mt-2 md:mt-0">
                 <CustomButton
                   type="button"
                   variant="outline"
@@ -639,7 +650,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
           </div>
           
           {/* Task Progress Section */}
-          <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-24' : 'pb-4'}`} style={bodyFont}>
+          <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-32 md:pb-28' : 'pb-4'}`} style={bodyFont}>
             <div
               className={cn(
                 "grid gap-6",
@@ -667,16 +678,19 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
           </CardContent>
         </Card>
       </div>
-      {/* Fixed Action Buttons at Bottom of Viewport or Modal */}
+      
+      {/* Bottom action bar — sized by left/right inset (do not use w-full with sidebar offset) */}
       {!hideActionBar && actionButtonsVisible && postCallActions.length > 0 && (
         <div 
-          className={`${isInModal ? 'sticky bottom-0 shrink-0' : 'fixed bottom-0 right-0'} z-[100] border-t border-slate-200 bg-white px-6 py-4 shadow-lg`}
-          style={isInModal ? { pointerEvents: 'auto' } : { 
-            left: 'var(--sidebar-width, 288px)',
-            transition: 'left 0.2s ease-in-out'
-          }}
+          className={cn(
+            "z-[100] border-t border-slate-200 bg-white px-3 md:px-4 lg:px-6 py-3 md:py-4 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] box-border",
+            isInModal 
+              ? "sticky bottom-0 shrink-0 w-full" 
+              : "fixed bottom-0 left-0 right-0 md:left-[var(--sidebar-width,288px)] transition-[left] duration-200 ease-in-out"
+          )}
+          style={isInModal ? { pointerEvents: 'auto' } : undefined}
         >
-          <div className="flex w-full flex-wrap items-center gap-3">
+          <div className="grid w-full max-w-full grid-cols-2 gap-2 md:grid-cols-4 md:gap-2 lg:gap-3">
             {postCallActions.map((action) => (
               <LeadActionButton
                 key={action.id}
@@ -686,12 +700,13 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
                 disabled={updating || fetchingNext}
                 loading={Boolean(processingAction === action.loadingKey && updating)}
                 tone={action.tone}
-                className="flex-1 min-w-[160px]"
+                className="w-full max-w-full min-w-0"
               />
             ))}
           </div>
         </div>
       )}
+      
       <NotInterestedModal
         open={showNotInterestedDialog}
         onOpenChange={setShowNotInterestedDialog}
@@ -721,7 +736,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel) {
 
       {/* Profile Modal */}
       {showProfileModal && (currentLead?.linkedin_profile || currentLead?.website) && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b">

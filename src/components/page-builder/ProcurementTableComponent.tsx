@@ -46,7 +46,7 @@ export const DEFAULT_PROCUREMENT_TABLE_COLUMNS: ProcurementTableColumn[] = [
   { key: 'estimated_cost', label: 'Estimated Cost', type: 'text' },
   { key: 'vendor', label: 'Vendor', type: 'text' },
   { key: 'request_date', label: 'Request Date', type: 'date' },
-  { key: 'required_date', label: 'Requirement Date', type: 'date' },
+  { key: 'eta', label: 'ETA', type: 'date' },
   { key: 'urgency_level', label: 'Priority', type: 'chip' },
   { key: 'status', label: 'Status', type: 'chip' },
 ];
@@ -70,7 +70,7 @@ export const DEFAULT_PROCUREMENT_TABLE_CONFIG = {
     { key: 'urgency_level', label: 'Priority', enabled: false },
     { key: 'department', label: 'Department', enabled: false },
     { key: 'project_purpose', label: 'Project', enabled: false },
-    { key: 'category', label: 'Category', enabled: false },
+    { key: 'category', label: 'Shipment Type', enabled: false },
     { key: 'specifications', label: 'Specifications', enabled: true },
     { key: 'product_link', label: 'Item link', enabled: true, link: true },
     { key: 'comments', label: 'Comments', enabled: true },
@@ -140,9 +140,9 @@ function withProcurementModalFields(
   if (!keys.has('project_purpose')) {
     next.push({ key: 'project_purpose', label: 'Project', enabled: false });
   }
-  insertAfter('project_purpose', { key: 'category', label: 'Category', enabled: false });
+  insertAfter('project_purpose', { key: 'category', label: 'Shipment Type', enabled: false });
   if (!keys.has('category')) {
-    next.push({ key: 'category', label: 'Category', enabled: false });
+    next.push({ key: 'category', label: 'Shipment Type', enabled: false });
   }
 
   // When vendor can be changed, product link must be editable too.

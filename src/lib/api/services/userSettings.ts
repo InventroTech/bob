@@ -10,6 +10,7 @@ import {
   LeadFilterOptions,
   LeadGroupSummary,
   PatchSupportDailyLimitsPayload,
+  GeoPartyCatalog,
 } from '@/types/userSettings';
 
 export const SUPPORT_DAILY_LIMIT_SELF_TRIAL_KEY = 'SUPPORT_DAILY_LIMIT_SELF_TRIAL';
@@ -256,6 +257,49 @@ export const leadTypeAssignmentApi = {
     }
   },
 
+  /** Circle state/district/party catalog for User Management dropdowns (Name (id)). */
+  async getGeoPartyCatalog(stateId?: string): Promise<GeoPartyCatalog> {
+    const empty: GeoPartyCatalog = { states: [], districts: [], parties: [] };
+    try {
+      const response = await apiClient.get('/user-settings/geo-party-catalog/', {
+        params: stateId ? { state_id: stateId } : undefined,
+      });
+      const data = response.data || {};
+      const toNum = (v: unknown): number | null => {
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+        return null;
+      };
+      const normalize = (rows: unknown[]): GeoPartyCatalog['states'] =>
+        (Array.isArray(rows) ? rows : [])
+          .map((row: any) => {
+            const value = toNum(row?.value);
+            if (value == null) return null;
+            const stateId = toNum(row?.state_id);
+            return {
+              value,
+              label: typeof row?.label === 'string' ? row.label : String(value),
+              name: typeof row?.name === 'string' ? row.name : String(value),
+              ...(stateId != null ? { state_id: stateId } : {}),
+            };
+          })
+          .filter(Boolean) as GeoPartyCatalog['states'];
+      return {
+        version: data.version,
+        states: normalize(data.states),
+        districts: normalize(data.districts),
+        parties: normalize(data.parties),
+      };
+    } catch (error: any) {
+      console.error(
+        'Error fetching geo-party catalog:',
+        error?.response?.status,
+        error?.response?.data || error?.message || error
+      );
+      return empty;
+    }
+  },
+
   // Get supported queue types
   async getAvailableQueueTypes(endpoint?: string): Promise<string[]> {
     try {
@@ -286,6 +330,18 @@ export const leadTypeAssignmentApi = {
   async patchSupportDailyLimits(
     userId: string,
     data: PatchSupportDailyLimitsPayload
+  ): Promise<UserCoreKVSetting[]> {
+    const response = await apiClient.patch(
+      `/user-settings/users/${userId}/core-kv-settings/`,
+      data
+    );
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
+  /** Patch arbitrary core-KV keys (used for tenant custom User Management fields). */
+  async patchCoreKvSettings(
+    userId: string,
+    data: Record<string, string | number | boolean | null>
   ): Promise<UserCoreKVSetting[]> {
     const response = await apiClient.patch(
       `/user-settings/users/${userId}/core-kv-settings/`,

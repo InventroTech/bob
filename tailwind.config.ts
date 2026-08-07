@@ -134,6 +134,14 @@ export default {
 				'sparky-bubble-in': {
 					'0%': { opacity: '0', transform: 'translateY(8px) scale(0.92)' },
 					'100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+				shake: {
+					'0%, 100%': { transform: 'translateX(0)' },
+					'15%': { transform: 'translateX(-10px)' },
+					'30%': { transform: 'translateX(10px)' },
+					'45%': { transform: 'translateX(-8px)' },
+					'60%': { transform: 'translateX(8px)' },
+					'75%': { transform: 'translateX(-5px)' },
+					'90%': { transform: 'translateX(5px)' },
 				}
 			},
 			animation: {
@@ -145,6 +153,7 @@ export default {
 				'sparky-bob': 'sparky-bob 2.4s ease-in-out infinite',
 				'sparky-bubble': 'sparky-bubble 2.8s ease-in-out infinite',
 				'sparky-bubble-in': 'sparky-bubble-in 0.45s ease-out both',
+				shake: 'shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both'
 			}
 		}
 	},

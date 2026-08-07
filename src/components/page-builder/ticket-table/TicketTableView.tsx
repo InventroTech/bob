@@ -79,11 +79,19 @@ if (loading) {
 
 return (
   <>
+    {/* ADDED: Mobile Page Title - Only visible on small screens (md:hidden) */}
+    <div className="md:hidden w-full pb-3 px-4 pt-4">
+      <h2 className="text-2xl font-bold text-gray-900">
+        {config?.title || "Support Tickets"}
+      </h2>
+    </div>
+
     <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
       {/* Filter Section */}
       <div className="mb-4 relative">
         <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-          <h5>
+          {/* UPDATED: Added 'hidden md:block' so it doesn't show twice on mobile */}
+          <h5 className="hidden md:block">
             {config?.title || "Support Tickets"}
           </h5>
           <div className="flex items-center gap-2 relative">
@@ -533,7 +541,6 @@ return (
         )}
       </div>
 
-
       {/* Table Section */}
       <div className="w-full relative">
         {/* Loading Overlay */}
@@ -548,49 +555,124 @@ return (
           </div>
         )}
 
-        <div className="overflow-hidden w-full">
+        {/* Mobile Cards */}
+        <div className="md:hidden space-y-4">
+          {filteredData.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No data found
+            </div>
+          ) : (
+            filteredData.map((row: any, index: number) => (
+              <div
+                key={index}
+                onClick={() => handleRowClick(row)}
+                className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm cursor-pointer"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <ShortProfileCard
+                    image={row.display_pic_url || row.image}
+                    name={row.name}
+                    address=""
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Praja User ID</p>
+                    <p className="font-medium">
+                      {row.user_id ?? row.praja_user_id ?? row.prajaUserId ?? "N/A"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Reason</p>
+                    <p>{row.reason || "N/A"}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Poster Status</p>
+                    <Badge
+                      variant="outline"
+                      className={`rounded-full ${getStatusColor(
+                        row.poster ?? row.poster_status ?? row.support_ticket_type ?? ""
+                      )}`}
+                    >
+                      {row.poster ?? row.poster_status ?? row.support_ticket_type ?? "N/A"}
+                    </Badge>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500">Resolution Status</p>
+                    <Badge
+                      variant="outline"
+                      className={`${getStatusColor(row.resolution_status)} rounded-full`}
+                    >
+                      {row.resolution_status || "Open"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto w-full max-w-full min-w-0">
           <table className="min-w-full bg-white">
             <thead>
               <tr className="bg-black border-b border-gray-200">
                 {tableColumns.map((col) => (
-                  <th key={col.accessor} className="py-3 px-6 text-left text-sm font-semibold text-white">
+                  <th
+                    key={col.accessor}
+                    className="py-3 px-6 text-left text-sm font-semibold text-white"
+                  >
                     {col.header}
                   </th>
                 ))}
               </tr>
             </thead>
+
             <tbody className="text-gray-600 text-sm bg-white">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={tableColumns.length} className="text-center py-8 text-gray-500">
+                  <td
+                    colSpan={tableColumns.length}
+                    className="text-center py-8 text-gray-500"
+                  >
                     No data found
                   </td>
                 </tr>
               ) : (
                 filteredData.map((row: any, rowIndex: number) => (
-                  <tr 
-                    key={rowIndex} 
-                    className={`border-b border-gray-200 hover:bg-gray-50 bg-white cursor-pointer`}
+                  <tr
+                    key={rowIndex}
+                    className="border-b border-gray-200 hover:bg-gray-50 bg-white cursor-pointer"
                     onClick={() => handleRowClick(row)}
                   >
                     {tableColumns.map((col) => (
-                      <td key={col.accessor} className="py-3 px-6 text-left">
+                      <td
+                        key={col.accessor}
+                        className="py-3 px-6 text-left"
+                      >
                         <div className="flex items-center">
-                          {col.accessor === 'name' ? (
+                          {col.accessor === "name" ? (
                             <ShortProfileCard
                               image={row.display_pic_url || row.image}
                               name={row.name}
-                              address={row.email_id || row.email || ''}
+                              address={row.email_id || row.email || ""}
                             />
-                          ) : col.type === 'chip' ? (
-                            <Badge 
-                              variant="outline" 
-                              className={`${getStatusColor(row[col.accessor])} text-xs font-medium px-3 py-1 rounded-full border`}
+                          ) : col.type === "chip" ? (
+                            <Badge
+                              variant="outline"
+                              className={`${getStatusColor(
+                                row[col.accessor]
+                              )} text-xs font-medium px-3 py-1 rounded-full border`}
                             >
                               {row[col.accessor]}
                             </Badge>
-                          ) : col.type === 'link' ? (
-                            row[col.accessor] && row[col.accessor] !== 'N/A' ? (
+                          ) : col.type === "link" ? (
+                            row[col.accessor] &&
+                            row[col.accessor] !== "N/A" ? (
                               <a
                                 href={row[col.accessor]}
                                 target="_blank"
@@ -601,9 +683,11 @@ return (
                                 {row[col.accessor]}
                               </a>
                             ) : (
-                              <span className="text-sm text-gray-400">N/A</span>
+                              <span className="text-sm text-gray-400">
+                                N/A
+                              </span>
                             )
-                          ) : col.type === 'action' ? (
+                          ) : col.type === "action" ? (
                             <CustomButton
                               variant="outline"
                               size="sm"
@@ -613,10 +697,12 @@ return (
                                 handleActionClick(row, col);
                               }}
                             >
-                              {col.header || 'Action'}
+                              {col.header || "Action"}
                             </CustomButton>
                           ) : (
-                            <span className="text-sm text-gray-600">{row[col.accessor] || 'N/A'}</span>
+                            <span className="text-sm text-gray-600">
+                              {row[col.accessor] || "N/A"}
+                            </span>
                           )}
                         </div>
                       </td>
