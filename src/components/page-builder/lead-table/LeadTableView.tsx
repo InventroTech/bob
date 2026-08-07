@@ -81,9 +81,34 @@ export function LeadTableView(props: LeadTableModel) {
 
   // DYNAMIC TITLE LOGIC based on URL path
   const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
-  let displayTitle = config?.title;
-  
-  if (!displayTitle) {
+  const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
+  const forceEntityType = String(
+    (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
+      ?.entity_type || ''
+  ).trim();
+  const isInventoryLikeForTitle =
+    config?.entityType === 'unmannd_request' ||
+    config?.entityType === 'inventory_request' ||
+    forceEntityType === 'unmannd_request' ||
+    forceEntityType === 'inventory_request' ||
+    /(?:^|[?&])entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(endpointForTitle) ||
+    Boolean(
+      Array.isArray(config?.columns) &&
+        config.columns.some((col: { key?: string }) =>
+          ['item_name_freeform', 'item_name', 'quantity_required', 'urgency_level'].includes(
+            String(col?.key || '')
+          )
+        )
+    );
+  // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
+  const configuredTitle = (config?.title || '').trim();
+  let displayTitle =
+    isInventoryLikeForTitle &&
+    (!configuredTitle || configuredTitle.toLowerCase() === 'all leads')
+      ? undefined
+      : configuredTitle || undefined;
+
+  if (!displayTitle && !isInventoryLikeForTitle) {
     if (pathname.includes('follow')) {
       displayTitle = "Follow Up Leads";
     } else if (pathname.includes('pending')) {
@@ -123,16 +148,21 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle = (config?.title || '').trim();
+  const tableTitle =
+    isInventoryLikeForTitle && configuredTitle.toLowerCase() === 'all leads'
+      ? ''
+      : configuredTitle;
 
   return (
     <>
       {/* Mobile Page Title - Dynamically changes based on URL */}
-      <div className="md:hidden w-full pb-3 px-4 pt-4">
-        <h2 className="text-2xl font-bold text-gray-900">
-          {displayTitle}
-        </h2>
-      </div>
+      {displayTitle ? (
+        <div className="md:hidden w-full pb-3 px-4 pt-4">
+          <h2 className="text-2xl font-bold text-gray-900">
+            {displayTitle}
+          </h2>
+        </div>
+      ) : null}
 
       <div className="w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5">
         {/* Toolbar — tight under page header so All Requests fits with less scroll */}
@@ -141,9 +171,11 @@ export function LeadTableView(props: LeadTableModel) {
             tableTitle || displayTitle ? 'justify-between' : 'justify-end'
           }`}
         >
-          <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
-            {displayTitle || tableTitle}
-          </h5>
+          {(displayTitle || tableTitle) ? (
+            <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
+              {displayTitle || tableTitle}
+            </h5>
+          ) : null}
           <div className="flex items-center gap-2">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
