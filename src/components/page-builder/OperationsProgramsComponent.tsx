@@ -491,9 +491,9 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
   };
 
   return (
-    <div className="w-full h-full flex gap-6 p-4">
+    <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6">
       {/* 1. Add API Call Operation */}
-      <Card className="w-full max-w-md flex-shrink-0">
+      <Card className="w-full lg:max-w-md">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Play className="h-5 w-5" />
@@ -517,10 +517,10 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
                     >
                       <div className="font-medium">{op.title}</div>
                       <div className="text-xs text-gray-500">{op.reqType} • {op.endpoint}</div>
-                      <div className="flex gap-2 mt-2">
-                        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleEdit(op); }}>Edit</Button>
-                        <Button size="sm" variant="outline" className="text-red-600" onClick={(e) => { e.stopPropagation(); setDeleteId(op.id); }}>Delete</Button>
-                        <Button size="sm" className="bg-black text-white hover:bg-gray-800" onClick={(e) => { e.stopPropagation(); handleRunApiCall(op); }} disabled={isRunning}>Run</Button>
+                      <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                        <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={(e) => { e.stopPropagation(); handleEdit(op); }}>Edit</Button>
+                        <Button size="sm" variant="outline" className="text-red-600 w-full sm:w-auto" onClick={(e) => { e.stopPropagation(); setDeleteId(op.id); }}>Delete</Button>
+                        <Button size="sm" className="bg-black text-white hover:bg-gray-800 w-full sm:w-auto" onClick={(e) => { e.stopPropagation(); handleRunApiCall(op); }} disabled={isRunning}>Run</Button>
                       </div>
                     </div>
                   ))}
@@ -556,9 +556,9 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
                   <Textarea value={formPayload} onChange={(e) => setFormPayload(e.target.value)} placeholder='{"key": "value"}' rows={3} className="font-mono text-sm" />
                 </div>
               )}
-              <div className="flex gap-2">
-                <CustomButton type="submit" disabled={isSubmitting} loading={isSubmitting} className="bg-black text-white hover:bg-gray-800">Save</CustomButton>
-                <Button type="button" variant="outline" onClick={() => { setIsFormOpen(false); setEditingId(null); }}>Cancel</Button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <CustomButton type="submit" disabled={isSubmitting} loading={isSubmitting} className="w-full sm:w-auto bg-black text-white hover:bg-gray-800">Save</CustomButton>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => { setIsFormOpen(false); setEditingId(null); }}>Cancel</Button>
               </div>
             </form>
           )}
@@ -566,7 +566,7 @@ export const OperationsProgramsComponent: React.FC<OperationsProgramsComponentPr
       </Card>
 
       {/* 2. Push Random Records */}
-      <Card className="w-full max-w-md flex-shrink-0">
+      <Card className="w-full lg:max-w-md">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Zap className="h-5 w-5" />
