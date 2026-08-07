@@ -137,14 +137,16 @@ export default {
 				'sparky-bubble-in': {
 					'0%': { opacity: '0', transform: 'translateY(8px) scale(0.92)' },
 					'100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+				},
 				shake: {
-					'0%, 100%': { transform: 'translateX(0)' },
+					'0%': { transform: 'translateX(0)' },
 					'15%': { transform: 'translateX(-10px)' },
 					'30%': { transform: 'translateX(10px)' },
 					'45%': { transform: 'translateX(-8px)' },
 					'60%': { transform: 'translateX(8px)' },
 					'75%': { transform: 'translateX(-5px)' },
 					'90%': { transform: 'translateX(5px)' },
+					'100%': { transform: 'translateX(0)' },
 				}
 			},
 			animation: {
