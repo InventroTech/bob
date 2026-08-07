@@ -4,7 +4,8 @@
  * Runtime: page widget config (saved with the page — shared for everyone).
  *
  * Built-ins: name, email, department, role (+ created_at, actions on table).
- * Everything else is a custom field on the page config.
+ * Everything else is a custom field on the page config (stored in user_kv_settings
+ * as bare uppercase keys, e.g. STATE).
  */
 
 import userManagementConfig from "@/config/user-management";
@@ -197,14 +198,28 @@ export function slugifyCustomFieldKey(label: string): string {
   return base || `custom_${Date.now()}`;
 }
 
-/** Core-KV key used to persist a custom field value for a user. */
+/** Core-KV key used to persist a custom field value for a user (e.g. state → STATE). */
 export function customFieldKvKey(fieldKey: string): string {
-  return `CUSTOM_FIELD_${fieldKey.trim().toUpperCase()}`;
+  return fieldKey.trim().toUpperCase();
 }
 
+/** System keys in user_kv_settings that are not tenant custom fields. */
+export const CORE_USER_KV_KEYS = new Set([
+  "GROUP",
+  "DAILY_TARGET",
+  "DAILY_LIMIT",
+  "LEAD_TYPE_ASSIGNMENT",
+  "SUPPORT_DAILY_LIMIT_SELF_TRIAL",
+  "SUPPORT_DAILY_LIMIT_OTHER",
+  "SUPPORT_RESOLVE_RATE_GOAL",
+  "STATE",
+  "DISTRICT",
+  "PARTY",
+]);
+
 /**
- * Custom field keys that are NOT stored as CUSTOM_FIELD_* KV.
- * They bind to hierarchy / dedicated user-settings keys instead.
+ * Custom field keys that are NOT stored via generic KV patch.
+ * They bind to hierarchy / dedicated create-update / core KV keys instead.
  */
 export const BOUND_CUSTOM_FIELD_KEYS = new Set([
   "manager_email",
@@ -214,6 +229,9 @@ export const BOUND_CUSTOM_FIELD_KEYS = new Set([
   "resolve_rate_goal",
   "support_daily_limits",
   "queue_type",
+  "state",
+  "district",
+  "party",
 ]);
 
 export function isBoundCustomField(key: string): boolean {
