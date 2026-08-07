@@ -117,19 +117,25 @@ const MyPages = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6 space-y-4">
+      <div className="p-4 md:p-6 space-y-6">
         {/* Custom-app URL */}
         {tenantSlug && (
-          <div className="mb-4 p-4 bg-muted rounded">
-            <p className="text-sm text-muted-foreground">Your custom-app URL:</p>
-            <div className="flex items-center gap-2">
-              <code className="font-mono text-primary">{`${window.location.origin}/app/${tenantSlug}`}</code>
+          <div className="p-4 bg-muted rounded">
+            <p className="text-sm text-muted-foreground mb-3">Your custom-app URL:</p>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <code className="font-mono text-primary break-all text-sm">
+                {`${window.location.origin}/app/${tenantSlug}`}
+              </code>
+
               <Button
                 size="sm"
                 variant="outline"
+                className="w-full md:w-auto"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/app/${tenantSlug}`);
-                  toast.success('Copied!');
+                  navigator.clipboard.writeText(
+                    `${window.location.origin}/app/${tenantSlug}`
+                  );
+                  toast.success("Copied!");
                 }}
               >
                 Copy
@@ -138,9 +144,9 @@ const MyPages = () => {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <h5>My Pages</h5>
-          <Button asChild>
+          <Button asChild className="w-full md:w-auto">
             <Link to="/builder/new">
               <PlusCircle className="mr-2 h-4 w-4" /> Create New Page
             </Link>
@@ -155,72 +161,172 @@ const MyPages = () => {
           <p className="text-muted-foreground">You haven't created any pages yet.</p>
         ) : (
           Object.entries(pagesByRole).map(([roleName, pages]) => (
-            <div key={roleName}>
+            <div key={roleName} className="space-y-4">
               <h5>
                 {roleName === 'public' || roleName === 'Unassigned' 
                   ? '🌐 Open Access (No Login Required)' 
                   : `${roleName} Pages :-`}
               </h5>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {pages.map((page) => {
-                  const isPublic = roleName === 'public' || roleName === 'Unassigned';
-                  const publicUrl = isPublic && tenantSlug 
-                    ? `${window.location.origin}/app/${tenantSlug}/public/${page.id}`
-                    : null;
-                  
-                  return (
-                    <Card key={page.id}>
-                      <CardHeader>
-                        <h5 className="flex items-center gap-2">
-                          <FileText className="h-5 w-5 text-primary" />
-                          {page.name}
-                          {isPublic && (
-                            <span className="ml-auto text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                              Open Access
-                            </span>
-                          )}
-                        </h5>
-                      </CardHeader>
-                      <CardContent className="text-sm text-muted-foreground space-y-2">
-                        <div>
-                          Last updated: {new Date(page.updated_at).toLocaleDateString()}
-                        </div>
-                        {publicUrl && (
-                          <div className="mt-2 p-2 bg-muted rounded">
-                            <p className="text-xs font-semibold mb-1">Public URL:</p>
-                            <div className="flex items-center gap-1">
-                              <code className="text-xs break-all">{publicUrl}</code>
+              
+              <>
+                {/* Desktop */}
+                <div className="hidden md:grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {pages.map((page) => {
+                    const isPublic = roleName === 'public' || roleName === 'Unassigned';
+                    const publicUrl = isPublic && tenantSlug 
+                      ? `${window.location.origin}/app/${tenantSlug}/public/${page.id}`
+                      : null;
+                    
+                    return (
+                      <Card key={page.id}>
+                        <CardHeader>
+                          <h5 className="flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-primary" />
+                            {page.name}
+                            {isPublic && (
+                              <span className="ml-auto text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                                Open Access
+                              </span>
+                            )}
+                          </h5>
+                        </CardHeader>
+                        <CardContent className="text-sm text-muted-foreground space-y-2">
+                          <div>
+                            Last updated: {new Date(page.updated_at).toLocaleDateString()}
+                          </div>
+                          {publicUrl && (
+                            <div className="mt-2 p-2 bg-muted rounded">
+                              <p className="text-xs font-semibold mb-1">Public URL:</p>
+                              <div className="flex items-center gap-1">
+                                <code className="text-xs break-all">{publicUrl}</code>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="mt-1 h-6 text-xs"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(publicUrl);
+                                  toast.success('Public URL copied!');
+                                }}
+                              >
+                                📋 Copy URL
+                              </Button>
                             </div>
+                          )}
+                        </CardContent>
+                        <CardFooter className="flex justify-between">
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to={`/builder/${page.id}`}>Edit Page</Link>
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeletePage(page.id)}
+                          >
+                            Delete
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                {/* Mobile */}
+                <div className="space-y-4 md:hidden">
+                  {pages.map((page) => {
+                    const isPublic =
+                      roleName === "public" || roleName === "Unassigned";
+
+                    const publicUrl =
+                      isPublic && tenantSlug
+                        ? `${window.location.origin}/app/${tenantSlug}/public/${page.id}`
+                        : null;
+
+                    return (
+                      <Card
+                        key={page.id}
+                        className="rounded-xl border shadow-sm"
+                      >
+                        <CardContent className="p-5 space-y-4">
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Page Name
+                            </p>
+
+                            <div className="flex items-center gap-2 mt-1">
+                              <FileText className="h-5 w-5" />
+
+                              <p className="font-semibold text-lg">
+                                {page.name}
+                              </p>
+
+                              {isPublic && (
+                                <span className="ml-auto rounded bg-green-100 px-2 py-1 text-xs text-green-700">
+                                  Open Access
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Last Updated
+                            </p>
+
+                            <p className="font-medium">
+                              {new Date(page.updated_at).toLocaleDateString()}
+                            </p>
+                          </div>
+
+                          {publicUrl && (
+                            <div className="rounded-lg bg-muted p-3">
+                              <p className="text-xs font-semibold mb-2">
+                                Public URL
+                              </p>
+
+                              <code className="block break-all text-xs">
+                                {publicUrl}
+                              </code>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="mt-3 w-full"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(publicUrl);
+                                  toast.success("Public URL copied!");
+                                }}
+                              >
+                                Copy URL
+                              </Button>
+                            </div>
+                          )}
+
+                          <div className="flex gap-3 pt-2">
                             <Button
-                              size="sm"
-                              variant="ghost"
-                              className="mt-1 h-6 text-xs"
-                              onClick={() => {
-                                navigator.clipboard.writeText(publicUrl);
-                                toast.success('Public URL copied!');
-                              }}
+                              variant="outline"
+                              className="flex-1"
+                              asChild
                             >
-                              📋 Copy URL
+                              <Link to={`/builder/${page.id}`}>
+                                Edit Page
+                              </Link>
+                            </Button>
+
+                            <Button
+                              variant="destructive"
+                              className="flex-1"
+                              onClick={() => handleDeletePage(page.id)}
+                            >
+                              Delete
                             </Button>
                           </div>
-                        )}
-                      </CardContent>
-                      <CardFooter className="flex justify-between">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link to={`/builder/${page.id}`}>Edit Page</Link>
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeletePage(page.id)}
-                        >
-                          Delete
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
-              </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </>
             </div>
           ))
         )}
