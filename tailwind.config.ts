@@ -116,20 +116,23 @@ export default {
 					}
 				},
 				'sparky-wave': {
-					'0%, 100%': { transform: 'rotate(0deg)' },
+					'0%': { transform: 'rotate(0deg)' },
 					'15%': { transform: 'rotate(10deg)' },
 					'30%': { transform: 'rotate(-6deg)' },
 					'45%': { transform: 'rotate(10deg)' },
 					'60%': { transform: 'rotate(-3deg)' },
 					'75%': { transform: 'rotate(5deg)' },
+					'100%': { transform: 'rotate(0deg)' },
 				},
 				'sparky-bob': {
-					'0%, 100%': { transform: 'translateY(0)' },
+					'0%': { transform: 'translateY(0)' },
 					'50%': { transform: 'translateY(-4px)' },
+					'100%': { transform: 'translateY(0)' },
 				},
 				'sparky-bubble': {
-					'0%, 100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+					'0%': { opacity: '1', transform: 'translateY(0) scale(1)' },
 					'50%': { opacity: '0.92', transform: 'translateY(-3px) scale(1.02)' },
+					'100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
 				},
 				'sparky-bubble-in': {
 					'0%': { opacity: '0', transform: 'translateY(8px) scale(0.92)' },
