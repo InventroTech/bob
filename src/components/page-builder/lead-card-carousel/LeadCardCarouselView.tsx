@@ -650,7 +650,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
           </div>
           
           {/* Task Progress Section */}
-          <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-28 md:pb-24' : 'pb-4'}`} style={bodyFont}>
+          <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-32 md:pb-28' : 'pb-4'}`} style={bodyFont}>
             <div
               className={cn(
                 "grid gap-6",
@@ -679,18 +679,18 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
         </Card>
       </div>
       
-      {/* FIXED MOBILE ACTION BUTTONS - Spans full width, flex wraps cleanly */}
+      {/* Bottom action bar — sized by left/right inset (do not use w-full with sidebar offset) */}
       {!hideActionBar && actionButtonsVisible && postCallActions.length > 0 && (
         <div 
           className={cn(
-            "z-[100] border-t border-slate-200 bg-white px-3 md:px-6 py-3 md:py-4 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] w-full",
+            "z-[100] border-t border-slate-200 bg-white px-3 md:px-4 lg:px-6 py-3 md:py-4 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] box-border",
             isInModal 
-              ? "sticky bottom-0 shrink-0" 
-              : "fixed bottom-0 right-0 left-0 md:left-[var(--sidebar-width,288px)] transition-all duration-200 ease-in-out"
+              ? "sticky bottom-0 shrink-0 w-full" 
+              : "fixed bottom-0 left-0 right-0 md:left-[var(--sidebar-width,288px)] transition-[left] duration-200 ease-in-out"
           )}
           style={isInModal ? { pointerEvents: 'auto' } : undefined}
         >
-          <div className="flex w-full flex-wrap items-center justify-center gap-2 md:gap-3">
+          <div className="grid w-full max-w-full grid-cols-2 gap-2 md:grid-cols-4 md:gap-2 lg:gap-3">
             {postCallActions.map((action) => (
               <LeadActionButton
                 key={action.id}
@@ -700,7 +700,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                 disabled={updating || fetchingNext}
                 loading={Boolean(processingAction === action.loadingKey && updating)}
                 tone={action.tone}
-                className="flex-1 min-w-[calc(50%-0.5rem)] md:min-w-[140px]"
+                className="w-full max-w-full min-w-0"
               />
             ))}
           </div>

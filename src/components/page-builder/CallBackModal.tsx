@@ -101,8 +101,8 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
   return (
     <Dialog
       open={open}
-      onOpenChange={(open) => {
-        if (!open) {
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
           handleClose();
         }
       }}
@@ -110,24 +110,28 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
       <DialogPortal>
         {/* No overlay - modal slides in from right without blocking main content */}
         <DialogPrimitive.Content
-  onWheel={(e) => e.stopPropagation()}
-  onTouchMove={(e) => e.stopPropagation()}
-  className={cn(
-    "fixed inset-y-0 right-0 left-auto top-0 h-screen w-full max-w-[320px]",
-    "rounded-none border-l border-[#ded8d2] bg-[#f9f6f2] p-0 shadow-2xl z-[200]",
-    "flex flex-col overflow-hidden",
-    "data-[state=open]:animate-in data-[state=closed]:animate-out",
-    "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
-    "sm:w-[320px]"
-  )}
+          onWheel={(e) => e.stopPropagation()}
+          className={cn(
+            // inset-y-0 sizes to the visible viewport; avoid h-screen (pushes footer below fold on tablets)
+            "fixed inset-y-0 right-0 left-auto top-0 z-[200] flex h-full max-h-[100dvh] w-full max-w-[320px] flex-col overflow-hidden",
+            "rounded-none border-l border-[#ded8d2] bg-[#f9f6f2] p-0 shadow-2xl",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+            "sm:w-[320px]"
+          )}
           aria-describedby="callback-dialog-description"
           style={{ zIndex: 200 }}
         >
-          <div className="flex h-screen flex-col">
-            <div className="border-b border-[#e7e1db] px-4 py-4 flex-shrink-0 flex items-center justify-between">
-              <div className="space-y-1">
-                <DialogPrimitive.Title className="text-[20px] font-semibold text-black">Select time</DialogPrimitive.Title>
-                <DialogPrimitive.Description id="callback-dialog-description" className="text-sm text-[#8c8176]">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-[#e7e1db] px-4 py-4">
+              <div className="space-y-1 pr-2">
+                <DialogPrimitive.Title className="text-[20px] font-semibold text-black">
+                  Select time
+                </DialogPrimitive.Title>
+                <DialogPrimitive.Description
+                  id="callback-dialog-description"
+                  className="text-sm text-[#8c8176]"
+                >
                   Optionally pick a time within the next 48 hours, or save without a time.
                 </DialogPrimitive.Description>
               </div>
@@ -136,64 +140,64 @@ export const CallBackModal: React.FC<CallBackModalProps> = ({
                 <span className="sr-only">Close</span>
               </DialogPrimitive.Close>
             </div>
+
             <div
-  className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-6"
-  style={{
-    WebkitOverflowScrolling: "touch",
-  }}
->
-            {callbackSlotSections.map((section) => (
-              <div key={section.label} className="space-y-3">
-                <p className="text-sm font-semibold text-[#9b8f84]">{section.label}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {section.slots.map((slot) => {
-                    const isSelected = selectedCallbackSlot === slot.iso;
-                    return (
-                      <button
-                        key={slot.id}
-                        type="button"
-                        disabled={slot.disabled}
-                        onClick={() => setSelectedCallbackSlot(slot.iso)}
-                        className={cn(
-                          "rounded-full px-4 py-2 text-sm font-medium transition shadow-inner",
-                          slot.disabled
-                            ? "cursor-not-allowed bg-[#e8e3dd] text-[#b7aea4]"
-                            : isSelected
-                            ? "bg-black text-white shadow-md"
-                            : "bg-[#efe8e1] text-[#6d5f54] hover:bg-[#e7dfd7]"
-                        )}
-                      >
-                        {slot.label.toLowerCase()}
-                      </button>
-                    );
-                  })}
+              className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-4"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
+              {callbackSlotSections.map((section) => (
+                <div key={section.label} className="space-y-3">
+                  <p className="text-sm font-semibold text-[#9b8f84]">{section.label}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {section.slots.map((slot) => {
+                      const isSelected = selectedCallbackSlot === slot.iso;
+                      return (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          disabled={slot.disabled}
+                          onClick={() => setSelectedCallbackSlot(slot.iso)}
+                          className={cn(
+                            "rounded-full px-4 py-2 text-sm font-medium transition shadow-inner",
+                            slot.disabled
+                              ? "cursor-not-allowed bg-[#e8e3dd] text-[#b7aea4]"
+                              : isSelected
+                              ? "bg-black text-white shadow-md"
+                              : "bg-[#efe8e1] text-[#6d5f54] hover:bg-[#e7dfd7]"
+                          )}
+                        >
+                          {slot.label.toLowerCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+              ))}
+            </div>
+
+            {/* Pinned footer — always visible on tablet/desktop/mobile */}
+            <div className="flex-shrink-0 border-t border-[#e7e1db] bg-[#f4efe9] px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <CustomButton
+                  variant="ghost"
+                  className="w-full sm:w-auto rounded-full border border-transparent text-black hover:border-black hover:bg-transparent"
+                  onClick={handleClose}
+                >
+                  Close
+                </CustomButton>
+                <CustomButton
+                  className="w-full sm:w-auto rounded-full bg-black text-white hover:bg-black/90"
+                  onClick={handleSubmit}
+                  disabled={updating}
+                  loading={updating}
+                >
+                  Save
+                </CustomButton>
               </div>
-            ))}
-          </div>
-          <div className="border-t border-[#e7e1db] px-4 py-4 space-y-4 flex-shrink-0 bg-[#f4efe9]">
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <CustomButton
-                variant="ghost"
-                className="w-full sm:w-auto rounded-full border border-transparent text-black hover:border-black hover:bg-transparent"
-                onClick={handleClose}
-              >
-                Close
-              </CustomButton>
-              <CustomButton
-                className="w-full sm:w-auto rounded-full bg-black text-white hover:bg-black/90"
-                onClick={handleSubmit}
-                disabled={updating}
-                loading={updating}
-              >
-                Save
-              </CustomButton>
             </div>
           </div>
-        </div>
-      </DialogPrimitive.Content>
+        </DialogPrimitive.Content>
       </DialogPortal>
     </Dialog>
   );
 };
-
