@@ -462,13 +462,13 @@ export function LeadTableView(props: LeadTableModel) {
                     }}
                   />
                 </div>
-                {/* Action bar fixed in dialog footer - only show when actionButtonsVisible is true AND CallBackModal is not open */}
+                {/* Action bar at bottom of modal — 4 equal columns so Call Back Later stays on-screen */}
                 {actionButtonsVisible && !isCallBackModalOpen && (
-                <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-4 flex flex-wrap items-center gap-3">
+                <div className="shrink-0 border-t border-slate-200 bg-white px-3 md:px-4 lg:px-6 py-3 md:py-4 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-2 lg:gap-3 w-full max-w-full box-border">
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -480,13 +480,13 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Trial Activated
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Trial Activated</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -498,13 +498,13 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <MessageCircle className="h-4 w-4" />
-                    Not Interested
+                    <MessageCircle className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Not Interested</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -516,13 +516,13 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <AlertCircle className="h-4 w-4" />
-                    Not Connected
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Not Connected</span>
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 min-w-[140px] h-12 rounded-xl gap-2 hover:bg-slate-100 hover:text-slate-900"
+                    className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -534,8 +534,8 @@ export function LeadTableView(props: LeadTableModel) {
                       }
                     }}
                   >
-                    <Clock className="h-4 w-4" />
-                    Call Back Later
+                    <Clock className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 break-words">Call Back Later</span>
                   </Button>
                 </div>
                 )}
