@@ -320,7 +320,7 @@ const AddUserPage = () => {
             </select>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-3 md:flex-row">
             <Button
               className="flex-1"
               onClick={handleAddUser}
@@ -386,7 +386,7 @@ const AddUserPage = () => {
         </div>
 
         <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
             <h5 className="mb-0">Users</h5>
 
             <Input
@@ -394,7 +394,7 @@ const AddUserPage = () => {
               placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-80"
+              className="w-full md:w-80"
             />
           </div>
           {isLoading ? (
@@ -406,57 +406,125 @@ const AddUserPage = () => {
               No users found
             </div>
           ) : (
-            <div className="overflow-x-auto border-2 border-gray-200 rounded-lg bg-white">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-black hover:!bg-black text-white hover:text-white border-b border-gray-200">
-                    <TableHead className="text-white font-medium">Name</TableHead>
-                    <TableHead className="text-white font-medium">Email</TableHead>
-                    <TableHead className="text-white font-medium">Department</TableHead>
-                    <TableHead className="text-white font-medium">Role</TableHead>
-                    <TableHead className="text-white font-medium">Created At</TableHead>
-                    <TableHead className="text-white font-medium text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.map((user, index) => (
-                    <TableRow key={`${user.id}-${index}`}>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>{user.department || '—'}</TableCell>
-                      <TableCell>{user.role?.name || 'No Role'}</TableCell>
-                      <TableCell>
-                        {format(
-                          new Date(new Date(user.created_at).getTime() + 5.5 * 60 * 60 * 1000),
-                          'MMM d, yyyy h:mm a'
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => handleSpoofUser(user)}
-                            title="Spoof this user"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleDeleteUser(user.email)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto border-2 border-gray-200 rounded-lg bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-black hover:!bg-black text-white hover:text-white border-b border-gray-200">
+                      <TableHead className="text-white font-medium">Name</TableHead>
+                      <TableHead className="text-white font-medium">Email</TableHead>
+                      <TableHead className="text-white font-medium">Department</TableHead>
+                      <TableHead className="text-white font-medium">Role</TableHead>
+                      <TableHead className="text-white font-medium">Created At</TableHead>
+                      <TableHead className="text-white font-medium text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.map((user, index) => (
+                      <TableRow key={`${user.id}-${index}`}>
+                        <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.department || '—'}</TableCell>
+                        <TableCell>{user.role?.name || 'No Role'}</TableCell>
+                        <TableCell>
+                          {format(
+                            new Date(new Date(user.created_at).getTime() + 5.5 * 60 * 60 * 1000),
+                            'MMM d, yyyy h:mm a'
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => handleSpoofUser(user)}
+                              title="Spoof this user"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteUser(user.email)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Cards View */}
+              <div className="md:hidden space-y-4">
+                {filteredUsers.map((user, index) => (
+                  <div
+                    key={`${user.id}-${index}`}
+                    className="rounded-xl border bg-white p-4 shadow-sm"
+                  >
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-500">Name</p>
+                        <p className="font-semibold">{user.name}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-gray-500">Role</p>
+                        <p>{user.role?.name || "No Role"}</p>
+                      </div>
+
+                      <div className="col-span-2">
+                        <p className="text-gray-500">Email</p>
+                        <p className="break-all">{user.email}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-gray-500">Department</p>
+                        <p>{user.department || "—"}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-gray-500">Created</p>
+                        <p className="text-xs">
+                          {format(
+                            new Date(
+                              new Date(user.created_at).getTime() +
+                                5.5 * 60 * 60 * 1000
+                            ),
+                            "MMM d, yyyy"
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSpoofUser(user)}
+                      >
+                        <Eye className="mr-1 h-4 w-4" />
+                        View
+                      </Button>
+
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteUser(user.email)}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>

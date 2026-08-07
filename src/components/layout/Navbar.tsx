@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bell, LogOut, Settings, User } from "lucide-react";
+import { Bell, LogOut, Settings, User, Menu } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
+import { useSidebar } from "@/components/ui/sidebar";
 
 interface UserInfo {
   name: string;
@@ -26,6 +27,7 @@ interface NavbarProps {
 const Navbar = ({ user }: NavbarProps) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { toggleSidebar } = useSidebar();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const initials = user?.name
@@ -51,7 +53,17 @@ const Navbar = ({ user }: NavbarProps) => {
   return (
     <header className="border-b px-6 py-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Mobile Menu */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={toggleSidebar}
+          >
+            <Menu className="h-6 w-6" />
+          </Button>
+
           <div>
             <h5>BOB by Pyro</h5>
           </div>

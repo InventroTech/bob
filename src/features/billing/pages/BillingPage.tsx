@@ -360,7 +360,7 @@ const BillingPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-6">
         <div>
           <h5>Billing</h5>
           <p className="text-sm text-muted-foreground">
@@ -455,14 +455,15 @@ const BillingPage = () => {
                 ) : null}
               </div>
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                <Button onClick={loadBilling} disabled={isLoading}>
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                <Button className="w-full sm:w-auto" onClick={loadBilling} disabled={isLoading}>
                   {isLoading ? 'Loading...' : 'Refresh Billing'}
                 </Button>
                 {removedMembershipIds.length > 0 ? (
                   <Button
                     type="button"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={handleResetRemovedMembers}
                     disabled={isLoading}
                   >
@@ -472,6 +473,7 @@ const BillingPage = () => {
                 <Button
                   type="button"
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={handleDownloadPdf}
                   disabled={!report || isLoading || isDownloadingPdf}
                 >
@@ -516,7 +518,7 @@ const BillingPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="hidden md:block overflow-x-auto rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -586,6 +588,77 @@ const BillingPage = () => {
                   )}
                 </TableBody>
               </Table>
+            </div>
+
+            <div className="space-y-4 md:hidden">
+              {isLoading ? (
+                <Card>
+                  <CardContent className="p-6 text-center text-muted-foreground">
+                    Loading billing...
+                  </CardContent>
+                </Card>
+              ) : !report || billingMembers.length === 0 ? (
+                <Card>
+                  <CardContent className="p-6 text-center text-muted-foreground">
+                    No members found.
+                  </CardContent>
+                </Card>
+              ) : (
+                billingMembers.map((member) => (
+                  <Card key={member.membership_id}>
+                    <CardContent className="space-y-3 p-4">
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Name</p>
+                        <p className="font-semibold">
+                          {member.name || "Unnamed User"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Email</p>
+                        <p className="break-all">{member.email}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Role</p>
+                        <p>{member.role?.name || "No role"}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Joined</p>
+                        <p>{formatDate(member.joined_date)}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Billable Days</p>
+                        <p>{member.billable_days}/{member.cycle_days}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Role Rate</p>
+                        <p>{formatMoney(member.monthly_amount)}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">Billing Amount</p>
+                        <p className="font-semibold">
+                          {formatMoney(member.billing_amount)}
+                        </p>
+                      </div>
+
+                      <Button
+                        className="w-full"
+                        variant="outline"
+                        onClick={() => handleRemoveFromBilling(member)}
+                      >
+                        Remove
+                      </Button>
+
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
