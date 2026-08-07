@@ -37,7 +37,6 @@ import { DispatchCardListConfigPanel } from "@/components/page-builder/component
 import { DispatchDashboardConfigPanel } from "@/components/page-builder/component-config/DispatchDashboardConfig";
 import { ProcurementDashboardConfigPanel } from "@/components/page-builder/component-config/ProcurementDashboardConfig";
 import { AddUserConfig } from "@/components/page-builder/component-config/AddUserConfig";
-import { ProcurementDashboardConfigPanel } from "@/components/page-builder/component-config/ProcurementDashboardConfig";
 import type { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import type { CanvasComponentData, ComponentConfig } from "./componentMap";
 
