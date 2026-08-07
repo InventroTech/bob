@@ -1,9 +1,14 @@
-import React, { useState, useEffect, useRef, type ComponentType } from 'react';
-import { useParams, useOutletContext } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback, type ComponentType } from 'react';
+import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { componentMap as staticComponentMap } from '@/features/page-builder/componentMap';
-import { fetchPageConfig } from '@/lib/auth/spoof';
+import {
+  fetchPageConfig,
+  fetchPagesForRole,
+  getEffectiveToken,
+} from '@/lib/auth/spoof';
+import { useAuth } from '@/hooks/useAuth';
 
 // Module-level cache to prevent duplicate page fetches across component remounts
 const pageCache = new Map<string, { data: any; timestamp: number }>();
@@ -14,51 +19,103 @@ type ComponentMap = Record<string, ComponentType<any>>;
 interface CustomAppOutletContext {
   tenantId: string | null;
   userRoleId: string | null;
+  pages?: { id: string; name: string; display_order?: number; icon_name?: string }[];
 }
 
 const CustomAppPage: React.FC = () => {
-  const { pageId } = useParams<{ tenantSlug: string; pageId: string }>();
-  const { tenantId: contextTenantId } = useOutletContext<CustomAppOutletContext>();
+  const { tenantSlug, pageId } = useParams<{ tenantSlug: string; pageId: string }>();
+  const navigate = useNavigate();
+  const { session } = useAuth();
+  const {
+    tenantId: contextTenantId,
+    userRoleId,
+    pages: sidebarPages = [],
+  } = useOutletContext<CustomAppOutletContext>();
   const tenantId = contextTenantId ?? (typeof window !== 'undefined' ? localStorage.getItem('tenant_id') : null);
   
   const [page, setPage] = useState<{ name: string; config: any; header_title?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const componentMap = staticComponentMap as ComponentMap;
-  const fetchingRef = useRef<string | null>(null); // Track which pageId is currently being fetched
+  const fetchingRef = useRef<string | null>(null);
+  const redirectingRef = useRef(false);
+  const sidebarPagesRef = useRef(sidebarPages);
+  sidebarPagesRef.current = sidebarPages;
+
+  const redirectToFirstSidebarPage = useCallback(async () => {
+    if (redirectingRef.current || !tenantSlug) return;
+    redirectingRef.current = true;
+
+    const fromSidebar = sidebarPagesRef.current.find((p) => p.id && p.id !== pageId);
+    if (fromSidebar?.id) {
+      navigate(`/app/${tenantSlug}/pages/${fromSidebar.id}`, { replace: true });
+      return;
+    }
+
+    try {
+      if (!tenantId || !userRoleId) {
+        navigate(`/app/${tenantSlug}`, { replace: true });
+        return;
+      }
+      const token = await getEffectiveToken(session?.access_token ?? null);
+      let firstId: string | null = null;
+      if (token) {
+        const navPages = await fetchPagesForRole(tenantId, userRoleId, token);
+        firstId = navPages.find((p) => p.id && p.id !== pageId)?.id ?? null;
+      }
+      if (!firstId) {
+        const { data } = await supabase
+          .from('pages')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('role', userRoleId)
+          .eq('is_deleted', false)
+          .order('display_order', { ascending: true })
+          .limit(1);
+        firstId = data?.[0]?.id ?? null;
+      }
+      if (firstId) {
+        navigate(`/app/${tenantSlug}/pages/${firstId}`, { replace: true });
+      } else {
+        navigate(`/app/${tenantSlug}`, { replace: true });
+      }
+    } catch {
+      navigate(`/app/${tenantSlug}`, { replace: true });
+    }
+  }, [tenantSlug, pageId, tenantId, userRoleId, session?.access_token, navigate]);
 
   useEffect(() => {
     if (!tenantId || !pageId) return;
-    
-    // Track if component is still mounted
+
     let isMounted = true;
-    
-    // Check cache first
+    redirectingRef.current = false;
+
     const cacheKey = `${tenantId}-${pageId}`;
     const cached = pageCache.get(cacheKey);
     const now = Date.now();
-    
-    if (cached && (now - cached.timestamp) < PAGE_CACHE_TTL) {
-      console.log('Using cached page data for:', pageId);
+
+    if (cached && now - cached.timestamp < PAGE_CACHE_TTL) {
       if (isMounted) {
         setPage(cached.data);
         setLoading(false);
+        setError(null);
       }
       return;
     }
-    
-    // Prevent duplicate fetches for the same pageId
+
     if (fetchingRef.current === pageId) {
       return;
     }
-    
+
     fetchingRef.current = pageId;
     if (isMounted) {
       setLoading(true);
       setError(null);
+      setPage(null);
     }
 
-    const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
+    const spoofToken =
+      typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
 
     const fetchPage = async () => {
       try {
@@ -69,27 +126,29 @@ const CustomAppPage: React.FC = () => {
           if (pageData) {
             setPage(pageData);
             pageCache.set(cacheKey, { data: pageData, timestamp: now });
+            setLoading(false);
           } else {
-            setError('Page not found');
-            toast.error('Failed to load page');
+            pageCache.delete(cacheKey);
+            await redirectToFirstSidebarPage();
           }
-          setLoading(false);
           return;
         }
 
-        const { data, error } = await supabase
+        const { data, error: fetchError } = await supabase
           .from('pages')
           .select('name, config, header_title')
           .eq('id', pageId)
           .eq('tenant_id', tenantId)
-          .single();
+          .eq('is_deleted', false)
+          .maybeSingle();
 
         if (!isMounted) return;
         fetchingRef.current = null;
 
-        if (error) {
-          setError(error.message);
+        if (fetchError) {
+          setError(fetchError.message);
           toast.error('Failed to load page');
+          setLoading(false);
         } else if (data) {
           const pageData = {
             name: data.name,
@@ -98,8 +157,11 @@ const CustomAppPage: React.FC = () => {
           };
           setPage(pageData);
           pageCache.set(cacheKey, { data: pageData, timestamp: now });
+          setLoading(false);
+        } else {
+          pageCache.delete(cacheKey);
+          await redirectToFirstSidebarPage();
         }
-        setLoading(false);
       } catch (err: any) {
         fetchingRef.current = null;
         if (!isMounted) return;
@@ -109,21 +171,19 @@ const CustomAppPage: React.FC = () => {
       }
     };
 
-    fetchPage();
-    
-    // Cleanup function
+    void fetchPage();
+
     return () => {
       isMounted = false;
-      // Abort the Supabase query if possible
       if (fetchingRef.current === pageId) {
         fetchingRef.current = null;
       }
     };
-  }, [pageId, tenantId]);
+  }, [pageId, tenantId, redirectToFirstSidebarPage]);
 
   if (loading) return <div className="p-4">Loading page...</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;
-  if (!page) return <div className="p-4">Page not found.</div>;
+  if (!page) return <div className="p-4">Loading page...</div>;
 
   // Extract header title from page-level header_title or from header component in config
   const getHeaderTitle = () => {

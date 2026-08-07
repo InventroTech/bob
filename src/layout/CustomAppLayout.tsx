@@ -544,7 +544,7 @@ const CustomAppLayout: React.FC = () => {
           </div>
         )}
         <div className="min-h-screen w-full">
-          <Outlet context={{ tenantId, userRoleId }} />
+          <Outlet context={{ tenantId, userRoleId, pages }} />
         </div>
       </main>
     </div>

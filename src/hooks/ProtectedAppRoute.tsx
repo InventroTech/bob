@@ -40,11 +40,12 @@ const UnauthorizedPage: React.FC<{
           // Get the public role via membership API (Django authz at /membership/roles)
           const publicRole = await membershipService.getPublicRole();
 
-          // Fetch public and unassigned pages
+          // Fetch public and unassigned pages (exclude soft-deleted)
           const query = supabase
             .from('pages')
             .select('id, name')
-            .eq('tenant_id', tenant.id);
+            .eq('tenant_id', tenant.id)
+            .eq('is_deleted', false);
 
           // Allow pages with no role OR pages with public role (if it exists)
           if (publicRole) {

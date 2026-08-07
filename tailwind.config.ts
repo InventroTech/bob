@@ -114,13 +114,37 @@ export default {
 					"100%": {
 						transform: "translateX(0)"
 					}
+				},
+				'sparky-wave': {
+					'0%, 100%': { transform: 'rotate(0deg)' },
+					'15%': { transform: 'rotate(10deg)' },
+					'30%': { transform: 'rotate(-6deg)' },
+					'45%': { transform: 'rotate(10deg)' },
+					'60%': { transform: 'rotate(-3deg)' },
+					'75%': { transform: 'rotate(5deg)' },
+				},
+				'sparky-bob': {
+					'0%, 100%': { transform: 'translateY(0)' },
+					'50%': { transform: 'translateY(-4px)' },
+				},
+				'sparky-bubble': {
+					'0%, 100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+					'50%': { opacity: '0.92', transform: 'translateY(-3px) scale(1.02)' },
+				},
+				'sparky-bubble-in': {
+					'0%': { opacity: '0', transform: 'translateY(8px) scale(0.92)' },
+					'100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'fade-in': 'fade-in 0.3s ease-out',
-				'slide-in': 'slide-in 0.3s ease-out'
+				'slide-in': 'slide-in 0.3s ease-out',
+				'sparky-wave': 'sparky-wave 1.4s ease-in-out infinite',
+				'sparky-bob': 'sparky-bob 2.4s ease-in-out infinite',
+				'sparky-bubble': 'sparky-bubble 2.8s ease-in-out infinite',
+				'sparky-bubble-in': 'sparky-bubble-in 0.45s ease-out both',
 			}
 		}
 	},
