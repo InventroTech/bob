@@ -42,8 +42,8 @@ export const LeadActionButton: React.FC<LeadActionButtonProps> = ({
       disabled={disabled || loading}
       onClick={onClick}
       className={cn(
-        "h-12 rounded-xl border border-transparent px-4 text-sm font-semibold shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
-        "flex items-center justify-center gap-2 text-sm font-medium",
+        "h-auto min-h-12 rounded-xl border border-transparent px-2 py-2.5 md:px-2.5 lg:px-4 text-xs md:text-sm font-semibold shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
+        "inline-flex w-full max-w-full min-w-0 items-center justify-center gap-1.5 md:gap-2 font-medium !whitespace-normal text-center leading-tight",
         toneStyles[tone],
         (disabled || loading) &&
           "cursor-not-allowed opacity-60 hover:bg-inherit",
@@ -52,13 +52,13 @@ export const LeadActionButton: React.FC<LeadActionButtonProps> = ({
     >
       {loading ? (
         <>
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-b-transparent" />
-          <span>{label}</span>
+          <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-b-transparent" />
+          <span className="min-w-0 break-words">{label}</span>
         </>
       ) : (
         <>
-          <Icon className="h-4 w-4 text-[#61646B]" strokeWidth={2} />
-          <span>{label}</span>
+          <Icon className="h-4 w-4 shrink-0 text-[#61646B]" strokeWidth={2} />
+          <span className="min-w-0 break-words">{label}</span>
         </>
       )}
     </Button>
