@@ -10,6 +10,7 @@ import {
   validateServerSession,
   SESSION_WATCHDOG_INITIAL_DELAY_MS,
 } from '@/lib/auth/deletedUserSession';
+import ChatWidget from '@/components/chatbot/ChatWidget';
 
 interface PublicPage {
   id: string;
@@ -39,11 +40,12 @@ const UnauthorizedPage: React.FC<{
           // Get the public role via membership API (Django authz at /membership/roles)
           const publicRole = await membershipService.getPublicRole();
 
-          // Fetch public and unassigned pages
+          // Fetch public and unassigned pages (exclude soft-deleted)
           const query = supabase
             .from('pages')
             .select('id, name')
-            .eq('tenant_id', tenant.id);
+            .eq('tenant_id', tenant.id)
+            .eq('is_deleted', false);
 
           // Allow pages with no role OR pages with public role (if it exists)
           if (publicRole) {
@@ -348,7 +350,12 @@ const ProtectedAppRoute: React.FC = () => {
     return <UnauthorizedPage onLogout={handleLogout} tenantSlug={tenantSlug || ''} />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <ChatWidget />
+    </>
+  );
 };
 
 export default ProtectedAppRoute;

@@ -88,7 +88,7 @@ export const pageService = {
       // Notice the trailing slash - Django/Python backends usually require it!
       await apiClient.delete(`/pages/${pageId}/`);
     } catch (error) {
-      console.error(`Error deleting page ${pageId}:`, error);
+      console.error('Error deleting page:', pageId, error);
       throw error;
     }
   },
@@ -131,7 +131,7 @@ export const pageService = {
         role: pageData.role
       };
     } catch (error) {
-      console.error(`Error fetching page ${pageId} from API:`, error);
+      console.error('Error fetching page from API:', pageId, error);
       throw error;
     }
   },

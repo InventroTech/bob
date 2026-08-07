@@ -103,6 +103,12 @@ function boundCustomFieldDisplay(user: User, fieldKey: string): string {
       return user.dailyLimit != null && user.dailyLimit !== '—'
         ? String(user.dailyLimit)
         : '—';
+    case 'state':
+      return user.state && user.state !== '—' ? user.state : '—';
+    case 'district':
+      return user.district && user.district !== '—' ? user.district : '—';
+    case 'party':
+      return user.party && user.party !== '—' ? user.party : '—';
     case 'resolve_rate_goal':
       return user.supportResolveRateGoal != null && user.supportResolveRateGoal !== '—'
         ? String(user.supportResolveRateGoal)
@@ -166,6 +172,14 @@ export function AddUserView(props: AddUserModel) {
     setSelectedQueueType,
     queueTypes,
     availableLeadGroups,
+    geoStates,
+    geoDistricts,
+    geoParties,
+    formDistrictOptions,
+    editDistrictOptions,
+    formPartyOptions,
+    editPartyOptions,
+    catalogLabel,
   } = props;
 
   const { schema, showField } = useUserManagementConfig(config);
@@ -181,6 +195,9 @@ export function AddUserView(props: AddUserModel) {
   const showLeadGroupForm = showCustomForm('lead_group');
   const showDailyTargetForm = showCustomForm('daily_target');
   const showDailyLimitForm = showCustomForm('daily_limit');
+  const showStateForm = showCustomForm('state');
+  const showDistrictForm = showCustomForm('district');
+  const showPartyForm = showCustomForm('party');
   const showResolveGoalForm = showCustomForm('resolve_rate_goal');
   const showSupportLimitsForm = showCustomForm('support_daily_limits');
 
@@ -197,7 +214,10 @@ export function AddUserView(props: AddUserModel) {
     showLeadGroupForm ||
     showQueueTypeForm ||
     showLeadTargets ||
-    showTicketTargets;
+    showTicketTargets ||
+    showStateForm ||
+    showDistrictForm ||
+    showPartyForm;
   const renderManagerEditCell = (user: User) => (
     <div className="relative" ref={editManagerDropdownRef}>
       <div className="flex gap-1">
@@ -397,6 +417,108 @@ export function AddUserView(props: AddUserModel) {
             />
           ) : (
             boundCustomFieldDisplay(user, 'daily_limit')
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'state') {
+      return (
+        <TableCell key={`${user.uid}-cf-state`}>
+          {isEditing && editingRow ? (
+            <select
+              className="h-9 w-full border rounded-md px-2 text-sm bg-white"
+              value={editingRow.state}
+              onChange={(e) => {
+                const nextState = e.target.value;
+                setEditingRow((prev) => {
+                  if (!prev) return prev;
+                  const districtOk =
+                    !prev.district ||
+                    geoDistricts.some(
+                      (d) =>
+                        String(d.value) === String(prev.district) &&
+                        (!nextState || String(d.state_id) === String(nextState))
+                    );
+                  const partyOk =
+                    !prev.party ||
+                    geoParties.some((p) => {
+                      if (String(p.value) !== String(prev.party)) return false;
+                      if (!nextState || p.state_id == null) return true;
+                      return String(p.state_id) === String(nextState);
+                    });
+                  return {
+                    ...prev,
+                    state: nextState,
+                    district: districtOk ? prev.district : '',
+                    party: partyOk ? prev.party : '',
+                  };
+                });
+              }}
+            >
+              <option value="">Select state</option>
+              {geoStates.map((opt) => (
+                <option key={opt.value} value={String(opt.value)}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            catalogLabel('state', user.state)
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'district') {
+      return (
+        <TableCell key={`${user.uid}-cf-district`}>
+          {isEditing && editingRow ? (
+            <select
+              className="h-9 w-full border rounded-md px-2 text-sm bg-white"
+              value={editingRow.district}
+              onChange={(e) =>
+                setEditingRow((prev) =>
+                  prev ? { ...prev, district: e.target.value } : prev
+                )
+              }
+            >
+              <option value="">Select district</option>
+              {editDistrictOptions.map((opt) => (
+                <option key={opt.value} value={String(opt.value)}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            catalogLabel('district', user.district)
+          )}
+        </TableCell>
+      );
+    }
+
+    if (field.key === 'party') {
+      return (
+        <TableCell key={`${user.uid}-cf-party`}>
+          {isEditing && editingRow ? (
+            <select
+              className="h-9 w-full border rounded-md px-2 text-sm bg-white"
+              value={editingRow.party}
+              onChange={(e) =>
+                setEditingRow((prev) =>
+                  prev ? { ...prev, party: e.target.value } : prev
+                )
+              }
+            >
+              <option value="">Select party</option>
+              {editPartyOptions.map((opt) => (
+                <option key={opt.value} value={String(opt.value)}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            catalogLabel('party', user.party)
           )}
         </TableCell>
       );
@@ -967,6 +1089,92 @@ export function AddUserView(props: AddUserModel) {
                   )}
                 </>
               ) : null}
+
+              {showStateForm && (
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <select
+                    id="state"
+                    name="state"
+                    className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                    value={formData.state}
+                    onChange={(e) => {
+                      const nextState = e.target.value;
+                      setFormData((prev) => {
+                        const districtOk =
+                          !prev.district ||
+                          geoDistricts.some(
+                            (d) =>
+                              String(d.value) === String(prev.district) &&
+                              (!nextState || String(d.state_id) === String(nextState))
+                          );
+                        const partyOk =
+                          !prev.party ||
+                          geoParties.some((p) => {
+                            if (String(p.value) !== String(prev.party)) return false;
+                            if (!nextState || p.state_id == null) return true;
+                            return String(p.state_id) === String(nextState);
+                          });
+                        return {
+                          ...prev,
+                          state: nextState,
+                          district: districtOk ? prev.district : '',
+                          party: partyOk ? prev.party : '',
+                        };
+                      });
+                    }}
+                  >
+                    <option value="">Select state</option>
+                    {geoStates.map((opt) => (
+                      <option key={opt.value} value={String(opt.value)}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {showDistrictForm && (
+                <div className="space-y-2">
+                  <Label htmlFor="district">District</Label>
+                  <select
+                    id="district"
+                    name="district"
+                    className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                    value={formData.district}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, district: e.target.value }))
+                    }
+                  >
+                    <option value="">Select district</option>
+                    {formDistrictOptions.map((opt) => (
+                      <option key={opt.value} value={String(opt.value)}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {showPartyForm && (
+                <div className="space-y-2">
+                  <Label htmlFor="party">Party</Label>
+                  <select
+                    id="party"
+                    name="party"
+                    className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                    value={formData.party}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, party: e.target.value }))
+                    }
+                  >
+                    <option value="">Select party</option>
+                    {formPartyOptions.map((opt) => (
+                      <option key={opt.value} value={String(opt.value)}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {customFormFields.map((field) => (
                 <div key={field.key} className="space-y-2">

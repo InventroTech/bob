@@ -36,6 +36,13 @@ export type {
 // Services
 export { authService, linkUserUidLegacy } from './services/auth';
 export { billingService } from './services/billing';
+export { chatbotService } from './services/chatbot';
+export type {
+  ChatAskPayload,
+  ChatAskResponse,
+  ChatMessage,
+  ChatSource,
+} from './services/chatbot';
 export { membershipService } from './services/membership';
 export { pageService } from './services/pageService';
 export type {

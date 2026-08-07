@@ -76,6 +76,7 @@ const CustomAppDashboard: React.FC = () => {
             .select('id, name')
             .eq('tenant_id', tenantId)
             .eq('role', roleId)
+            .eq('is_deleted', false)
             .order('display_order', { ascending: true });
           if (pagesError) throw pagesError;
           pages = pagesData;

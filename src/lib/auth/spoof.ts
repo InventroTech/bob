@@ -179,6 +179,7 @@ export async function fetchPageConfig(
   const params = new URLSearchParams({
     id: `eq.${pageId}`,
     tenant_id: `eq.${tenantId}`,
+    is_deleted: 'eq.false',
     select: 'name,config,header_title',
   });
   const res = await fetch(`${url}/rest/v1/pages?${params}`, {
