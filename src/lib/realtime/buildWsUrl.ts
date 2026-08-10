@@ -1,7 +1,7 @@
 import { getAccessToken } from "@/lib/auth/accessTokenProvider";
 
-export function buildNotificationsWsUrl(): string | null {
-  const token = getAccessToken();
+export function buildNotificationsWsUrl(explicitToken?: string | null): string | null {
+  const token = (explicitToken || getAccessToken() || "").trim();
   if (!token) return null;
 
   const httpBase = (

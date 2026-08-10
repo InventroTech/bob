@@ -2,7 +2,11 @@
 
 import type { Column } from './types';
 
-export const TICKET_API_BASE = import.meta.env.VITE_RENDER_API_URL;
+export const TICKET_API_BASE = String(import.meta.env.VITE_RENDER_API_URL || '').replace(
+  /\/+$/,
+  ''
+);
+
 
 export function transformTicketForCarousel(row: any) {
   const nestedData =

@@ -4,6 +4,7 @@ import type { RealtimePayload } from "./types";
 
 type MessageHandler = (payload: RealtimePayload) => void;
 type StatusHandler = (status: "connecting" | "connected" | "disconnected" | "error") => void;
+type TokenProvider = () => string | null | undefined;
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const PING_INTERVAL_MS = 25_000;
@@ -16,10 +17,18 @@ export class NotificationsWsClient {
   private shouldRun = false;
   private onMessage: MessageHandler;
   private onStatus: StatusHandler;
+  private getToken: TokenProvider;
 
-  constructor(handlers: { onMessage?: MessageHandler; onStatus?: StatusHandler } = {}) {
+  constructor(
+    handlers: {
+      onMessage?: MessageHandler;
+      onStatus?: StatusHandler;
+      getToken?: TokenProvider;
+    } = {},
+  ) {
     this.onMessage = handlers.onMessage ?? (() => undefined);
     this.onStatus = handlers.onStatus ?? (() => undefined);
+    this.getToken = handlers.getToken ?? (() => null);
   }
 
   start(): void {
@@ -82,7 +91,7 @@ export class NotificationsWsClient {
   private connect(): void {
     if (!this.shouldRun) return;
 
-    const url = buildNotificationsWsUrl();
+    const url = buildNotificationsWsUrl(this.getToken());
     if (!url) {
       this.onStatus("disconnected");
       return;
@@ -98,6 +107,7 @@ export class NotificationsWsClient {
       socket.onopen = () => {
         this.reconnectAttempts = 0;
         this.onStatus("connected");
+        console.info("[Realtime] WebSocket connected");
         this.startPing();
       };
 
@@ -127,7 +137,8 @@ export class NotificationsWsClient {
         this.onStatus("disconnected");
         this.scheduleReconnect();
       };
-    } catch {
+    } catch (err) {
+      console.error("[Realtime] WebSocket failed to start", err);
       this.onStatus("error");
       this.scheduleReconnect();
     }

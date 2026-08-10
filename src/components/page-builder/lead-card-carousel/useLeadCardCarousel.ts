@@ -170,11 +170,14 @@ export function useLeadCardCarousel(
     if (!initialLead) lastFetchedLeadIdRef.current = null;
   }, [initialLead]);
 
-  // Handle initialLead prop - set currentLead when initialLead is provided, then fetch fresh data once per lead
+  // Handle initialLead prop — only when the lead *id* changes.
+  // Parent tables pass a new object ref on every list refresh; resetting from that
+  // would wipe Task Progress updates applied via WebSocket / fetchFreshLeadForCard.
   useEffect(() => {
     if (!initialLead) return;
     const leadId = initialLead.id != null ? Number(initialLead.id) : NaN;
     const isNewLead = !Number.isNaN(leadId) && lastFetchedLeadIdRef.current !== leadId;
+    if (!isNewLead) return;
 
     setCurrentLead(initialLead);
     setShowPendingCard(false);
@@ -195,11 +198,8 @@ export function useLeadCardCarousel(
     });
     isInitialized.current = true;
 
-    // Fetch latest from backend only once per lead open (not on every parent re-render)
-    if (isNewLead) {
-      lastFetchedLeadIdRef.current = leadId;
-      fetchFreshLeadForCard(leadId);
-    }
+    lastFetchedLeadIdRef.current = leadId;
+    fetchFreshLeadForCard(leadId);
   }, [initialLead, isInModal, fetchFreshLeadForCard]);
 
   // Call onLeadUpdate when currentLead changes (if callback provided)
@@ -1087,6 +1087,35 @@ export function useLeadCardCarousel(
         const currentId =
           currentLead?.id != null ? Number(currentLead.id) : Number.NaN;
         if (!Number.isNaN(recordId) && recordId === currentId) {
+          // Instant Task Progress update from WS payload (full HTTP refresh follows).
+          const data = payload.data;
+          if (data && typeof data === 'object' && 'tasks' in data && data.tasks !== undefined) {
+            setCurrentLead((prev) => {
+              if (!prev) return prev;
+              const prevId = prev.id != null ? Number(prev.id) : Number.NaN;
+              if (prevId !== recordId) return prev;
+              const tasks = (data as Record<string, unknown>).tasks;
+              const prevData =
+                prev.data && typeof prev.data === 'object'
+                  ? (prev.data as Record<string, unknown>)
+                  : {};
+              const nextData = { ...prevData, ...data, tasks };
+              const stage =
+                payload.lead_stage != null && String(payload.lead_stage).trim()
+                  ? String(payload.lead_stage)
+                  : undefined;
+              return {
+                ...prev,
+                ...(stage ? { lead_stage: stage, status: stage } : {}),
+                tasks,
+                data: nextData,
+                reject_reason:
+                  (data as Record<string, unknown>).reject_reason ??
+                  (prev as { reject_reason?: unknown }).reject_reason ??
+                  prevData.reject_reason,
+              } as typeof prev;
+            });
+          }
           void fetchFreshLeadForCard(recordId);
           return;
         }
