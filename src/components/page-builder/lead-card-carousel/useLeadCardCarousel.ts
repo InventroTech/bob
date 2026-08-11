@@ -25,6 +25,8 @@ import {
   shouldResetFetchedCount,
   getPhoneForDial,
   normalizePhoneForLinks,
+  resolveLeadRecordId,
+  tasksSignature,
 } from "./utils";
 
 export function useLeadCardCarousel(
@@ -148,7 +150,7 @@ export function useLeadCardCarousel(
     try {
       const fresh = await crmLeadsApi.getLeadById(leadId);
       if (!fresh) return;
-      const normalized = normalizeApiLeadToLeadData(fresh);
+      const normalized = normalizeApiLeadToLeadData({ ...fresh, id: leadId });
       setCurrentLead(normalized);
       setLead(prev => ({
         ...prev,
@@ -164,42 +166,81 @@ export function useLeadCardCarousel(
     }
   }, [onLeadUpdate]);
 
-  // Track last lead id we fetched for (avoid re-fetching when parent re-renders with new initialLead object ref)
+  // Track last lead id we fetched for (avoid full reset when parent re-renders with new initialLead object ref)
   const lastFetchedLeadIdRef = useRef<number | null>(null);
   useEffect(() => {
     if (!initialLead) lastFetchedLeadIdRef.current = null;
   }, [initialLead]);
 
-  // Handle initialLead prop — only when the lead *id* changes.
-  // Parent tables pass a new object ref on every list refresh; resetting from that
-  // would wipe Task Progress updates applied via WebSocket / fetchFreshLeadForCard.
+  // Handle initialLead prop.
+  // - New lead id: full init + fresh fetch
+  // - Same lead id (All Leads table refreshed via WebSocket while View Profile is open): sync Task Progress only
   useEffect(() => {
     if (!initialLead) return;
-    const leadId = initialLead.id != null ? Number(initialLead.id) : NaN;
-    const isNewLead = !Number.isNaN(leadId) && lastFetchedLeadIdRef.current !== leadId;
-    if (!isNewLead) return;
+    const leadId = resolveLeadRecordId(initialLead);
+    if (leadId == null) return;
 
-    setCurrentLead(initialLead);
-    setShowPendingCard(false);
-    if (isInModal) {
-      setActionButtonsVisible(true);
-    } else {
-      setActionButtonsVisible(false);
+    const isNewLead = lastFetchedLeadIdRef.current !== leadId;
+    if (isNewLead) {
+      setCurrentLead(initialLead);
+      setShowPendingCard(false);
+      if (isInModal) {
+        setActionButtonsVisible(true);
+      } else {
+        setActionButtonsVisible(false);
+      }
+      setShowNotInterestedDialog(false);
+      setShowCallBackDialog(false);
+      setShowProfileModal(false);
+      setLead({
+        leadStatus: initialLead.status || initialLead.lead_stage || "New",
+        notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
+        selectedTags: parseTags(initialLead.tags || []),
+        nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
+        leadStartTime: new Date(),
+      });
+      isInitialized.current = true;
+
+      lastFetchedLeadIdRef.current = leadId;
+      void fetchFreshLeadForCard(leadId);
+      return;
     }
-    setShowNotInterestedDialog(false);
-    setShowCallBackDialog(false);
-    setShowProfileModal(false);
-    setLead({
-      leadStatus: initialLead.status || initialLead.lead_stage || "New",
-      notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
-      selectedTags: parseTags(initialLead.tags || []),
-      nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
-      leadStartTime: new Date(),
-    });
-    isInitialized.current = true;
 
-    lastFetchedLeadIdRef.current = leadId;
-    fetchFreshLeadForCard(leadId);
+    // Same lead — parent list refreshed (e.g. View Profile on All Leads). Sync tasks without wiping card state.
+    const incomingTasks =
+      (initialLead as { tasks?: unknown }).tasks ?? initialLead.data?.tasks;
+    if (incomingTasks === undefined) return;
+
+    setCurrentLead((prev) => {
+      if (!prev || resolveLeadRecordId(prev) !== leadId) return prev;
+      const prevTasks =
+        (prev as { tasks?: unknown }).tasks ?? prev.data?.tasks;
+      // Don't replace in-card progress with an empty placeholder from table transform defaults.
+      if (
+        Array.isArray(incomingTasks) &&
+        incomingTasks.length === 0 &&
+        Array.isArray(prevTasks) &&
+        prevTasks.length > 0
+      ) {
+        return prev;
+      }
+      if (tasksSignature(prevTasks) === tasksSignature(incomingTasks)) return prev;
+      const prevData =
+        prev.data && typeof prev.data === "object"
+          ? (prev.data as Record<string, unknown>)
+          : {};
+      const stage =
+        initialLead.lead_stage ||
+        initialLead.status ||
+        (initialLead.data as { lead_stage?: string } | undefined)?.lead_stage;
+      return {
+        ...prev,
+        id: leadId,
+        ...(stage ? { lead_stage: stage, status: stage } : {}),
+        tasks: incomingTasks as LeadData["tasks"],
+        data: { ...prevData, ...((initialLead.data as object) || {}), tasks: incomingTasks },
+      } as typeof prev;
+    });
   }, [initialLead, isInModal, fetchFreshLeadForCard]);
 
   // Call onLeadUpdate when currentLead changes (if callback provided)
@@ -1083,17 +1124,17 @@ export function useLeadCardCarousel(
   useRecordUpdated(
     useCallback(
       (payload) => {
-        const recordId = Number(payload.record_id);
-        const currentId =
-          currentLead?.id != null ? Number(currentLead.id) : Number.NaN;
-        if (!Number.isNaN(recordId) && recordId === currentId) {
+        const recordId =
+          payload.record_id != null ? String(payload.record_id) : "";
+        const currentId = resolveLeadRecordId(currentLead);
+        if (currentId != null && String(currentId) === recordId) {
           // Instant Task Progress update from WS payload (full HTTP refresh follows).
           const data = payload.data;
           if (data && typeof data === 'object' && 'tasks' in data && data.tasks !== undefined) {
             setCurrentLead((prev) => {
               if (!prev) return prev;
-              const prevId = prev.id != null ? Number(prev.id) : Number.NaN;
-              if (prevId !== recordId) return prev;
+              const prevId = resolveLeadRecordId(prev);
+              if (prevId !== currentId) return prev;
               const tasks = (data as Record<string, unknown>).tasks;
               const prevData =
                 prev.data && typeof prev.data === 'object'
@@ -1106,6 +1147,7 @@ export function useLeadCardCarousel(
                   : undefined;
               return {
                 ...prev,
+                id: currentId,
                 ...(stage ? { lead_stage: stage, status: stage } : {}),
                 tasks,
                 data: nextData,
@@ -1116,14 +1158,14 @@ export function useLeadCardCarousel(
               } as typeof prev;
             });
           }
-          void fetchFreshLeadForCard(recordId);
+          void fetchFreshLeadForCard(currentId);
           return;
         }
         if (showPendingCard) {
           void refreshPendingDashboard();
         }
       },
-      [currentLead?.id, showPendingCard, fetchFreshLeadForCard, refreshPendingDashboard],
+      [currentLead, showPendingCard, fetchFreshLeadForCard, refreshPendingDashboard],
     ),
     { entityType: "lead" },
   );
