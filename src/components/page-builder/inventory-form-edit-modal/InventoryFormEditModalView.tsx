@@ -57,10 +57,10 @@ import {
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import { getRecordModalTitleParts } from '@/lib/utils/recordModalHeader';
 
-/** Unmannd modal chrome — design navy header/footer + white ID block. */
-const UNMANND_NAVY = '#1A44A1';
+/** Unmannd modal chrome — matches procurement table navy (#1A3673). */
+const UNMANND_NAVY = '#1A3673';
 const UNMANND_ID_BG = '#FFFFFF';
-const UNMANND_ID_TEXT = '#1E3A5F';
+const UNMANND_ID_TEXT = '#1A3673';
 
 function UnmanndModalHeader({
   record,
@@ -144,7 +144,7 @@ function UnmanndModalHeader({
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 w-full gap-1.5 rounded-full border-transparent bg-white px-2.5 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]"
+              className="h-8 w-full gap-1.5 rounded-full border-transparent bg-white px-2.5 text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]"
               disabled={applyingStatusValue != null || saving}
               onClick={onHistory}
             >
@@ -1199,7 +1199,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     className={cn(
                       'gap-2 h-9 rounded-md',
                       isUnmannd
-                        ? 'border-white/40 bg-white text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]'
+                        ? 'border-white/40 bg-white text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]'
                         : urgencyToneButtonClassName(btn.statusValue, urgencyHighlighted),
                     )}
                     disabled={!!applyingStatusValue}
@@ -1228,7 +1228,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 className={cn(
                   'gap-2 h-9 rounded-md',
                   isUnmannd &&
-                    'border-white/40 bg-white text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]'
+                    'border-white/40 bg-white text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]'
                 )}
                 disabled={saving || applyingStatusValue != null}
                 onClick={handleSaveAll}
