@@ -21,12 +21,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, User, Send, Loader2, Plus, Trash2, Scale, RefreshCw, ExternalLink, MapPin } from 'lucide-react';
+import { Calendar, User, Send, Loader2, Plus, Trash2, MapPin } from 'lucide-react';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
-import { Badge } from '@/components/ui/badge';
 
 import { REQUEST_CATEGORY_OPTIONS, PRIORITY_OPTIONS } from './constants';
-import { looksLikeProductUrl, normalizeIndianPincode, toVendorStorageName, formatRequestDateDisplay } from './utils';
+import { toVendorStorageName, formatRequestDateDisplay } from './utils';
 import type { InventoryRequestFormModel } from './useInventoryRequestForm';
 import { cn } from '@/lib/utils';
 
@@ -55,24 +54,10 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     newVendorLink,
     setNewVendorLink,
     savingNewVendor,
-    specPromptItemId,
-    specFacets,
-    specSelections,
-    specExtraText,
-    setSpecExtraText,
-    specSampleTitles,
-    selectedSampleMatch,
-    pendingSpecCompare,
     priceDraftByItemId,
     setPriceDraftByItemId,
-    ecommerceSources,
-    priceCompareProfile,
-    setPriceCompareProfile,
-    liveCompareLoadingByItemId,
-    linkFetchLoadingByItemId,
     fieldShakeNonce,
     clearFieldShake,
-    priceCompareStatusByItemId,
     focusedItemNameId,
     setFocusedItemNameId,
     setItemNameQuery,
@@ -91,20 +76,10 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     vendorSuggestionsOpen,
     setVendorSuggestionsOpen,
     requesterDisplay,
-    activePriceCompareVendors,
     filteredProjectSuggestions,
     addItem,
     removeItem,
     updateItem,
-    removeQuote,
-    applyQuoteToItem,
-    fetchDetailsFromItemLink,
-    applyLivePriceResults,
-    fetchLivePrices,
-    cancelSpecPrompt,
-    selectSpecFacetOption,
-    selectSampleMatch,
-    confirmSpecPrompt,
     startAddVendor,
     cancelAddVendor,
     saveNewVendor,
@@ -423,7 +398,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   />
                 )}
                 <p className="text-[11px] text-muted-foreground">
-                  Required for live delivery dates (Amazon and similar).
+                  6-digit PIN for where this order should arrive.
                 </p>
               </div>
               <div className="space-y-2">
@@ -502,46 +477,16 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     </Label>
                     {wrapShake(
                       itemKey(item.id, 'product_link'),
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Input
-                          type="url"
-                          placeholder="https://… (Amazon, Robu, vendor page, etc.)"
-                          value={item.product_link}
-                          onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                          onBlur={(e) => {
-                            const url = e.target.value.trim();
-                            if (looksLikeProductUrl(url)) {
-                              void fetchDetailsFromItemLink(item.id, url);
-                            }
-                          }}
-                          className="h-9 flex-1"
-                          disabled={!!linkFetchLoadingByItemId[item.id]}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className={cn('h-9 shrink-0 gap-1.5', navyOutline)}
-                          disabled={
-                            !!linkFetchLoadingByItemId[item.id] ||
-                            !looksLikeProductUrl(item.product_link)
-                          }
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() =>
-                            void fetchDetailsFromItemLink(item.id, item.product_link, { force: true })
-                          }
-                        >
-                          {linkFetchLoadingByItemId[item.id] ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                          Fetch details
-                        </Button>
-                      </div>
+                      <Input
+                        type="url"
+                        placeholder="https://… (Amazon, Robu, vendor page, etc.)"
+                        value={item.product_link}
+                        onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                        className="h-9"
+                      />
                     )}
                     <p className="text-[11px] text-muted-foreground">
-                      Paste a product URL to auto-fill item name, specifications, vendor, and cost.
+                      Paste the product URL from the vendor site.
                     </p>
                   </div>
 
@@ -647,274 +592,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     />
                     )}
                     <p className="text-[11px] text-muted-foreground">
-                      Filled automatically from the item link when available.
+                      Size, connector, model, or other distinguishing details.
                     </p>
-                  </div>
-
-                  {/* E-commerce price comparison (multi-vendor live search) */}
-                  <div
-                    className={cn(
-                      'sm:col-span-2 space-y-3 rounded-md border border-dashed p-3',
-                      useNavyTheme
-                        ? 'border-[#1A3673]/30 bg-[#1A3673]/[0.03]'
-                        : 'border-border/80 bg-background/60'
-                    )}
-                  >                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="space-y-0.5">
-                        <Label className="text-xs font-medium flex items-center gap-1.5">
-                          <Scale className="h-3.5 w-3.5" />
-                          Price comparison
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground">
-                          Searching {activePriceCompareVendors.length} vendors
-                          {priceCompareProfile === 'extended' ? ' (full catalog)' : ' (core set)'}.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 items-center">
-                        <Select
-                          value={priceCompareProfile}
-                          onValueChange={(v) =>
-                            setPriceCompareProfile(v === 'extended' ? 'extended' : 'core')
-                          }
-                        >
-                          <SelectTrigger className="h-7 w-[10.5rem] text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="core">Core ({ecommerceSources.filter((s) => s.id !== 'other' && s.profile === 'core').length})</SelectItem>
-                            <SelectItem value="extended">
-                              Extended ({ecommerceSources.filter((s) => s.id && s.id !== 'other').length})
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className={cn('h-7 gap-1 text-xs', navyBtn, useNavyTheme && 'rounded-md')}
-                          disabled={
-                            !!liveCompareLoadingByItemId[item.id] ||
-                            !normalizeIndianPincode(deliveryPincode)
-                          }
-                          onClick={() => fetchLivePrices(item.id)}
-                          title={
-                            normalizeIndianPincode(deliveryPincode)
-                              ? undefined
-                              : 'Enter a valid delivery PIN code first'
-                          }
-                        >
-                          {liveCompareLoadingByItemId[item.id] ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3 w-3" />
-                          )}
-                          Fetch live prices
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5">
-                      {activePriceCompareVendors.map((v) => (
-                        <Badge
-                          key={v.id}
-                          variant="secondary"
-                          className="rounded-md px-2 py-0.5 text-[10px] font-normal"
-                        >
-                          {v.label}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-end">
-                      <div className="space-y-1">
-                        <Label
-                          htmlFor={`delivery-pincode-${item.id}`}
-                          className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1"
-                        >
-                          <MapPin className="h-3 w-3" />
-                          Delivery PIN <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id={`delivery-pincode-${item.id}`}
-                          inputMode="numeric"
-                          maxLength={6}
-                          placeholder="560001"
-                          value={deliveryPincode}
-                          onChange={(e) =>
-                            setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6))
-                          }
-                          className="h-8 font-mono text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1 min-w-0">
-                        <Label
-                          htmlFor={`delivery-address-${item.id}`}
-                          className="text-[10px] text-muted-foreground uppercase tracking-wide"
-                        >
-                          Delivery address <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id={`delivery-address-${item.id}`}
-                          placeholder="Building, street, city"
-                          value={deliveryAddress}
-                          onChange={(e) => setDeliveryAddress(e.target.value)}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                    </div>
-
-                    {item.price_quotes.length > 0 ? (() => {
-                      const priced = item.price_quotes.filter(
-                        (q) => q.price !== '' && Number.isFinite(Number(q.price)) && Number(q.price) > 0
-                      );
-                      const lowestId =
-                        priced.length > 0
-                          ? priced.reduce((best, q) =>
-                              q.currency === best.currency && Number(q.price) < Number(best.price) ? q : best
-                            ).id
-                          : null;
-
-                      return (
-                        <div className="space-y-2">
-                          {item.price_quotes.map((quote) => {
-                            const isLowest = lowestId === quote.id;
-                            const sourceLabel =
-                              quote.source_label ||
-                              ecommerceSources.find((s) => s.id === quote.source)?.label ||
-                              quote.source;
-                            const priceText =
-                              quote.price !== '' && Number.isFinite(Number(quote.price))
-                                ? `${formatCurrencyDisplay(quote.price)} ${quote.currency || 'INR'}`
-                                : '—';
-                            const deliveryText = (quote.delivery_date || '').trim() || '—';
-                            return (
-                              <div
-                                key={quote.id}
-                                className={cn(
-                                  'space-y-2 rounded-md border p-2',
-                                  isLowest
-                                    ? useNavyTheme
-                                      ? 'border-[#1A3673]/50 bg-[#1A3673]/[0.06]'
-                                      : 'border-emerald-500/50 bg-emerald-500/5'
-                                    : useNavyTheme
-                                      ? 'border-[#1A3673]/18 bg-white'
-                                      : 'border-border/50'
-                                )}
-                              >
-                                {quote.title ? (
-                                  <p className="text-[11px] text-muted-foreground truncate" title={quote.title}>
-                                    {quote.live ? 'Live · ' : ''}
-                                    {quote.title}
-                                  </p>
-                                ) : null}
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[6.5rem_minmax(0,1fr)_7.5rem_7.5rem_auto] sm:items-center">
-                                  <div className="space-y-0.5 min-w-0">
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                                      Source
-                                    </p>
-                                    <p className="text-xs font-medium truncate" title={sourceLabel}>
-                                      {sourceLabel}
-                                    </p>
-                                  </div>
-                                  <div className="space-y-0.5 min-w-0">
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                                      Product
-                                    </p>
-                                    <div className="flex items-center gap-1 min-w-0">
-                                      <p
-                                        className="text-xs text-muted-foreground truncate min-w-0 flex-1"
-                                        title={quote.link || undefined}
-                                      >
-                                        {quote.link.trim() || '—'}
-                                      </p>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className={cn(
-                                          'h-7 shrink-0 gap-1 text-xs px-2',
-                                          useNavyTheme && navyOutline
-                                        )}
-                                        disabled={!quote.link.trim()}
-                                        onClick={() => {
-                                          const url = quote.link.trim();
-                                          if (!url) return;
-                                          const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-                                          window.open(href, '_blank', 'noopener,noreferrer');
-                                        }}
-                                        title="Open product page"
-                                        aria-label="Open product page"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                        Open
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-0.5 min-w-0">
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                                      Delivery
-                                    </p>
-                                    <p className="text-xs font-medium truncate" title={deliveryText}>
-                                      {deliveryText}
-                                    </p>
-                                  </div>
-                                  <div className="space-y-0.5 min-w-0">
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                                      Price
-                                      {isLowest && (
-                                        <span
-                                          className={cn(
-                                            'rounded px-1 py-0.5 text-[9px] font-semibold normal-case tracking-normal',
-                                            useNavyTheme
-                                              ? 'bg-[#1A3673]/15 text-[#1A3673]'
-                                              : 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-400'
-                                          )}
-                                        >
-                                          Lowest
-                                        </span>
-                                      )}
-                                    </p>
-                                    <p className="text-xs font-mono tabular-nums font-medium">{priceText}</p>
-                                  </div>
-                                  <div className="flex items-center gap-1 sm:justify-end">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant={isLowest ? 'default' : 'secondary'}
-                                      className={cn(
-                                        'h-8 text-xs',
-                                        useNavyTheme && isLowest && navyBtn,
-                                        useNavyTheme && !isLowest && navyOutline
-                                      )}
-                                      onClick={() => applyQuoteToItem(item.id, quote)}
-                                    >
-                                      Use
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                                      onClick={() => removeQuote(item.id, quote.id)}
-                                      aria-label="Remove quote"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })() : priceCompareStatusByItemId[item.id] === 'unavailable' ? (
-                      <p className="text-sm text-muted-foreground py-1">
-                        No product available
-                      </p>
-                    ) : (
-                        <p className="text-[11px] text-muted-foreground">
-                          Enter delivery PIN above, item name (and specs if needed), then click Fetch live prices.
-                        </p>
-                    )}
                   </div>
 
                   <div className="flex flex-wrap items-end gap-4 sm:col-span-2 w-full">
@@ -1192,108 +871,6 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
             >
               {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save vendor
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={specPromptItemId !== null}
-        onOpenChange={(open) => {
-          if (!open) cancelSpecPrompt();
-        }}
-      >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Choose product specifications</DialogTitle>
-            <DialogDescription>
-              Your item name matches multiple variants. Pick the specs you need so we fetch the right prices.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 max-h-[70vh] overflow-auto pr-1">
-            {specSampleTitles.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Matching products</Label>
-                <div className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
-                  {specSampleTitles.map((t, idx) => {
-                    const selected = selectedSampleMatch === t.trim();
-                    return (
-                      <button
-                        key={`${idx}-${t.slice(0, 40)}`}
-                        type="button"
-                        onClick={() => selectSampleMatch(t)}
-                        className={
-                          selected
-                            ? 'block w-full rounded-lg border border-black bg-black px-4 py-3.5 text-left text-sm leading-relaxed text-white shadow-sm'
-                            : 'block w-full rounded-lg border border-input bg-background px-4 py-3.5 text-left text-sm leading-relaxed text-foreground hover:bg-accent hover:text-accent-foreground'
-                        }
-                      >
-                        <span className="block whitespace-normal break-words">{t}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {specFacets.map((facet) => (
-              <div key={facet.key} className="space-y-1.5">
-                <Label className="text-xs font-medium">{facet.label}</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {facet.options.map((opt) => {
-                    const selected = specSelections[facet.key] === opt;
-                    return (
-                      <Button
-                        key={opt}
-                        type="button"
-                        size="sm"
-                        variant={selected ? 'default' : 'outline'}
-                        className="h-7 rounded-full text-xs"
-                        onClick={() => selectSpecFacetOption(facet.key, opt, selected)}
-                      >
-                        {opt}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                {specFacets.length > 0 || specSampleTitles.length > 0
-                  ? 'Specifications'
-                  : 'Specifications *'}
-              </Label>
-              <Input
-                placeholder="Filled when you select a product or length/size…"
-                value={specExtraText}
-                onChange={(e) => setSpecExtraText(e.target.value)}
-                className="h-9"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={async () => {
-                const itemId = specPromptItemId;
-                const pending =
-                  pendingSpecCompare && pendingSpecCompare.itemId === itemId
-                    ? pendingSpecCompare
-                    : null;
-                cancelSpecPrompt();
-                if (!itemId) return;
-                if (pending?.data) {
-                  applyLivePriceResults(itemId, pending.data, pending.name, '');
-                  return;
-                }
-                await fetchLivePrices(itemId, { skipSpecPrompt: true });
-              }}
-            >
-              Skip &amp; show all
-            </Button>
-            <Button type="button" onClick={confirmSpecPrompt}>
-              Apply &amp; fetch prices
             </Button>
           </DialogFooter>
         </DialogContent>
