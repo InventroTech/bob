@@ -366,14 +366,8 @@ const ChatWidget: React.FC = () => {
     writePreferNew(true);
   };
 
-  // Unmannd: quiet edge tab (no bouncing avatar over the table).
-  // Other apps keep the bottom-right launcher.
-  const isUnmanndApp = (() => {
-    const fromSlug = String(getTenantSlug() || '').toLowerCase();
-    if (/unman+d/.test(fromSlug)) return true;
-    const match = location.pathname.match(/\/app\/([^/]+)/i);
-    return match ? /unman+d/.test(match[1].toLowerCase()) : false;
-  })();
+  // Sparky: quiet draggable edge tab everywhere.
+  const isUnmanndApp = true;
 
   const [tabHover, setTabHover] = useState(false);
   const [sparkyPos, setSparkyPos] = useState<SparkyPos>(() =>
