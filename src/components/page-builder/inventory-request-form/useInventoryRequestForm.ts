@@ -87,11 +87,13 @@ function pickPageIdByNames(
  * - Prefer Page Builder override `redirectAfterSubmitPageName` when set
  * - Prefer My Request(s) for all roles (including TL / Procurement Manager)
  * - Approver roles fall back to All Request(s) if My Request page is missing
+ * - Final fallbacks: any request list page (not New/Create), else first available page
  */
 function pickPostCreatePageId(
   pages: Array<{ id: string; name: string }>,
   preferredName: string | undefined,
-  roleName: string | null | undefined
+  roleName: string | null | undefined,
+  currentPageId?: string | null
 ): string | null {
   if (!pages.length) return null;
   const preferred = preferredName ? normalizePageName(preferredName) : '';
@@ -110,14 +112,36 @@ function pickPostCreatePageId(
   if (myRequest) return myRequest;
 
   if (isApproverLikeRole(roleName)) {
-    return pickPageIdByNames(
+    const allRequests = pickPageIdByNames(
       pages,
       ['all requests', 'all request'],
       ['all request']
     );
+    if (allRequests) return allRequests;
   }
 
-  return null;
+  const isNewRequestPage = (name: string) => {
+    const n = normalizePageName(name);
+    return n.includes('new request') || n.includes('create request') || n === 'new';
+  };
+
+  // Unmannd / inventory: land on any request list (not the create form).
+  const requestList = pages.find((p) => {
+    if (currentPageId && p.id === currentPageId) return false;
+    if (isNewRequestPage(p.name)) return false;
+    const n = normalizePageName(p.name);
+    return (
+      n.includes('my request') ||
+      n.includes('all request') ||
+      n.includes('pending approval') ||
+      n === 'requests' ||
+      (n.includes('request') && !n.includes('form'))
+    );
+  });
+  if (requestList) return requestList.id;
+
+  const other = pages.find((p) => !currentPageId || p.id !== currentPageId);
+  return other?.id ?? pages[0]?.id ?? null;
 }
 
 export function useInventoryRequestForm({
@@ -127,9 +151,17 @@ export function useInventoryRequestForm({
   const isProcurement = variant === 'procurement';
   const { user, session } = useAuth();
   const navigate = useNavigate();
-  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const { tenantSlug, pageId: currentPageId } = useParams<{
+    tenantSlug?: string;
+    pageId?: string;
+  }>();
 
   const entityType = config?.entityType ?? 'inventory_request';
+  // Navy chrome for Unmannd: procurement form, unmannd entity, or unmannd tenant slug.
+  const useNavyTheme =
+    isProcurement ||
+    String(entityType).toLowerCase() === 'unmannd_request' ||
+    /unman+d/i.test(String(tenantSlug || ''));
   const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'NEW_REQUEST';
   const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
   const redirectPageName = config?.redirectAfterSubmitPageName;
@@ -148,6 +180,7 @@ export function useInventoryRequestForm({
   const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmitSuccess, setShowSubmitSuccess] = useState(false);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [vendorsLoading, setVendorsLoading] = useState(true);
   const [addVendorForItemId, setAddVendorForItemId] = useState<string | null>(null);
@@ -1381,54 +1414,81 @@ export function useInventoryRequestForm({
       }
       rememberProjectSuggestion(projectPurpose);
 
-      // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
-      let redirected = false;
-      if (tenantSlug) {
-        try {
-          const token = await getEffectiveToken(session?.access_token ?? null);
-          const tenantId = token ? getTenantIdFromJWT(token) : null;
-          const roleId = token ? getRoleIdFromJWT(token) : null;
-          let pages: Array<{ id: string; name: string }> = [];
-          if (token && tenantId && roleId) {
-            const spoofToken =
-              typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
-            if (spoofToken) {
-              pages = await fetchPagesForRole(tenantId, roleId, spoofToken);
-            } else {
-              const { data } = await supabase
-                .from('pages')
-                .select('id, name')
-                .eq('tenant_id', tenantId)
-                .eq('role', roleId)
-                .order('display_order', { ascending: true });
-              pages = data ?? [];
+      const navigateAfterCreate = async () => {
+        // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
+        let redirected = false;
+        if (tenantSlug) {
+          try {
+            const token = await getEffectiveToken(session?.access_token ?? null);
+            const tenantId = token ? getTenantIdFromJWT(token) : null;
+            const roleId = token ? getRoleIdFromJWT(token) : null;
+            let pages: Array<{ id: string; name: string }> = [];
+            if (token && tenantId && roleId) {
+              // Prefer the same Pages API path as the sidebar (works for spoof + normal JWT).
+              try {
+                pages = await fetchPagesForRole(tenantId, roleId, token);
+              } catch (pagesErr) {
+                console.warn('fetchPagesForRole failed after create; trying Supabase', pagesErr);
+              }
+              if (!pages.length) {
+                const { data } = await supabase
+                  .from('pages')
+                  .select('id, name')
+                  .eq('tenant_id', tenantId)
+                  .eq('role', roleId)
+                  .eq('is_deleted', false)
+                  .order('display_order', { ascending: true });
+                pages = data ?? [];
+              }
             }
+            const pageId = pickPostCreatePageId(
+              pages,
+              redirectPageName,
+              myRoleName,
+              currentPageId
+            );
+            if (pageId) {
+              navigate(`/app/${tenantSlug}/pages/${pageId}`);
+              redirected = true;
+            } else {
+              console.warn('No post-create page found', {
+                pageCount: pages.length,
+                pageNames: pages.map((p) => p.name),
+                redirectPageName,
+                myRoleName,
+              });
+              toast.message('Request created, but no list page was found to open.');
+            }
+          } catch (navErr) {
+            console.warn('Could not navigate after request create', navErr);
+            toast.message('Request created, but navigation failed.');
           }
-          const pageId = pickPostCreatePageId(pages, redirectPageName, myRoleName);
-          if (pageId) {
-            navigate(`/app/${tenantSlug}/pages/${pageId}`);
-            redirected = true;
-          }
-        } catch (navErr) {
-          console.warn('Could not navigate after request create', navErr);
+        } else {
+          navigate('/inventory/requests');
+          redirected = true;
         }
-      } else {
-        navigate('/inventory/requests');
-        redirected = true;
-      }
 
-      if (!redirected) {
-        setItems([newEmptyItem()]);
-        setProjectPurpose('');
-        setRequestCategory('');
-        setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
-        setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
-        setPriceDraftByItemId({});
-        setPriceCompareStatusByItemId({});
-        setLinkFetchLoadingByItemId({});
-        setFieldShakeNonce({});
-        setLastFetchedLinkByItemId({});
+        if (!redirected) {
+          setShowSubmitSuccess(false);
+          setItems([newEmptyItem()]);
+          setProjectPurpose('');
+          setRequestCategory('');
+          setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
+          setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
+          setPriceDraftByItemId({});
+          setPriceCompareStatusByItemId({});
+          setLinkFetchLoadingByItemId({});
+          setFieldShakeNonce({});
+          setLastFetchedLinkByItemId({});
+        }
+      };
+
+      // Unmannd: brief success animation before leaving the form.
+      if (useNavyTheme) {
+        setShowSubmitSuccess(true);
+        await new Promise((r) => window.setTimeout(r, 1400));
       }
+      await navigateAfterCreate();
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'message' in err
@@ -1438,6 +1498,7 @@ export function useInventoryRequestForm({
             : 'Failed to create inventory request.';
       console.error('Failed to create request', err);
       toast.error(message);
+      setShowSubmitSuccess(false);
     } finally {
       setSubmitting(false);
     }
@@ -1480,6 +1541,7 @@ export function useInventoryRequestForm({
   return {
     user,
     isProcurement,
+    useNavyTheme,
     requestDate,
     department,
     projectPurpose,
@@ -1492,6 +1554,7 @@ export function useInventoryRequestForm({
     setDeliveryAddress,
     items,
     submitting,
+    showSubmitSuccess,
     vendors,
     vendorsLoading,
     addVendorForItemId,

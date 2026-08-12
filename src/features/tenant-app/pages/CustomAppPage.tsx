@@ -20,6 +20,7 @@ interface CustomAppOutletContext {
   tenantId: string | null;
   userRoleId: string | null;
   pages?: { id: string; name: string; display_order?: number; icon_name?: string }[];
+  isUnmanndApp?: boolean;
 }
 
 const CustomAppPage: React.FC = () => {
@@ -30,6 +31,7 @@ const CustomAppPage: React.FC = () => {
     tenantId: contextTenantId,
     userRoleId,
     pages: sidebarPages = [],
+    isUnmanndApp = false,
   } = useOutletContext<CustomAppOutletContext>();
   const tenantId = contextTenantId ?? (typeof window !== 'undefined' ? localStorage.getItem('tenant_id') : null);
   
@@ -214,12 +216,18 @@ const CustomAppPage: React.FC = () => {
     );
 
   return (
-    <div className="w-full max-w-full min-w-0">
+    <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'h-full min-h-0 flex flex-col' : ''}`}>
       {/* Fixed Header — compact so request tables start closer to the title */}
       {headerTitle && !hidePageHeader && (
-        <div className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white max-md:hidden">
-          <div className="px-4 py-1.5">
-            <h2 className="!m-0 !text-lg !font-semibold !leading-snug text-gray-900">
+        <div className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white max-md:hidden shrink-0">
+          <div className={isUnmanndApp ? 'px-4 py-3' : 'px-4 py-1.5'}>
+            <h2
+              className={
+                isUnmanndApp
+                  ? '!m-0 !text-3xl !font-bold !leading-tight !tracking-tight !uppercase text-[#0B1F4D]'
+                  : '!m-0 !text-lg !font-semibold !leading-snug text-gray-900'
+              }
+            >
               {headerTitle}
             </h2>
           </div>
@@ -227,8 +235,8 @@ const CustomAppPage: React.FC = () => {
       )}
       
       {/* Page Content */}
-      <div className="w-full max-w-full min-w-0">
-        <div className="max-w-full min-w-0 pt-1">
+      <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'flex-1 min-h-0' : ''}`}>
+        <div className={`max-w-full min-w-0 ${isUnmanndApp ? 'px-2 pt-0 h-full' : 'pt-1'}`}>
           {Array.isArray(page.config)
             ? (page.config as any[]).map((component) => {
                 const Renderer = componentMap[component.type];

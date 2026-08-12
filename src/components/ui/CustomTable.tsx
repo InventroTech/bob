@@ -28,6 +28,8 @@ export interface CustomTableProps {
   hoverable?: boolean;
   className?: string;
   tableClassName?: string;
+  /** Tighter header/cell padding (Unmannd procurement tables). */
+  dense?: boolean;
   /**
    * @deprecated Stacked card layout is removed. Prop kept for call-site compatibility.
    * Tables always render as a normal table with horizontal scroll on small screens.
@@ -77,7 +79,12 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   hoverable = true,
   className,
   tableClassName,
+  dense = false,
 }) => {
+  const cellY = dense ? 'py-1' : 'py-2';
+  const cellX = dense ? 'px-2.5' : 'px-4';
+  const leftCellX = dense ? 'pl-2 pr-2.5' : 'pl-2 pr-4';
+
   const defaultRenderCell = (row: any, column: CustomTableColumn, _columnIndex: number) => {
     const value = row[column.accessor];
 
@@ -118,9 +125,10 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                 <th
                   key={idx}
                   className={cn(
-                    'text-sm font-medium py-2 text-center whitespace-nowrap',
-                    col.align === 'left' ? 'pl-2 pr-4 text-left' : 'px-4',
-                    col.align === 'right' && 'px-4 text-right',
+                    'text-sm font-medium text-center whitespace-nowrap',
+                    cellY,
+                    col.align === 'left' ? `${leftCellX} text-left` : cellX,
+                    col.align === 'right' && `${cellX} text-right`,
                     col.width && `w-[${col.width}]`
                   )}
                   style={col.width ? { width: col.width } : undefined}
@@ -161,9 +169,10 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     <td
                       key={colIdx}
                       className={cn(
-                        'text-sm py-2 align-middle whitespace-nowrap',
-                        col.align === 'left' ? 'pl-2 pr-4 text-left' : 'px-4 text-center',
-                        col.align === 'right' && 'px-4 text-right'
+                        'text-sm align-middle whitespace-nowrap',
+                        cellY,
+                        col.align === 'left' ? `${leftCellX} text-left` : `${cellX} text-center`,
+                        col.align === 'right' && `${cellX} text-right`
                       )}
                     >
                       {cellRenderer(row, col, colIdx)}
