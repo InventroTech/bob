@@ -1,6 +1,7 @@
 /** Presentational JSX for the lead card carousel. */
 
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { CustomButton } from "@/components/ui/CustomButton";
 import { FaWhatsapp } from "react-icons/fa";
 import {
@@ -149,6 +150,7 @@ const LeadInfoTile: React.FC<{
 };
 
 export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: () => void }) {
+  const navigate = useNavigate();
   const {
     config,
     isInModal,
@@ -482,17 +484,21 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
       <div className={cn("relative w-full", !isInModal && "overflow-hidden md:overflow-hidden")}>
         <Card className={cn("relative flex w-full flex-col bg-white border-0 shadow-none", !isInModal && "overflow-hidden md:overflow-hidden")}>
           
-          {/* Absolute Mobile Close Button - No touch restrictions, high z-index */}
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 z-[100] md:hidden shadow-sm"
-              aria-label="Close modal"
-            >
-              <X className="h-5 w-5 text-gray-700" />
-            </button>
-          )}
+          {/* Mobile Absolute Close Button - Visible only on small screens */}
+          <button
+            type="button"
+            onClick={() => {
+              if (onClose) {
+                onClose();
+              } else {
+                document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+              }
+            }}
+            className="absolute top-2 right-2 z-[100] flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 p-1.5 shadow-sm hover:bg-slate-200 md:hidden"
+            aria-label="Close modal"
+          >
+            <X className="h-5 w-5 text-slate-700" />
+          </button>
 
           {fetchingNext && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
@@ -508,7 +514,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
             <div className="relative flex flex-wrap items-start justify-between gap-2">
               <div
                 className={cn(
-                  "flex items-center gap-1.5 pr-12 md:pr-0", // Keeps text from overlapping the floating close button
+                  "flex items-center gap-1.5 pr-12 md:pr-0", // Keeps text from overlapping the floating close button on mobile
                   profileClickable && "cursor-pointer"
                 )}
                 onClick={profileClickable ? handleOpenProfile : undefined}
@@ -595,6 +601,8 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                   </div>
                 </div>
               </div>
+
+              {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-3 mt-2 md:mt-0">
                 <CustomButton
                   type="button"
@@ -626,6 +634,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                 >
                   Refresh
                 </CustomButton>
+
                 <CustomButton
                   type="button"
                   variant="outline"
@@ -636,6 +645,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                 >
                   WhatsApp
                 </CustomButton>
+
                 <CustomButton
                   type="button"
                   icon={<Phone className="h-4 w-4" />}
@@ -645,6 +655,21 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                 >
                   {formattedPhoneNumber}
                 </CustomButton>
+
+                {/* Desktop-only Inline Close Button */}
+                <CustomButton
+                  type="button"
+                  variant="outline"
+                  icon={<X className="h-4 w-4" />}
+                  className="hidden md:inline-flex rounded-xl border-[#D0D5DD] bg-white px-3 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#F9FAFB]"
+                  onClick={() => {
+                    if (onClose) {
+                      onClose();
+                    } else {
+                      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+                    }
+                  }}
+                />
               </div>
             </div>
           </div>
