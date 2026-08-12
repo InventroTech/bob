@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 import { Loader2, Send, X } from 'lucide-react';
 import { chatbotService, type ChatMessage, type ChatSource } from '@/lib/api/services/chatbot';
 import { getTenantSlug } from '@/lib/api/config';
-import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import ChatMarkdown from '@/components/chatbot/ChatMarkdown';
 
@@ -32,23 +31,6 @@ function storageKey(): string {
 function preferNewKey(): string {
   const slug = getTenantSlug() || 'default';
   return `pyro_chat_prefer_new:${slug}`;
-}
-
-/** Stable-ish login id from JWT `iat` — changes on new login, not on page refresh/token refresh. */
-function loginStampFromToken(accessToken?: string | null): string | null {
-  if (!accessToken) return null;
-  try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1] || ''));
-    if (payload?.iat == null) return null;
-    return String(payload.iat);
-  } catch {
-    return null;
-  }
-}
-
-function tipDismissedKey(userId: string, loginStamp: string): string {
-  const slug = getTenantSlug() || 'default';
-  return `pyro_sparky_tip_dismissed:${slug}:${userId}:${loginStamp}`;
 }
 
 type SparkyPos = { x: number; y: number };
@@ -116,22 +98,6 @@ function writePreferNew(value: boolean) {
   }
 }
 
-function isTipDismissedForLogin(userId: string, loginStamp: string): boolean {
-  try {
-    return window.localStorage.getItem(tipDismissedKey(userId, loginStamp)) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function dismissTipForLogin(userId: string, loginStamp: string) {
-  try {
-    window.localStorage.setItem(tipDismissedKey(userId, loginStamp), '1');
-  } catch {
-    // ignore
-  }
-}
-
 function toUiMessages(rows: ChatMessage[]): UiMessage[] {
   return rows
     .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -158,7 +124,6 @@ const SparkyAvatar: React.FC<{ className?: string; alt?: string }> = ({
 
 const ChatWidget: React.FC = () => {
   const location = useLocation();
-  const { user, session } = useAuth();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -166,34 +131,15 @@ const ChatWidget: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
-  const [showWelcomeTip, setShowWelcomeTip] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyLoadedRef = useRef(false);
   // Bumps when user clicks New so in-flight history restores are ignored.
   const sessionGenRef = useRef(0);
-  const loginStamp = loginStampFromToken(session?.access_token);
-
-  useEffect(() => {
-    if (!user?.id || !loginStamp) {
-      setShowWelcomeTip(false);
-      return;
-    }
-    // Show once per login (JWT iat). Hidden after dismiss until next login.
-    setShowWelcomeTip(!isTipDismissedForLogin(user.id, loginStamp));
-  }, [user?.id, loginStamp]);
-
-  const dismissWelcomeTip = useCallback(() => {
-    if (user?.id && loginStamp) {
-      dismissTipForLogin(user.id, loginStamp);
-    }
-    setShowWelcomeTip(false);
-  }, [user?.id, loginStamp]);
 
   const openChat = useCallback(() => {
-    dismissWelcomeTip();
     setOpen(true);
-  }, [dismissWelcomeTip]);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -365,9 +311,6 @@ const ChatWidget: React.FC = () => {
     persistConversationId(null);
     writePreferNew(true);
   };
-
-  // Sparky: quiet draggable edge tab everywhere.
-  const isUnmanndApp = true;
 
   const [tabHover, setTabHover] = useState(false);
   const [sparkyPos, setSparkyPos] = useState<SparkyPos>(() =>
@@ -583,139 +526,74 @@ const ChatWidget: React.FC = () => {
     </div>
   ) : null;
 
-  // Unmannd: draggable bubble — drag to place, click to open. Position is remembered.
-  if (isUnmanndApp) {
-    return (
-      <div
-        className="pointer-events-none fixed z-[80]"
-        style={{ left: sparkyPos.x, top: sparkyPos.y }}
-        onMouseEnter={() => !dragging && setTabHover(true)}
-        onMouseLeave={() => setTabHover(false)}
-      >
-        {open ? (
-          <div className="pointer-events-auto absolute bottom-full right-0 mb-2">
-            {chatPanel}
-          </div>
-        ) : null}
-
-        {/* Hover tip bubble */}
-        {!open && tabHover && !dragging ? (
-          <div
-            className={cn(
-              'pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2',
-              'whitespace-nowrap rounded-2xl rounded-bl-md bg-white px-3 py-1.5',
-              'text-xs font-semibold text-[#1A3673] shadow-lg ring-1 ring-black/5'
-            )}
-          >
-            Ask Sparky
-            <span
-              aria-hidden
-              className="absolute -bottom-1 left-4 h-2.5 w-2.5 rotate-45 bg-white shadow-[1px_1px_0_0_rgba(0,0,0,0.06)]"
-            />
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          aria-label={open ? 'Close Sparky' : 'Ask Sparky — drag to move'}
-          aria-expanded={open}
-          title="Drag to move · Click to chat"
-          onPointerDown={onLauncherPointerDown}
-          onPointerMove={onLauncherPointerMove}
-          onPointerUp={endLauncherDrag}
-          onPointerCancel={endLauncherDrag}
-          onClick={() => {
-            // Ignore click after a drag so position changes don't open chat.
-            if (dragRef.current?.moved) {
-              dragRef.current.moved = false;
-              return;
-            }
-            if (open) {
-              setOpen(false);
-            } else {
-              openChat();
-            }
-          }}
-          className={cn(
-            'pointer-events-auto relative flex h-14 w-14 cursor-grab items-center justify-center overflow-hidden',
-            'rounded-full bg-transparent shadow-lg ring-1 ring-black/5',
-            'transition hover:scale-105',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A3673]',
-            'active:cursor-grabbing select-none touch-none',
-            open && 'bg-white ring-2 ring-[#1A3673]',
-            dragging && 'scale-105 opacity-90 shadow-xl'
-          )}
-        >
-          {open ? (
-            <X className="h-6 w-6 text-[#1A3673]" />
-          ) : (
-            <SparkyAvatar className="h-14 w-14 pointer-events-none" alt="" />
-          )}
-        </button>
-      </div>
-    );
-  }
-
-  const launcherButton = (
-    <button
-      type="button"
-      aria-label={open ? 'Close Sparky' : 'Open Sparky'}
-      onClick={() => {
-        if (open) {
-          setOpen(false);
-        } else {
-          openChat();
-        }
-      }}
-      className={cn(
-        'pointer-events-auto relative flex h-16 w-16 items-center justify-center rounded-full',
-        'bg-white shadow-lg ring-1 ring-black/5 transition hover:scale-105',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e4fd6]',
-        !open && 'animate-sparky-bob motion-reduce:animate-none'
-      )}
+  // Draggable launcher for every tenant — drag to place, click to open. Position is remembered.
+  return (
+    <div
+      className="pointer-events-none fixed z-[80]"
+      style={{ left: sparkyPos.x, top: sparkyPos.y }}
+      onMouseEnter={() => !dragging && setTabHover(true)}
+      onMouseLeave={() => setTabHover(false)}
     >
       {open ? (
-        <X className="h-6 w-6 text-[#1e4fd6]" />
-      ) : (
-        <SparkyAvatar
-          className="h-14 w-14 origin-[70%_70%] animate-sparky-wave motion-reduce:animate-none"
-          alt="Open Sparky"
-        />
-      )}
-    </button>
-  );
+        <div className="pointer-events-auto absolute bottom-full right-0 mb-2">
+          {chatPanel}
+        </div>
+      ) : null}
 
-  const welcomeTip = !open && showWelcomeTip ? (
-    <button
-      type="button"
-      onClick={openChat}
-      className={cn(
-        'pointer-events-auto mb-1 animate-sparky-bubble-in',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e4fd6]'
-      )}
-      aria-label="Ask Sparky anything"
-    >
-      <div
+      {/* Hover tip bubble */}
+      {!open && tabHover && !dragging ? (
+        <div
+          className={cn(
+            'pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2',
+            'whitespace-nowrap rounded-2xl rounded-bl-md bg-white px-3 py-1.5',
+            'text-xs font-semibold text-[#1A3673] shadow-lg ring-1 ring-black/5'
+          )}
+        >
+          Ask Sparky
+          <span
+            aria-hidden
+            className="absolute -bottom-1 left-4 h-2.5 w-2.5 rotate-45 bg-white shadow-[1px_1px_0_0_rgba(0,0,0,0.06)]"
+          />
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        aria-label={open ? 'Close Sparky' : 'Ask Sparky — drag to move'}
+        aria-expanded={open}
+        title="Drag to move · Click to chat"
+        onPointerDown={onLauncherPointerDown}
+        onPointerMove={onLauncherPointerMove}
+        onPointerUp={endLauncherDrag}
+        onPointerCancel={endLauncherDrag}
+        onClick={() => {
+          // Ignore click after a drag so position changes don't open chat.
+          if (dragRef.current?.moved) {
+            dragRef.current.moved = false;
+            return;
+          }
+          if (open) {
+            setOpen(false);
+          } else {
+            openChat();
+          }
+        }}
         className={cn(
-          'relative animate-sparky-bubble motion-reduce:animate-none',
-          'max-w-[220px] rounded-2xl rounded-br-md bg-white px-3.5 py-2.5 text-left',
-          'text-sm font-medium text-[#1e4fd6] shadow-lg ring-1 ring-black/5'
+          'pointer-events-auto relative flex h-14 w-14 cursor-grab items-center justify-center overflow-hidden',
+          'rounded-full bg-transparent shadow-lg ring-1 ring-black/5',
+          'transition hover:scale-105',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A3673]',
+          'active:cursor-grabbing select-none touch-none',
+          open && 'bg-white ring-2 ring-[#1A3673]',
+          dragging && 'scale-105 opacity-90 shadow-xl'
         )}
       >
-        <p>Hey! Anything you want to ask?</p>
-        <span
-          aria-hidden
-          className="absolute -bottom-1.5 right-5 h-3 w-3 rotate-45 bg-white shadow-[1px_1px_0_0_rgba(0,0,0,0.06)]"
-        />
-      </div>
-    </button>
-  ) : null;
-
-  return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-[80] flex flex-col items-end gap-3">
-      {chatPanel}
-      {welcomeTip}
-      {launcherButton}
+        {open ? (
+          <X className="h-6 w-6 text-[#1A3673]" />
+        ) : (
+          <SparkyAvatar className="h-14 w-14 pointer-events-none" alt="" />
+        )}
+      </button>
     </div>
   );
 };
