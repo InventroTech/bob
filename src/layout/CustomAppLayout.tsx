@@ -133,6 +133,19 @@ const CustomAppLayout: React.FC = () => {
     collapsed: 96,
   };
 
+  // Expose sidebar offset for global overlays (e.g. Sparky on Unmannd top-left).
+  useEffect(() => {
+    const widthPx = isMobile
+      ? 0
+      : sidebarCollapsed
+        ? sidebarWidths.collapsed
+        : sidebarWidths.expanded;
+    document.documentElement.style.setProperty('--app-sidebar-width', `${widthPx}px`);
+    return () => {
+      document.documentElement.style.removeProperty('--app-sidebar-width');
+    };
+  }, [isMobile, sidebarCollapsed]);
+
   const profileImage = user?.user_metadata?.picture || user?.user_metadata?.avatar_url || '';
   const spoofLabel = getSpoofUserLabel();
   const profileName = isSpoofing() && spoofLabel
@@ -278,6 +291,29 @@ const CustomAppLayout: React.FC = () => {
     }
   };
 
+  // Unmannd / procurement apps: navy active nav to match procurement table headers.
+  // CRM tenants (e.g. praja) keep black.
+  const isUnmanndApp = (() => {
+    const slug = String(tenantSlug || '').toLowerCase();
+    if (/unman+d/.test(slug)) return true;
+    const names = pages.map((p) => String(p.name || '').toLowerCase());
+    const requestPages = names.filter((n) =>
+      /request|procurement|pending approval|vendor identified/.test(n)
+    );
+    return requestPages.length >= 2;
+  })();
+  const activeNavClass = isUnmanndApp
+    ? 'bg-[#1A3673] text-white'
+    : 'bg-black text-white';
+  const activeNavClassMobile = isUnmanndApp
+    ? 'bg-[#1A3673] text-white shadow-sm'
+    : 'bg-black text-white shadow-sm';
+  const brandLogoSrc = isUnmanndApp ? '/pyro-ai-logo.png' : '/fire-logo.png';
+  const brandLogoAlt = isUnmanndApp ? 'Pyro.ai' : 'Pyro';
+  const navItemPad = isUnmanndApp
+    ? { collapsed: 'justify-center px-0 py-1.5', expanded: 'gap-2.5 px-2.5 py-1.5' }
+    : { collapsed: 'justify-center px-0 py-2', expanded: 'gap-3 px-3 py-2' };
+
   const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
     <>
       {pages.map((page) => (
@@ -287,14 +323,14 @@ const CustomAppLayout: React.FC = () => {
           onClick={opts.onNavigate}
           className={({ isActive }) =>
             `flex items-center rounded-xl text-sm font-medium transition ${
-              opts.collapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'
+              opts.collapsed ? navItemPad.collapsed : navItemPad.expanded
             } ${
               isMobile
                 ? isActive
-                  ? 'bg-black text-white shadow-sm'
+                  ? activeNavClassMobile
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 : isActive
-                  ? 'bg-black text-white'
+                  ? activeNavClass
                   : 'text-gray-700 hover:bg-gray-50'
             }`
           }
@@ -358,7 +394,7 @@ const CustomAppLayout: React.FC = () => {
             >
               <Menu className="h-6 w-6" />
             </button>
-            <img src="/fire-logo.png" alt="Pyro" className="h-8 object-contain" />
+            <img src={brandLogoSrc} alt={brandLogoAlt} className="h-8 object-contain" />
             <div className="w-10" />
           </header>
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -372,12 +408,14 @@ const CustomAppLayout: React.FC = () => {
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </button>
-                <img src="/fire-logo.png" alt="Pyro" className="h-8 object-contain" />
+                <img src={brandLogoSrc} alt={brandLogoAlt} className="h-8 object-contain" />
               </div>
-              <nav className="flex-1 space-y-2 overflow-y-auto p-3">
+              <nav
+                className={`flex-1 overflow-y-auto p-3 ${isUnmanndApp ? 'space-y-1' : 'space-y-2'}`}
+              >
                 {renderNavLinks({ collapsed: false, onNavigate: () => setMobileNavOpen(false) })}
               </nav>
-              <div className="border-t p-3 space-y-2">
+              <div className={`border-t p-3 ${isUnmanndApp ? 'space-y-1.5' : 'space-y-2'}`}>
                 <button
                   type="button"
                   className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
@@ -417,7 +455,11 @@ const CustomAppLayout: React.FC = () => {
         style={{ width: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
-            <div className={`flex items-center flex-shrink-0 ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'} pt-6 pb-4 w-full`}>
+            <div
+              className={`flex items-center flex-shrink-0 w-full ${
+                sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'
+              } ${isUnmanndApp ? 'pt-3 pb-2' : 'pt-6 pb-4'}`}
+            >
             {sidebarCollapsed ? (
               <button
                 onClick={() => setSidebarCollapsed(false)}
@@ -429,7 +471,11 @@ const CustomAppLayout: React.FC = () => {
             ) : (
               <>
                 <div className="flex items-center justify-start flex-1">
-                  <img src="/fire-logo.png" alt="Pyro" className="h-auto w-auto max-h-12 object-contain" />
+                  <img
+                    src={brandLogoSrc}
+                    alt={brandLogoAlt}
+                    className={`h-auto w-auto object-contain ${isUnmanndApp ? 'max-h-9' : 'max-h-12'}`}
+                  />
                 </div>
                 <button
                   onClick={() => setSidebarCollapsed(true)}
@@ -442,15 +488,21 @@ const CustomAppLayout: React.FC = () => {
             )}
           </div>
 
-          <nav className={`flex-1 overflow-y-auto space-y-2 py-2 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+          <nav
+            className={`flex-1 overflow-y-auto ${isUnmanndApp ? 'space-y-1 py-1' : 'space-y-2 py-2'} ${
+              sidebarCollapsed ? 'px-2' : 'px-3'
+            }`}
+          >
             {pages.map((page) => (
               <NavLink
                 key={page.id}
                 to={`/app/${tenantSlug}/pages/${page.id}`}
                 className={({ isActive }) =>
-                  `flex items-center rounded-xl ${sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'} text-sm font-medium transition ${
+                  `flex items-center rounded-xl ${
+                    sidebarCollapsed ? navItemPad.collapsed : navItemPad.expanded
+                  } text-sm font-medium transition ${
                     isActive
-                      ? 'bg-black text-white'
+                      ? activeNavClass
                       : 'text-gray-700 hover:bg-gray-50'
                   }`
                 }
@@ -468,7 +520,11 @@ const CustomAppLayout: React.FC = () => {
             ))}
           </nav>
 
-          <div className={`flex-shrink-0 bg-white border-t py-4 space-y-3 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+          <div
+            className={`flex-shrink-0 bg-white border-t ${
+              isUnmanndApp ? 'py-2.5 space-y-2' : 'py-4 space-y-3'
+            } ${sidebarCollapsed ? 'px-2' : 'px-3'}`}
+          >
             <button className={`flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500">
                 <Bell className="h-4 w-4" />
@@ -476,20 +532,20 @@ const CustomAppLayout: React.FC = () => {
               {!sidebarCollapsed && <span>Notifications</span>}
             </button>
 
-            <div className="border-t pt-4 space-y-2">
+            <div className={`border-t space-y-2 ${isUnmanndApp ? 'pt-2.5' : 'pt-4'}`}>
               <div className={`flex items-center rounded-xl px-3 py-2 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
               {sidebarCollapsed ? (
                 <img
                   src={profileImage || '/default-avatar.png'}
                   alt={profileName}
-                  className="h-10 w-10 rounded-full object-cover"
+                  className={`${isUnmanndApp ? 'h-8 w-8' : 'h-10 w-10'} rounded-full object-cover`}
                 />
               ) : (
                 <div className="flex items-center gap-3">
                   <img
                     src={profileImage || '/default-avatar.png'}
                     alt={profileName}
-                    className="h-10 w-10 rounded-full object-cover"
+                    className={`${isUnmanndApp ? 'h-8 w-8' : 'h-10 w-10'} rounded-full object-cover`}
                   />
                   <p className="text-sm font-semibold text-gray-900">{profileName}</p>
                 </div>
@@ -548,8 +604,8 @@ const CustomAppLayout: React.FC = () => {
             </button>
           </div>
         )}
-        <div className="min-h-screen w-full">
-          <Outlet context={{ tenantId, userRoleId, pages }} />
+        <div className={isUnmanndApp ? 'h-full min-h-0 w-full' : 'min-h-screen w-full'}>
+          <Outlet context={{ tenantId, userRoleId, pages, isUnmanndApp }} />
         </div>
       </main>
     </div>
