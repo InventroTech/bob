@@ -12,6 +12,7 @@ import { authService, membershipService } from '@/lib/api';
 import { signOutAndClearSession } from '@/lib/auth/authSessionService';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { clearAllInventoryRequestFormDrafts } from '@/components/page-builder/inventory-request-form/draftStorage';
 
 const ACCESS_CACHE_KEY = 'pyro_access_check';
 const SESSION_CHECK_MS = 15_000;
@@ -22,6 +23,7 @@ export function clearLocalAuthCaches(): void {
   try {
     sessionStorage.removeItem(ACCESS_CACHE_KEY);
     sessionStorage.removeItem('ticketCarouselState');
+    clearAllInventoryRequestFormDrafts();
   } catch {
     /* ignore */
   }

@@ -14,7 +14,7 @@ import {
 import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
 import { supabase } from '@/lib/supabase';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
-import { getEffectiveToken, fetchPagesForRole } from '@/lib/auth/spoof';
+import { getEffectiveToken, fetchPagesForRole, useSpoofUserId } from '@/lib/auth/spoof';
 
 import {
   RECORDS_URL,
@@ -31,6 +31,7 @@ import type {
   RequestCategory,
   VendorOption,
 } from './types';
+import type { InventoryRequestFormDraft } from './draftStorage';
 import {
   normalizeIndianPincode,
   normalizeProductName,
@@ -38,6 +39,13 @@ import {
   toVendorStorageName,
   newEmptyItem,
 } from './utils';
+import {
+  clearDraft,
+  isMeaningfulDraft,
+  loadDraft,
+  makeDraftKey,
+  saveDraft,
+} from './draftStorage';
 
 const normalizePageName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -135,6 +143,8 @@ export function useInventoryRequestForm({
 }: InventoryRequestFormProps) {
   const isProcurement = variant === 'procurement';
   const { user, session } = useAuth();
+  const spoofUserId = useSpoofUserId();
+  const draftOwnerId = spoofUserId || user?.id || null;
   const navigate = useNavigate();
   const { tenantSlug, pageId: currentPageId } = useParams<{
     tenantSlug?: string;
@@ -142,6 +152,15 @@ export function useInventoryRequestForm({
   }>();
 
   const entityType = config?.entityType ?? 'inventory_request';
+  const draftKey = draftOwnerId
+    ? makeDraftKey({
+        userId: draftOwnerId,
+        tenantSlug,
+        pageId: currentPageId,
+        entityType,
+        variant: isProcurement ? 'procurement' : 'default',
+      })
+    : '';
   // Navy chrome for Unmannd: procurement form, unmannd entity, or unmannd tenant slug.
   const useNavyTheme =
     isProcurement ||
@@ -189,6 +208,13 @@ export function useInventoryRequestForm({
   const [focusedVendorId, setFocusedVendorId] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState<string>('');
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  const appliedOwnerIdRef = useRef<string | null>(null);
+  const snapshotRef = useRef<(InventoryRequestFormDraft & { key: string }) | null>(null);
+  const persistTimerRef = useRef<number | null>(null);
+  const skipPersistRef = useRef(false);
+  const userIdRef = useRef(draftOwnerId);
+  userIdRef.current = draftOwnerId;
 
   const requesterDisplay =
     requesterNameFromMembership ||
@@ -235,6 +261,124 @@ export function useInventoryRequestForm({
   useEffect(() => {
     void loadProjectSuggestions();
   }, [loadProjectSuggestions]);
+
+  const applyEmptyForm = useCallback(() => {
+    setProjectPurpose('');
+    setRequestCategory('');
+    setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
+    setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
+    setItems([newEmptyItem()]);
+    setPriceDraftByItemId({});
+    setFieldShakeNonce({});
+  }, []);
+
+  const applyDraftToForm = useCallback((draft: InventoryRequestFormDraft) => {
+    setProjectPurpose(draft.projectPurpose);
+    setRequestCategory(draft.requestCategory);
+    setDeliveryPincode(draft.deliveryPincode || DEFAULT_DELIVERY_PINCODE);
+    setDeliveryAddress(draft.deliveryAddress || DEFAULT_DELIVERY_ADDRESS);
+    setItems(draft.items.length > 0 ? draft.items : [newEmptyItem()]);
+    setPriceDraftByItemId(draft.priceDraftByItemId ?? {});
+    setFieldShakeNonce({});
+  }, []);
+
+  // Only record a snapshot once this owner's fields are on screen, so we never
+  // write requestor A's values into team lead / manager / another requestor's slot.
+  if (appliedOwnerIdRef.current === draftOwnerId && draftKey && draftOwnerId) {
+    snapshotRef.current = {
+      key: draftKey,
+      userId: draftOwnerId,
+      projectPurpose,
+      requestCategory,
+      deliveryPincode,
+      deliveryAddress,
+      items,
+      priceDraftByItemId,
+      persistedAt: Date.now(),
+    };
+  }
+
+  useEffect(() => {
+    skipPersistRef.current = true;
+
+    const prev = snapshotRef.current;
+    if (prev?.userId && prev.key && draftOwnerId && prev.userId !== draftOwnerId) {
+      const { key: prevKey, ...prevDraft } = prev;
+      if (isMeaningfulDraft(prevDraft)) {
+        saveDraft(prevKey, { ...prevDraft, persistedAt: Date.now() });
+      } else {
+        clearDraft(prevKey);
+      }
+      snapshotRef.current = null;
+    }
+
+    if (!draftOwnerId || !draftKey) {
+      appliedOwnerIdRef.current = null;
+      applyEmptyForm();
+      setDraftHydrated(false);
+      return;
+    }
+
+    const draft = loadDraft(draftKey, draftOwnerId);
+    if (draft) applyDraftToForm(draft);
+    else applyEmptyForm();
+    appliedOwnerIdRef.current = draftOwnerId;
+    setDraftHydrated(true);
+  }, [draftKey, draftOwnerId, applyEmptyForm, applyDraftToForm]);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    if (!draftOwnerId || !draftKey) return;
+    if (appliedOwnerIdRef.current !== draftOwnerId) return;
+
+    const persist = () => {
+      persistTimerRef.current = null;
+      const snap = snapshotRef.current;
+      if (!snap?.key || !snap.userId) return;
+      if (snap.userId !== userIdRef.current) return;
+      const { key, ...draft } = snap;
+      if (!isMeaningfulDraft(draft)) {
+        clearDraft(key);
+        return;
+      }
+      saveDraft(key, { ...draft, persistedAt: Date.now() });
+    };
+    if (persistTimerRef.current != null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = window.setTimeout(persist, 250);
+    return () => {
+      if (persistTimerRef.current != null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      if (!skipPersistRef.current && userIdRef.current) persist();
+    };
+  }, [
+    draftHydrated,
+    draftKey,
+    draftOwnerId,
+    projectPurpose,
+    requestCategory,
+    deliveryPincode,
+    deliveryAddress,
+    items,
+    priceDraftByItemId,
+  ]);
+
+  const discardDraft = useCallback(() => {
+    skipPersistRef.current = true;
+    if (persistTimerRef.current != null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    snapshotRef.current = null;
+    if (draftKey) clearDraft(draftKey);
+  }, [draftKey]);
 
   const rememberProjectSuggestion = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -773,6 +917,7 @@ export function useInventoryRequestForm({
         );
       }
       rememberProjectSuggestion(projectPurpose);
+      discardDraft();
 
       const navigateAfterCreate = async () => {
         // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
@@ -830,13 +975,7 @@ export function useInventoryRequestForm({
 
         if (!redirected) {
           setShowSubmitSuccess(false);
-          setItems([newEmptyItem()]);
-          setProjectPurpose('');
-          setRequestCategory('');
-          setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
-          setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
-          setPriceDraftByItemId({});
-          setFieldShakeNonce({});
+          applyEmptyForm();
         }
       };
 
@@ -862,16 +1001,11 @@ export function useInventoryRequestForm({
   };
 
   const handleClear = () => {
-    setItems([newEmptyItem()]);
+    applyEmptyForm();
     setAddVendorForItemId(null);
     setNewVendorName('');
     setNewVendorLink('');
-    setPriceDraftByItemId({});
-    setProjectPurpose('');
-    setRequestCategory('');
-    setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
-    setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
-    setFieldShakeNonce({});
+    discardDraft();
     toast.success('Form cleared.');
   };
 
