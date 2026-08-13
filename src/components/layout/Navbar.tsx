@@ -13,6 +13,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebar } from "@/components/ui/sidebar";
+import { SparkyHeaderButton } from "@/components/chatbot/ChatWidget";
 
 interface UserInfo {
   name: string;
@@ -69,6 +70,7 @@ const Navbar = ({ user }: NavbarProps) => {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <SparkyHeaderButton />
           <Button variant="outline" size="icon">
             <Bell className="h-5 w-5" />
             <span className="sr-only">Notifications</span>

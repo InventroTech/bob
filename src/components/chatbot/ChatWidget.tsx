@@ -5,6 +5,14 @@ import { chatbotService, type ChatMessage, type ChatSource } from '@/lib/api/ser
 import { getTenantSlug } from '@/lib/api/config';
 import { cn } from '@/lib/utils';
 import ChatMarkdown from '@/components/chatbot/ChatMarkdown';
+import { useAuth } from '@/hooks/useAuth';
+import {
+  type SparkyAnchor,
+  anchorFromElement,
+  setSparkyChatOpen,
+  subscribeSparkyChat,
+  toggleSparkyChat,
+} from '@/components/chatbot/sparkyChatStore';
 
 const SPARKY_AVATAR = '/chatbot/sparky.png';
 const SPARKY_NAME = 'Sparky';
@@ -23,6 +31,9 @@ const SUGGESTIONS = [
   'List my pages',
 ];
 
+const SPARKY_WELCOME_TEXT = 'Hi, Do you need anything?';
+const SPARKY_SAY_HI_KEY = 'pyro_sparky_say_hi';
+
 function storageKey(): string {
   const slug = getTenantSlug() || 'default';
   return `pyro_chat_conversation_id:${slug}`;
@@ -33,49 +44,52 @@ function preferNewKey(): string {
   return `pyro_chat_prefer_new:${slug}`;
 }
 
-type SparkyPos = { x: number; y: number };
+const SPARKY_PANEL_MAX_WIDTH = 380;
+const SPARKY_PANEL_MAX_HEIGHT = 560;
+const SPARKY_VIEWPORT_GUTTER = 8;
 
-function sparkyPosKey(): string {
-  const slug = getTenantSlug() || 'default';
-  return `pyro_sparky_pos:${slug}`;
+function sparkyPanelWidth(): number {
+  if (typeof window === 'undefined') return SPARKY_PANEL_MAX_WIDTH;
+  return Math.min(SPARKY_PANEL_MAX_WIDTH, window.innerWidth - SPARKY_VIEWPORT_GUTTER * 2);
 }
 
-function readSparkyPos(): SparkyPos | null {
-  try {
-    const raw = window.localStorage.getItem(sparkyPosKey());
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as SparkyPos;
-    if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') return parsed;
-  } catch {
-    // ignore
+type SparkyPanelBox = { left: number; top: number; width: number; height: number };
+
+function clampSparkyPanelBox(anchor: SparkyAnchor | null): SparkyPanelBox {
+  if (typeof window === 'undefined') {
+    return { left: 0, top: 8, width: SPARKY_PANEL_MAX_WIDTH, height: SPARKY_PANEL_MAX_HEIGHT };
   }
-  return null;
-}
 
-function writeSparkyPos(pos: SparkyPos) {
-  try {
-    window.localStorage.setItem(sparkyPosKey(), JSON.stringify(pos));
-  } catch {
-    // ignore
+  const width = sparkyPanelWidth();
+  const maxHeight = Math.min(SPARKY_PANEL_MAX_HEIGHT, Math.round(window.innerHeight * 0.7));
+
+  if (!anchor) {
+    const height = Math.max(220, Math.min(maxHeight, window.innerHeight - SPARKY_VIEWPORT_GUTTER * 2));
+    return {
+      left: Math.max(SPARKY_VIEWPORT_GUTTER, window.innerWidth - width - SPARKY_VIEWPORT_GUTTER),
+      top: Math.max(SPARKY_VIEWPORT_GUTTER, window.innerHeight - height - SPARKY_VIEWPORT_GUTTER),
+      width,
+      height,
+    };
   }
-}
 
-function defaultSparkyPos(): SparkyPos {
-  if (typeof window === 'undefined') return { x: 0, y: 200 };
-  return {
-    x: Math.max(8, window.innerWidth - 56),
-    y: Math.round(window.innerHeight / 2 - 24),
-  };
-}
+  const preferredLeft = anchor.right + SPARKY_VIEWPORT_GUTTER;
+  const left =
+    preferredLeft + width <= window.innerWidth - SPARKY_VIEWPORT_GUTTER
+      ? preferredLeft
+      : Math.max(SPARKY_VIEWPORT_GUTTER, window.innerWidth - width - SPARKY_VIEWPORT_GUTTER);
 
-function clampSparkyPos(pos: SparkyPos, size = { w: 56, h: 48 }): SparkyPos {
-  if (typeof window === 'undefined') return pos;
-  const maxX = Math.max(8, window.innerWidth - size.w);
-  const maxY = Math.max(8, window.innerHeight - size.h);
-  return {
-    x: Math.min(maxX, Math.max(8, pos.x)),
-    y: Math.min(maxY, Math.max(8, pos.y)),
-  };
+  const height = Math.max(
+    220,
+    Math.min(maxHeight, Math.max(anchor.bottom - SPARKY_VIEWPORT_GUTTER, window.innerHeight * 0.55))
+  );
+  const preferredTop = anchor.bottom - height;
+  const top = Math.min(
+    Math.max(SPARKY_VIEWPORT_GUTTER, preferredTop),
+    window.innerHeight - height - SPARKY_VIEWPORT_GUTTER
+  );
+
+  return { left, top, width, height };
 }
 
 function readPreferNew(): boolean {
@@ -96,6 +110,63 @@ function writePreferNew(value: boolean) {
   } catch {
     // ignore
   }
+}
+
+function loginStampFromToken(accessToken?: string | null): string | null {
+  if (!accessToken) return null;
+  try {
+    const payload = JSON.parse(atob(accessToken.split('.')[1] || ''));
+    if (payload?.iat == null) return null;
+    return String(payload.iat);
+  } catch {
+    return null;
+  }
+}
+
+function welcomeTipKey(userId: string, loginStamp: string): string {
+  const slug = getTenantSlug() || 'default';
+  return `pyro_sparky_welcome_tip:${slug}:${userId}:${loginStamp}`;
+}
+
+function useSparkyWelcomeTip() {
+  const { user, session } = useAuth();
+  const [showTip, setShowTip] = useState(false);
+  const loginStamp = loginStampFromToken(session?.access_token);
+
+  useEffect(() => {
+    if (!user?.id || !loginStamp) {
+      setShowTip(false);
+      return;
+    }
+    try {
+      setShowTip(window.localStorage.getItem(welcomeTipKey(user.id, loginStamp)) !== '1');
+    } catch {
+      setShowTip(true);
+    }
+  }, [user?.id, loginStamp]);
+
+  const dismissWelcomeTip = useCallback(
+    (sayHiInChat = false) => {
+      if (user?.id && loginStamp) {
+        try {
+          window.localStorage.setItem(welcomeTipKey(user.id, loginStamp), '1');
+        } catch {
+          // ignore
+        }
+      }
+      if (sayHiInChat) {
+        try {
+          window.sessionStorage.setItem(SPARKY_SAY_HI_KEY, '1');
+        } catch {
+          // ignore
+        }
+      }
+      setShowTip(false);
+    },
+    [user?.id, loginStamp]
+  );
+
+  return { showTip, dismissWelcomeTip };
 }
 
 function toUiMessages(rows: ChatMessage[]): UiMessage[] {
@@ -122,9 +193,178 @@ const SparkyAvatar: React.FC<{ className?: string; alt?: string }> = ({
   />
 );
 
+function SparkyWelcomeBubble({
+  onOpen,
+  onDismiss,
+  placement = 'above',
+}: {
+  onOpen: () => void;
+  onDismiss: () => void;
+  placement?: 'above' | 'right';
+}) {
+  return (
+    <div
+      className={cn(
+        'absolute z-30 animate-sparky-bubble-in',
+        placement === 'right'
+          ? 'left-full top-1/2 ml-3 -translate-y-1/2'
+          : 'bottom-full left-0 mb-3'
+      )}
+    >
+      <div className="relative max-w-[230px]">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="block w-full rounded-[22px] border-[3px] border-white bg-gradient-to-b from-[#F4F8FF] to-white px-4 py-3 text-left shadow-[0_10px_28px_rgba(15,23,42,0.16)]"
+        >
+          <p className="pr-4 text-sm font-semibold leading-snug text-[#1A3673]">
+            Hi, Do you need anything?
+          </p>
+        </button>
+        <button
+          type="button"
+          aria-label="Dismiss welcome"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss();
+          }}
+          className="absolute right-1.5 top-1.5 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+        >
+          <X className="h-3 w-3" />
+        </button>
+        <span
+          aria-hidden
+          className={cn(
+            'absolute h-3.5 w-3.5 rotate-45 border-white bg-white shadow-[2px_2px_6px_rgba(15,23,42,0.08)]',
+            placement === 'right'
+              ? 'left-0 top-1/2 -ml-[8px] -translate-y-1/2 border-b-[3px] border-l-[3px]'
+              : 'left-5 -bottom-[8px] border-b-[3px] border-r-[3px]'
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function SparkySidebarButton({
+  collapsed = false,
+  className,
+  onToggle,
+  placePanelAway = false,
+}: {
+  collapsed?: boolean;
+  className?: string;
+  onToggle?: () => void;
+  placePanelAway?: boolean;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const { showTip, dismissWelcomeTip } = useSparkyWelcomeTip();
+
+  useEffect(() => subscribeSparkyChat((state) => setOpen(state.open)), []);
+
+  const openSparky = () => {
+    dismissWelcomeTip(true);
+    const nextAnchor =
+      placePanelAway || !buttonRef.current ? null : anchorFromElement(buttonRef.current);
+    onToggle?.();
+    toggleSparkyChat(nextAnchor);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={open ? 'Close Sparky' : 'Ask Sparky'}
+        aria-expanded={open}
+        onClick={openSparky}
+        className={cn(
+          'flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium transition',
+          collapsed ? 'justify-center' : 'gap-3',
+          open
+            ? 'bg-[#1A3673] text-white shadow-[0_2px_10px_rgba(26,54,115,0.28)]'
+            : 'text-gray-600 hover:bg-gray-50',
+          className
+        )}
+      >
+        <div className="relative h-8 w-8 shrink-0">
+          <div
+            className={cn(
+              'flex h-8 w-8 items-center justify-center overflow-hidden rounded-full',
+              open ? 'bg-white/15' : 'bg-gray-100',
+              showTip && !open && 'animate-sparky-bob'
+            )}
+          >
+            <SparkyAvatar
+              className={cn('h-7 w-7', showTip && !open && 'animate-sparky-wave')}
+              alt=""
+            />
+          </div>
+        </div>
+        {!collapsed && <span>Sparky</span>}
+      </button>
+      {showTip && !open ? (
+        <SparkyWelcomeBubble
+          placement={collapsed ? 'right' : 'above'}
+          onOpen={openSparky}
+          onDismiss={() => dismissWelcomeTip(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export function SparkyHeaderButton() {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const { showTip, dismissWelcomeTip } = useSparkyWelcomeTip();
+
+  useEffect(() => subscribeSparkyChat((state) => setOpen(state.open)), []);
+
+  const openSparky = () => {
+    dismissWelcomeTip(true);
+    toggleSparkyChat(buttonRef.current ? anchorFromElement(buttonRef.current) : null);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={open ? 'Close Sparky' : 'Ask Sparky'}
+        aria-expanded={open}
+        onClick={openSparky}
+        className={cn(
+          'relative flex h-10 w-10 items-center justify-center rounded-full border bg-white transition',
+          open ? 'ring-2 ring-[#1A3673]' : 'hover:bg-gray-50',
+          showTip && !open && 'animate-sparky-bob'
+        )}
+      >
+        <SparkyAvatar
+          className={cn(
+            'h-8 w-8 overflow-hidden rounded-full',
+            showTip && !open && 'animate-sparky-wave'
+          )}
+          alt=""
+        />
+      </button>
+      {showTip && !open ? (
+        <SparkyWelcomeBubble
+          placement="above"
+          onOpen={openSparky}
+          onDismiss={() => dismissWelcomeTip(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 const ChatWidget: React.FC = () => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<SparkyAnchor | null>(null);
+  const [, setLayoutTick] = useState(0);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -134,12 +374,33 @@ const ChatWidget: React.FC = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyLoadedRef = useRef(false);
-  // Bumps when user clicks New so in-flight history restores are ignored.
   const sessionGenRef = useRef(0);
 
-  const openChat = useCallback(() => {
-    setOpen(true);
-  }, []);
+  useEffect(
+    () =>
+      subscribeSparkyChat((state) => {
+        setOpen(state.open);
+        setAnchor(state.anchor);
+      }),
+    []
+  );
+
+  useEffect(() => {
+    if (!open || loadingHistory || messages.length > 0) return;
+    try {
+      if (window.sessionStorage.getItem(SPARKY_SAY_HI_KEY) !== '1') return;
+      window.sessionStorage.removeItem(SPARKY_SAY_HI_KEY);
+    } catch {
+      return;
+    }
+    setMessages([
+      {
+        id: 'sparky-welcome',
+        role: 'assistant',
+        content: SPARKY_WELCOME_TEXT,
+      },
+    ]);
+  }, [open, loadingHistory, messages.length]);
 
   useEffect(() => {
     if (open) {
@@ -163,7 +424,6 @@ const ChatWidget: React.FC = () => {
   const loadConversation = useCallback(
     async (id: string, gen: number) => {
       const rows = await chatbotService.getMessages(id);
-      // User clicked New (or another restore superseded this one).
       if (gen !== sessionGenRef.current) return false;
       setConversationId(id);
       setMessages(toUiMessages(rows));
@@ -174,7 +434,6 @@ const ChatWidget: React.FC = () => {
     [persistConversationId]
   );
 
-  // Restore only the saved conversation id — never auto-pick "latest".
   useEffect(() => {
     if (historyLoadedRef.current) return;
     historyLoadedRef.current = true;
@@ -183,7 +442,6 @@ const ChatWidget: React.FC = () => {
     const restore = async () => {
       const gen = sessionGenRef.current;
 
-      // Fresh "New chat" session — show empty UI immediately, skip network.
       if (readPreferNew()) {
         setLoadingHistory(false);
         setConversationId(null);
@@ -198,7 +456,6 @@ const ChatWidget: React.FC = () => {
         savedId = null;
       }
 
-      // Nothing to restore.
       if (!savedId) {
         setLoadingHistory(false);
         return;
@@ -211,14 +468,12 @@ const ChatWidget: React.FC = () => {
         const ok = await loadConversation(savedId, gen);
         if (!ok) return;
       } catch {
-        // Stale id — start clean instead of pulling another thread.
         if (gen === sessionGenRef.current) {
           persistConversationId(null);
           setConversationId(null);
           setMessages([]);
         }
       } finally {
-        // Always clear spinner for this generation (and no-ops if New already did).
         if (!cancelled) setLoadingHistory(false);
       }
     };
@@ -300,7 +555,6 @@ const ChatWidget: React.FC = () => {
   };
 
   const startNew = () => {
-    // Invalidate any in-flight restore / ask applied after this click.
     sessionGenRef.current += 1;
     setLoadingHistory(false);
     setConversationId(null);
@@ -312,83 +566,16 @@ const ChatWidget: React.FC = () => {
     writePreferNew(true);
   };
 
-  const [tabHover, setTabHover] = useState(false);
-  const [sparkyPos, setSparkyPos] = useState<SparkyPos>(() =>
-    clampSparkyPos(readSparkyPos() ?? defaultSparkyPos())
-  );
-  const dragRef = useRef<{
-    active: boolean;
-    moved: boolean;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-    pointerId: number;
-  } | null>(null);
-  const [dragging, setDragging] = useState(false);
-
   useEffect(() => {
-    const onResize = () => setSparkyPos((p) => clampSparkyPos(p));
+    const onResize = () => setLayoutTick((n) => n + 1);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const onLauncherPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = {
-      active: true,
-      moved: false,
-      startX: e.clientX,
-      startY: e.clientY,
-      originX: sparkyPos.x,
-      originY: sparkyPos.y,
-      pointerId: e.pointerId,
-    };
-    setDragging(true);
-  };
-
-  const onLauncherPointerMove = (e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag?.active) return;
-    const dx = e.clientX - drag.startX;
-    const dy = e.clientY - drag.startY;
-    if (!drag.moved && dx * dx + dy * dy > 16) {
-      drag.moved = true;
-    }
-    if (drag.moved) {
-      setSparkyPos(
-        clampSparkyPos({
-          x: drag.originX + dx,
-          y: drag.originY + dy,
-        })
-      );
-    }
-  };
-
-  const endLauncherDrag = (e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag?.active) return;
-    drag.active = false;
-    setDragging(false);
-    try {
-      e.currentTarget.releasePointerCapture(drag.pointerId);
-    } catch {
-      // ignore
-    }
-    if (drag.moved) {
-      setSparkyPos((pos) => {
-        const next = clampSparkyPos(pos);
-        writeSparkyPos(next);
-        return next;
-      });
-    }
-  };
-
   const chatPanel = open ? (
     <div
       className={cn(
-        'pointer-events-auto flex h-[min(560px,70vh)] w-[min(380px,calc(100vw-2rem))]',
+        'pointer-events-auto flex h-full w-full min-w-0 max-w-full box-border',
         'flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl'
       )}
     >
@@ -413,7 +600,7 @@ const ChatWidget: React.FC = () => {
           <button
             type="button"
             aria-label="Close chat"
-            onClick={() => setOpen(false)}
+            onClick={() => setSparkyChatOpen(false)}
             className="rounded-md p-1 hover:bg-white/15"
           >
             <X className="h-4 w-4" />
@@ -421,7 +608,7 @@ const ChatWidget: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-muted/30 px-3 py-3">
+      <div className="min-w-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden bg-muted/30 px-3 py-3">
         {loadingHistory && messages.length === 0 && (
           <div className="flex items-center gap-2 px-1 py-4 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -429,7 +616,7 @@ const ChatWidget: React.FC = () => {
           </div>
         )}
 
-        {!loadingHistory && messages.length === 0 && (
+        {!loadingHistory && !messages.some((m) => m.role === 'user') && (
           <div className="space-y-3 px-1 py-2">
             <div className="flex flex-wrap gap-2">
               {SUGGESTIONS.map((s) => (
@@ -498,7 +685,7 @@ const ChatWidget: React.FC = () => {
       )}
 
       <form
-        className="flex items-end gap-2 border-t border-border bg-background p-3"
+        className="flex w-full min-w-0 max-w-full items-end gap-2 border-t border-border bg-background p-3"
         onSubmit={(e) => {
           e.preventDefault();
           void send(input);
@@ -512,7 +699,7 @@ const ChatWidget: React.FC = () => {
           rows={1}
           placeholder="Ask Sparky…"
           disabled={sending}
-          className="max-h-28 min-h-[40px] flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+          className="max-h-28 min-h-[40px] min-w-0 w-full flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
         />
         <button
           type="submit"
@@ -526,74 +713,21 @@ const ChatWidget: React.FC = () => {
     </div>
   ) : null;
 
-  // Draggable launcher for every tenant — drag to place, click to open. Position is remembered.
+  const panelBox = open ? clampSparkyPanelBox(anchor) : null;
+
+  if (!open || !panelBox) return null;
+
   return (
     <div
-      className="pointer-events-none fixed z-[80]"
-      style={{ left: sparkyPos.x, top: sparkyPos.y }}
-      onMouseEnter={() => !dragging && setTabHover(true)}
-      onMouseLeave={() => setTabHover(false)}
+      className="pointer-events-auto fixed z-[80]"
+      style={{
+        left: panelBox.left,
+        top: panelBox.top,
+        width: panelBox.width,
+        height: panelBox.height,
+      }}
     >
-      {open ? (
-        <div className="pointer-events-auto absolute bottom-full right-0 mb-2">
-          {chatPanel}
-        </div>
-      ) : null}
-
-      {/* Hover tip bubble */}
-      {!open && tabHover && !dragging ? (
-        <div
-          className={cn(
-            'pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2',
-            'whitespace-nowrap rounded-2xl rounded-bl-md bg-white px-3 py-1.5',
-            'text-xs font-semibold text-[#1A3673] shadow-lg ring-1 ring-black/5'
-          )}
-        >
-          Ask Sparky
-          <span
-            aria-hidden
-            className="absolute -bottom-1 left-4 h-2.5 w-2.5 rotate-45 bg-white shadow-[1px_1px_0_0_rgba(0,0,0,0.06)]"
-          />
-        </div>
-      ) : null}
-
-      <button
-        type="button"
-        aria-label={open ? 'Close Sparky' : 'Ask Sparky — drag to move'}
-        aria-expanded={open}
-        title="Drag to move · Click to chat"
-        onPointerDown={onLauncherPointerDown}
-        onPointerMove={onLauncherPointerMove}
-        onPointerUp={endLauncherDrag}
-        onPointerCancel={endLauncherDrag}
-        onClick={() => {
-          // Ignore click after a drag so position changes don't open chat.
-          if (dragRef.current?.moved) {
-            dragRef.current.moved = false;
-            return;
-          }
-          if (open) {
-            setOpen(false);
-          } else {
-            openChat();
-          }
-        }}
-        className={cn(
-          'pointer-events-auto relative flex h-14 w-14 cursor-grab items-center justify-center overflow-hidden',
-          'rounded-full bg-transparent shadow-lg ring-1 ring-black/5',
-          'transition hover:scale-105',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A3673]',
-          'active:cursor-grabbing select-none touch-none',
-          open && 'bg-white ring-2 ring-[#1A3673]',
-          dragging && 'scale-105 opacity-90 shadow-xl'
-        )}
-      >
-        {open ? (
-          <X className="h-6 w-6 text-[#1A3673]" />
-        ) : (
-          <SparkyAvatar className="h-14 w-14 pointer-events-none" alt="" />
-        )}
-      </button>
+      {chatPanel}
     </div>
   );
 };
