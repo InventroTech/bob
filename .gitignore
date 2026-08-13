@@ -26,3 +26,9 @@ dist-ssr
 # Cursor local noise (keep .cursor/BUGBOT.md tracked)
 .cursor/*.log
 .cursor/**/*.log
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
