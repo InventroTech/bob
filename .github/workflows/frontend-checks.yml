@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   frontend-checks:
     name: Run React Quality Checks
@@ -35,6 +38,9 @@ jobs:
   playwright:
     name: Run Playwright E2E
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
