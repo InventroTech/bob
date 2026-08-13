@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "src/components/page-builder/scripts/pushDummyLeads.js"] },
+  { ignores: ["dist", "e2e/**", "playwright-report/**", "test-results/**", "playwright.config.ts", "src/components/page-builder/scripts/pushDummyLeads.js"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
