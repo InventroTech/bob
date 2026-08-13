@@ -79,8 +79,7 @@ export function LeadTableView(props: LeadTableModel) {
     apiClient,
   } = props;
 
-  // DYNAMIC TITLE LOGIC based on URL path
-  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  // Identify if this table is being used for Inventory/Unmanned requests instead of CRM Leads
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
   const forceEntityType = String(
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
@@ -100,23 +99,42 @@ export function LeadTableView(props: LeadTableModel) {
           )
         )
     );
-  // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
-  const configuredTitle = (config?.title || '').trim();
-  let displayTitle =
-    isInventoryLikeForTitle &&
-    (!configuredTitle || configuredTitle.toLowerCase() === 'all leads')
-      ? undefined
-      : configuredTitle || undefined;
 
-  if (!displayTitle && !isInventoryLikeForTitle) {
-    if (pathname.includes('follow')) {
-      displayTitle = "Follow Up Leads";
-    } else if (pathname.includes('pending')) {
-      displayTitle = "Pending Leads";
-    } else {
-      displayTitle = "All Leads";
+  // DYNAMIC TITLE LOGIC: Intelligently infer the title from the active sidebar item or URL
+  // This overrides incorrect config.title values passed by the builder.
+  const [mobileTitle, setMobileTitle] = React.useState(() => {
+    const configured = (config?.title || '').trim();
+    if (isInventoryLikeForTitle && (!configured || configured.toLowerCase() === 'all leads')) return '';
+    return configured || 'All Leads';
+  });
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const configured = (config?.title || '').trim();
+      
+      // If it's an inventory page, just use the configured title (or blank if it defaulted to "All Leads")
+      if (isInventoryLikeForTitle) {
+        setMobileTitle((!configured || configured.toLowerCase() === 'all leads') ? '' : configured);
+        return;
+      }
+
+      // For CRM leads, intelligently detect the page to override wrong builder configs
+      const activeSidebarText = document.querySelector('.bg-black')?.textContent?.toLowerCase() || '';
+      const pageTitle = document.title.toLowerCase();
+      const currentPath = window.location.pathname.toLowerCase();
+      
+      if (activeSidebarText.includes('follow up') || pageTitle.includes('follow up') || currentPath.includes('follow')) {
+        setMobileTitle('Follow Up Leads');
+      } else if (activeSidebarText.includes('pending') || pageTitle.includes('pending') || currentPath.includes('pending')) {
+        setMobileTitle('Pending Leads');
+      } else if (activeSidebarText.includes('halocom') || pageTitle.includes('halocom') || currentPath.includes('halocom')) {
+        setMobileTitle('Halocom Leads');
+      } else {
+        setMobileTitle(configured || "All Leads");
+      }
     }
-  }
+  }, [config?.title, isInventoryLikeForTitle]);
+
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
@@ -148,34 +166,20 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle =
-    isInventoryLikeForTitle && configuredTitle.toLowerCase() === 'all leads'
-      ? ''
-      : configuredTitle;
-
   return (
     <>
-      {/* Mobile Page Title - Dynamically changes based on URL */}
-      {displayTitle ? (
+      {/* Mobile Page Title - Dynamically changes based on URL (Visible only on mobile) */}
+      {mobileTitle ? (
         <div className="md:hidden w-full pb-3 px-4 pt-4">
           <h2 className="text-2xl font-bold text-gray-900">
-            {displayTitle}
+            {mobileTitle}
           </h2>
         </div>
       ) : null}
 
       <div className="w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5">
-        {/* Toolbar — tight under page header so All Requests fits with less scroll */}
-        <div
-          className={`flex items-center gap-3 flex-wrap ${
-            tableTitle || displayTitle ? 'justify-between' : 'justify-end'
-          }`}
-        >
-          {(displayTitle || tableTitle) ? (
-            <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
-              {displayTitle || tableTitle}
-            </h5>
-          ) : null}
+        {/* Toolbar — tight under page header. Internal title removed for desktop to prevent duplication. */}
+        <div className="flex items-center gap-3 flex-wrap justify-end w-full">
           <div className="flex items-center gap-2">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />

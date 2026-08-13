@@ -203,8 +203,21 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
     onClose,
   } = props;
 
+  // Local state to instantly jump back to the dashboard without reloading the page
+  const [forceDashboard, setForceDashboard] = React.useState(false);
+
+  // If a new lead is genuinely fetched/assigned, make sure we clear the dashboard override
+  React.useEffect(() => {
+    if (currentLead?.id) {
+      setForceDashboard(false);
+    }
+  }, [currentLead?.id]);
+
+  // Use the local override or the parent's state
+  const shouldShowDashboard = showPendingCard || forceDashboard;
+
   // Pending card
-  if (showPendingCard) {
+  if (shouldShowDashboard) {
     const recallSkeleton = (
       <div className="space-y-2 animate-pulse" aria-hidden>
         <div className="h-4 w-3/4 rounded bg-muted" />
@@ -396,7 +409,10 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
 
             <div className="flex justify-center items-center w-full">
               <CustomButton
-                onClick={handleGetLeads}
+                onClick={() => {
+                  setForceDashboard(false);
+                  if (handleGetLeads) handleGetLeads();
+                }}
                 disabled={loading}
                 loading={loading}
                 className="max-w-xs"
@@ -478,6 +494,18 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
   ].filter(Boolean);
   const titleFont = { fontFamily: "Georgia, serif" };
   const bodyFont = { fontFamily: '"Open Sans", sans-serif' };
+
+  // Reusable soft close handler
+  const handleClose = () => {
+    if (onClose) {
+      onClose(); // Parent provided handler
+    } else if (isInModal) {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    } else {
+      // INSTANTLY render the Get Leads dashboard without triggering a page reload!
+      setForceDashboard(true);
+    }
+  };
   
   return (
     <div className={cn("flex w-full flex-col relative", !isInModal && "overflow-hidden md:overflow-hidden")}>
@@ -487,13 +515,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
           {/* Mobile Absolute Close Button - Visible only on small screens */}
           <button
             type="button"
-            onClick={() => {
-              if (onClose) {
-                onClose();
-              } else {
-                document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-              }
-            }}
+            onClick={handleClose}
             className="absolute top-2 right-2 z-[100] flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 p-1.5 shadow-sm hover:bg-slate-200 md:hidden"
             aria-label="Close modal"
           >
@@ -662,13 +684,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                   variant="outline"
                   icon={<X className="h-4 w-4" />}
                   className="hidden md:inline-flex rounded-xl border-[#D0D5DD] bg-white px-3 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#F9FAFB]"
-                  onClick={() => {
-                    if (onClose) {
-                      onClose();
-                    } else {
-                      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-                    }
-                  }}
+                  onClick={handleClose}
                 />
               </div>
             </div>
