@@ -966,8 +966,23 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
         </CustomButton>
       </div>
       <Separator className="mb-4" />
+
+      {/* ADDED: Global Title Input for the Component */}
+      <div className="mb-4">
+        <Label className="text-sm font-medium mb-1 block">Component Title</Label>
+        <Input
+          value={localConfig.title || ''}
+          onChange={(e) => handleInputChange('title', e.target.value)}
+          placeholder="e.g., WIP Tickets"
+          className="w-full"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          This title will be displayed above the component on the page.
+        </p>
+      </div>
+      <Separator className="mb-4" />
+
       {renderConfigFields()}
     </aside>
   );
 };
-

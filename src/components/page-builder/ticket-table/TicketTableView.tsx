@@ -79,21 +79,29 @@ if (loading) {
 
 return (
   <>
-    {/* ADDED: Mobile Page Title - Only visible on small screens (md:hidden) */}
-    <div className="md:hidden w-full pb-3 px-4 pt-4">
-      <h2 className="text-2xl font-bold text-gray-900">
-        {config?.title || "Support Tickets"}
-      </h2>
-    </div>
+    {/* ADDED: Mobile Page Title - Only visible if configured in builder */}
+    {config?.title && (
+      <div className="md:hidden w-full pb-3 px-4 pt-4">
+        <h2 className="text-2xl font-bold text-gray-900">
+          {config.title}
+        </h2>
+      </div>
+    )}
 
     <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
       {/* Filter Section */}
       <div className="mb-4 relative">
         <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-          {/* UPDATED: Added 'hidden md:block' so it doesn't show twice on mobile */}
-          <h5 className="hidden md:block">
-            {config?.title || "Support Tickets"}
-          </h5>
+          
+          {/* ADDED: Desktop Title - Only visible if configured in builder */}
+          <div className="hidden md:block">
+            {config?.title && (
+              <h5 className="text-xl font-bold text-gray-900">
+                {config.title}
+              </h5>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 relative">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />

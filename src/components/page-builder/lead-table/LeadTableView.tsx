@@ -79,56 +79,22 @@ export function LeadTableView(props: LeadTableModel) {
     apiClient,
   } = props;
 
-  // DYNAMIC TITLE LOGIC based on URL path
-  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
-  const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
-  const forceEntityType = String(
-    (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
-      ?.entity_type || ''
-  ).trim();
-  const isInventoryLikeForTitle =
-    config?.entityType === 'unmannd_request' ||
-    config?.entityType === 'inventory_request' ||
-    forceEntityType === 'unmannd_request' ||
-    forceEntityType === 'inventory_request' ||
-    /(?:^|[?&])entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(endpointForTitle) ||
-    Boolean(
-      Array.isArray(config?.columns) &&
-        config.columns.some((col: { key?: string }) =>
-          ['item_name_freeform', 'item_name', 'quantity_required', 'urgency_level'].includes(
-            String(col?.key || '')
-          )
-        )
-    );
-  // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
-  const configuredTitle = (config?.title || '').trim();
-  let displayTitle =
-    isInventoryLikeForTitle &&
-    (!configuredTitle || configuredTitle.toLowerCase() === 'all leads')
-      ? undefined
-      : configuredTitle || undefined;
-
-  if (!displayTitle && !isInventoryLikeForTitle) {
-    if (pathname.includes('follow')) {
-      displayTitle = "Follow Up Leads";
-    } else if (pathname.includes('pending')) {
-      displayTitle = "Pending Leads";
-    } else {
-      displayTitle = "All Leads";
-    }
-  }
-
   // Navy header/border for Procurement / My Request / Pending Approval / etc.
   // CRM All Leads and other default tables keep black headers.
   const isProcurementStyleTable =
-    config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
+    config?.tableType === 'itemsTable' || 
+    config?.entityType === 'unmannd_request' || 
+    config?.entityType === 'inventory_request';
+
   const procurementHeaderBg = 'bg-[#1A3673]';
   const procurementTableFrame = 'overflow-hidden rounded-lg border border-[#1A3673]';
+  
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
       String(config?.apiEndpoint || effectiveApiEndpoint || '')
     );
+    
   const useUnmanndDetailModal =
     useFormModal &&
     isUnmanndEntity &&
@@ -155,15 +121,10 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle =
-    isInventoryLikeForTitle && configuredTitle.toLowerCase() === 'all leads'
-      ? ''
-      : configuredTitle;
-
   return (
     <>
-      {/* Mobile Page Title - Dynamically changes based on URL */}
-      {displayTitle ? (
+      {/* Mobile Page Title - Only visible if configured in builder */}
+      {config?.title ? (
         <div
           className={
             isProcurementStyleTable
@@ -178,7 +139,7 @@ export function LeadTableView(props: LeadTableModel) {
                 : 'text-2xl font-bold text-gray-900'
             }
           >
-            {displayTitle}
+            {config.title}
           </h2>
         </div>
       ) : null}
@@ -194,13 +155,15 @@ export function LeadTableView(props: LeadTableModel) {
         <div
           className={`flex items-center flex-wrap ${
             isProcurementStyleTable ? 'gap-2' : 'gap-3'
-          } ${tableTitle || displayTitle ? 'justify-between' : 'justify-end'}`}
+          } ${config?.title ? 'justify-between' : 'justify-end'}`}
         >
-          {(displayTitle || tableTitle) ? (
+          {/* Desktop Title - Only visible if configured in builder */}
+          {config?.title ? (
             <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
-              {displayTitle || tableTitle}
+              {config.title}
             </h5>
           ) : null}
+          
           <div className="flex items-center gap-2">
             <div
               className={`relative flex-1 max-w-sm ${
