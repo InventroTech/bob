@@ -112,44 +112,32 @@ function writePreferNew(value: boolean) {
   }
 }
 
-function loginStampFromToken(accessToken?: string | null): string | null {
-  if (!accessToken) return null;
-  try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1] || ''));
-    if (payload?.iat == null) return null;
-    return String(payload.iat);
-  } catch {
-    return null;
-  }
-}
-
-function welcomeTipKey(userId: string, loginStamp: string): string {
+function welcomeTipKey(userId: string): string {
   const slug = getTenantSlug() || 'default';
-  return `pyro_sparky_welcome_tip:${slug}:${userId}:${loginStamp}`;
+  return `pyro_sparky_welcome_tip:${slug}:${userId}`;
 }
 
 function useSparkyWelcomeTip() {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const [showTip, setShowTip] = useState(false);
-  const loginStamp = loginStampFromToken(session?.access_token);
 
   useEffect(() => {
-    if (!user?.id || !loginStamp) {
+    if (!user?.id) {
       setShowTip(false);
       return;
     }
     try {
-      setShowTip(window.localStorage.getItem(welcomeTipKey(user.id, loginStamp)) !== '1');
+      setShowTip(window.localStorage.getItem(welcomeTipKey(user.id)) !== '1');
     } catch {
       setShowTip(true);
     }
-  }, [user?.id, loginStamp]);
+  }, [user?.id]);
 
   const dismissWelcomeTip = useCallback(
     (sayHiInChat = false) => {
-      if (user?.id && loginStamp) {
+      if (user?.id) {
         try {
-          window.localStorage.setItem(welcomeTipKey(user.id, loginStamp), '1');
+          window.localStorage.setItem(welcomeTipKey(user.id), '1');
         } catch {
           // ignore
         }
@@ -163,7 +151,7 @@ function useSparkyWelcomeTip() {
       }
       setShowTip(false);
     },
-    [user?.id, loginStamp]
+    [user?.id]
   );
 
   return { showTip, dismissWelcomeTip };
