@@ -264,7 +264,12 @@ export function SparkySidebarButton({
   useEffect(() => subscribeSparkyChat((state) => setOpen(state.open)), []);
 
   const openSparky = () => {
-    dismissWelcomeTip(true);
+    if (open) {
+      setSparkyChatOpen(false);
+      return;
+    }
+    // Only arm the in-chat greeting when opening from the welcome bubble / first login.
+    dismissWelcomeTip(showTip);
     const nextAnchor =
       placePanelAway || !buttonRef.current ? null : anchorFromElement(buttonRef.current);
     onToggle?.();
@@ -323,7 +328,11 @@ export function SparkyHeaderButton() {
   useEffect(() => subscribeSparkyChat((state) => setOpen(state.open)), []);
 
   const openSparky = () => {
-    dismissWelcomeTip(true);
+    if (open) {
+      setSparkyChatOpen(false);
+      return;
+    }
+    dismissWelcomeTip(showTip);
     toggleSparkyChat(buttonRef.current ? anchorFromElement(buttonRef.current) : null);
   };
 
