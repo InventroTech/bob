@@ -30,6 +30,7 @@ const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
 const [posterStatusFilter, setPosterStatusFilter] = useState<string[]>([]);
 const [stateFilter, setStateFilter] = useState<string[]>([]);
 const [callAttemptsFilter, setCallAttemptsFilter] = useState<number[]>([]);
+const [reasonFilter, setReasonFilter] = useState<string[]>([]); // ADDED: Reason filter state
 const [dateRangeFilter, setDateRangeFilter] = useState<{
   startDate: Date | undefined;
   endDate: Date | undefined;
@@ -128,6 +129,12 @@ const getUniqueResolutionStatuses = () => {
   return statuses.filter(status => status && status !== 'N/A');
 };
 
+// ADDED: Get unique reasons for the new filter
+const getUniqueReasons = () => {
+  const reasons = [...new Set(data.map(ticket => ticket.reason))];
+  return reasons.filter(reason => reason && reason !== 'N/A' && reason !== 'No reason provided');
+};
+
 // Fetch filter options from API
 const fetchFilterOptions = async () => {
   try {
@@ -178,9 +185,6 @@ const fetchFilterOptions = async () => {
     });
   }
 };
-
-// Debounced function to fetch filter options with search
-
 
 // Fetch assignees from API
 const fetchAssignees = async () => {
@@ -308,6 +312,11 @@ const applyFilters = async (requestSequence?: number) => {
 
     if (callAttemptsFilter.length > 0) {
       callAttemptsFilter.forEach((count) => params.append('call_attempts', String(count)));
+    }
+
+    // ADDED: Add reason filters
+    if (reasonFilter.length > 0) {
+      reasonFilter.forEach((reason) => params.append('reason', reason));
     }
     
     // Add date range filters
@@ -460,6 +469,7 @@ const resetFilters = () => {
   setPosterStatusFilter([]);
   setStateFilter([]);
   setCallAttemptsFilter([]);
+  setReasonFilter([]); // ADDED: Clear reason filter
   setDateRangeFilter({
     startDate: undefined,
     endDate: undefined,
@@ -507,6 +517,7 @@ const debouncedSearch = useCallback((value: string) => {
       posterStatusFilter.length > 0 ||
       stateFilter.length > 0 ||
       callAttemptsFilter.length > 0 ||
+      reasonFilter.length > 0 || // ADDED
       dateRangeFilter.startDate ||
       dateRangeFilter.endDate;
     
@@ -691,7 +702,7 @@ const debouncedSearch = useCallback((value: string) => {
       }
     }
   }, 500); // Increased debounce to 500ms to reduce API calls
-}, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
+}, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, reasonFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
 
 // Handle search input change from PrajaTable
 const handleSearchChange = useCallback((value: string) => {
@@ -929,6 +940,11 @@ const handlePageChange = async (pageNumber: string) => {
     if (callAttemptsFilter.length > 0) {
       callAttemptsFilter.forEach((count) => params.append('call_attempts', String(count)));
     }
+
+    // ADDED: Add reason filters
+    if (reasonFilter.length > 0) {
+      reasonFilter.forEach((reason) => params.append('reason', reason));
+    }
     
     // Add date range filters
     if (dateRangeFilter.startDate) {
@@ -1149,6 +1165,7 @@ useEffect(() => {
         posterStatusFilter.length > 0 || 
         stateFilter.length > 0 ||
         callAttemptsFilter.length > 0 ||
+        reasonFilter.length > 0 || // ADDED
         dateRangeFilter.startDate || 
         dateRangeFilter.endDate || 
         searchTerm.trim() !== ''
@@ -1200,7 +1217,7 @@ useEffect(() => {
 // Apply filters when filter values change
 useEffect(() => {
   // Don't auto-apply filters, wait for user to click "Apply Filters" button
-}, [resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, data]);
+}, [resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, reasonFilter, data]);
 
 // Update apiPrefix when config changes
 useEffect(() => {
@@ -1239,6 +1256,8 @@ useEffect(() => {
     setStateFilter,
     callAttemptsFilter,
     setCallAttemptsFilter,
+    reasonFilter,           // ADDED: Export reason filter state
+    setReasonFilter,        // ADDED: Export reason filter setter
     dateRangeFilter,
     setDateRangeFilter,
     filtersApplied,
@@ -1262,6 +1281,7 @@ useEffect(() => {
     getUniqueResolutionStatuses,
     getUniqueAssignedTo,
     getUniquePosterStatuses,
+    getUniqueReasons,       // ADDED: Export unique reasons getter
     apiPrefix,
     searchTerm,
     stateToParamValue,

@@ -41,6 +41,9 @@ export function TicketTableView(props: TicketTableModel) {
     setStateFilter,
     callAttemptsFilter,
     setCallAttemptsFilter,
+    reasonFilter,           // ADDED
+    setReasonFilter,        // ADDED
+    getUniqueReasons,       // ADDED
     dateRangeFilter,
     setDateRangeFilter,
     filtersApplied,
@@ -79,7 +82,7 @@ if (loading) {
 
 return (
   <>
-    {/* ADDED: Mobile Page Title - Only visible on small screens (md:hidden) */}
+    {/* Mobile Page Title - Only visible on small screens (md:hidden) */}
     <div className="md:hidden w-full pb-3 px-4 pt-4">
       <h2 className="text-2xl font-bold text-gray-900">
         {config?.title || "Support Tickets"}
@@ -90,7 +93,7 @@ return (
       {/* Filter Section */}
       <div className="mb-4 relative">
         <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-          {/* UPDATED: Added 'hidden md:block' so it doesn't show twice on mobile */}
+          {/* Desktop Title */}
           <h5 className="hidden md:block">
             {config?.title || "Support Tickets"}
           </h5>
@@ -122,6 +125,7 @@ return (
       <div className="mb-4">
         {showFilters && (
           <div className="bg-gray-50 p-4 rounded-lg border">
+            {/* ROW 1 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-gray-700 mb-2">
@@ -267,7 +271,8 @@ return (
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            {/* ROW 2 - UPDATED to grid-cols-3 and added Reason filter */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <div>
                 <label className="block text-gray-700 mb-2">
                   State
@@ -393,9 +398,71 @@ return (
                   </PopoverContent>
                 </Popover>
               </div>
+
+              {/* ADDED: Reason Filter Dropdown */}
+              <div>
+                <label className="block text-gray-700 mb-2">
+                  Reason
+                </label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between"
+                    >
+                      <span className="text-sm truncate">
+                        {reasonFilter && reasonFilter.length > 0
+                          ? `${reasonFilter.length} reason(s) selected`
+                          : "All Reasons"}
+                      </span>
+                      <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-60 p-4" align="start">
+                    <div className="space-y-3">
+                      <h5>Select Reasons</h5>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {getUniqueReasons && getUniqueReasons().map((reason) => (
+                          <div key={reason} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`reason-${reason}`}
+                              checked={reasonFilter?.includes(reason)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setReasonFilter(prev => [...(prev || []), reason]);
+                                } else {
+                                  setReasonFilter(prev => (prev || []).filter((r) => r !== reason));
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`reason-${reason}`}
+                              className="text-body-sm-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            >
+                              {reason}
+                        </label>
+                          </div>
+                        ))}
+                      </div>
+                      {reasonFilter && reasonFilter.length > 0 && (
+                        <div className="pt-2 border-t">
+                          <CustomButton
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setReasonFilter([])}
+                            className="text-xs"
+                          >
+                            Clear All
+                          </CustomButton>
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
 
-            {/* Date Range Filters - 2nd Line */}
+            {/* Date Range Filters - 3rd Line */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-gray-700 mb-2">
@@ -490,7 +557,7 @@ return (
               </div>
             </div>
 
-            {/* Action Buttons - 3rd Line */}
+            {/* Action Buttons - 4th Line */}
             <div className="flex items-center gap-2 mt-4">
               <CustomButton
                 variant="outline"
@@ -513,7 +580,7 @@ return (
             {/* Filter Summary */}
             <div className="mt-3 text-sm text-gray-600">
               Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} tickets
-              {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
+              {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || (reasonFilter && reasonFilter.length > 0) || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                 <span className="ml-2">
                   (Filtered by: 
                   {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.map(status => status === null ? 'Open' : status).join(', ')}`}
@@ -521,12 +588,13 @@ return (
                   {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
                   {stateFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}State: ${stateFilter.join(', ')}`}
                   {callAttemptsFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0) ? ', ' : ''}Call Attempts: ${[...callAttemptsFilter].sort((a, b) => a - b).join(', ')}`}
-                  {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
-                  {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
+                  {reasonFilter && reasonFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0) ? ', ' : ''}Reason: ${reasonFilter.join(', ')}`}
+                  {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || (reasonFilter && reasonFilter.length > 0)) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
+                  {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || (reasonFilter && reasonFilter.length > 0) || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
                   )
                 </span>
               )}
-              {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
+              {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || (reasonFilter && reasonFilter.length > 0) || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
                 <span className="ml-2 text-orange-600">
                   (Filters selected - click "Apply Filters" to see results)
                 </span>
