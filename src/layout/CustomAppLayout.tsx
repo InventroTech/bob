@@ -604,7 +604,7 @@ const CustomAppLayout: React.FC = () => {
             </button>
           </div>
         )}
-        <div className={isUnmanndApp ? 'h-full min-h-0 w-full' : 'min-h-screen w-full'}>
+        <div className={isUnmanndApp ? 'unmannd-app h-full min-h-0 w-full' : 'min-h-screen w-full'}>
           <Outlet context={{ tenantId, userRoleId, pages, isUnmanndApp }} />
         </div>
       </main>

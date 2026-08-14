@@ -224,7 +224,7 @@ const CustomAppPage: React.FC = () => {
             <h2
               className={
                 isUnmanndApp
-                  ? '!m-0 !text-3xl !font-bold !leading-tight !tracking-tight !uppercase text-[#0B1F4D]'
+                  ? 'unmannd-page-title !m-0 !uppercase text-[#0B1F4D]'
                   : '!m-0 !text-lg !font-semibold !leading-snug text-gray-900'
               }
             >
