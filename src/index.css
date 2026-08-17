@@ -749,16 +749,3 @@
   animation: unmannd-success-check 0.45s 0.15s ease-out forwards;
 }
 
-/* Unmannd pages: Helvetica throughout; page titles Helvetica Bold 20px */
-.unmannd-app {
-  font-family: Helvetica, 'Helvetica Neue', Arial, sans-serif;
-}
-
-.unmannd-page-title {
-  font-family: Helvetica, 'Helvetica Neue', Arial, sans-serif;
-  font-weight: 700;
-  font-size: 20px;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-
