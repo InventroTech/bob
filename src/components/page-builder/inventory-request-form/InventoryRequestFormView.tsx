@@ -224,12 +224,12 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     <>
     {showSubmitSuccess ? (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B1F4D]/45 backdrop-blur-[2px]">
-        <div className="animate-unmannd-success-pop flex w-[min(92vw,22rem)] flex-col items-center gap-3 rounded-2xl bg-white px-8 py-9 text-center shadow-2xl shadow-[#1A3673]/25 ring-1 ring-[#1A3673]/15">
+        <div className="animate-request-success-pop flex w-[min(92vw,22rem)] flex-col items-center gap-3 rounded-2xl bg-white px-8 py-9 text-center shadow-2xl shadow-[#1A3673]/25 ring-1 ring-[#1A3673]/15">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1A3673] text-white shadow-lg shadow-[#1A3673]/30">
             <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" aria-hidden>
               <path
                 d="M5 13l4 4L19 7"
-                className="animate-unmannd-success-check"
+                className="animate-request-success-check"
                 stroke="currentColor"
                 strokeWidth="2.5"
                 strokeLinecap="round"
