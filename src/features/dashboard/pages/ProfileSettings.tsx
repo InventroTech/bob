@@ -70,22 +70,24 @@ const ProfileSettings = () => {
   const [passwordSaving, setPasswordSaving] = useState(false);
 
   const resetProfileForm = useCallback(() => {
-    if (!user) {
+    const currentUser = userRef.current;
+    if (!currentUser) {
       setProfileFullName("");
       return;
     }
-    const m = user.user_metadata ?? {};
+    const m = currentUser.user_metadata ?? {};
     setProfileFullName(
       (typeof m.full_name === "string" && m.full_name) ||
         (typeof m.name === "string" && m.name) ||
-        user.email?.split("@")[0] ||
+        currentUser.email?.split("@")[0] ||
         ""
     );
-  }, [user]);
+  }, []);
 
+  // Only hydrate form when the signed-in user changes, not on every auth metadata refresh.
   useEffect(() => {
     resetProfileForm();
-  }, [resetProfileForm]);
+  }, [user?.id, resetProfileForm]);
 
   const loadMembershipRoleDept = useCallback(async () => {
     const u = userRef.current;
@@ -125,11 +127,11 @@ const ProfileSettings = () => {
   }, [loadMembershipRoleDept]);
 
   useEffect(() => {
-    if (!user || roleDeptFromWorkspace) return;
+    if (!user?.id || roleDeptFromWorkspace) return;
     const rd = readRoleDepartmentFromMetadata(user);
     setRole(rd.role);
     setDepartment(rd.department);
-  }, [user?.user_metadata, roleDeptFromWorkspace, user]);
+  }, [user?.id, roleDeptFromWorkspace, user]);
 
   const handleDatabaseSetup = async () => {
     setIsSettingUp(true);
@@ -264,7 +266,7 @@ const ProfileSettings = () => {
 
   return (
     <DashboardLayout>
-      <div className="animate-fade-in mx-auto max-w-3xl space-y-8 pb-10">
+      <div className="mx-auto max-w-3xl space-y-8 pb-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">
