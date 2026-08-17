@@ -30,7 +30,7 @@ const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
 const [posterStatusFilter, setPosterStatusFilter] = useState<string[]>([]);
 const [stateFilter, setStateFilter] = useState<string[]>([]);
 const [callAttemptsFilter, setCallAttemptsFilter] = useState<number[]>([]);
-const [reasonFilter, setReasonFilter] = useState<string[]>([]); // ADDED: Reason filter state
+const [reasonFilter, setReasonFilter] = useState<string[]>([]); // Reason filter state
 const [dateRangeFilter, setDateRangeFilter] = useState<{
   startDate: Date | undefined;
   endDate: Date | undefined;
@@ -117,6 +117,14 @@ const matchRowBySearchTerm = useCallback((row: any, term: string, _columns: Colu
   return false;
 }, []);
 
+// --- ADDED: Client-Side Filter Fallback for Reasons ---
+// Since the backend might ignore the 'reason' API parameter, we filter it here before displaying.
+const applyFrontendReasonFilter = useCallback((tickets: any[]) => {
+  if (reasonFilter.length === 0) return tickets;
+  return tickets.filter(ticket => reasonFilter.includes(ticket.reason));
+}, [reasonFilter]);
+// ------------------------------------------------------
+
 // Get unique values for filters
 const getUniqueResolutionStatuses = () => {
   // Use API data if available, otherwise fallback to local data
@@ -129,7 +137,7 @@ const getUniqueResolutionStatuses = () => {
   return statuses.filter(status => status && status !== 'N/A');
 };
 
-// ADDED: Get unique reasons for the new filter
+// Get unique reasons for the new filter
 const getUniqueReasons = () => {
   const reasons = [...new Set(data.map(ticket => ticket.reason))];
   return reasons.filter(reason => reason && reason !== 'N/A' && reason !== 'No reason provided');
@@ -142,9 +150,6 @@ const fetchFilterOptions = async () => {
     const baseUrl = TICKET_API_BASE;
     const apiUrl = `${baseUrl}/analytics/support-tickets/filter-options/`;
     
-    console.log('Fetching filter options from:', apiUrl);
-    console.log('Auth token:', authToken ? 'Present' : 'Missing');
-    
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
@@ -153,36 +158,17 @@ const fetchFilterOptions = async () => {
       }
     });
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error response:', errorText);
-      throw new Error(`Failed to fetch filter options: ${response.status} - ${errorText}`);
-    }
+    if (!response.ok) throw new Error(`Failed to fetch filter options: ${response.status}`);
 
     const responseData = await response.json();
-    console.log('Filter options response:', responseData);
-    
     if (responseData.resolution_statuses && responseData.poster_statuses) {
       setFilterOptions({
         resolution_statuses: responseData.resolution_statuses,
         poster_statuses: responseData.poster_statuses
       });
-    } else {
-      console.error('Invalid filter options data format:', responseData);
-      setFilterOptions({
-        resolution_statuses: [],
-        poster_statuses: []
-      });
     }
   } catch (error) {
     console.error('Error fetching filter options:', error);
-    setFilterOptions({
-      resolution_statuses: [],
-      poster_statuses: []
-    });
   }
 };
 
@@ -193,9 +179,6 @@ const fetchAssignees = async () => {
     const baseUrl = TICKET_API_BASE;
     const apiUrl = `${baseUrl}/accounts/users/assignees-by-role/?role=CSE`;
     
-    console.log('Fetching assignees from:', apiUrl);
-    console.log('Auth token:', authToken ? 'Present' : 'Missing');
-    
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
@@ -204,45 +187,28 @@ const fetchAssignees = async () => {
       }
     });
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error response:', errorText);
-      throw new Error(`Failed to fetch assignees: ${response.status} - ${errorText}`);
-    }
+    if (!response.ok) throw new Error(`Failed to fetch assignees: ${response.status}`);
 
     const responseData = await response.json();
-    console.log('Assignees response:', responseData);
-    
     if (responseData.results && Array.isArray(responseData.results)) {
       setAssignees(responseData.results);
-    } else {
-      console.error('Invalid assignees data format:', responseData);
-      setAssignees([]);
     }
   } catch (error) {
     console.error('Error fetching assignees:', error);
-    setAssignees([]);
   }
 };
 
 const getUniqueAssignedTo = () => {
-  // Return the assignees fetched from API
   return assignees.map(assignee => ({
-    id: assignee.uid || assignee.id.toString(), // Use uid if available, fallback to id
+    id: assignee.uid || assignee.id.toString(), 
     name: assignee.name
   }));
 };
 
 const getUniquePosterStatuses = () => {
-  // Use API data if available, otherwise fallback to local data
   if (filterOptions.poster_statuses.length > 0) {
     return filterOptions.poster_statuses;
   }
-  
-  // Fallback to local data
   const statuses = [...new Set(data.map(ticket => ticket.poster))];
   return statuses.filter(status => status && status !== 'N/A' && status !== 'No Poster');
 };
@@ -255,71 +221,48 @@ const stateToParamValue = (state: string | null | undefined): string => {
 // Apply filters using analytics endpoint
 const applyFilters = async (requestSequence?: number) => {
   try {
-    setTableLoading(true); // Use table loading instead of full component loading
+    setTableLoading(true); 
     
-    // Cancel any previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    // Create new AbortController for this request
+    if (abortControllerRef.current) abortControllerRef.current.abort();
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
     
-    // Use provided sequence or increment for non-search calls
     const currentSequence = requestSequence || ++requestSequenceRef.current;
-    
     const authToken = session?.access_token;
-
-    // Always use renderer URL for analytics endpoint
     const baseUrl = TICKET_API_BASE;
     const apiUrl = `${baseUrl}/analytics/support-ticket/`;
     
-    // Build query parameters
     const params = new URLSearchParams();
     
-    // Add resolution status filters
     if (resolutionStatusFilter.length > 0) {
       resolutionStatusFilter.forEach(status => {
-        // Send null for "Open" status, otherwise send the status as-is
         const statusToSend = status === 'Open' ? 'null' : status;
         params.append('resolution_status', statusToSend);
       });
     }
     
-    // Add assigned to filter
     if (assignedToFilter !== 'all') {
-      if (assignedToFilter === 'myself') {
-        params.append('assigned_to', user?.id || '');
-      } else if (assignedToFilter === 'unassigned') {
-        params.append('assigned_to', 'null');
-      } else {
-        // For specific assignee, use the ID directly
-        params.append('assigned_to', assignedToFilter);
-      }
+      if (assignedToFilter === 'myself') params.append('assigned_to', user?.id || '');
+      else if (assignedToFilter === 'unassigned') params.append('assigned_to', 'null');
+      else params.append('assigned_to', assignedToFilter);
     }
     
-    // Add poster status filters
     if (posterStatusFilter.length > 0) {
-      posterStatusFilter.forEach(status => {
-        params.append('poster', status);
-      });
+      posterStatusFilter.forEach(status => params.append('poster', status));
     }
 
     if (stateFilter.length > 0) {
-      stateFilter.forEach((state) => params.append('state', state));
+      stateFilter.forEach(state => params.append('state', state));
     }
 
     if (callAttemptsFilter.length > 0) {
-      callAttemptsFilter.forEach((count) => params.append('call_attempts', String(count)));
+      callAttemptsFilter.forEach(count => params.append('call_attempts', String(count)));
     }
 
-    // ADDED: Add reason filters
     if (reasonFilter.length > 0) {
-      reasonFilter.forEach((reason) => params.append('reason', reason));
+      reasonFilter.forEach(reason => params.append('reason', reason));
     }
     
-    // Add date range filters
     if (dateRangeFilter.startDate) {
       const startDateTime = new Date(dateRangeFilter.startDate);
       startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
@@ -331,26 +274,16 @@ const applyFilters = async (requestSequence?: number) => {
       params.append('created_at__lte', endDateTime.toISOString());
     }
 
-    // Include search param for backend search (improves time and accuracy)
     const currentSearchTerm = latestSearchValueRef.current?.trim() ?? '';
-    const isSearching = currentSearchTerm !== '';
     if (currentSearchTerm) {
       params.append('search', currentSearchTerm);
-      if (config?.searchFields) {
-        params.append('search_fields', config.searchFields);
-      }
+      if (config?.searchFields) params.append('search_fields', config.searchFields);
     }
     
-    // Pagination: always use 50 tickets per page
     params.append('page', '1');
     params.append('page_size', '50');
     
     const fullUrl = `${apiUrl}?${params.toString()}`;
-    console.log('Filtered API URL:', fullUrl);
-    console.log('Resolution status filter mapping:', resolutionStatusFilter.map(status => ({
-      original: status,
-      sent: status === 'Open' ? 'null' : status
-    })));
 
     const response = await fetch(fullUrl, {
       method: 'GET',
@@ -361,24 +294,12 @@ const applyFilters = async (requestSequence?: number) => {
       signal: abortController.signal
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        throw new Error(`Rate limit exceeded. Please wait a moment before searching again.`);
-      }
-      throw new Error(`Failed to fetch filtered tickets: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`Failed to fetch filtered tickets: ${response.status}`);
 
     const responseData = await response.json();
     
-    // Check if this response is still relevant (not superseded by a newer request)
-    if (currentSequence !== requestSequenceRef.current) {
-      console.log(`Ignoring stale response for sequence ${currentSequence}, current is ${requestSequenceRef.current}, search term was: "${searchTerm}"`);
-      return;
-    }
+    if (currentSequence !== requestSequenceRef.current) return;
     
-    console.log(`Processing response for sequence ${currentSequence}, search term: "${searchTerm}", display term: "${displaySearchTerm}", tickets found: ${responseData.data?.length ?? responseData.results?.length ?? (Array.isArray(responseData) ? responseData.length : '?')}`);
-    
-    // Handle different response formats (array or single object)
     let tickets: any[] = [];
     let pageMeta = null;
     
@@ -392,43 +313,27 @@ const applyFilters = async (requestSequence?: number) => {
       pageMeta = responseData.page_meta;
     } else if (Array.isArray(responseData)) {
       tickets = responseData;
-    } else {
-      throw new Error('Invalid data format received');
     }
 
-    // Transform the data with the new attributes
     const transformedData = tickets.map((ticket: any) => ({
       ...ticket,
-      // Format created_at with relative time
       created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
-      // Use cse_name for assigned to with display name
       cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-      // Combine first_name and last_name for name
-      name: ticket.first_name && ticket.last_name 
-        ? `${ticket.first_name} ${ticket.last_name}`
-        : ticket.name || 'N/A',
-      // Use reason field
+      name: ticket.first_name && ticket.last_name ? `${ticket.first_name} ${ticket.last_name}` : ticket.name || 'N/A',
       reason: ticket.reason || ticket.Description || 'No reason provided',
-      // Use resolution_status with proper formatting
       resolution_status: ticket.resolution_status || ticket.status || 'Open',
-      // Use poster field directly
       poster: ticket.poster || 'No Poster',
-      // Generate Praja dashboard user link
-      praja_dashboard_user_link: ticket.praja_user_id 
-        ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-        : ticket.praja_dashboard_user_link || 'N/A',
-      // Ensure display_pic_url is included
+      praja_dashboard_user_link: ticket.praja_user_id ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}` : ticket.praja_dashboard_user_link || 'N/A',
       display_pic_url: ticket.display_pic_url || null
     }));
 
-    baseDataRef.current = transformedData;
-    // Backend already applies search when search param is sent - no client-side filter needed
-    const toShow = transformedData;
-    console.log(`Setting filtered data for sequence ${currentSequence}: ${transformedData.length} from API (search: "${currentSearchTerm}")`);
+    // ADDED: Apply the client-side reason filter here!
+    const toShow = applyFrontendReasonFilter(transformedData);
+    
+    baseDataRef.current = toShow;
     setFilteredData(toShow);
     setFiltersApplied(true);
     
-    // Update pagination data if available
     if (pageMeta) {
       setPagination({
         totalCount: pageMeta.total_count || 0,
@@ -438,27 +343,14 @@ const applyFilters = async (requestSequence?: number) => {
         nextPageLink: pageMeta.next_page_link || null,
         previousPageLink: pageMeta.previous_page_link || null
       });
-      console.log('Updated pagination from filtered response:', pageMeta);
     }
   } catch (error: unknown) {
-    // Don't show error for aborted requests
     const err = error as { name?: string; message?: string };
-    if (err.name === 'AbortError') {
-      console.log('Request was aborted');
-      return;
-    }
+    if (err.name === 'AbortError') return;
     console.error('Error applying filters:', error);
-    
-    // Handle different types of errors
-    if (err.message?.includes('Rate limit exceeded')) {
-      toast.error('Too many requests. Please wait a moment before searching again.');
-    } else if (err.message?.includes('429')) {
-      toast.error('Rate limit exceeded. Please wait before making another request.');
-    } else {
-      toast.error('Failed to apply filters');
-    }
+    toast.error('Failed to apply filters');
   } finally {
-    setTableLoading(false); // Use table loading instead of full component loading
+    setTableLoading(false);
   }
 };
 
@@ -469,21 +361,18 @@ const resetFilters = () => {
   setPosterStatusFilter([]);
   setStateFilter([]);
   setCallAttemptsFilter([]);
-  setReasonFilter([]); // ADDED: Clear reason filter
+  setReasonFilter([]); // Clear reason filter
   setDateRangeFilter({
     startDate: undefined,
     endDate: undefined,
     startTime: '00:00',
     endTime: '23:59'
   });
-  setSearchTerm(''); // Clear search term
-  setDisplaySearchTerm(''); // Clear display search term
-  if (searchTimeoutRef.current) {
-    clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = null;
-  }
+  setSearchTerm('');
+  setDisplaySearchTerm('');
+  if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
   baseDataRef.current = data;
-  setFilteredData(data); // Show all tickets again
+  setFilteredData(data);
   setFiltersApplied(false);
 };
 
@@ -494,41 +383,31 @@ const debouncedSearch = useCallback((value: string) => {
   latestSearchValueRef.current = value;
   setDisplaySearchTerm(value);
 
-  // Cancel previous search timeout
   if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-  
-  // Cancel any ongoing API requests
-  if (abortControllerRef.current) {
-    abortControllerRef.current.abort();
-  }
+  if (abortControllerRef.current) abortControllerRef.current.abort();
 
   searchTimeoutRef.current = setTimeout(async () => {
     const term = latestSearchValueRef.current.trim();
     setSearchTerm(term);
     
-    // Create new abort controller for this search
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
     
-    // Check if filters are applied
     const hasFilters = filtersApplied || 
       resolutionStatusFilter.length > 0 || 
       assignedToFilter !== 'all' || 
       posterStatusFilter.length > 0 ||
       stateFilter.length > 0 ||
       callAttemptsFilter.length > 0 ||
-      reasonFilter.length > 0 || // ADDED
+      reasonFilter.length > 0 || 
       dateRangeFilter.startDate ||
       dateRangeFilter.endDate;
     
-    // If search was cleared, reset to original data
     if (!term) {
-      setSearchLoading(false); // Clear search loading when search is cleared
+      setSearchLoading(false);
       if (hasFilters) {
-        // If filters are applied, re-apply filters without search
         applyFilters();
       } else {
-        // Reset to original first page (50 tickets)
         try {
           setTableLoading(true);
           const authToken = session?.access_token;
@@ -553,10 +432,8 @@ const debouncedSearch = useCallback((value: string) => {
           if (response.ok) {
             const responseData = await response.json();
             const ensureArray = (val: any): any[] => Array.isArray(val) ? val : val != null && typeof val === 'object' ? [val] : [];
-            
             let tickets: any[] = [];
             let pageMeta = null;
-            
             if (responseData.results !== undefined) {
               tickets = ensureArray(responseData.results);
               pageMeta = responseData.page_meta;
@@ -571,15 +448,11 @@ const debouncedSearch = useCallback((value: string) => {
               ...ticket,
               created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
               cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-              name: ticket.first_name && ticket.last_name 
-                ? `${ticket.first_name} ${ticket.last_name}`
-                : ticket.name || 'N/A',
+              name: ticket.first_name && ticket.last_name ? `${ticket.first_name} ${ticket.last_name}` : ticket.name || 'N/A',
               reason: ticket.reason || ticket.Description || 'No reason provided',
               resolution_status: ticket.resolution_status || ticket.status || 'Open',
               poster: ticket.poster || 'No Poster',
-              praja_dashboard_user_link: ticket.praja_user_id 
-                ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-                : ticket.praja_dashboard_user_link || 'N/A',
+              praja_dashboard_user_link: ticket.praja_user_id ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}` : ticket.praja_dashboard_user_link || 'N/A',
               display_pic_url: ticket.display_pic_url || null
             }));
 
@@ -600,19 +473,15 @@ const debouncedSearch = useCallback((value: string) => {
           }
         } catch (error: any) {
           if (error.name === 'AbortError') return;
-          console.error('Error resetting search:', error);
           baseDataRef.current = data;
           setFilteredData(data);
         } finally {
-          if (!abortController.signal.aborted) {
-            setTableLoading(false);
-          }
+          if (!abortController.signal.aborted) setTableLoading(false);
         }
       }
       return;
     }
     
-    // If searching and no filters applied: use backend search (single API call)
     if (term && !hasFilters) {
       try {
         setTableLoading(true);
@@ -643,15 +512,11 @@ const debouncedSearch = useCallback((value: string) => {
           ...ticket,
           created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
           cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-          name: ticket.first_name && ticket.last_name
-            ? `${ticket.first_name} ${ticket.last_name}`
-            : ticket.name || 'N/A',
+          name: ticket.first_name && ticket.last_name ? `${ticket.first_name} ${ticket.last_name}` : ticket.name || 'N/A',
           reason: ticket.reason || ticket.Description || 'No reason provided',
           resolution_status: ticket.resolution_status || ticket.status || 'Open',
           poster: ticket.poster || 'No Poster',
-          praja_dashboard_user_link: ticket.praja_user_id
-            ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-            : ticket.praja_dashboard_user_link || 'N/A',
+          praja_dashboard_user_link: ticket.praja_user_id ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}` : ticket.praja_dashboard_user_link || 'N/A',
           display_pic_url: ticket.display_pic_url || null
         });
 
@@ -663,8 +528,12 @@ const debouncedSearch = useCallback((value: string) => {
           else if (Array.isArray(responseData)) tickets = responseData;
 
           const transformedData = tickets.map(transformTicket);
-          baseDataRef.current = transformedData;
-          setFilteredData(transformedData);
+          
+          // ADDED: Apply client-side reason filter here too (just in case)
+          const toShow = applyFrontendReasonFilter(transformedData);
+
+          baseDataRef.current = toShow;
+          setFilteredData(toShow);
 
           const pageMeta = responseData.page_meta;
           if (pageMeta) {
@@ -682,7 +551,6 @@ const debouncedSearch = useCallback((value: string) => {
         }
       } catch (error: any) {
         if (error.name === 'AbortError') return;
-        console.error('Error fetching tickets for search:', error);
         const base = baseDataRef.current.length > 0 ? baseDataRef.current : data;
         const next = base.filter((row: any) => matchRowBySearchTerm(row, term, tableColumns));
         setFilteredData(next);
@@ -693,7 +561,6 @@ const debouncedSearch = useCallback((value: string) => {
         }
       }
     } else {
-      // Search with filters applied - use backend (applyFilters includes search param)
       setSearchLoading(true);
       try {
         await applyFilters();
@@ -701,22 +568,19 @@ const debouncedSearch = useCallback((value: string) => {
         setSearchLoading(false);
       }
     }
-  }, 500); // Increased debounce to 500ms to reduce API calls
-}, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, reasonFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
+  }, 500); 
+}, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, reasonFilter, dateRangeFilter, session?.access_token, config?.searchFields, applyFrontendReasonFilter]);
 
-// Handle search input change from PrajaTable
 const handleSearchChange = useCallback((value: string) => {
   debouncedSearch(value);
 }, [debouncedSearch]);
 
 
-// Memoized row click handler
 const handleRowClick = useCallback((row: any) => {
   setSelectedTicket(transformTicketForCarousel(row));
   setIsTicketModalOpen(true);
 }, []);
 
-// Action button click: open card and/or call API
 const handleActionClick = useCallback(async (row: any, col: Column) => {
   const openCard = col.openCard === true || col.openCard === 'true';
   if (openCard) {
@@ -765,41 +629,33 @@ const handleNextPage = async () => {
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch next page: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Failed to fetch next page: ${response.status}`);
 
       const responseData = await response.json();
-      
       let tickets = [];
       let pageMeta = null;
       
       if (responseData.data && Array.isArray(responseData.data)) {
         tickets = responseData.data;
         pageMeta = responseData.page_meta;
-      } else {
-        throw new Error('Invalid data format received');
       }
 
-      // Transform the data
       const transformedData = tickets.map((ticket: any) => ({
         ...ticket,
         created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
         cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-        name: ticket.first_name && ticket.last_name 
-          ? `${ticket.first_name} ${ticket.last_name}`
-          : ticket.name || 'N/A',
+        name: ticket.first_name && ticket.last_name ? `${ticket.first_name} ${ticket.last_name}` : ticket.name || 'N/A',
         reason: ticket.reason || ticket.Description || 'No reason provided',
         resolution_status: ticket.resolution_status || ticket.status || 'Open',
         poster: ticket.poster || 'No Poster',
-        praja_dashboard_user_link: ticket.praja_user_id 
-          ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-          : ticket.praja_dashboard_user_link || 'N/A',
+        praja_dashboard_user_link: ticket.praja_user_id ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}` : ticket.praja_dashboard_user_link || 'N/A',
         display_pic_url: ticket.display_pic_url || null
       }));
 
       setData(transformedData);
-      setFilteredData(transformedData);
+      
+      // ADDED: Apply client-side reason filter here too
+      setFilteredData(applyFrontendReasonFilter(transformedData));
       
       if (pageMeta) {
         setPagination({
@@ -813,7 +669,6 @@ const handleNextPage = async () => {
       }
     } catch (error) {
       console.error('Error fetching next page:', error);
-      toast.error('Failed to load next page');
     } finally {
       setTableLoading(false);
     }
@@ -834,41 +689,33 @@ const handlePreviousPage = async () => {
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch previous page: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Failed to fetch previous page: ${response.status}`);
 
       const responseData = await response.json();
-      
       let tickets = [];
       let pageMeta = null;
       
       if (responseData.data && Array.isArray(responseData.data)) {
         tickets = responseData.data;
         pageMeta = responseData.page_meta;
-      } else {
-        throw new Error('Invalid data format received');
       }
 
-      // Transform the data
       const transformedData = tickets.map((ticket: any) => ({
         ...ticket,
         created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
         cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-        name: ticket.first_name && ticket.last_name 
-          ? `${ticket.first_name} ${ticket.last_name}`
-          : ticket.name || 'N/A',
+        name: ticket.first_name && ticket.last_name ? `${ticket.first_name} ${ticket.last_name}` : ticket.name || 'N/A',
         reason: ticket.reason || ticket.Description || 'No reason provided',
         resolution_status: ticket.resolution_status || ticket.status || 'Open',
         poster: ticket.poster || 'No Poster',
-        praja_dashboard_user_link: ticket.praja_user_id 
-          ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-          : ticket.praja_dashboard_user_link || 'N/A',
+        praja_dashboard_user_link: ticket.praja_user_id ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}` : ticket.praja_dashboard_user_link || 'N/A',
         display_pic_url: ticket.display_pic_url || null
       }));
 
       setData(transformedData);
-      setFilteredData(transformedData);
+      
+      // ADDED: Apply client-side reason filter here too
+      setFilteredData(applyFrontendReasonFilter(transformedData));
       
       if (pageMeta) {
         setPagination({
@@ -882,14 +729,12 @@ const handlePreviousPage = async () => {
       }
     } catch (error) {
       console.error('Error fetching previous page:', error);
-      toast.error('Failed to load previous page');
     } finally {
       setTableLoading(false);
     }
   }
 };
 
-// Handle page selection from dropdown
 const handlePageChange = async (pageNumber: string) => {
   const page = parseInt(pageNumber, 10);
   if (isNaN(page) || page < 1 || page > pagination.numberOfPages) {
@@ -899,38 +744,23 @@ const handlePageChange = async (pageNumber: string) => {
   try {
     setTableLoading(true);
     const authToken = session?.access_token;
-
-    // Always use renderer URL for analytics endpoint
     const baseUrl = TICKET_API_BASE;
     const apiUrl = `${baseUrl}/analytics/support-ticket/`;
     
-    // Build query parameters with all current filters
     const params = new URLSearchParams();
     
-    // Add resolution status filters
     if (resolutionStatusFilter.length > 0) {
-      resolutionStatusFilter.forEach(status => {
-        const statusToSend = status === 'Open' ? 'null' : status;
-        params.append('resolution_status', statusToSend);
-      });
+      resolutionStatusFilter.forEach(status => params.append('resolution_status', status === 'Open' ? 'null' : status));
     }
     
-    // Add assigned to filter
     if (assignedToFilter !== 'all') {
-      if (assignedToFilter === 'myself') {
-        params.append('assigned_to', user?.id || '');
-      } else if (assignedToFilter === 'unassigned') {
-        params.append('assigned_to', 'null');
-      } else {
-        params.append('assigned_to', assignedToFilter);
-      }
+      if (assignedToFilter === 'myself') params.append('assigned_to', user?.id || '');
+      else if (assignedToFilter === 'unassigned') params.append('assigned_to', 'null');
+      else params.append('assigned_to', assignedToFilter);
     }
     
-    // Add poster status filters
     if (posterStatusFilter.length > 0) {
-      posterStatusFilter.forEach(status => {
-        params.append('poster', status);
-      });
+      posterStatusFilter.forEach(status => params.append('poster', status));
     }
 
     if (stateFilter.length > 0) {
@@ -941,12 +771,10 @@ const handlePageChange = async (pageNumber: string) => {
       callAttemptsFilter.forEach((count) => params.append('call_attempts', String(count)));
     }
 
-    // ADDED: Add reason filters
     if (reasonFilter.length > 0) {
       reasonFilter.forEach((reason) => params.append('reason', reason));
     }
     
-    // Add date range filters
     if (dateRangeFilter.startDate) {
       const startDateTime = new Date(dateRangeFilter.startDate);
       startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
@@ -965,7 +793,7 @@ const handlePageChange = async (pageNumber: string) => {
     }
 
     params.append('page', page.toString());
-    params.append('page_size', '50'); // Always use 50 tickets per page
+    params.append('page_size', '50');
     
     const fullUrl = `${apiUrl}?${params.toString()}`;
 
@@ -977,9 +805,7 @@ const handlePageChange = async (pageNumber: string) => {
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch page ${page}: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`Failed to fetch page ${page}: ${response.status}`);
 
     const responseData = await response.json();
     
@@ -993,29 +819,24 @@ const handlePageChange = async (pageNumber: string) => {
     } else if (responseData.results !== undefined) {
       tickets = ensureArray(responseData.results);
       pageMeta = responseData.page_meta;
-    } else {
-      throw new Error('Invalid data format received');
     }
 
-    // Transform the data
     const transformedData = tickets.map(ticket => ({
       ...ticket,
       created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
       cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-      name: ticket.first_name && ticket.last_name 
-        ? `${ticket.first_name} ${ticket.last_name}`
-        : ticket.name || 'N/A',
+      name: ticket.first_name && ticket.last_name ? `${ticket.first_name} ${ticket.last_name}` : ticket.name || 'N/A',
       reason: ticket.reason || ticket.Description || 'No reason provided',
       resolution_status: ticket.resolution_status || ticket.status || 'Open',
       poster: ticket.poster || 'No Poster',
-      praja_dashboard_user_link: ticket.praja_user_id 
-        ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-        : ticket.praja_dashboard_user_link || 'N/A',
+      praja_dashboard_user_link: ticket.praja_user_id ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}` : ticket.praja_dashboard_user_link || 'N/A',
       display_pic_url: ticket.display_pic_url || null
     }));
 
     setData(transformedData);
-    setFilteredData(transformedData);
+    
+    // ADDED: Apply client-side reason filter here too
+    setFilteredData(applyFrontendReasonFilter(transformedData));
     
     if (pageMeta) {
       setPagination({
@@ -1029,7 +850,6 @@ const handlePageChange = async (pageNumber: string) => {
     }
   } catch (error) {
     console.error('Error fetching page:', error);
-    toast.error(`Failed to load page ${page}`);
   } finally {
     setTableLoading(false);
   }
@@ -1043,17 +863,14 @@ const refreshTicketsFromRealtime = useCallback(() => {
 useRecordUpdated(refreshTicketsFromRealtime, { entityType: 'support_ticket' });
 
 const handleTicketUpdate = (updatedTicket: any) => {
-  // Update the local data with the updated ticket
   const updatedData = data.map(ticket => 
     ticket.id === updatedTicket.id ? updatedTicket : ticket
   );
   setData(updatedData);
   
-  // If filters are applied, refresh filtered data
   if (filtersApplied) {
     applyFilters();
   } else {
-    // If no filters applied, update filtered data with all tickets
     setFilteredData(updatedData);
   }
   
@@ -1061,46 +878,29 @@ const handleTicketUpdate = (updatedTicket: any) => {
 };
 
 useEffect(() => {
-  // Abort controller for initial fetch
   const abortController = new AbortController();
 
   const fetchTickets = async () => {
     try {
       setLoading(true);
       const authToken = session?.access_token;
-
       const endpoint = config?.apiEndpoint || '/api/tickets';
-      // Page builder uses TableConfig for ticketTable (no apiPrefix UI). Support
-      // ticket APIs live on the renderer backend, not Supabase edge functions.
-      const useRenderer =
-        apiPrefix === 'renderer' ||
-        endpoint.includes('/support-ticket/');
-      const baseUrl = useRenderer
-        ? TICKET_API_BASE
-        : import.meta.env.VITE_API_URI;
+      const useRenderer = apiPrefix === 'renderer' || endpoint.includes('/support-ticket/');
+      const baseUrl = useRenderer ? TICKET_API_BASE : import.meta.env.VITE_API_URI;
       const apiUrl = `${baseUrl}${endpoint}?page=1&page_size=50`;
-      console.log('API URL:', apiUrl);
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': authToken ? `Bearer ${authToken}` : ''
       };
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers,
-        signal: abortController.signal
-      });
+      const response = await fetch(apiUrl, { method: 'GET', headers, signal: abortController.signal });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch tickets: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Failed to fetch tickets: ${response.status}`);
 
-      // Clone the response before reading it
       const responseClone = response.clone();
       const responseData = await responseClone.json();
 
-      // Handle different response formats
       let tickets = [];
       let pageMeta = null;
       
@@ -1111,42 +911,24 @@ useEffect(() => {
         tickets = responseData;
       } else if (responseData.tickets && Array.isArray(responseData.tickets)) {
         tickets = responseData.tickets;
-      } else {
-        throw new Error('Invalid data format received');
       }
 
-      // Transform the data with the new attributes
       const transformedData = tickets.map((ticket: any) => ({
         ...ticket,
-        // Format created_at with relative time
         created_at: ticket.created_at ? convertGMTtoIST(ticket.created_at) : 'N/A',
-        // Use cse_name for assigned to with display name
         cse_name: getDisplayName(ticket.cse_name || ticket.assigned_to),
-        // Combine first_name and last_name for name
-        name: ticket.first_name && ticket.last_name 
-          ? `${ticket.first_name} ${ticket.last_name}`
-          : ticket.name || 'N/A',
-        // Use reason field
+        name: ticket.first_name && ticket.last_name ? `${ticket.first_name} ${ticket.last_name}` : ticket.name || 'N/A',
         reason: ticket.reason || ticket.Description || 'No reason provided',
-        // Use resolution_status with proper formatting
         resolution_status: ticket.resolution_status || ticket.status || 'Open',
-        // Use poster field directly
         poster: ticket.poster || 'No Poster',
-        // Generate Praja dashboard user link
-        praja_dashboard_user_link: ticket.praja_user_id 
-          ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}`
-          : ticket.praja_dashboard_user_link || 'N/A',
-        // Ensure display_pic_url is included
+        praja_dashboard_user_link: ticket.praja_user_id ? `https://app.praja.com/dashboard/user/${ticket.praja_user_id}` : ticket.praja_dashboard_user_link || 'N/A',
         display_pic_url: ticket.display_pic_url || null
       }));
 
-      // Set the data (empty array if no tickets found)
       setData(transformedData);
       setFilteredData(transformedData);
       baseDataRef.current = transformedData;
-      console.log('Data loaded. FiltersApplied:', filtersApplied, 'Data count:', transformedData.length);
       
-      // Set pagination data if available
       if (pageMeta) {
         setPagination({
           totalCount: pageMeta.total_count || 0,
@@ -1158,55 +940,34 @@ useEffect(() => {
         });
       }
       
-      // If filters were previously applied, reapply them after data loads
       if (filtersApplied && (
         resolutionStatusFilter.length > 0 || 
         assignedToFilter !== 'all' || 
         posterStatusFilter.length > 0 || 
         stateFilter.length > 0 ||
         callAttemptsFilter.length > 0 ||
-        reasonFilter.length > 0 || // ADDED
+        reasonFilter.length > 0 || 
         dateRangeFilter.startDate || 
         dateRangeFilter.endDate || 
         searchTerm.trim() !== ''
       )) {
-        console.log('Reapplying filters after data fetch...');
-        setTimeout(() => applyFilters(), 100); // Small delay to ensure state is updated
+        setTimeout(() => applyFilters(), 100); 
       }
     } catch (error: any) {
-      // Effect re-runs (token/config) abort the previous fetch — not a real failure.
-      if (
-        error?.name === 'AbortError' ||
-        abortController.signal.aborted ||
-        (typeof error?.message === 'string' &&
-          error.message.toLowerCase().includes('aborted'))
-      ) {
+      if (error?.name === 'AbortError' || abortController.signal.aborted || (typeof error?.message === 'string' && error.message.toLowerCase().includes('aborted'))) {
         return;
       }
-      console.error('Error fetching tickets:', error);
-      // Set empty data on error instead of using demo data
       setData([]);
       setFilteredData([]);
-      
-      // If filters were previously applied, we still need to maintain that state
-      if (filtersApplied) {
-        console.log('Filters were applied but data fetch failed');
-      }
     } finally {
-      if (!abortController.signal.aborted) {
-        setLoading(false);
-      }
+      if (!abortController.signal.aborted) setLoading(false);
     }
   };
 
   fetchTickets();
-
-  return () => {
-    abortController.abort();
-  };
+  return () => abortController.abort();
 }, [session?.access_token, config?.apiEndpoint, apiPrefix]);
 
-// Fetch filter options and assignees when component mounts
 useEffect(() => {
   if (session?.access_token) {
     fetchFilterOptions();
@@ -1214,27 +975,14 @@ useEffect(() => {
   }
 }, [session?.access_token]);
 
-// Apply filters when filter values change
 useEffect(() => {
-  // Don't auto-apply filters, wait for user to click "Apply Filters" button
-}, [resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, reasonFilter, data]);
-
-// Update apiPrefix when config changes
-useEffect(() => {
-  if (config?.apiPrefix) {
-    setApiPrefix(config.apiPrefix);
-  }
+  if (config?.apiPrefix) setApiPrefix(config.apiPrefix);
 }, [config?.apiPrefix]);
 
-// Cleanup timeout and abort controller on unmount
 useEffect(() => {
   return () => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (abortControllerRef.current) abortControllerRef.current.abort();
   };
 }, []);
 
@@ -1256,8 +1004,8 @@ useEffect(() => {
     setStateFilter,
     callAttemptsFilter,
     setCallAttemptsFilter,
-    reasonFilter,           // ADDED: Export reason filter state
-    setReasonFilter,        // ADDED: Export reason filter setter
+    reasonFilter,           
+    setReasonFilter,        
     dateRangeFilter,
     setDateRangeFilter,
     filtersApplied,
@@ -1281,7 +1029,7 @@ useEffect(() => {
     getUniqueResolutionStatuses,
     getUniqueAssignedTo,
     getUniquePosterStatuses,
-    getUniqueReasons,       // ADDED: Export unique reasons getter
+    getUniqueReasons,       
     apiPrefix,
     searchTerm,
     stateToParamValue,
