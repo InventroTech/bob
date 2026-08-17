@@ -23,6 +23,7 @@ import {
 import { icons } from 'lucide-react';
 import { CustomIcons } from '@/components/page-builder/NewCustomIcons';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon } from '@/components/icons/CustomIcons';
+import { SparkySidebarButton } from '@/components/chatbot/ChatWidget';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -416,6 +417,10 @@ const CustomAppLayout: React.FC = () => {
                 {renderNavLinks({ collapsed: false, onNavigate: () => setMobileNavOpen(false) })}
               </nav>
               <div className={`border-t p-3 ${isUnmanndApp ? 'space-y-1.5' : 'space-y-2'}`}>
+                <SparkySidebarButton
+                  placePanelAway
+                  onToggle={() => setMobileNavOpen(false)}
+                />
                 <button
                   type="button"
                   className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
@@ -525,6 +530,7 @@ const CustomAppLayout: React.FC = () => {
               isUnmanndApp ? 'py-2.5 space-y-2' : 'py-4 space-y-3'
             } ${sidebarCollapsed ? 'px-2' : 'px-3'}`}
           >
+            <SparkySidebarButton collapsed={sidebarCollapsed} />
             <button className={`flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500">
                 <Bell className="h-4 w-4" />
