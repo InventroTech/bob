@@ -715,7 +715,7 @@
   will-change: transform;
 }
 
-@keyframes unmannd-success-pop {
+@keyframes request-success-pop {
   0% {
     opacity: 0;
     transform: scale(0.85);
@@ -730,7 +730,7 @@
   }
 }
 
-@keyframes unmannd-success-check {
+@keyframes request-success-check {
   0% {
     stroke-dashoffset: 48;
   }
@@ -739,13 +739,13 @@
   }
 }
 
-.animate-unmannd-success-pop {
-  animation: unmannd-success-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+.animate-request-success-pop {
+  animation: request-success-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.animate-unmannd-success-check {
+.animate-request-success-check {
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: unmannd-success-check 0.45s 0.15s ease-out forwards;
+  animation: request-success-check 0.45s 0.15s ease-out forwards;
 }
 
