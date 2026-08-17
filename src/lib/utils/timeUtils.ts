@@ -63,7 +63,7 @@ export const convertGMTtoIST = (
 
 /**
  * Format a date-only value (YYYY-MM-DD) as a calendar day without timezone shift.
- * Example: 2026-07-24 → "24 JULY 2026"
+ * Example: 2026-08-12 → "12 AUG 2026"
  * Full timestamps still go through convertGMTtoIST.
  */
 export const formatCalendarDate = (dateString: string): string => {
@@ -74,7 +74,7 @@ export const formatCalendarDate = (dateString: string): string => {
       .replace(/,?\s*\d{1,2}:\d{2}.*$/, '')
       .trim()
       .replace(
-        /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/gi,
+        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b/gi,
         (m) => m.toUpperCase()
       );
 
@@ -88,14 +88,14 @@ export const formatCalendarDate = (dateString: string): string => {
     return toUpperMonth(
       local.toLocaleDateString('en-GB', {
         day: 'numeric',
-        month: 'long',
+        month: 'short',
         year: 'numeric',
       })
     );
   }
   const formatted = convertGMTtoIST(trimmed, 'date', {
     day: 'numeric',
-    month: 'long',
+    month: 'short',
     year: 'numeric',
   });
   return toUpperMonth(String(formatted)) || formatted;
