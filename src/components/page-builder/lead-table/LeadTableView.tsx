@@ -77,7 +77,10 @@ export function LeadTableView(props: LeadTableModel) {
     isCustomModalOpen,
     setIsCustomModalOpen,
     apiClient,
-  } = props;
+    // Added from main branch context:
+    displayTitle,
+    tableTitle,
+  } = props as any;
 
   // Identify if this table is being used for Inventory/Unmanned requests instead of CRM Leads
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
@@ -100,40 +103,12 @@ export function LeadTableView(props: LeadTableModel) {
         )
     );
 
-  // DYNAMIC TITLE LOGIC: Intelligently infer the title from the active sidebar item or URL
-  // This overrides incorrect config.title values passed by the builder.
-  const [mobileTitle, setMobileTitle] = React.useState(() => {
-    const configured = (config?.title || '').trim();
-    if (isInventoryLikeForTitle && (!configured || configured.toLowerCase() === 'all leads')) return '';
-    return configured || 'All Leads';
-  });
-
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const configured = (config?.title || '').trim();
-      
-      // If it's an inventory page, just use the configured title (or blank if it defaulted to "All Leads")
-      if (isInventoryLikeForTitle) {
-        setMobileTitle((!configured || configured.toLowerCase() === 'all leads') ? '' : configured);
-        return;
-      }
-
-      // For CRM leads, intelligently detect the page to override wrong builder configs
-      const activeSidebarText = document.querySelector('.bg-black')?.textContent?.toLowerCase() || '';
-      const pageTitle = document.title.toLowerCase();
-      const currentPath = window.location.pathname.toLowerCase();
-      
-      if (activeSidebarText.includes('follow up') || pageTitle.includes('follow up') || currentPath.includes('follow')) {
-        setMobileTitle('Follow Up Leads');
-      } else if (activeSidebarText.includes('pending') || pageTitle.includes('pending') || currentPath.includes('pending')) {
-        setMobileTitle('Pending Leads');
-      } else if (activeSidebarText.includes('halocom') || pageTitle.includes('halocom') || currentPath.includes('halocom')) {
-        setMobileTitle('Halocom Leads');
-      } else {
-        setMobileTitle(configured || "All Leads");
-      }
-    }
-  }, [config?.title, isInventoryLikeForTitle]);
+  // Navy header/border for Procurement / My Request / Pending Approval / etc.
+  // CRM All Leads and other default tables keep black headers.
+  const isProcurementStyleTable =
+    config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
+  const procurementHeaderBg = 'bg-[#1A3673]';
+  const procurementTableFrame = 'overflow-hidden rounded-lg border border-[#1A3673]';
 
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
@@ -168,18 +143,45 @@ export function LeadTableView(props: LeadTableModel) {
 
   return (
     <>
-      {/* Mobile Page Title - Dynamically changes based on URL (Visible only on mobile) */}
-      {mobileTitle ? (
-        <div className="md:hidden w-full pb-3 px-4 pt-4">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {mobileTitle}
+      {/* Mobile Page Title - Dynamically changes based on URL */}
+      {displayTitle ? (
+        <div
+          className={
+            isProcurementStyleTable
+              ? 'md:hidden w-full pb-1.5 px-3 pt-2'
+              : 'md:hidden w-full pb-3 px-4 pt-4'
+          }
+        >
+          <h2
+            className={
+              isProcurementStyleTable
+                ? 'text-2xl font-bold uppercase tracking-tight text-[#0B1F4D]'
+                : 'text-2xl font-bold text-gray-900'
+            }
+          >
+            {displayTitle}
           </h2>
         </div>
       ) : null}
 
-      <div className="w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5">
-        {/* Toolbar — tight under page header. Internal title removed for desktop to prevent duplication. */}
-        <div className="flex items-center gap-3 flex-wrap justify-end w-full">
+      <div
+        className={
+          isProcurementStyleTable
+            ? 'w-full max-w-full min-w-0 border border-[#1A3673] rounded-lg bg-white px-1.5 py-1'
+            : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
+        }
+      >
+        {/* Toolbar - tight under page header so All Requests fits with less scroll */}
+        <div
+          className={`flex items-center flex-wrap ${
+            isProcurementStyleTable ? 'gap-2' : 'gap-3'
+          } ${tableTitle || displayTitle ? 'justify-between' : 'justify-end'}`}
+        >
+          {(displayTitle || tableTitle) ? (
+            <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
+              {displayTitle || tableTitle}
+            </h5>
+          ) : null}
           <div className="flex items-center gap-2">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
