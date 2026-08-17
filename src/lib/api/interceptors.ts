@@ -83,25 +83,33 @@ export const setupResponseInterceptor = (instance: any) => {
             try {
               console.log('[Interceptor] 401 error - attempting to refresh session and retry request');
 
-              // Force a session refresh
+              // Shared single-flight refresh (safe under concurrent 401s / proactive refresh)
               const refreshedToken = await refreshAccessToken();
 
               if (!refreshedToken) {
-                console.error('[Interceptor] Session refresh failed');
-                await signOutAndClearSession();
+                console.error('[Interceptor] Session refresh failed — signing out');
+                await signOutAndClearSession({ reason: 'expired' });
+                return Promise.reject(new AuthenticationError(errorMessage, status, data));
+              }
+
+              // Same token as before means refresh was retryable/network — don't logout, don't loop
+              const priorAuth = originalRequest.headers?.Authorization;
+              const priorToken =
+                typeof priorAuth === 'string' && priorAuth.toLowerCase().startsWith('bearer ')
+                  ? priorAuth.slice(7).trim()
+                  : null;
+              if (priorToken && priorToken === refreshedToken) {
+                console.warn('[Interceptor] Refresh did not yield a new token — failing request without sign-out');
                 return Promise.reject(new AuthenticationError(errorMessage, status, data));
               }
 
               console.log('[Interceptor] Session refreshed successfully - retrying request with new token');
 
-              // Update the Authorization header with the new token
               originalRequest.headers.Authorization = `Bearer ${refreshedToken}`;
-
-              // Retry the original request with the new token
               return instance(originalRequest);
             } catch (refreshError) {
               console.error('[Interceptor] Error during token refresh:', refreshError);
-              await signOutAndClearSession();
+              // Transient refresh errors should not hard-logout the user
               return Promise.reject(new AuthenticationError(errorMessage, status, data));
             }
           }
