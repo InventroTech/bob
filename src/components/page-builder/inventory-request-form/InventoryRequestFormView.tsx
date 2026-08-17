@@ -264,7 +264,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
         <CardContent
           className={cn(
             'space-y-3 px-4 pt-3 pb-2',
-            useNavyTheme && 'space-y-4 px-5 pt-5 pb-3 sm:px-6'
+            useNavyTheme && 'space-y-4 px-5 pt-2.5 pb-3 sm:px-6'
           )}
         >
           <section className={cn('space-y-2', useNavyTheme && 'space-y-3')}>
