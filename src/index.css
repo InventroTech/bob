@@ -749,3 +749,64 @@
   animation: unmannd-success-check 0.45s 0.15s ease-out forwards;
 }
 
+@keyframes sparky-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes sparky-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(12deg);
+  }
+  40% {
+    transform: rotate(-8deg);
+  }
+  60% {
+    transform: rotate(10deg);
+  }
+  80% {
+    transform: rotate(-4deg);
+  }
+}
+
+@keyframes sparky-bubble-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-sparky-bob {
+  animation: sparky-bob 1.5s ease-in-out infinite;
+}
+
+.animate-sparky-wave {
+  transform-origin: 70% 80%;
+  animation: sparky-wave 1.35s ease-in-out infinite;
+}
+
+.animate-sparky-bubble-in {
+  animation: sparky-bubble-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sparky-bob,
+  .animate-sparky-wave,
+  .animate-sparky-bubble-in {
+    animation: none;
+  }
+}
+
