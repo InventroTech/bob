@@ -180,14 +180,18 @@ export function LeadTableView(props: LeadTableModel) {
             </h5>
           ) : null}
           <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <div
+              className={`relative flex-1 max-w-sm ${
+                isProcurementStyleTable ? 'min-w-[160px]' : 'min-w-[200px]'
+              }`}
+            >
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 type="text"
                 placeholder="Search..."
                 value={displaySearchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-9 h-8"
+                className={isProcurementStyleTable ? 'pl-9 h-7 text-sm' : 'pl-9 h-8'}
               />
             </div>
             <CustomButton
@@ -198,6 +202,11 @@ export function LeadTableView(props: LeadTableModel) {
                 e.stopPropagation();
                 setShowFilters(!showFilters);
               }}
+              className={
+                isProcurementStyleTable && showFilters
+                  ? 'border-[#1A3673] bg-[#1A3673] text-white hover:bg-[#152c5e] hover:text-white'
+                  : undefined
+              }
             >
               {showFilters ? 'Hide Filters' : 'Show Filters'}
             </CustomButton>
@@ -205,11 +214,17 @@ export function LeadTableView(props: LeadTableModel) {
         </div>
 
         {showFilters && (
-          <div className="mt-2 mb-1.5">
-            <div className="bg-gray-50 p-2.5 rounded-lg border">
+          <div className={isProcurementStyleTable ? 'mt-1.5 mb-1' : 'mt-2 mb-1.5'}>
+            <div
+              className={
+                isProcurementStyleTable
+                  ? 'rounded-lg border border-[#1A3673] bg-[#1A3673] p-3 text-white'
+                  : 'rounded-lg border bg-gray-50 p-2.5'
+              }
+            >
               {/* Use new dynamic filter system if filters are configured */}
               {hasActiveFilters ? (
-                <div className="space-y-3">
+                <div className={isProcurementStyleTable ? 'space-y-2' : 'space-y-3'}>
                   <DynamicFilterBuilder
                     filters={effectiveFilters}
                     filterContext={{
@@ -242,13 +257,38 @@ export function LeadTableView(props: LeadTableModel) {
                       const currentSequence = ++requestSequenceRef.current;
                       fetchFilteredData(currentSequence, params);
                     }}
-                    className=""
+                    className={
+                      isProcurementStyleTable
+                        ? [
+                            // Labels stay white on navy
+                            '[&>div>div>label]:!text-white',
+                            // Filter field controls: white boxes, dark readable text
+                            '[&>div.grid_input]:!bg-white [&>div.grid_input]:!text-gray-900 [&>div.grid_input]:placeholder:!text-gray-500',
+                            '[&>div.grid_textarea]:!bg-white [&>div.grid_textarea]:!text-gray-900',
+                            '[&>div.grid_button]:!bg-white [&>div.grid_button]:!text-gray-900',
+                            '[&>div.grid_button_span]:!text-gray-900',
+                            // Apply Filters — white on navy (was nearly invisible as dark-on-navy)
+                            '[&>div.flex>button:first-child]:!bg-white [&>div.flex>button:first-child]:!text-[#1A3673]',
+                            '[&>div.flex>button:first-child]:hover:!bg-white/90',
+                            '[&>div.flex>button:first-child]:disabled:!bg-white/50 [&>div.flex>button:first-child]:disabled:!text-[#1A3673]/60',
+                            // Clear All — light outline on navy
+                            '[&>div.flex>button:not(:first-child)]:!border-white/70 [&>div.flex>button:not(:first-child)]:!bg-transparent',
+                            '[&>div.flex>button:not(:first-child)]:!text-white [&>div.flex>button:not(:first-child)]:hover:!bg-white/10',
+                          ].join(' ')
+                        : ''
+                    }
                     showSummary={config?.filterOptions?.showSummary !== false}
                     compact={config?.filterOptions?.compact}
                   />
 
                   {/* Filter Summary */}
-                  <div className="mt-3 text-sm text-gray-600">
+                  <div
+                    className={
+                      isProcurementStyleTable
+                        ? 'mt-3 text-sm text-white/85'
+                        : 'mt-3 text-sm text-gray-600'
+                    }
+                  >
                     Showing {filteredData.length} records
                     {pagination.currentPage > 1 && (
                       <span> · Page {pagination.currentPage}</span>
@@ -261,7 +301,9 @@ export function LeadTableView(props: LeadTableModel) {
                   </div>
                 </div>
               ) : (
-                <h5>No filters configured</h5>
+                <h5 className={isProcurementStyleTable ? 'text-white' : undefined}>
+                  No filters configured
+                </h5>
               )}
             </div>
           </div>
@@ -327,7 +369,13 @@ export function LeadTableView(props: LeadTableModel) {
         </div>
 
         {/* Desktop Table */}
-        <div className="hidden md:block w-full max-w-full min-w-0 relative mt-1.5">
+        <div
+          className={
+            isProcurementStyleTable
+              ? 'hidden md:block w-full max-w-full min-w-0 relative mt-1'
+              : 'hidden md:block w-full max-w-full min-w-0 relative mt-1.5'
+          }
+        >
           {/* Loading Overlay */}
           {tableLoading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
@@ -356,8 +404,11 @@ export function LeadTableView(props: LeadTableModel) {
             emptyMessage={config?.emptyMessage || 'No data found'}
             onRowClick={!isInPageBuilder && effectiveDetailMode !== 'none' ? handleRowClick : undefined}
             renderCell={renderCell}
-            headerBgColor="bg-black"
+            // Navy theme for Unmannd / procurement request tables only. All Leads & CRM stay black.
+            headerBgColor={isProcurementStyleTable ? procurementHeaderBg : 'bg-black'}
             headerTextColor="text-white"
+            dense={isProcurementStyleTable}
+            className={isProcurementStyleTable ? procurementTableFrame : undefined}
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
           />
         </div>
@@ -365,7 +416,13 @@ export function LeadTableView(props: LeadTableModel) {
         {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
         {filteredData.length > 0 &&
           (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
-            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+            <div
+              className={
+                isProcurementStyleTable
+                  ? 'flex justify-between items-center mt-1 pt-1 border-t border-gray-200'
+                  : 'flex justify-between items-center mt-2 pt-2 border-t border-gray-200'
+              }
+            >
               <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
 
               <div className="flex items-center gap-2">

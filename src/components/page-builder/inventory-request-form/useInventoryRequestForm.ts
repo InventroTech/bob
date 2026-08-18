@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import type { MembershipUser } from '@/lib/api/services/membership';
 import { toast } from 'sonner';
-import { formatCurrencyDisplay } from '@/lib/utils/currencyFormat';
 import { emptyShipmentTrackingFields } from '@/lib/inventory/shipmentTracking';
 import { formatInventoryPriorityLabel } from '@/lib/inventory/priority';
 import {
@@ -15,44 +14,38 @@ import {
 import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
 import { supabase } from '@/lib/supabase';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
-import { getEffectiveToken, fetchPagesForRole } from '@/lib/auth/spoof';
+import { getEffectiveToken, fetchPagesForRole, useSpoofUserId } from '@/lib/auth/spoof';
 
 import {
   RECORDS_URL,
-  PRICE_COMPARE_URL,
-  FALLBACK_ECOMMERCE_SOURCES,
   DEFAULT_DELIVERY_PINCODE,
   DEFAULT_DELIVERY_ADDRESS,
   PRIORITY_OPTIONS,
   REQUIRED_ITEM_FIELDS,
 } from './constants';
 import type {
-  EcommerceSource,
   FormItem,
   InventoryItemSuggestion,
   InventoryRequestFormProps,
-  LivePriceCompareResponse,
-  PriceCompareVendorsResponse,
   PriceQuote,
   RequestCategory,
-  SpecFacet,
   VendorOption,
 } from './types';
+import type { InventoryRequestFormDraft } from './draftStorage';
 import {
-  quoteFromLiveResult,
   normalizeIndianPincode,
-  looksLikeProductUrl,
   normalizeProductName,
   normalizeVendorName,
   toVendorStorageName,
   newEmptyItem,
-  buildPriceSearchQuery,
-  extractSpecFacetsFromTitles,
-  cleanItemNameFromTitle,
-  resolveSpecificationsFromTitle,
-  titlesNeedSpecificationPrompt,
-  isExactEnoughProductMatch,
 } from './utils';
+import {
+  clearDraft,
+  isMeaningfulDraft,
+  loadDraft,
+  makeDraftKey,
+  saveDraft,
+} from './draftStorage';
 
 const normalizePageName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -87,11 +80,13 @@ function pickPageIdByNames(
  * - Prefer Page Builder override `redirectAfterSubmitPageName` when set
  * - Prefer My Request(s) for all roles (including TL / Procurement Manager)
  * - Approver roles fall back to All Request(s) if My Request page is missing
+ * - Final fallbacks: any request list page (not New/Create), else first available page
  */
 function pickPostCreatePageId(
   pages: Array<{ id: string; name: string }>,
   preferredName: string | undefined,
-  roleName: string | null | undefined
+  roleName: string | null | undefined,
+  currentPageId?: string | null
 ): string | null {
   if (!pages.length) return null;
   const preferred = preferredName ? normalizePageName(preferredName) : '';
@@ -110,14 +105,36 @@ function pickPostCreatePageId(
   if (myRequest) return myRequest;
 
   if (isApproverLikeRole(roleName)) {
-    return pickPageIdByNames(
+    const allRequests = pickPageIdByNames(
       pages,
       ['all requests', 'all request'],
       ['all request']
     );
+    if (allRequests) return allRequests;
   }
 
-  return null;
+  const isNewRequestPage = (name: string) => {
+    const n = normalizePageName(name);
+    return n.includes('new request') || n.includes('create request') || n === 'new';
+  };
+
+  // Unmannd / inventory: land on any request list (not the create form).
+  const requestList = pages.find((p) => {
+    if (currentPageId && p.id === currentPageId) return false;
+    if (isNewRequestPage(p.name)) return false;
+    const n = normalizePageName(p.name);
+    return (
+      n.includes('my request') ||
+      n.includes('all request') ||
+      n.includes('pending approval') ||
+      n === 'requests' ||
+      (n.includes('request') && !n.includes('form'))
+    );
+  });
+  if (requestList) return requestList.id;
+
+  const other = pages.find((p) => !currentPageId || p.id !== currentPageId);
+  return other?.id ?? pages[0]?.id ?? null;
 }
 
 export function useInventoryRequestForm({
@@ -126,10 +143,29 @@ export function useInventoryRequestForm({
 }: InventoryRequestFormProps) {
   const isProcurement = variant === 'procurement';
   const { user, session } = useAuth();
+  const spoofUserId = useSpoofUserId();
+  const draftOwnerId = spoofUserId || user?.id || null;
   const navigate = useNavigate();
-  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const { tenantSlug, pageId: currentPageId } = useParams<{
+    tenantSlug?: string;
+    pageId?: string;
+  }>();
 
   const entityType = config?.entityType ?? 'inventory_request';
+  const draftKey = draftOwnerId
+    ? makeDraftKey({
+        userId: draftOwnerId,
+        tenantSlug,
+        pageId: currentPageId,
+        entityType,
+        variant: isProcurement ? 'procurement' : 'default',
+      })
+    : '';
+  // Navy chrome for Unmannd: procurement form, unmannd entity, or unmannd tenant slug.
+  const useNavyTheme =
+    isProcurement ||
+    String(entityType).toLowerCase() === 'unmannd_request' ||
+    /unman+d/i.test(String(tenantSlug || ''));
   const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'NEW_REQUEST';
   const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
   const redirectPageName = config?.redirectAfterSubmitPageName;
@@ -148,48 +184,19 @@ export function useInventoryRequestForm({
   const [currentMembershipId, setCurrentMembershipId] = useState<string | null>(null);
   const [items, setItems] = useState<FormItem[]>(() => [newEmptyItem()]);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmitSuccess, setShowSubmitSuccess] = useState(false);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [vendorsLoading, setVendorsLoading] = useState(true);
   const [addVendorForItemId, setAddVendorForItemId] = useState<string | null>(null);
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorLink, setNewVendorLink] = useState('');
   const [savingNewVendor, setSavingNewVendor] = useState(false);
-  /** Spec picker shown when live search finds multiple product variants. */
-  const [specPromptItemId, setSpecPromptItemId] = useState<string | null>(null);
-  const [specFacets, setSpecFacets] = useState<SpecFacet[]>([]);
-  const [specSelections, setSpecSelections] = useState<Record<string, string>>({});
-  const [specExtraText, setSpecExtraText] = useState('');
-  const [specSampleTitles, setSpecSampleTitles] = useState<string[]>([]);
-  /** At most one matching product selected (titles contain commas — don't parse via split). */
-  const [selectedSampleMatch, setSelectedSampleMatch] = useState<string | null>(null);
-  /** First live-search payload kept so length/size Apply filters existing hits instead of re-querying empty. */
-  const [pendingSpecCompare, setPendingSpecCompare] = useState<{
-    itemId: string;
-    name: string;
-    data: LivePriceCompareResponse;
-  } | null>(null);
   /** Live-formatted price strings while typing (cleared on blur). */
   const [priceDraftByItemId, setPriceDraftByItemId] = useState<Record<string, string>>({});
-  /** Vendor catalog from backend (config-driven). */
-  const [ecommerceSources, setEcommerceSources] = useState<EcommerceSource[]>(() => [
-    ...FALLBACK_ECOMMERCE_SOURCES,
-  ]);
-  /** core = small reliable set (default); extended = full catalog. */
-  const [priceCompareProfile, setPriceCompareProfile] = useState<'core' | 'extended'>('core');
-  /** Per-item loading state for live marketplace price fetch. */
-  const [liveCompareLoadingByItemId, setLiveCompareLoadingByItemId] = useState<Record<string, boolean>>({});
-  /** Per-item loading while resolving product details from a pasted item link. */
-  const [linkFetchLoadingByItemId, setLinkFetchLoadingByItemId] = useState<Record<string, boolean>>({});
-  /** Shake nounce for header/item fields that failed validation (or link fetch). */
+  /** Shake nounce for header/item fields that failed validation. */
   const [fieldShakeNonce, setFieldShakeNonce] = useState<Record<string, number>>({});
   /** First missing field to focus after validation shake re-render. */
   const pendingFocusFieldKeyRef = useRef<string | null>(null);
-  /** Last item-link URL successfully fetched per item (skip duplicate blur fetches). */
-  const [lastFetchedLinkByItemId, setLastFetchedLinkByItemId] = useState<Record<string, string>>({});
-  /** Shown when live search finds no close product match. */
-  const [priceCompareStatusByItemId, setPriceCompareStatusByItemId] = useState<
-    Record<string, 'idle' | 'found' | 'unavailable'>
-  >({});
   const [focusedItemNameId, setFocusedItemNameId] = useState<string | null>(null);
   const [itemNameQuery, setItemNameQuery] = useState<string>('');
   const [itemNameSuggestions, setItemNameSuggestions] = useState<InventoryItemSuggestion[]>([]);
@@ -201,19 +208,19 @@ export function useInventoryRequestForm({
   const [focusedVendorId, setFocusedVendorId] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState<string>('');
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  const appliedOwnerIdRef = useRef<string | null>(null);
+  const snapshotRef = useRef<(InventoryRequestFormDraft & { key: string }) | null>(null);
+  const persistTimerRef = useRef<number | null>(null);
+  const skipPersistRef = useRef(false);
+  const userIdRef = useRef(draftOwnerId);
+  userIdRef.current = draftOwnerId;
 
   const requesterDisplay =
     requesterNameFromMembership ||
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
     '—';
-
-  /** Vendors searched for the selected profile (extended = full catalog). */
-  const activePriceCompareVendors = ecommerceSources.filter((s) => {
-    if (!s.id || s.id === 'other') return false;
-    if (priceCompareProfile === 'extended') return true;
-    return s.profile === 'core';
-  });
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -254,6 +261,124 @@ export function useInventoryRequestForm({
   useEffect(() => {
     void loadProjectSuggestions();
   }, [loadProjectSuggestions]);
+
+  const applyEmptyForm = useCallback(() => {
+    setProjectPurpose('');
+    setRequestCategory('');
+    setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
+    setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
+    setItems([newEmptyItem()]);
+    setPriceDraftByItemId({});
+    setFieldShakeNonce({});
+  }, []);
+
+  const applyDraftToForm = useCallback((draft: InventoryRequestFormDraft) => {
+    setProjectPurpose(draft.projectPurpose);
+    setRequestCategory(draft.requestCategory);
+    setDeliveryPincode(draft.deliveryPincode || DEFAULT_DELIVERY_PINCODE);
+    setDeliveryAddress(draft.deliveryAddress || DEFAULT_DELIVERY_ADDRESS);
+    setItems(draft.items.length > 0 ? draft.items : [newEmptyItem()]);
+    setPriceDraftByItemId(draft.priceDraftByItemId ?? {});
+    setFieldShakeNonce({});
+  }, []);
+
+  // Only record a snapshot once this owner's fields are on screen, so we never
+  // write requestor A's values into team lead / manager / another requestor's slot.
+  if (appliedOwnerIdRef.current === draftOwnerId && draftKey && draftOwnerId) {
+    snapshotRef.current = {
+      key: draftKey,
+      userId: draftOwnerId,
+      projectPurpose,
+      requestCategory,
+      deliveryPincode,
+      deliveryAddress,
+      items,
+      priceDraftByItemId,
+      persistedAt: Date.now(),
+    };
+  }
+
+  useEffect(() => {
+    skipPersistRef.current = true;
+
+    const prev = snapshotRef.current;
+    if (prev?.userId && prev.key && draftOwnerId && prev.userId !== draftOwnerId) {
+      const { key: prevKey, ...prevDraft } = prev;
+      if (isMeaningfulDraft(prevDraft)) {
+        saveDraft(prevKey, { ...prevDraft, persistedAt: Date.now() });
+      } else {
+        clearDraft(prevKey);
+      }
+      snapshotRef.current = null;
+    }
+
+    if (!draftOwnerId || !draftKey) {
+      appliedOwnerIdRef.current = null;
+      applyEmptyForm();
+      setDraftHydrated(false);
+      return;
+    }
+
+    const draft = loadDraft(draftKey, draftOwnerId);
+    if (draft) applyDraftToForm(draft);
+    else applyEmptyForm();
+    appliedOwnerIdRef.current = draftOwnerId;
+    setDraftHydrated(true);
+  }, [draftKey, draftOwnerId, applyEmptyForm, applyDraftToForm]);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    if (!draftOwnerId || !draftKey) return;
+    if (appliedOwnerIdRef.current !== draftOwnerId) return;
+
+    const persist = () => {
+      persistTimerRef.current = null;
+      const snap = snapshotRef.current;
+      if (!snap?.key || !snap.userId) return;
+      if (snap.userId !== userIdRef.current) return;
+      const { key, ...draft } = snap;
+      if (!isMeaningfulDraft(draft)) {
+        clearDraft(key);
+        return;
+      }
+      saveDraft(key, { ...draft, persistedAt: Date.now() });
+    };
+    if (persistTimerRef.current != null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = window.setTimeout(persist, 250);
+    return () => {
+      if (persistTimerRef.current != null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      if (!skipPersistRef.current && userIdRef.current) persist();
+    };
+  }, [
+    draftHydrated,
+    draftKey,
+    draftOwnerId,
+    projectPurpose,
+    requestCategory,
+    deliveryPincode,
+    deliveryAddress,
+    items,
+    priceDraftByItemId,
+  ]);
+
+  const discardDraft = useCallback(() => {
+    skipPersistRef.current = true;
+    if (persistTimerRef.current != null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    snapshotRef.current = null;
+    if (draftKey) clearDraft(draftKey);
+  }, [draftKey]);
 
   const rememberProjectSuggestion = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -408,34 +533,6 @@ export function useInventoryRequestForm({
     }, 250);
     return () => window.clearTimeout(t);
   }, [focusedItemNameId, itemNameQuery, fetchItemSuggestions]);
-
-  // Load price-compare vendor catalog from backend (single source of truth).
-  useEffect(() => {
-    let cancelled = false;
-    const loadVendors = async () => {
-      try {
-        const res = await apiClient.get<PriceCompareVendorsResponse>(PRICE_COMPARE_URL);
-        const rows = (res.data?.vendors ?? [])
-          .map((v) => ({
-            id: String(v.id || '').trim().toLowerCase(),
-            label: String(v.label || v.id || '').trim(),
-            vendorName: String(v.vendor_name || '').trim(),
-            hostIncludes: Array.isArray(v.hosts) ? v.hosts.map(String) : [],
-            profile: String(v.profile || 'extended'),
-          }))
-          .filter((v) => v.id && v.label);
-        if (cancelled || rows.length === 0) return;
-        setEcommerceSources([...rows, { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] }]);
-        // Form default is Core; keep local selection unless the user changes the profile control.
-      } catch {
-        // Keep fallback sources.
-      }
-    };
-    void loadVendors();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Pre-fill department and team_lead from current user's membership (API only)
   useEffect(() => {
@@ -596,546 +693,6 @@ export function useInventoryRequestForm({
       return next;
     });
   }, []);
-
-  const removeQuote = useCallback((itemId: string, quoteId: string) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== itemId) return item;
-        return { ...item, price_quotes: item.price_quotes.filter((q) => q.id !== quoteId) };
-      })
-    );
-  }, []);
-
-  /** Apply a comparison quote into the main cost / vendor / product link fields. */
-  const applyQuoteToItem = useCallback((itemId: string, quote: PriceQuote) => {
-    if (quote.price === '' || !Number.isFinite(Number(quote.price)) || Number(quote.price) <= 0) {
-      toast.error('This quote has no valid price.');
-      return;
-    }
-    const meta = ecommerceSources.find((s) => s.id === quote.source);
-    const vendorName = meta?.vendorName || toVendorStorageName(quote.source_label) || 'OTHER';
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== itemId) return item;
-        return {
-          ...item,
-          estimated_cost: Number(quote.price),
-          price_currency: quote.currency,
-          vendor: vendorName,
-          product_link: quote.link.trim() || item.product_link,
-          product_image: quote.image?.trim() || item.product_image,
-        };
-      })
-    );
-    setPriceDraftByItemId((prev) => {
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
-    toast.success(`Using ${quote.source_label} price (${formatCurrencyDisplay(quote.price)} ${quote.currency}).`);
-  }, [ecommerceSources]);
-
-  /**
-   * Fetch product title / price / vendor from a pasted item link via price-compare (urls only).
-   */
-  const shakeItemLink = useCallback(
-    (itemId: string) => {
-      shakeFields([`item:${itemId}:product_link`]);
-    },
-    [shakeFields]
-  );
-
-  const fetchDetailsFromItemLink = useCallback(
-    async (itemId: string, rawUrl?: string, options?: { force?: boolean }) => {
-      const item = items.find((i) => i.id === itemId);
-      if (!item) return;
-
-      const url = String(rawUrl ?? item.product_link ?? '').trim();
-      if (!looksLikeProductUrl(url)) {
-        shakeItemLink(itemId);
-        if (url) {
-          toast.error('Enter a valid product URL (https://…).');
-        }
-        return;
-      }
-
-      const normalizedUrl = url;
-      if (!options?.force && lastFetchedLinkByItemId[itemId] === normalizedUrl) {
-        return;
-      }
-
-      const pin = normalizeIndianPincode(deliveryPincode) || DEFAULT_DELIVERY_PINCODE;
-
-      setLinkFetchLoadingByItemId((prev) => ({ ...prev, [itemId]: true }));
-      try {
-        const res = await apiClient.post<LivePriceCompareResponse>(
-          PRICE_COMPARE_URL,
-          {
-            urls: [normalizedUrl],
-            pincode: pin,
-          },
-          { timeout: 90000 }
-        );
-        const data = res.data;
-        if (data?.error) {
-          shakeItemLink(itemId);
-          toast.error(data.error);
-          return;
-        }
-
-        const results = (data?.results ?? []).filter(
-          (r) => !r.error && r.price != null && Number(r.price) > 0
-        );
-        if (results.length === 0) {
-          const errMsg =
-            (data?.results ?? []).find((r) => r.error)?.error ||
-            data?.errors?.[0] ||
-            'Could not fetch product details from this link.';
-          shakeItemLink(itemId);
-          toast.error(String(errMsg));
-          return;
-        }
-
-        // Prefer the result whose link matches the pasted URL; else cheapest.
-        const urlHost = (() => {
-          try {
-            return new URL(normalizedUrl).hostname.replace(/^www\./, '').toLowerCase();
-          } catch {
-            return '';
-          }
-        })();
-        const matched =
-          results.find((r) => {
-            const link = String(r.link || '').trim();
-            if (!link) return false;
-            if (link === normalizedUrl) return true;
-            try {
-              const h = new URL(link).hostname.replace(/^www\./, '').toLowerCase();
-              return Boolean(urlHost && h === urlHost);
-            } catch {
-              return false;
-            }
-          }) ||
-          [...results].sort((a, b) => Number(a.price) - Number(b.price))[0];
-
-        const quote = quoteFromLiveResult(matched, ecommerceSources);
-        if (!quote) {
-          shakeItemLink(itemId);
-          toast.error('Could not read a price from this link.');
-          return;
-        }
-
-        const meta = ecommerceSources.find((s) => s.id === quote.source);
-        const vendorName = meta?.vendorName || toVendorStorageName(quote.source_label) || 'OTHER';
-        const rawTitle = (quote.title || '').trim();
-        const title = cleanItemNameFromTitle(rawTitle) || rawTitle;
-        const specsFromTitle = resolveSpecificationsFromTitle(rawTitle, title);
-
-        const productImage =
-          String(matched.image || quote.image || '').trim() ||
-          (item.product_image ?? '').trim();
-
-        setItems((prev) =>
-          prev.map((row) => {
-            if (row.id !== itemId) return row;
-            const existingQuotes = row.price_quotes.filter(
-              (q) => (q.link || '').trim().toLowerCase() !== (quote.link || '').trim().toLowerCase()
-            );
-            return {
-              ...row,
-              item_name_freeform: title || row.item_name_freeform,
-              // Always fill specs from the link when we have a title.
-              specifications: specsFromTitle || row.specifications || title || row.item_name_freeform,
-              estimated_cost: Number(quote.price),
-              price_currency: quote.currency,
-              vendor: vendorName || row.vendor,
-              product_link: quote.link.trim() || normalizedUrl,
-              product_image: productImage || row.product_image,
-              price_quotes: [quote, ...existingQuotes],
-            };
-          })
-        );
-        setPriceDraftByItemId((prev) => {
-          const next = { ...prev };
-          delete next[itemId];
-          return next;
-        });
-        setLastFetchedLinkByItemId((prev) => ({ ...prev, [itemId]: normalizedUrl }));
-        setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'found' }));
-        clearFieldShake(`item:${itemId}:product_link`);
-
-        toast.success(
-          title
-            ? `Loaded “${title.slice(0, 60)}${title.length > 60 ? '…' : ''}” — ${formatCurrencyDisplay(quote.price)} ${quote.currency}`
-            : `Loaded price ${formatCurrencyDisplay(quote.price)} ${quote.currency} from link`
-        );
-      } catch (err: unknown) {
-        shakeItemLink(itemId);
-        const msg =
-          err && typeof err === 'object' && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'Failed to fetch details from this link.';
-        toast.error(msg);
-      } finally {
-        setLinkFetchLoadingByItemId((prev) => ({ ...prev, [itemId]: false }));
-      }
-    },
-    [items, deliveryPincode, ecommerceSources, lastFetchedLinkByItemId, shakeItemLink, clearFieldShake]
-  );
-
-  /** Apply live API results into quote rows for one item. */
-  const applyLivePriceResults = useCallback(
-    (itemId: string, data: LivePriceCompareResponse, name: string, specifications: string) => {
-      const catalog =
-        data.vendors && data.vendors.length > 0
-          ? [
-              ...data.vendors.map((v) => ({
-                id: String(v.id || '').toLowerCase(),
-                label: String(v.label || v.id || ''),
-                vendorName: String(v.vendorName || ''),
-                hostIncludes: v.hostIncludes || [],
-                profile: v.profile,
-              })),
-              { id: 'other', label: 'Other', vendorName: '', hostIncludes: [] },
-            ]
-          : ecommerceSources;
-
-      const mapped = (data?.results ?? [])
-        .map((r) => quoteFromLiveResult(r, catalog))
-        .filter(Boolean) as PriceQuote[];
-
-      // Keep only close matches for the requested name + specifications.
-      let exactMatches = mapped.filter((q) =>
-        isExactEnoughProductMatch(q.title || '', name, specifications)
-      );
-      if (exactMatches.length === 0 && specifications.trim()) {
-        exactMatches = mapped.filter((q) => isExactEnoughProductMatch(q.title || '', name, ''));
-      }
-
-      const MAX_PER_SOURCE = 3;
-      const SOURCE_ORDER = [
-        ...catalog.map((s) => s.id).filter((id) => id !== 'other'),
-        'other',
-      ];
-      const grouped = new Map<string, PriceQuote[]>();
-      const seenLinks = new Set<string>();
-      for (const q of exactMatches) {
-        const linkKey = (q.link || '').trim().toLowerCase();
-        if (linkKey) {
-          if (seenLinks.has(linkKey)) continue;
-          seenLinks.add(linkKey);
-        }
-        const list = grouped.get(q.source) ?? [];
-        list.push(q);
-        grouped.set(q.source, list);
-      }
-
-      const nextQuotes: PriceQuote[] = [];
-      const orderSet = new Set(SOURCE_ORDER);
-      for (const source of SOURCE_ORDER) {
-        const list = (grouped.get(source) ?? [])
-          .slice()
-          .sort((a, b) => Number(a.price) - Number(b.price))
-          .slice(0, MAX_PER_SOURCE);
-        nextQuotes.push(...list);
-      }
-      for (const [source, list] of grouped) {
-        if (orderSet.has(source)) continue;
-        nextQuotes.push(
-          ...list
-            .slice()
-            .sort((a, b) => Number(a.price) - Number(b.price))
-            .slice(0, MAX_PER_SOURCE)
-        );
-      }
-
-      nextQuotes.sort((a, b) => {
-        const ai = SOURCE_ORDER.indexOf(a.source);
-        const bi = SOURCE_ORDER.indexOf(b.source);
-        const aIdx = ai === -1 ? SOURCE_ORDER.length : ai;
-        const bIdx = bi === -1 ? SOURCE_ORDER.length : bi;
-        if (aIdx !== bIdx) return aIdx - bIdx;
-        const ap = typeof a.price === 'number' ? a.price : Number.POSITIVE_INFINITY;
-        const bp = typeof b.price === 'number' ? b.price : Number.POSITIVE_INFINITY;
-        return ap - bp;
-      });
-
-      if (nextQuotes.length === 0) {
-        setItems((prev) =>
-          prev.map((row) => (row.id === itemId ? { ...row, price_quotes: [] } : row))
-        );
-        setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
-        toast.error('No product available');
-        return false;
-      }
-
-      setItems((prev) =>
-        prev.map((row) => (row.id === itemId ? { ...row, price_quotes: nextQuotes } : row))
-      );
-      setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'found' }));
-
-      const bySourceCount = SOURCE_ORDER.filter((s) =>
-        nextQuotes.some((q) => q.source === s && typeof q.price === 'number' && q.price > 0)
-      ).length;
-      const cheapest = nextQuotes.reduce((best, q) =>
-        typeof q.price === 'number' &&
-        typeof best.price === 'number' &&
-        q.currency === best.currency &&
-        q.price < best.price
-          ? q
-          : best
-      );
-      if (typeof cheapest.price === 'number') {
-        toast.success(
-          `Loaded prices from ${bySourceCount} site${bySourceCount === 1 ? '' : 's'}. Lowest: ${formatCurrencyDisplay(cheapest.price)} ${cheapest.currency} (${cheapest.source_label})`
-        );
-      } else {
-        toast.success(`Loaded ${nextQuotes.length} live price${nextQuotes.length === 1 ? '' : 's'}.`);
-      }
-      return true;
-    },
-    [ecommerceSources]
-  );
-
-  /** Fetch live prices from configured vendor sites via backend. */
-  const fetchLivePrices = useCallback(
-    async (itemId: string, options?: { skipSpecPrompt?: boolean; specificationsOverride?: string }) => {
-      const item = items.find((i) => i.id === itemId);
-      if (!item) return;
-      const name = (item.item_name_freeform ?? '').trim();
-      const specs = (options?.specificationsOverride ?? item.specifications ?? '').trim();
-      const query = buildPriceSearchQuery(name, specs);
-      const urls = [
-        ...(item.product_link ? [item.product_link.trim()] : []),
-        ...item.price_quotes.map((q) => q.link.trim()).filter(Boolean),
-      ].filter((u, idx, arr) => u && arr.indexOf(u) === idx);
-
-      if (!query && urls.length === 0) {
-        toast.error('Enter an item name (or paste a product URL) to fetch live prices.');
-        return;
-      }
-
-      const pin = normalizeIndianPincode(deliveryPincode);
-      if (!pin) {
-        toast.error('Enter a valid 6-digit delivery PIN code to get delivery dates.');
-        return;
-      }
-
-      setLiveCompareLoadingByItemId((prev) => ({ ...prev, [itemId]: true }));
-      setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'idle' }));
-      try {
-        const vendorIdsForProfile = ecommerceSources
-          .filter((s) => {
-            if (!s.id || s.id === 'other') return false;
-            if (priceCompareProfile === 'extended') return true;
-            return s.profile === 'core';
-          })
-          .map((v) => v.id);
-        const res = await apiClient.post<LivePriceCompareResponse>(
-          PRICE_COMPARE_URL,
-          {
-            query: query || undefined,
-            profile: priceCompareProfile,
-            // Explicit IDs so Extended always hits the full catalog (not stale server default).
-            sources: priceCompareProfile === 'extended' ? vendorIdsForProfile : undefined,
-            urls: urls.length ? urls.slice(0, 8) : undefined,
-            pincode: pin,
-          },
-          { timeout: 90000 }
-        );
-        const data = res.data;
-        if (data?.error) {
-          toast.error(data.error);
-          setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
-          return;
-        }
-
-        const pricedResults = (data?.results ?? []).filter(
-          (r) => r.price != null && Number(r.price) > 0
-        );
-        const titles = pricedResults
-          .map((r) => String(r.title || '').trim())
-          .filter(Boolean);
-
-        if (
-          !options?.skipSpecPrompt &&
-          name &&
-          titlesNeedSpecificationPrompt(titles, name, specs)
-        ) {
-          const facets = extractSpecFacetsFromTitles(titles, name);
-          setSpecPromptItemId(itemId);
-          setSpecFacets(facets);
-          setSpecSelections({});
-          setSelectedSampleMatch(null);
-          setSpecExtraText(specs);
-          setSpecSampleTitles(titles.slice(0, 10));
-          setPendingSpecCompare({ itemId, name, data: data ?? {} });
-          toast.info('Multiple product variants found. Please choose specifications.');
-          return;
-        }
-
-        // If nothing came back at all, or nothing matches closely enough.
-        const anyExact = pricedResults.some((r) =>
-          isExactEnoughProductMatch(String(r.title || ''), name, specs)
-        );
-        if (pricedResults.length === 0) {
-          setItems((prev) =>
-            prev.map((row) => (row.id === itemId ? { ...row, price_quotes: [] } : row))
-          );
-          setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
-          toast.error('No product available');
-          return;
-        }
-        if (!anyExact) {
-          // Specs (e.g. "7 mm") can over-filter; keep name matches so stocked items still show.
-          const nameOnly = pricedResults.filter((r) =>
-            isExactEnoughProductMatch(String(r.title || ''), name, '')
-          );
-          if (nameOnly.length === 0) {
-            setItems((prev) =>
-              prev.map((row) => (row.id === itemId ? { ...row, price_quotes: [] } : row))
-            );
-            setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
-            toast.error('No product available');
-            return;
-          }
-          applyLivePriceResults(
-            itemId,
-            { ...(data ?? {}), results: nameOnly },
-            name,
-            ''
-          );
-          if (specs) {
-            toast.info('Showing closest name matches — selected size was not found in every listing title.');
-          }
-          return;
-        }
-
-        applyLivePriceResults(itemId, data ?? {}, name, specs);
-      } catch (err: unknown) {
-        const msg =
-          err && typeof err === 'object' && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'Failed to fetch live prices.';
-        toast.error(msg);
-        setPriceCompareStatusByItemId((prev) => ({ ...prev, [itemId]: 'unavailable' }));
-      } finally {
-        setLiveCompareLoadingByItemId((prev) => ({ ...prev, [itemId]: false }));
-      }
-    },
-    [items, applyLivePriceResults, deliveryPincode, priceCompareProfile, ecommerceSources]
-  );
-
-  const buildSpecBoxText = useCallback((sample: string | null, facets: Record<string, string>) => {
-    const facetParts = Object.values(facets)
-      .map((v) => String(v || '').trim())
-      .filter(Boolean);
-    return [sample ? String(sample).trim() : '', ...facetParts].filter(Boolean).join(' · ');
-  }, []);
-
-  const cancelSpecPrompt = () => {
-    setSpecPromptItemId(null);
-    setSpecFacets([]);
-    setSpecSelections({});
-    setSpecExtraText('');
-    setSpecSampleTitles([]);
-    setSelectedSampleMatch(null);
-    setPendingSpecCompare(null);
-  };
-
-  /** Length/size chips update independently; product pick stays single via selectedSampleMatch. */
-  const selectSpecFacetOption = useCallback(
-    (facetKey: string, opt: string, wasSelected: boolean) => {
-      setSpecSelections((prev) => {
-        const next = {
-          ...prev,
-          [facetKey]: wasSelected ? '' : opt,
-        };
-        setSelectedSampleMatch((sample) => {
-          setSpecExtraText(buildSpecBoxText(sample, next));
-          return sample;
-        });
-        return next;
-      });
-    },
-    [buildSpecBoxText]
-  );
-
-  /** Only one matching product at a time. */
-  const selectSampleMatch = useCallback(
-    (title: string) => {
-      const value = String(title || '').trim();
-      if (!value) return;
-      setSelectedSampleMatch((prev) => {
-        const next = prev === value ? null : value;
-        setSpecSelections((facets) => {
-          setSpecExtraText(buildSpecBoxText(next, facets));
-          return facets;
-        });
-        return next;
-      });
-    },
-    [buildSpecBoxText]
-  );
-
-  const confirmSpecPrompt = async () => {
-    const itemId = specPromptItemId;
-    if (!itemId) return;
-    const fromFacets = Object.values(specSelections)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    const sample = (selectedSampleMatch || '').trim();
-    const combined =
-      buildSpecBoxText(sample || null, specSelections) ||
-      specExtraText.trim() ||
-      fromFacets.join(' · ');
-    if (!combined) {
-      toast.error('Select a sample match or length/size, or enter specifications.');
-      return;
-    }
-    setItems((prev) =>
-      prev.map((row) => (row.id === itemId ? { ...row, specifications: combined } : row))
-    );
-    const pending =
-      pendingSpecCompare && pendingSpecCompare.itemId === itemId ? pendingSpecCompare : null;
-    const pendingName = pending?.name ?? '';
-    const pendingData = pending?.data ?? null;
-    cancelSpecPrompt();
-
-    // Prefer filtering the first search results (items already found) by the chosen length/size.
-    if (pendingData) {
-      const priced = (pendingData.results ?? []).filter(
-        (r) => r.price != null && Number(r.price) > 0
-      );
-      const exact = priced.filter((r) =>
-        isExactEnoughProductMatch(String(r.title || ''), pendingName, combined)
-      );
-      if (exact.length > 0) {
-        applyLivePriceResults(
-          itemId,
-          { ...pendingData, results: exact },
-          pendingName,
-          combined
-        );
-        return;
-      }
-      const nameOnly = priced.filter((r) =>
-        isExactEnoughProductMatch(String(r.title || ''), pendingName, '')
-      );
-      if (nameOnly.length > 0) {
-        applyLivePriceResults(
-          itemId,
-          { ...pendingData, results: nameOnly },
-          pendingName,
-          ''
-        );
-        toast.info('Showing closest name matches — selected size was not found in every listing title.');
-        return;
-      }
-    }
-
-    await fetchLivePrices(itemId, { skipSpecPrompt: true, specificationsOverride: combined });
-  };
 
   const startAddVendor = (itemId: string) => {
     setAddVendorForItemId(itemId);
@@ -1337,26 +894,6 @@ export function useInventoryRequestForm({
         if (estCost !== '' && estCost !== undefined) {
           payloadData.estimated_cost = typeof estCost === 'number' ? estCost : Number(estCost) || 0;
         }
-        const filledQuotes = (item.price_quotes ?? [])
-          .filter((q) => q.price !== '' && Number(q.price) > 0)
-          .map((q) => ({
-            source: q.source,
-            source_label: q.source_label,
-            link: (q.link ?? '').trim(),
-            price: Number(q.price),
-            currency: q.currency === 'USD' ? 'USD' : 'INR',
-            title: (q.title ?? '').trim() || undefined,
-            delivery_date: (q.delivery_date ?? '').trim() || undefined,
-            live: q.live === true,
-          }));
-        if (filledQuotes.length > 0) {
-          payloadData.price_comparisons = filledQuotes;
-          const cheapest = filledQuotes.reduce((best, q) =>
-            q.currency === best.currency && q.price < best.price ? q : best
-          );
-          payloadData.cheapest_comparison_price = cheapest.price;
-          payloadData.cheapest_comparison_source = cheapest.source_label;
-        }
         if (teamLeadMembershipId) {
           payloadData.team_lead = teamLeadMembershipId;
         }
@@ -1380,55 +917,74 @@ export function useInventoryRequestForm({
         );
       }
       rememberProjectSuggestion(projectPurpose);
+      discardDraft();
 
-      // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
-      let redirected = false;
-      if (tenantSlug) {
-        try {
-          const token = await getEffectiveToken(session?.access_token ?? null);
-          const tenantId = token ? getTenantIdFromJWT(token) : null;
-          const roleId = token ? getRoleIdFromJWT(token) : null;
-          let pages: Array<{ id: string; name: string }> = [];
-          if (token && tenantId && roleId) {
-            const spoofToken =
-              typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
-            if (spoofToken) {
-              pages = await fetchPagesForRole(tenantId, roleId, spoofToken);
-            } else {
-              const { data } = await supabase
-                .from('pages')
-                .select('id, name')
-                .eq('tenant_id', tenantId)
-                .eq('role', roleId)
-                .order('display_order', { ascending: true });
-              pages = data ?? [];
+      const navigateAfterCreate = async () => {
+        // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
+        let redirected = false;
+        if (tenantSlug) {
+          try {
+            const token = await getEffectiveToken(session?.access_token ?? null);
+            const tenantId = token ? getTenantIdFromJWT(token) : null;
+            const roleId = token ? getRoleIdFromJWT(token) : null;
+            let pages: Array<{ id: string; name: string }> = [];
+            if (token && tenantId && roleId) {
+              // Prefer the same Pages API path as the sidebar (works for spoof + normal JWT).
+              try {
+                pages = await fetchPagesForRole(tenantId, roleId, token);
+              } catch (pagesErr) {
+                console.warn('fetchPagesForRole failed after create; trying Supabase', pagesErr);
+              }
+              if (!pages.length) {
+                const { data } = await supabase
+                  .from('pages')
+                  .select('id, name')
+                  .eq('tenant_id', tenantId)
+                  .eq('role', roleId)
+                  .eq('is_deleted', false)
+                  .order('display_order', { ascending: true });
+                pages = data ?? [];
+              }
             }
+            const pageId = pickPostCreatePageId(
+              pages,
+              redirectPageName,
+              myRoleName,
+              currentPageId
+            );
+            if (pageId) {
+              navigate(`/app/${tenantSlug}/pages/${pageId}`);
+              redirected = true;
+            } else {
+              console.warn('No post-create page found', {
+                pageCount: pages.length,
+                pageNames: pages.map((p) => p.name),
+                redirectPageName,
+                myRoleName,
+              });
+              toast.message('Request created, but no list page was found to open.');
+            }
+          } catch (navErr) {
+            console.warn('Could not navigate after request create', navErr);
+            toast.message('Request created, but navigation failed.');
           }
-          const pageId = pickPostCreatePageId(pages, redirectPageName, myRoleName);
-          if (pageId) {
-            navigate(`/app/${tenantSlug}/pages/${pageId}`);
-            redirected = true;
-          }
-        } catch (navErr) {
-          console.warn('Could not navigate after request create', navErr);
+        } else {
+          navigate('/inventory/requests');
+          redirected = true;
         }
-      } else {
-        navigate('/inventory/requests');
-        redirected = true;
-      }
 
-      if (!redirected) {
-        setItems([newEmptyItem()]);
-        setProjectPurpose('');
-        setRequestCategory('');
-        setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
-        setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
-        setPriceDraftByItemId({});
-        setPriceCompareStatusByItemId({});
-        setLinkFetchLoadingByItemId({});
-        setFieldShakeNonce({});
-        setLastFetchedLinkByItemId({});
+        if (!redirected) {
+          setShowSubmitSuccess(false);
+          applyEmptyForm();
+        }
+      };
+
+      // Unmannd: brief success animation before leaving the form.
+      if (useNavyTheme) {
+        setShowSubmitSuccess(true);
+        await new Promise((r) => window.setTimeout(r, 1400));
       }
+      await navigateAfterCreate();
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'message' in err
@@ -1438,26 +994,18 @@ export function useInventoryRequestForm({
             : 'Failed to create inventory request.';
       console.error('Failed to create request', err);
       toast.error(message);
+      setShowSubmitSuccess(false);
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleClear = () => {
-    setItems([newEmptyItem()]);
+    applyEmptyForm();
     setAddVendorForItemId(null);
     setNewVendorName('');
     setNewVendorLink('');
-    setPriceDraftByItemId({});
-    setProjectPurpose('');
-    setRequestCategory('');
-    setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
-    setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
-    setPriceCompareStatusByItemId({});
-    setLinkFetchLoadingByItemId({});
-    setFieldShakeNonce({});
-    setLastFetchedLinkByItemId({});
-    cancelSpecPrompt();
+    discardDraft();
     toast.success('Form cleared.');
   };
 
@@ -1470,16 +1018,14 @@ export function useInventoryRequestForm({
       (i.vendor ?? '').trim() !== '' ||
       (i.estimated_cost ?? '') !== '' ||
       (i.comments ?? '').trim() !== '' ||
-      (i.product_link ?? '').trim() !== '' ||
-      (i.price_quotes ?? []).some(
-        (q) => (q.link ?? '').trim() !== '' || (q.price !== '' && Number(q.price) > 0)
-      )
+      (i.product_link ?? '').trim() !== ''
   );
   const isFormEmpty = !hasAnyItemContent;
 
   return {
     user,
     isProcurement,
+    useNavyTheme,
     requestDate,
     department,
     projectPurpose,
@@ -1492,6 +1038,7 @@ export function useInventoryRequestForm({
     setDeliveryAddress,
     items,
     submitting,
+    showSubmitSuccess,
     vendors,
     vendorsLoading,
     addVendorForItemId,
@@ -1500,24 +1047,10 @@ export function useInventoryRequestForm({
     newVendorLink,
     setNewVendorLink,
     savingNewVendor,
-    specPromptItemId,
-    specFacets,
-    specSelections,
-    specExtraText,
-    setSpecExtraText,
-    specSampleTitles,
-    selectedSampleMatch,
-    pendingSpecCompare,
     priceDraftByItemId,
     setPriceDraftByItemId,
-    ecommerceSources,
-    priceCompareProfile,
-    setPriceCompareProfile,
-    liveCompareLoadingByItemId,
-    linkFetchLoadingByItemId,
     fieldShakeNonce,
     clearFieldShake,
-    priceCompareStatusByItemId,
     focusedItemNameId,
     setFocusedItemNameId,
     itemNameQuery,
@@ -1537,20 +1070,10 @@ export function useInventoryRequestForm({
     vendorSuggestionsOpen,
     setVendorSuggestionsOpen,
     requesterDisplay,
-    activePriceCompareVendors,
     filteredProjectSuggestions,
     addItem,
     removeItem,
     updateItem,
-    removeQuote,
-    applyQuoteToItem,
-    fetchDetailsFromItemLink,
-    applyLivePriceResults,
-    fetchLivePrices,
-    cancelSpecPrompt,
-    selectSpecFacetOption,
-    selectSampleMatch,
-    confirmSpecPrompt,
     startAddVendor,
     cancelAddVendor,
     saveNewVendor,
