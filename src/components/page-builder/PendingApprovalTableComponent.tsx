@@ -50,9 +50,9 @@ export const DEFAULT_PENDING_APPROVAL_TABLE_COLUMNS: PendingApprovalTableColumn[
 
 /**
  * Suggested statuses for a Pending Approval page (not forced in code).
- * Put them on the API endpoint, e.g. `?status=NEW_REQUEST,ON_HOLD`.
+ * Put them on the API endpoint, e.g. `?status=NEW_REQUEST,ON_HOLD,REQ_TO_VERIFY`.
  */
-export const PENDING_APPROVAL_STATUSES = ['NEW_REQUEST', 'ON_HOLD'] as const;
+export const PENDING_APPROVAL_STATUSES = ['NEW_REQUEST', 'ON_HOLD', 'REQ_TO_VERIFY'] as const;
 
 /** Defaults applied when the component is first dropped in Page Builder. */
 export const DEFAULT_PENDING_APPROVAL_TABLE_CONFIG = {

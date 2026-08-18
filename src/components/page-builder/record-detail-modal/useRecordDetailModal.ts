@@ -7,7 +7,7 @@ import { crmRecordsApi } from '@/lib/api/services/crmRecords';
 import { useAuth } from '@/hooks/useAuth';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { formatCurrencyInputLive, formatPriceForInput, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
-import { canRequesterEditInventoryRequest, getInventoryWorkflowButtons } from '@/lib/inventory/workflow';
+import { canRequesterEditInventoryRequest, getInventoryWorkflowButtons, inventoryRequesterIdFromRecord, isInventoryRequestRowRequester } from '@/lib/inventory/workflow';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import type { RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 import type { RecordDetailModalProps } from './types';
@@ -54,13 +54,11 @@ export function useRecordDetailModal({
   const canEdit = Boolean(onUpdate && record?.id != null);
   const isInventoryRequest =
     entityType === 'inventory_request' || entityType === 'unmannd_request';
-  const requesterId = record?.data?.requester_id;
+  const requesterId = inventoryRequesterIdFromRecord(record);
   const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
   const isRequester =
     isInventoryRequest &&
-    requesterId != null &&
-    ((!!user && String(requesterId) === String(user.id)) ||
-      (myMembershipId != null && String(requesterId) === String(myMembershipId)));
+    isInventoryRequestRowRequester(requesterId, user?.id ?? null, myMembershipId);
   const assignedToId = record?.data?.assigned_to_id;
   const isAssignee =
     isInventoryRequest &&
@@ -76,7 +74,8 @@ export function useRecordDetailModal({
   const requestStatusForWorkflow =
     (pending.status !== undefined ? pending.status : record?.data?.status) ??
     (record?.data && typeof record.data === 'object'
-      ? (record.data as Record<string, unknown>).status
+      ? (record.data as Record<string, unknown>).status ??
+        (record.data as Record<string, unknown>).status_text
       : undefined);
   const requesterWorkflowButtons =
     isInventoryRequest && isRequester
@@ -491,6 +490,7 @@ export function useRecordDetailModal({
         const existingData = (record.data as Record<string, unknown>) || {};
         const payload: Record<string, unknown> = {
           ...existingData,
+          ...pending,
           [targetAttribute]: btn.statusValue,
           ...(extraData || {}),
         };
