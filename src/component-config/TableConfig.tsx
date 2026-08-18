@@ -734,7 +734,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
                 </Label>
               </div>
               <p className="text-xs text-gray-500">
-                Default is off. When enabled, users can open a history modal that shows object-level changes for the request.
+                Default is off. When enabled, users can open a history view that shows object-level changes for the request.
               </p>
             </div>
           )}

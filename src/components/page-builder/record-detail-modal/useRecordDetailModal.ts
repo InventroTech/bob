@@ -550,7 +550,7 @@ export function useRecordDetailModal({
     try {
       const response = await apiClient.get(`/crm-records/records/${record.id}/history/`);
       const list = Array.isArray(response?.data?.history) ? response.data.history : [];
-      setHistoryEntries(list);
+      setHistoryEntries(list as RequestHistoryEntry[]);
     } catch (e: any) {
       setHistoryEntries([]);
       setHistoryError(e?.message || 'Could not load request history.');

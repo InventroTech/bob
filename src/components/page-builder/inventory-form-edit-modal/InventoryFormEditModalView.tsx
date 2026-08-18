@@ -29,7 +29,7 @@ import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inve
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal } from '@/components/config_components/StatusActionWarningModal';
-import { RequestHistoryPanel } from '@/components/page-builder/RequestHistoryPanel';
+import { RequestHistoryViewer } from '@/components/page-builder/RequestHistoryPanel';
 import { ShipmentDeliveryPipeline } from '@/components/page-builder/ShipmentDeliveryPipeline';
 import {
   SHIPMENT_STATUSES,
@@ -174,7 +174,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
     modalFlags,
     showFinalPriceSection,
     showDeleteRequestButton,
-    showHistoryButton,
+    showHistoryButton: _showHistoryButton,
     onDeleted,
     uiVariant = 'default',
     _formModalDescription,
@@ -221,11 +221,8 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
     historyModalOpen,
     setHistoryModalOpen,
     historyLoading,
-    setHistoryLoading,
     historyError,
-    setHistoryError,
     historyEntries,
-    setHistoryEntries,
     trackingPasteDraft,
     setTrackingPasteDraft,
     myMembershipId,
@@ -1333,14 +1330,22 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
       />
 
       <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Request history</DialogTitle>
-            <DialogDescription>Each entry shows who changed what, from the previous value to the new value.</DialogDescription>
+        <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-full [&>button]:right-4 [&>button]:top-4 [&>button]:text-white [&>button]:opacity-90 [&>button]:hover:opacity-100">
+          <DialogHeader
+            className="space-y-1 px-5 py-4 pr-12 text-left text-white"
+            style={{ backgroundColor: UNMANND_NAVY }}
+          >
+            <DialogTitle className="text-white">Request history</DialogTitle>
+            <DialogDescription className="text-white/80">
+              Each entry shows who changed what, from the previous value to the new value.
+            </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-            <RequestHistoryPanel loading={historyLoading} error={historyError} entries={historyEntries} />
-          </div>
+          <RequestHistoryViewer
+            loading={historyLoading}
+            error={historyError}
+            entries={historyEntries}
+            accentColor={UNMANND_NAVY}
+          />
         </DialogContent>
       </Dialog>
     </Dialog>

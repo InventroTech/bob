@@ -2,6 +2,7 @@ import * as React from 'react';
 import { ArrowRight } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { cn } from '@/lib/utils';
 import { PRICE_FIELD_KEYS, formatPriceFieldRead } from '@/lib/utils/currencyFormat';
 
@@ -59,8 +60,23 @@ const LINKISH_DATA_KEYS = new Set([
   'product_link',
   'tracking_link',
   'vendor_link',
+  'vendor_site_link',
+  'additional_link',
   'link',
 ]);
+
+function isHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  return /^https?:\/\//i.test(value.trim());
+}
+
+function historyLinkButtonLabel(fieldKey: string): string {
+  if (fieldKey === 'product_link') return 'Open product';
+  if (fieldKey === 'tracking_link') return 'Open tracking';
+  if (fieldKey === 'additional_link') return 'Open additional link';
+  if (fieldKey === 'vendor_link' || fieldKey === 'vendor_site_link') return 'Open vendor';
+  return 'Open link';
+}
 
 function humanizeFieldKey(key: string): string {
   return key
@@ -201,13 +217,8 @@ function formatDataValueNode(key: string, value: unknown): React.ReactNode {
     );
   }
   if (typeof value === 'string') {
-    if ((LINKISH_DATA_KEYS.has(key) || /^https?:\/\//i.test(value)) && /^https?:\/\//i.test(value.trim())) {
-      const href = value.trim();
-      return (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-2 hover:underline break-all">
-          {href}
-        </a>
-      );
+    if ((LINKISH_DATA_KEYS.has(key) || isHttpUrl(value)) && isHttpUrl(value)) {
+      return <OpenLinkButton href={value.trim()} label={historyLinkButtonLabel(key)} />;
     }
     return <span className="break-words">{value}</span>;
   }
@@ -265,6 +276,21 @@ function DataSnapshotSummary({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+function isEmptyHistoryValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  return false;
+}
+
+function historyValuesLookSame(from: unknown, to: unknown): boolean {
+  if (isEmptyHistoryValue(from) && isEmptyHistoryValue(to)) return true;
+  try {
+    return JSON.stringify(from) === JSON.stringify(to);
+  } catch {
+    return from === to;
+  }
+}
+
 function shallowDataFieldDiff(
   from: Record<string, unknown>,
   to: Record<string, unknown>,
@@ -275,7 +301,7 @@ function shallowDataFieldDiff(
     if (HIDDEN_DATA_KEYS.has(k)) continue;
     const a = from[k];
     const b = to[k];
-    if (JSON.stringify(a) === JSON.stringify(b)) continue;
+    if (historyValuesLookSame(a, b)) continue;
     rows.push({ key: k, from: a, to: b });
   }
   rows.sort((r1, r2) => {
@@ -517,7 +543,7 @@ function actionBadgeProps(action: string): { variant: 'default' | 'secondary' | 
   return { variant: 'secondary' };
 }
 
-function formatHistoryTimestamp(value: string | null | undefined): string {
+export function formatHistoryTimestamp(value: string | null | undefined): string {
   if (!value) return 'Unknown time';
 
   const raw = String(value).trim();
@@ -551,6 +577,307 @@ function formatHistoryTimestamp(value: string | null | undefined): string {
   return `${datePart}, ${timePart} IST`;
 }
 
+const TIMELINE_NAVY = '#1A3673';
+
+function formatCompactHistoryValue(fieldKey: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'NIL';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (fieldKey === 'comments') {
+    const summary = formatCommentsSummary(value);
+    return summary === '—' ? 'NIL' : summary;
+  }
+  if (typeof value === 'string' && (LINKISH_DATA_KEYS.has(fieldKey) || isHttpUrl(value)) && isHttpUrl(value)) {
+    return 'Link';
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'NIL';
+    }
+  }
+  const text = formatScalarForDisplay(fieldKey, value);
+  return text === '—' ? 'NIL' : text;
+}
+
+function formatTimelineCardDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  const normalized = /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw) ? raw : `${raw.replace(' ', 'T')}Z`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return '';
+  const formatted = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: '2-digit',
+  }).format(date);
+  return formatted.toLowerCase();
+}
+
+export type HistoryTimelineItem = {
+  id: string;
+  entryId: number;
+  createdAt: string;
+  actorName: string;
+  fieldKey: string;
+  fieldLabel: string;
+  fromText: string;
+  toText: string;
+};
+
+function collectTimelineItems(entries: RequestHistoryEntry[]): HistoryTimelineItem[] {
+  const items: HistoryTimelineItem[] = [];
+
+  for (const entry of entries) {
+    const actorName = entry.actor?.name || entry.actor?.email || entry.actor?.label || 'System';
+    const rawChanges = entry.changes && typeof entry.changes === 'object' ? entry.changes : null;
+    const pairs: Array<{ key: string; from: unknown; to: unknown }> = [];
+
+    if (rawChanges) {
+      for (const [key, val] of Object.entries(rawChanges)) {
+        if (HIDDEN_TOP_LEVEL_KEYS.has(key)) continue;
+        if (!isFromToPair(val)) continue;
+        if (key === 'data' && isPlainObject(val.to)) {
+          const fromObj = isPlainObject(val.from) ? val.from : {};
+          const fromEmpty = val.from == null || Object.keys(fromObj).length === 0;
+          if (fromEmpty) {
+            pairs.push({ key: 'request', from: 'NIL', to: 'created' });
+            continue;
+          }
+          const diff = shallowDataFieldDiff(fromObj, val.to);
+          if (diff.length > 0) {
+            pairs.push(...diff);
+            continue;
+          }
+        }
+        pairs.push({ key, from: val.from, to: val.to });
+      }
+    }
+
+    const visiblePairs = pairs.filter((pair) => {
+      if (pair.key === 'request') return true;
+      if (historyValuesLookSame(pair.from, pair.to)) return false;
+      return (
+        formatCompactHistoryValue(pair.key, pair.from) !==
+        formatCompactHistoryValue(pair.key, pair.to)
+      );
+    });
+
+    if (visiblePairs.length === 0) {
+      continue;
+    }
+
+    for (const pair of visiblePairs) {
+      items.push({
+        id: `${entry.id}-${pair.key}`,
+        entryId: entry.id,
+        createdAt: entry.created_at,
+        actorName,
+        fieldKey: pair.key,
+        fieldLabel: pair.key === 'request' ? 'Request created' : humanizeFieldKey(pair.key),
+        fromText: formatCompactHistoryValue(pair.key, pair.from),
+        toText: formatCompactHistoryValue(pair.key, pair.to),
+      });
+    }
+  }
+
+  return items;
+}
+
+export type RequestHistoryTimelineProps = {
+  loading: boolean;
+  error: string | null;
+  entries: RequestHistoryEntry[];
+  selectedId?: string | null;
+  onSelect?: (item: HistoryTimelineItem) => void;
+  accentColor?: string;
+};
+
+export function RequestHistoryTimeline({
+  loading,
+  error,
+  entries,
+  selectedId,
+  onSelect,
+  accentColor = TIMELINE_NAVY,
+}: RequestHistoryTimelineProps) {
+  const items = React.useMemo(() => collectTimelineItems(entries), [entries]);
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading history…</p>;
+  }
+  if (error) {
+    return <p className="text-sm text-destructive">{error}</p>;
+  }
+  if (items.length === 0) {
+    return <p className="text-sm text-muted-foreground">No changes recorded yet.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item) => {
+        const selected = selectedId === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelect?.(item)}
+            className={cn(
+              'w-full overflow-hidden rounded-md border bg-white text-left shadow-sm transition-shadow',
+              selected ? 'shadow-md' : 'hover:shadow-md',
+            )}
+            style={{
+              borderColor: selected ? accentColor : '#93C5FD',
+              boxShadow: selected ? `0 0 0 2px ${accentColor}` : undefined,
+            }}
+          >
+            <div
+              className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white"
+              style={{ backgroundColor: accentColor }}
+            >
+              <span>Changes</span>
+              <time className="font-medium normal-case tracking-normal">{formatTimelineCardDate(item.createdAt)}</time>
+            </div>
+            <div className="space-y-2 px-3 py-2.5">
+              <div className="text-xs font-bold uppercase tracking-wide" style={{ color: accentColor }}>
+                {item.fieldLabel}
+              </div>
+              <p className="text-sm leading-snug">
+                <span className="text-muted-foreground line-through decoration-muted-foreground/40">
+                  {item.fromText}
+                </span>
+                <span className="mx-1.5 text-muted-foreground">→</span>
+                <span className="font-semibold text-foreground break-words">{item.toText}</span>
+              </p>
+              <p className="text-right text-[11px] font-medium" style={{ color: accentColor }}>
+                Created by : {item.actorName.toUpperCase()}
+              </p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function applyHistoryChanges(
+  state: Record<string, unknown>,
+  changes: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const next = { ...state };
+  if (!changes) return next;
+
+  for (const [key, val] of Object.entries(changes)) {
+    if (HIDDEN_TOP_LEVEL_KEYS.has(key)) continue;
+    if (!isFromToPair(val)) continue;
+    if (key === 'data' && isPlainObject(val.to)) {
+      Object.assign(next, val.to);
+      continue;
+    }
+    next[key] = val.to;
+  }
+  return next;
+}
+
+function buildHistorySnapshots(entries: RequestHistoryEntry[]): Map<number, Record<string, unknown>> {
+  const chronological = [...entries].sort((a, b) => a.version - b.version || a.id - b.id);
+  const snapshots = new Map<number, Record<string, unknown>>();
+  let state: Record<string, unknown> = {};
+  for (const entry of chronological) {
+    const raw = entry.changes && typeof entry.changes === 'object' ? entry.changes : null;
+    state = applyHistoryChanges(state, raw);
+    snapshots.set(entry.id, { ...state });
+  }
+  return snapshots;
+}
+
+export type RequestHistoryViewerProps = {
+  loading: boolean;
+  error: string | null;
+  entries: RequestHistoryEntry[];
+  accentColor?: string;
+};
+
+export function RequestHistoryViewer({
+  loading,
+  error,
+  entries,
+  accentColor = TIMELINE_NAVY,
+}: RequestHistoryViewerProps) {
+  const items = React.useMemo(() => collectTimelineItems(entries), [entries]);
+  const snapshots = React.useMemo(() => buildHistorySnapshots(entries), [entries]);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (items.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId((prev) => (prev && items.some((item) => item.id === prev) ? prev : items[0].id));
+  }, [items]);
+
+  const selectedItem = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
+  const selectedEntry = selectedItem
+    ? entries.find((entry) => entry.id === selectedItem.entryId)
+    : undefined;
+  const snapshot = selectedItem ? snapshots.get(selectedItem.entryId) ?? {} : {};
+  const timestamp = selectedEntry ? formatHistoryTimestamp(selectedEntry.created_at) : '';
+  const isCreated = selectedEntry?.action?.toLowerCase() === 'created' || selectedItem?.fieldKey === 'request';
+
+  if (loading) {
+    return <p className="px-4 py-6 text-sm text-muted-foreground">Loading history…</p>;
+  }
+  if (error) {
+    return <p className="px-4 py-6 text-sm text-destructive">{error}</p>;
+  }
+  if (items.length === 0) {
+    return <p className="px-4 py-6 text-sm text-muted-foreground">No changes recorded yet.</p>;
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+      <aside className="flex max-h-[38vh] w-full shrink-0 flex-col border-b border-[#93C5FD] bg-white md:max-h-none md:w-[22rem] md:border-b-0 md:border-r">
+        <div className="px-4 pb-2 pt-4">
+          <h3 className="text-base font-semibold text-foreground">Timeline</h3>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <RequestHistoryTimeline
+            loading={false}
+            error={null}
+            entries={entries}
+            selectedId={selectedItem?.id}
+            onSelect={(item) => setSelectedId(item.id)}
+            accentColor={accentColor}
+          />
+        </div>
+      </aside>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#EEF4FB]">
+        <div className="flex shrink-0 items-center justify-between gap-3 bg-[#D6E6F7] px-5 py-2.5 sm:px-6">
+          <h3 className="text-sm font-semibold text-foreground">Changes</h3>
+          {timestamp && timestamp !== 'Unknown time' ? (
+            <time className="text-xs tabular-nums text-muted-foreground">{timestamp}</time>
+          ) : null}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+          <div className="rounded-xl border border-[#93C5FD] bg-white px-5 py-4 shadow-sm">
+            <h4 className="text-sm font-bold uppercase tracking-wide" style={{ color: accentColor }}>
+              Request details
+            </h4>
+            <p className="mb-4 mt-1 text-xs text-muted-foreground">
+              {isCreated
+                ? 'Values saved when this record was created (internal IDs hidden).'
+                : 'Values saved after this change (internal IDs hidden).'}
+            </p>
+            <DataSnapshotSummary data={snapshot} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export type RequestHistoryPanelProps = {
   loading: boolean;
   error: string | null;
@@ -579,6 +906,7 @@ export function RequestHistoryPanel({ loading, error, entries }: RequestHistoryP
           for (const [key, val] of Object.entries(rawChanges)) {
             if (HIDDEN_TOP_LEVEL_KEYS.has(key)) continue;
             if (isFromToPair(val)) {
+              if (historyValuesLookSame(val.from, val.to)) continue;
               pairs.push({ key, from: val.from, to: val.to });
             }
           }

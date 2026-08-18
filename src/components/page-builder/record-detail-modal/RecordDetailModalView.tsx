@@ -39,7 +39,7 @@ import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
 import { RecordModalTitleDisplay } from '@/components/page-builder/RecordModalTitleDisplay';
 import { StatusActionWarningModal, type StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
-import { RequestHistoryPanel } from '@/components/page-builder/RequestHistoryPanel';
+import { RequestHistoryViewer } from '@/components/page-builder/RequestHistoryPanel';
 import type { RecordDetailModalModel } from './useRecordDetailModal';
 import {
   ENTITY_LABELS,
@@ -169,7 +169,7 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
     modalFlags,
     showFinalPriceSection,
     showDeleteRequestButton,
-    showHistoryButton,
+    showHistoryButton: _showHistoryButton,
     toast,
     pending,
     setPending,
@@ -224,11 +224,8 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
     historyModalOpen,
     setHistoryModalOpen,
     historyLoading,
-    setHistoryLoading,
     historyError,
-    setHistoryError,
     historyEntries,
-    setHistoryEntries,
     saveNewVendor,
     flagConditionMatches,
     actionButtonConditionMatches,
@@ -723,14 +720,14 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
       />
 
       <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
+          <DialogHeader className="space-y-1 border-b px-5 py-4 pr-12 text-left">
             <DialogTitle>Request history</DialogTitle>
-            <DialogDescription>Each entry shows who changed what, from the previous value to the new value.</DialogDescription>
+            <DialogDescription>
+              Each entry shows who changed what, from the previous value to the new value.
+            </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-            <RequestHistoryPanel loading={historyLoading} error={historyError} entries={historyEntries} />
-          </div>
+          <RequestHistoryViewer loading={historyLoading} error={historyError} entries={historyEntries} />
         </DialogContent>
       </Dialog>
     </Dialog>

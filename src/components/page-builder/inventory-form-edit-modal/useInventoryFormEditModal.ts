@@ -1085,7 +1085,9 @@ export function useInventoryFormEditModal({
     setHistoryError(null);
     try {
       const response = await apiClient.get(`/crm-records/records/${record.id}/history/`);
-      const list = Array.isArray(response?.data?.history) ? (response.data.history as RequestHistoryEntry[]) : [];
+      const list = Array.isArray(response?.data?.history)
+        ? (response.data.history as RequestHistoryEntry[])
+        : [];
       setHistoryEntries(list);
     } catch (err: any) {
       setHistoryEntries([]);
