@@ -21,6 +21,33 @@ export const INVENTORY_APPROVABLE_STATUSES = new Set([
   'ON_HOLD',
 ]);
 
+/** Requestor may edit their own request until a manager/TL Approves it. */
+export const INVENTORY_REQUESTER_EDITABLE_STATUSES = new Set([
+  'NEW_REQUEST',
+  'ON_HOLD',
+  'REQ_TO_VERIFY',
+]);
+
+/** Form keys a requestor can change before approval. Status stays workflow-only. */
+export const INVENTORY_REQUESTER_EDITABLE_FORM_KEYS = new Set([
+  'item_name_freeform',
+  'item_name',
+  'specifications',
+  'quantity_required',
+  'quantity',
+  'estimated_cost',
+  'vendor',
+  'vendor_name',
+  'product_link',
+  'additional_link',
+  'comments',
+  'notes',
+  'project_purpose',
+  'department',
+  'required_date',
+  'requirement_date',
+]);
+
 export const INVENTORY_HOLDABLE_STATUSES = new Set([
   'NEW_REQUEST',
   'VENDOR_IDENTIFIED',
@@ -114,6 +141,20 @@ export function isAssignedInventoryManager(
   userId?: number | string | null
 ): boolean {
   return idsMatch(membershipId, managerOnRecord) || idsMatch(userId, managerOnRecord);
+}
+
+/** True when status is still pending approval (requestor may edit). */
+export function canRequesterEditInventoryRequest(status: unknown): boolean {
+  return INVENTORY_REQUESTER_EDITABLE_STATUSES.has(normalizeStatus(status));
+}
+
+/** True when this user is the requestor stored on the record. */
+export function isInventoryRequestRowRequester(
+  requesterIdOnRecord: unknown,
+  userId?: number | string | null,
+  membershipId?: number | string | null,
+): boolean {
+  return idsMatch(userId, requesterIdOnRecord) || idsMatch(membershipId, requesterIdOnRecord);
 }
 
 function isTeamLeadActor(opts: {

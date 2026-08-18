@@ -1,6 +1,6 @@
 /** Presentational JSX for the inventory form edit modal. */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -39,7 +39,6 @@ import {
 
 import type { InventoryFormEditModalModel } from './useInventoryFormEditModal';
 import {
-  ADD_VENDOR_VALUE,
   TRACKING_FORM_KEYS,
   toVendorStorageName,
   toCurrencyNumber,
@@ -288,6 +287,9 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
     quantityFieldKeys,
     primaryQuantityFieldKey
   } = props;
+
+  const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
+  const [vendorQuery, setVendorQuery] = useState('');
 
   if (!record) return null;
 
@@ -568,41 +570,70 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     })()
                   ) : isVendor ? (
                     <div className="flex items-center gap-2 w-full min-w-0">
-                      <div className="min-w-0 flex-1">
-                      <Select
-                        value={normalizedVendorValue || undefined}
-                        onValueChange={(v) => {
-                          if (v === ADD_VENDOR_VALUE) {
-                            setIsAddVendorModalOpen(true);
-                            return;
-                          }
-                          setField(field.key, toVendorStorageName(v ?? ''));
-                        }}
-                        disabled={!isEnabled}
-                      >
-                        <SelectTrigger className="h-9 w-full min-w-0 text-sm rounded-md">
-                          <SelectValue placeholder="Select or add vendor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {normalizedVendorValue &&
-                          !vendors.some((v) => toVendorStorageName(v.name) === normalizedVendorValue) ? (
-                            <SelectItem value={normalizedVendorValue}>
-                              {normalizedVendorValue}
-                            </SelectItem>
-                          ) : null}
-                          {vendorsLoading ? (
-                            <SelectItem value="__loading__" disabled>
-                              Loading…
-                            </SelectItem>
-                          ) : (
-                            vendors.map((v) => (
-                              <SelectItem key={v.id} value={toVendorStorageName(v.name)}>
-                                {toVendorStorageName(v.name)}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <div className="relative min-w-0 flex-1">
+                        <Input
+                          className="h-9 w-full min-w-0 text-sm rounded-md bg-white"
+                          value={normalizedVendorValue}
+                          placeholder="Search or add vendor"
+                          disabled={!isEnabled}
+                          onFocus={() => {
+                            if (!isEnabled) return;
+                            setVendorQuery(normalizedVendorValue);
+                            setVendorSuggestionsOpen(true);
+                          }}
+                          onBlur={() => {
+                            window.setTimeout(() => setVendorSuggestionsOpen(false), 150);
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setVendorQuery(raw);
+                            setField(field.key, toVendorStorageName(raw));
+                            setVendorSuggestionsOpen(true);
+                          }}
+                        />
+                        {isEnabled && vendorSuggestionsOpen ? (
+                          <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
+                            {vendorsLoading && vendors.length === 0 ? (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
+                            ) : (
+                              <div className="max-h-56 overflow-auto">
+                                {(() => {
+                                  const q = vendorQuery.trim().toLowerCase();
+                                  const filtered = q
+                                    ? vendors.filter((v) =>
+                                        toVendorStorageName(v.name).toLowerCase().includes(q)
+                                      ).slice(0, 12)
+                                    : vendors.slice(0, 12);
+                                  if (filtered.length === 0) {
+                                    return (
+                                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                                        No matches
+                                      </div>
+                                    );
+                                  }
+                                  return filtered.map((v) => {
+                                    const name = toVendorStorageName(v.name);
+                                    return (
+                                      <button
+                                        key={v.id}
+                                        type="button"
+                                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted truncate"
+                                        onMouseDown={(ev) => ev.preventDefault()}
+                                        onClick={() => {
+                                          setField(field.key, name);
+                                          setVendorQuery(name);
+                                          setVendorSuggestionsOpen(false);
+                                        }}
+                                      >
+                                        {name}
+                                      </button>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                       <Button
                         type="button"
