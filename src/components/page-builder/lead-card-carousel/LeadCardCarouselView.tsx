@@ -150,7 +150,6 @@ const LeadInfoTile: React.FC<{
 };
 
 export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: () => void }) {
-  const navigate = useNavigate();
   const {
     config,
     isInModal,

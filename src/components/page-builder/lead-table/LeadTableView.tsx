@@ -77,7 +77,6 @@ export function LeadTableView(props: LeadTableModel) {
     isCustomModalOpen,
     setIsCustomModalOpen,
     apiClient,
-    // Added from main branch context:
     displayTitle,
     tableTitle,
   } = props as any;
@@ -107,8 +106,6 @@ export function LeadTableView(props: LeadTableModel) {
   // CRM All Leads and other default tables keep black headers.
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
-  const procurementHeaderBg = 'bg-[#1A3673]';
-  const procurementTableFrame = 'overflow-hidden rounded-lg border border-[#1A3673]';
 
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
