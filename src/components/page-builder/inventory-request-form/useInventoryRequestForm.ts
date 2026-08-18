@@ -7,6 +7,7 @@ import { apiClient, membershipService } from '@/lib/api';
 import type { MembershipUser } from '@/lib/api/services/membership';
 import { toast } from 'sonner';
 import { emptyShipmentTrackingFields } from '@/lib/inventory/shipmentTracking';
+import { fetchProductFromLink, looksLikeProductUrl } from '@/lib/inventory/productLinkExtract';
 import { formatInventoryPriorityLabel } from '@/lib/inventory/priority';
 import {
   isInventoryTeamLeadRole,
@@ -38,6 +39,7 @@ import {
   normalizeVendorName,
   toVendorStorageName,
   newEmptyItem,
+  extractSpecificationsFromTitle,
 } from './utils';
 import {
   clearDraft,
@@ -208,6 +210,9 @@ export function useInventoryRequestForm({
   const [focusedVendorId, setFocusedVendorId] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState<string>('');
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
+  const [linkFetchLoadingByItemId, setLinkFetchLoadingByItemId] = useState<Record<string, boolean>>({});
+  const lastFetchedLinkByItemIdRef = useRef<Record<string, string>>({});
+  const linkFetchSeqByItemIdRef = useRef<Record<string, number>>({});
   const [draftHydrated, setDraftHydrated] = useState(false);
   const appliedOwnerIdRef = useRef<string | null>(null);
   const snapshotRef = useRef<(InventoryRequestFormDraft & { key: string }) | null>(null);
@@ -460,6 +465,7 @@ export function useInventoryRequestForm({
       vendor: productVendor || '',
       default_vendor: productVendor || '',
       product_link: String(item.product_link ?? '').trim() || '',
+      product_image: String(item.product_image ?? '').trim() || '',
     };
     const estCost = item.estimated_cost;
     if (estCost !== '' && estCost !== undefined) {
@@ -656,6 +662,111 @@ export function useInventoryRequestForm({
       return next;
     });
   }, []);
+
+  const fetchDetailsFromProductLink = useCallback(
+    async (itemId: string, rawUrl?: string, opts?: { force?: boolean }) => {
+      const item = items.find((i) => i.id === itemId);
+      const url = (rawUrl ?? item?.product_link ?? '').trim();
+      console.log('[product-link-extract] fetch click', {
+        itemId,
+        url,
+        force: !!opts?.force,
+        looksLikeUrl: looksLikeProductUrl(url),
+        alreadyFetched: lastFetchedLinkByItemIdRef.current[itemId] === url,
+      });
+      if (!looksLikeProductUrl(url)) {
+        console.warn('[product-link-extract] skipped: URL must start with https://');
+        toast.error('Paste a valid https:// product URL first.');
+        return;
+      }
+      if (!opts?.force && lastFetchedLinkByItemIdRef.current[itemId] === url) {
+        console.log('[product-link-extract] skipped: already fetched this URL');
+        return;
+      }
+
+      const seq = (linkFetchSeqByItemIdRef.current[itemId] ?? 0) + 1;
+      linkFetchSeqByItemIdRef.current[itemId] = seq;
+      setLinkFetchLoadingByItemId((prev) => ({ ...prev, [itemId]: true }));
+      try {
+        const result = await fetchProductFromLink({
+          url,
+          pincode: deliveryPincode,
+        });
+        if (linkFetchSeqByItemIdRef.current[itemId] !== seq) return;
+        lastFetchedLinkByItemIdRef.current[itemId] = url;
+        if (!result.ok) {
+          console.warn('[product-link-extract] extract not ok', result);
+          toast.error(result.error || 'Could not fetch product details from this link.');
+          return;
+        }
+        console.log('[product-link-extract] applying to form', {
+          title: result.title,
+          price: result.price,
+          vendor: result.vendor,
+          image: result.image,
+        });
+        setItems((prev) =>
+          prev.map((row) => {
+            if (row.id !== itemId) return row;
+            const title = String(result.title || '').trim();
+            const specs = row.specifications.trim() || extractSpecificationsFromTitle(title);
+            const next: FormItem = {
+              ...row,
+              product_link: String(result.link || url).trim() || row.product_link,
+            };
+            if (title) next.item_name_freeform = title;
+            if (specs) next.specifications = specs;
+            if (result.image) next.product_image = String(result.image).trim();
+            if (result.vendor && !row.vendor.trim()) {
+              next.vendor = toVendorStorageName(String(result.vendor));
+            }
+            if (result.price != null && Number.isFinite(Number(result.price))) {
+              next.estimated_cost = Math.round(Number(result.price) * 100) / 100;
+            }
+            if (result.currency === 'USD' || result.currency === 'INR') {
+              next.price_currency = result.currency;
+            }
+            return next;
+          })
+        );
+        if (result.price != null) {
+          setPriceDraftByItemId((prev) => {
+            const next = { ...prev };
+            delete next[itemId];
+            return next;
+          });
+        }
+        const bits = [
+          result.title ? 'name' : null,
+          result.price != null ? 'price' : null,
+          result.image ? 'image' : null,
+        ].filter(Boolean);
+        toast.success(`Fetched ${bits.join(', ') || 'product details'} from the link.`);
+      } catch (err) {
+        if (linkFetchSeqByItemIdRef.current[itemId] !== seq) return;
+        console.error('[product-link-extract] catch', err);
+        const apiData =
+          err && typeof err === 'object' && 'data' in err
+            ? (err as { data?: { error?: string } }).data
+            : undefined;
+        const msg =
+          (apiData && typeof apiData.error === 'string' && apiData.error) ||
+          (err && typeof err === 'object' && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Could not fetch product details from this link.');
+        toast.error(msg);
+      } finally {
+        if (linkFetchSeqByItemIdRef.current[itemId] === seq) {
+          setLinkFetchLoadingByItemId((prev) => {
+            const next = { ...prev };
+            delete next[itemId];
+            return next;
+          });
+        }
+      }
+    },
+    [items, deliveryPincode]
+  );
 
   const shakeFields = useCallback((keys: string[]) => {
     if (keys.length === 0) return;
@@ -1069,6 +1180,8 @@ export function useInventoryRequestForm({
     setVendorQuery,
     vendorSuggestionsOpen,
     setVendorSuggestionsOpen,
+    linkFetchLoadingByItemId,
+    fetchDetailsFromProductLink,
     requesterDisplay,
     filteredProjectSuggestions,
     addItem,
