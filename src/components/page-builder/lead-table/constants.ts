@@ -10,6 +10,9 @@ export const URGENCY_BUTTON_OPTIONS: Array<{ value: string; label: string }> = [
 // Lightweight mustache-style matcher for replacing tokens like {{current_user}}
 export const PLACEHOLDER_REGEX = /{{\s*([^}]+)\s*}}/g;
 
+/** Injected My Requests column: Edit until the request is approved. */
+export const REQUESTER_EDIT_COLUMN_ACCESSOR = '__requester_edit';
+
 // Default columns used if no custom columns are configured
 export const defaultColumns: Column[] = [
   { header: 'Stage', accessor: 'lead_stage', type: 'chip' },

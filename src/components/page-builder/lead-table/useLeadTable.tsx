@@ -37,6 +37,7 @@ import type { Column, LeadTableProps, PlaceholderAdapter } from './types';
 import {
   URGENCY_BUTTON_OPTIONS,
   defaultColumns,
+  REQUESTER_EDIT_COLUMN_ACCESSOR,
 } from './constants';
 import {
   getStatusColor,
@@ -45,6 +46,10 @@ import {
   applyPlaceholderTemplate,
   transformLeadData,
 } from './utils';
+import {
+  canRequesterEditInventoryRequest,
+  isInventoryRequestRowRequester,
+} from '@/lib/inventory/workflow';
 
 export function useLeadTable({ config, pageId }: LeadTableProps) {
   const { toast } = useToast();
@@ -228,6 +233,16 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [config?.apiEndpoint, resolvePlaceholderValue, isGM]);
 
   const effectiveApiEndpoint = resolvedApiEndpoint ?? config?.apiEndpoint;
+
+  const isInventoryRequestTable = useMemo(() => {
+    const et = String(config?.entityType || '').trim();
+    const endpoint = String(config?.apiEndpoint || effectiveApiEndpoint || '');
+    return (
+      et === 'inventory_request' ||
+      et === 'unmannd_request' ||
+      /[?&]entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(endpoint)
+    );
+  }, [config?.entityType, config?.apiEndpoint, effectiveApiEndpoint]);
 
   // Helper: for GM users, remove assigned_to only when it came from endpoint/default, not when user explicitly set "Assigned to" filter
   const removeAssignedToForGM = useCallback(
@@ -640,8 +655,37 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
   }, [effectiveApiEndpoint, toast]);
 
+  const canRequesterEditRow = useCallback((row: any) => {
+    if (!isInventoryRequestTable) return false;
+    const requesterId = row?.data?.requester_id ?? row?.requester_id ?? row?.data?.created_by_id;
+    if (!isInventoryRequestRowRequester(requesterId, activeUserId, membershipId)) return false;
+    const status = row?.data?.status ?? row?.status;
+    return canRequesterEditInventoryRequest(status);
+  }, [isInventoryRequestTable, activeUserId, membershipId]);
+
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
+    if (column.accessor === REQUESTER_EDIT_COLUMN_ACCESSOR) {
+      if (!canRequesterEditRow(row)) {
+        return <span className="text-sm text-gray-400">—</span>;
+      }
+      return (
+        <CustomButton
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs font-semibold"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (effectiveDetailMode === 'none') return;
+            setSelectedRecord(row);
+            setIsRecordDetailModalOpen(true);
+          }}
+        >
+          Edit
+        </CustomButton>
+      );
+    }
+
     let value = row[column.accessor];
     
     // Handle case where value is an object - extract the actual value
@@ -719,8 +763,17 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     };
     
     const inlineCellKey = getInlineCellKey(row?.id, column.accessor);
+    const rowLockedForRequester =
+      isInventoryRequestTable &&
+      isInventoryRequestRowRequester(
+        row?.data?.requester_id ?? row?.requester_id ?? row?.data?.created_by_id,
+        activeUserId,
+        membershipId
+      ) &&
+      !canRequesterEditInventoryRequest(row?.data?.status ?? row?.status);
     const isInlineEditable =
       canInlineEditRows &&
+      !rowLockedForRequester &&
       column.editableInTable === true &&
       row?.id != null &&
       column.type !== 'action' &&
@@ -1103,7 +1156,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
@@ -1165,9 +1218,28 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       seenKeys.add(col.accessor);
       deduped.push(col);
     }
-    const base: Column[] = (deduped.length > 0 ? deduped : defaultColumns) as Column[];
+    const base: Column[] = [...(deduped.length > 0 ? deduped : defaultColumns)] as Column[];
+    if (!isInPageBuilder && isInventoryRequestTable) {
+      const hasEditColumn = base.some((col) => {
+        const accessor = String(col.accessor || '').trim().toLowerCase();
+        const header = String(col.header || '').trim().toLowerCase();
+        return (
+          accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
+          accessor === 'edit' ||
+          header === 'edit'
+        );
+      });
+      if (!hasEditColumn) {
+        base.push({
+          header: 'Edit',
+          accessor: REQUESTER_EDIT_COLUMN_ACCESSOR,
+          type: 'action',
+          align: 'center',
+        });
+      }
+    }
     return base;
-  }, [config?.columns, config?.tableType, effectiveStatusButtons]);
+  }, [config?.columns, config?.tableType, effectiveStatusButtons, isInPageBuilder, isInventoryRequestTable]);
 
   // Get unique values for filters
   const getUniqueLeadStatuses = () => {

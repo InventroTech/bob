@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canRequesterEditInventoryRequest,
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
   isInventoryApproverActor,
   isInventoryProcurementRole,
+  isInventoryRequestRowRequester,
   isInventoryTeamLeadRole,
 } from './workflow';
 
@@ -133,5 +135,17 @@ describe('inventory Approve/Reject for team lead and PM', () => {
         { label: 'Custom', statusValue: 'OTHER' },
       ]).map((b) => b.statusValue)
     ).toEqual(['OTHER']);
+  });
+
+  it('lets the requestor edit until the request is approved', () => {
+    expect(canRequesterEditInventoryRequest('NEW_REQUEST')).toBe(true);
+    expect(canRequesterEditInventoryRequest('ON_HOLD')).toBe(true);
+    expect(canRequesterEditInventoryRequest('REQ_TO_VERIFY')).toBe(true);
+    expect(canRequesterEditInventoryRequest('VENDOR_IDENTIFIED')).toBe(false);
+    expect(canRequesterEditInventoryRequest('IN_SHIPPING')).toBe(false);
+    expect(canRequesterEditInventoryRequest('REJECTED')).toBe(false);
+    expect(isInventoryRequestRowRequester('user-1', 'user-1', 10)).toBe(true);
+    expect(isInventoryRequestRowRequester(10, 'user-1', 10)).toBe(true);
+    expect(isInventoryRequestRowRequester('other', 'user-1', 10)).toBe(false);
   });
 });
