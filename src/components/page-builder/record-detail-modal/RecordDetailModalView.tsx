@@ -638,7 +638,7 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
                   const applyingThis = applyingStatusValue === btn.statusValue;
                   return (
                     <Button
-                      key={btn.statusValue}
+                      key={`${btn.label}-${btn.statusValue}`}
                       type="button"
                       variant="outline"
                       size="default"

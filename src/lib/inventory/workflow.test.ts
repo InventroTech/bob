@@ -3,6 +3,7 @@ import {
   canRequesterEditInventoryRequest,
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
+  inventoryRequesterIdFromRecord,
   isInventoryApproverActor,
   isInventoryProcurementRole,
   isInventoryRequestRowRequester,
@@ -128,6 +129,36 @@ describe('inventory Approve/Reject for team lead and PM', () => {
     expect(isInventoryProcurementRole('PM')).toBe(true);
   });
 
+  it('team lead can Approve/Reject/Hold after sending to requestor to verify', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'REQ_TO_VERIFY',
+        isRequester: false,
+        roleNameOrKey: 'Team Lead',
+      }).map((b) => b.label)
+    ).toEqual(['Approve', 'Reject', 'Put on Hold']);
+  });
+
+  it('PM can Approve/Reject/Hold on REQ_TO_VERIFY for someone else\'s request', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'REQ_TO_VERIFY',
+        isRequester: false,
+        roleNameOrKey: 'Procurement Manager',
+      }).map((b) => b.label)
+    ).toEqual(['Approve', 'Reject', 'Put on Hold']);
+  });
+
+  it('team lead who is the requestor still gets Verify on REQ_TO_VERIFY', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'REQ_TO_VERIFY',
+        isRequester: true,
+        roleNameOrKey: 'Team Lead',
+      }).map((b) => b.label)
+    ).toEqual(['Verify', 'Reject', 'Put on Hold']);
+  });
+
   it('filters duplicate Page Builder status buttons', () => {
     expect(
       filterDuplicateInventoryWorkflowButtons([
@@ -147,5 +178,21 @@ describe('inventory Approve/Reject for team lead and PM', () => {
     expect(isInventoryRequestRowRequester('user-1', 'user-1', 10)).toBe(true);
     expect(isInventoryRequestRowRequester(10, 'user-1', 10)).toBe(true);
     expect(isInventoryRequestRowRequester('other', 'user-1', 10)).toBe(false);
+    expect(
+      inventoryRequesterIdFromRecord({
+        requester_id: 'row-level',
+        data: { created_by_id: 'created' },
+      })
+    ).toBe('row-level');
+    expect(
+      inventoryRequesterIdFromRecord({
+        data: { requester_id: 'from-data', created_by_id: 'created' },
+      })
+    ).toBe('from-data');
+    expect(
+      inventoryRequesterIdFromRecord({
+        data: { created_by_id: 'created' },
+      })
+    ).toBe('created');
   });
 });

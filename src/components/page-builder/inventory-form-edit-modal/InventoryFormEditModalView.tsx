@@ -1223,7 +1223,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     currentVal === String(btn.statusValue ?? '').toUpperCase() || applyingThis;
                   return (
                   <Button
-                    key={btn.statusValue}
+                    key={`${btn.label}-${btn.statusValue}`}
                     type="button"
                     variant="outline"
                     size="default"

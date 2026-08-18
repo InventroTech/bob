@@ -1,11 +1,13 @@
 /**
  * Inventory request flow:
  *
- *   NEW_REQUEST / ON_HOLD
+ *   NEW_REQUEST / ON_HOLD / REQ_TO_VERIFY
  *     → (team lead OR PM Approve) VENDOR_IDENTIFIED
- *     → (team lead OR PM Reject / Send to verify / Hold)
+ *     → (team lead OR PM Reject / Hold)
+ *     → (team lead OR PM Send to verify) REQ_TO_VERIFY  [not shown when already there]
  *   REQ_TO_VERIFY
  *     → (requestor Verify) VENDOR_IDENTIFIED
+ *     → (team lead OR PM Approve / Reject / Hold)  [requestor still has Verify]
  *   VENDOR_IDENTIFIED
  *     → (team lead OR PM Order / Hold)
  *
@@ -13,12 +15,16 @@
  * - Team lead can Approve/Reject, including on requests they created.
  * - PM can Approve/Reject other people's requests, but NOT their own
  *   (on their own request they are treated like a requestor).
- * - Plain requestors only get Verify on REQ_TO_VERIFY.
+ * - The requestor always gets Verify on REQ_TO_VERIFY (even if they also have
+ *   a team-lead / PM role).
+ * - After “Send to requestor to verify”, team lead/PM keep Approve / Reject /
+ *   Put on Hold so they can act on the requestor’s updated details.
  */
 
 export const INVENTORY_APPROVABLE_STATUSES = new Set([
   'NEW_REQUEST',
   'ON_HOLD',
+  'REQ_TO_VERIFY',
 ]);
 
 /** Requestor may edit their own request until a manager/TL Approves it. */
@@ -51,6 +57,7 @@ export const INVENTORY_REQUESTER_EDITABLE_FORM_KEYS = new Set([
 export const INVENTORY_HOLDABLE_STATUSES = new Set([
   'NEW_REQUEST',
   'VENDOR_IDENTIFIED',
+  'REQ_TO_VERIFY',
 ]);
 
 export const INVENTORY_ORDERABLE_STATUSES = new Set([
@@ -148,6 +155,15 @@ export function canRequesterEditInventoryRequest(status: unknown): boolean {
   return INVENTORY_REQUESTER_EDITABLE_STATUSES.has(normalizeStatus(status));
 }
 
+/** Requester id from a CRM record (data.requester_id, row, or created_by). */
+export function inventoryRequesterIdFromRecord(record: {
+  data?: Record<string, unknown> | null;
+  requester_id?: unknown;
+} | null | undefined): unknown {
+  const data = record?.data && typeof record.data === 'object' ? record.data : undefined;
+  return data?.requester_id ?? record?.requester_id ?? data?.created_by_id;
+}
+
 /** True when this user is the requestor stored on the record. */
 export function isInventoryRequestRowRequester(
   requesterIdOnRecord: unknown,
@@ -216,31 +232,36 @@ export function getInventoryWorkflowButtons(opts: {
   const buttons: InventoryWorkflowActionButton[] = [];
   const isApprover = isInventoryApproverActor(opts);
 
+  // Requestor always gets Verify on this status, even with a TL/PM role.
+  if (opts.isRequester && status === 'REQ_TO_VERIFY') {
+    buttons.push({
+      label: 'Verify',
+      statusValue: 'VENDOR_IDENTIFIED',
+      statusText: 'VENDOR_IDENTIFIED',
+    });
+  }
+
   if (!isApprover) {
-    if (opts.isRequester && status === 'REQ_TO_VERIFY') {
-      buttons.push({
-        label: 'Verify',
-        statusValue: 'VENDOR_IDENTIFIED',
-        statusText: 'VENDOR_IDENTIFIED',
-      });
-    }
     return buttons;
   }
 
   if (INVENTORY_APPROVABLE_STATUSES.has(status)) {
-    buttons.push(
-      {
+    // Requestor already has Verify (same destination as Approve).
+    if (!(opts.isRequester && status === 'REQ_TO_VERIFY')) {
+      buttons.push({
         label: 'Approve',
         statusValue: 'VENDOR_IDENTIFIED',
         statusText: 'VENDOR_IDENTIFIED',
-      },
-      {
+      });
+    }
+    if (status !== 'REQ_TO_VERIFY') {
+      buttons.push({
         label: 'Send to requestor to verify',
         statusValue: 'REQ_TO_VERIFY',
         statusText: 'REQ TO VERIFY',
-      },
-      { label: 'Reject', statusValue: 'REJECTED', statusText: 'REJECTED' }
-    );
+      });
+    }
+    buttons.push({ label: 'Reject', statusValue: 'REJECTED', statusText: 'REJECTED' });
   }
 
   if (INVENTORY_HOLDABLE_STATUSES.has(status)) {
