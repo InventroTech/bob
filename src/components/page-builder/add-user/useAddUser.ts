@@ -101,9 +101,10 @@ export function useAddUser({ config }: AddUserComponentProps) {
     fetchRoles();
   }, [tenantId]); // Keep dependency but don't block API call
 
-  const fetchUsers = async () => {
-    // Always try to fetch users from renderer API first, regardless of tenantId
-    setIsLoading(true);
+  const fetchUsers = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
 
     try{
       const token = session?.access_token;
@@ -584,7 +585,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
       setSelectedRoleId('');
 
       // Refresh the users list
-      await fetchUsers();
+      await fetchUsers({ silent: true });
       await fetchCoreSettings();
 
       if (createdMembershipId && Object.keys(selectedCustomFields).length > 0) {
@@ -712,7 +713,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
       }
 
       // Refresh the users list after successful deletion
-      await fetchUsers();
+      await fetchUsers({ silent: true });
       await fetchCoreSettings();
       toast.success('User deleted successfully. They have been signed out everywhere.');
     } catch (error: any) {
@@ -722,6 +723,91 @@ export function useAddUser({ config }: AddUserComponentProps) {
   };
 
   const getRowKey = (usr: User) => `${usr.uid}-${usr.email}-${usr.role_id}`;
+
+  const applyEditingRowToLocalState = useCallback(
+    (row: RowEditState) => {
+      const originalEmailKey = row.originalEmail.toLowerCase();
+      const newEmailKey = row.email.trim().toLowerCase();
+      const editedRole = roles.find((r) => r.id === row.roleId);
+      const managerUser = row.managerEmail.trim()
+        ? users.find(
+            (u) => (u.email || '').toLowerCase() === row.managerEmail.trim().toLowerCase()
+          )
+        : null;
+      const leadGroupOption = availableLeadGroups.find((g) => g.name === row.leadGroup.trim());
+      const parseOptionalNumber = (value: string): number | undefined => {
+        if (value === '') return undefined;
+        const n = Number(value);
+        return Number.isFinite(n) ? n : undefined;
+      };
+
+      setUsers((prev) =>
+        prev.map((u) => {
+          if ((u.email || '').toLowerCase() !== originalEmailKey) return u;
+          return {
+            ...u,
+            name: row.name.trim(),
+            email: row.email.trim(),
+            role_id: row.roleId,
+            role: editedRole || u.role,
+            department: row.department.trim() || undefined,
+            lead_group_name: row.leadGroup.trim() || undefined,
+            user_parent_id: managerUser?.tenant_membership_id ?? null,
+          };
+        })
+      );
+
+      setCoreSettingsMap((prev) => {
+        const existing = prev[originalEmailKey] ?? {};
+        const custom_fields = { ...(existing.custom_fields ?? {}) };
+
+        for (const [key, value] of Object.entries(row.customFields)) {
+          if (isBoundCustomField(key)) continue;
+          if (value === '' || value == null) {
+            delete custom_fields[key];
+            delete custom_fields[key.toLowerCase()];
+          } else {
+            custom_fields[key] = value;
+            custom_fields[key.toLowerCase()] = value;
+          }
+        }
+
+        const nextEntry: UserCoreSettingsSummary = {
+          ...existing,
+          group_id: leadGroupOption?.id ?? existing.group_id,
+          custom_fields,
+        };
+
+        if (!isCseRole(editedRole)) {
+          const dailyTarget = parseOptionalNumber(row.dailyTarget);
+          const dailyLimit = parseOptionalNumber(row.dailyLimit);
+          if (dailyTarget !== undefined) nextEntry.daily_target = dailyTarget;
+          if (dailyLimit !== undefined) nextEntry.daily_limit = dailyLimit;
+        }
+
+        if (row.state.trim()) nextEntry.state = row.state.trim();
+        if (row.district.trim()) nextEntry.district = row.district.trim();
+        if (row.party.trim()) nextEntry.party = row.party.trim();
+
+        if (isCseRole(editedRole)) {
+          const resolveGoal = parseOptionalNumber(row.supportResolveRateGoal);
+          const stLimit = parseOptionalNumber(row.supportDailyLimitSelfTrial);
+          const otherLimit = parseOptionalNumber(row.supportDailyLimitOther);
+          if (resolveGoal !== undefined) nextEntry.support_resolve_rate_goal = resolveGoal;
+          if (stLimit !== undefined) nextEntry.support_daily_limit_self_trial = stLimit;
+          if (otherLimit !== undefined) nextEntry.support_daily_limit_other = otherLimit;
+        }
+
+        const next = { ...prev };
+        if (originalEmailKey !== newEmailKey) {
+          delete next[originalEmailKey];
+        }
+        next[newEmailKey] = nextEntry;
+        return next;
+      });
+    },
+    [availableLeadGroups, roles, users]
+  );
 
   const handleEditUser = (usr: User) => {
     const config = coreSettingsMap[(usr.email || '').toLowerCase()];
@@ -915,10 +1001,13 @@ export function useAddUser({ config }: AddUserComponentProps) {
         }
       }
 
-      toast.success('User updated successfully!');
+      applyEditingRowToLocalState(editingRow);
       handleCancelRowEdit();
-      await fetchUsers();
-      await fetchCoreSettings();
+      toast.success('User updated successfully!');
+      void (async () => {
+        await fetchUsers({ silent: true });
+        await fetchCoreSettings();
+      })();
     } catch (error: any) {
       console.error('Error updating user:', error);
       toast.error(`Error updating user: ${error.message}`);

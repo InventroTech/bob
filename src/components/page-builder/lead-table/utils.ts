@@ -272,5 +272,6 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
     user_profile_link: lead.data?.user_profile_link || lead.user_profile_link || '#',
     poster: lead.data?.poster || lead.poster || null, // Add poster field from records JSONB data
     display_pic_url: lead.display_pic_url || lead.data?.display_pic_url || null,
+    product_image: lead.product_image || lead.data?.product_image || null,
   };
 };
