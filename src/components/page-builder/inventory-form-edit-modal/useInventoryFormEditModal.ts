@@ -31,6 +31,8 @@ import {
   canRequesterEditInventoryRequest,
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
+  inventoryRequesterIdFromRecord,
+  isInventoryRequestRowRequester,
   INVENTORY_REQUESTER_EDITABLE_FORM_KEYS,
 } from '@/lib/inventory/workflow';
 import type { RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
@@ -116,12 +118,10 @@ export function useInventoryFormEditModal({
     : [];
   const isInventoryRequest =
     entityType === 'inventory_request' || entityType === 'unmannd_request';
-  const requesterId = record?.data?.requester_id;
+  const requesterId = inventoryRequesterIdFromRecord(record);
   const isRequester =
     isInventoryRequest &&
-    requesterId != null &&
-    ((!!user && String(requesterId) === String(user.id)) ||
-      (myMembershipId != null && String(requesterId) === String(myMembershipId)));
+    isInventoryRequestRowRequester(requesterId, user?.id ?? null, myMembershipId);
   const canShowDeleteRequestButton =
     showDeleteRequestButton === true &&
     isInventoryRequest &&
@@ -869,9 +869,9 @@ export function useInventoryFormEditModal({
         if (!paymentButtonConfig && effectiveShowFinalPrice) {
           Object.assign(dataToSend, getComputedFinalAmountFields(dataToSend));
         }
-      if (typeof dataToSend.vendor === 'string') {
-        dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
-      }
+        if (typeof dataToSend.vendor === 'string') {
+          dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
+        }
 
         // Stage comment history: append `{name, role, comment}` into `data.comments`.
         if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
@@ -975,6 +975,20 @@ export function useInventoryFormEditModal({
         dataToSend.vendor = toVendorStorageName(dataToSend.vendor);
       }
 
+      if (isRequester) {
+        const previousStatus =
+          record?.data && typeof record.data === 'object'
+            ? (record.data as Record<string, unknown>).status
+            : undefined;
+        if (previousStatus != null && String(previousStatus).trim() !== '') {
+          dataToSend.status = previousStatus;
+          const previousStatusText = (record.data as Record<string, unknown>).status_text;
+          if (previousStatusText != null && String(previousStatusText).trim() !== '') {
+            dataToSend.status_text = previousStatusText;
+          }
+        }
+      }
+
       if (Object.prototype.hasOwnProperty.call(formData, 'comments') || (record?.data && 'comments' in (record.data as any))) {
         const existingRaw = (record?.data as any)?.comments;
         let history: Array<{ name: string; role: string; comment: string }> = [];
@@ -1051,7 +1065,7 @@ export function useInventoryFormEditModal({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, applyShipmentTrackingOnSave]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, applyShipmentTrackingOnSave, isRequester]);
 
   const handleDeleteRequest = useCallback(async () => {
     if (!canShowDeleteRequestButton || !record?.id) return;
@@ -1131,8 +1145,11 @@ export function useInventoryFormEditModal({
   // dropdown (e.g. NEW_REQUEST not in options) cannot hide the workflow buttons.
   const requestStatusForWorkflow =
     (record?.data && typeof record.data === 'object'
-      ? (record.data as Record<string, unknown>).status
-      : undefined) ?? statusFromForm;
+      ? (record.data as Record<string, unknown>).status ??
+        (record.data as Record<string, unknown>).status_text
+      : undefined) ??
+    statusFromForm ??
+    (record as { status?: unknown } | null)?.status;
   const teamLeadFromForm =
     formData.team_lead != null && String(formData.team_lead).trim() !== ''
       ? formData.team_lead
