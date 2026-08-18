@@ -21,11 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, User, Send, Loader2, Plus, Trash2, MapPin } from 'lucide-react';
+import { Calendar, User, Send, Loader2, Plus, Trash2, MapPin, RefreshCw } from 'lucide-react';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
 
 import { REQUEST_CATEGORY_OPTIONS, PRIORITY_OPTIONS } from './constants';
 import { toVendorStorageName, formatRequestDateDisplay } from './utils';
+import { looksLikeProductUrl } from '@/lib/inventory/productLinkExtract';
 import type { InventoryRequestFormModel } from './useInventoryRequestForm';
 import { cn } from '@/lib/utils';
 
@@ -75,6 +76,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     setVendorQuery,
     vendorSuggestionsOpen,
     setVendorSuggestionsOpen,
+    linkFetchLoadingByItemId,
+    fetchDetailsFromProductLink,
     requesterDisplay,
     filteredProjectSuggestions,
     addItem,
@@ -477,16 +480,40 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     </Label>
                     {wrapShake(
                       itemKey(item.id, 'product_link'),
-                      <Input
-                        type="url"
-                        placeholder="https://… (Amazon, Robu, vendor page, etc.)"
-                        value={item.product_link}
-                        onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                        className="h-9"
-                      />
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Input
+                          type="url"
+                          placeholder="https://… (Amazon, Robu, vendor page, etc.)"
+                          value={item.product_link}
+                          onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                          className="h-9 flex-1"
+                          disabled={!!linkFetchLoadingByItemId[item.id]}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className={cn('h-9 shrink-0 gap-1.5', navyOutline)}
+                          disabled={
+                            !!linkFetchLoadingByItemId[item.id] ||
+                            !looksLikeProductUrl(item.product_link)
+                          }
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() =>
+                            void fetchDetailsFromProductLink(item.id, item.product_link, { force: true })
+                          }
+                        >
+                          {linkFetchLoadingByItemId[item.id] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                          Fetch details
+                        </Button>
+                      </div>
                     )}
                     <p className="text-[11px] text-muted-foreground">
-                      Paste the product URL from the vendor site.
+                      Paste a product URL, then click Fetch details to fill name, vendor, and cost.
                     </p>
                   </div>
 
@@ -497,9 +524,17 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     {wrapShake(
                       itemKey(item.id, 'item_name_freeform'),
                     <div className="relative">
-                      <Input
-                        placeholder="Describe the item"
-                        value={item.item_name_freeform}
+                      <div className="flex items-center gap-2">
+                        {item.product_image ? (
+                          <img
+                            src={item.product_image}
+                            alt=""
+                            className="h-9 w-9 shrink-0 rounded-md border border-border object-cover bg-muted"
+                          />
+                        ) : null}
+                        <Input
+                          placeholder="Describe the item"
+                          value={item.item_name_freeform}
                         onFocus={() => {
                           setFocusedItemNameId(item.id);
                           setItemNameQuery(item.item_name_freeform || '');
@@ -520,8 +555,9 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                           setItemNameQuery(v);
                           if (v.trim().length >= 2) setItemNameSuggestionsOpen(true);
                         }}
-                        className="h-9"
+                        className="h-9 flex-1"
                       />
+                      </div>
 
                       {focusedItemNameId === item.id && (itemNameSuggestionsOpen || itemNameSuggestionsLoading) && (
                         <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
@@ -554,6 +590,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
 
                                     const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
                                     if (productLink) updateItem(item.id, 'product_link', productLink);
+                                    const productImage = String((d.product_image ?? d.image ?? '') as any).trim();
+                                    if (productImage) updateItem(item.id, 'product_image', productImage);
 
                                     const catalogSpecs = String(
                                       (d.specifications ?? d.specs ?? d.specification ?? d.short_description ?? '') as any

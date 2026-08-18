@@ -876,6 +876,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         displayValue && displayValue !== 'N/A' ? displayValue : String(row.item_name_freeform || '').trim();
       return (
         <ShortProfileCard
+          image={row.product_image}
           name={itemName || 'Unnamed item'}
           nameTitle={itemName || undefined}
           compact
