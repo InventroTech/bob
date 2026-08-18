@@ -81,6 +81,33 @@ export const INVENTORY_REQUESTER_EDITABLE_FORM_KEYS = new Set([
   'requirement_date',
 ]);
 
+/** Requestor may edit their own request until a manager/TL Approves it. */
+export const INVENTORY_REQUESTER_EDITABLE_STATUSES = new Set([
+  'NEW_REQUEST',
+  'ON_HOLD',
+  'REQ_TO_VERIFY',
+]);
+
+/** Form keys a requestor can change before approval. Status stays workflow-only. */
+export const INVENTORY_REQUESTER_EDITABLE_FORM_KEYS = new Set([
+  'item_name_freeform',
+  'item_name',
+  'specifications',
+  'quantity_required',
+  'quantity',
+  'estimated_cost',
+  'vendor',
+  'vendor_name',
+  'product_link',
+  'additional_link',
+  'comments',
+  'notes',
+  'project_purpose',
+  'department',
+  'required_date',
+  'requirement_date',
+]);
+
 export const INVENTORY_HOLDABLE_STATUSES = new Set([
   'NEW_REQUEST',
   'VENDOR_IDENTIFIED',
