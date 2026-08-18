@@ -28,8 +28,10 @@ import {
   type ShipmentTrackDetails,
 } from '@/lib/inventory/shipmentTracking';
 import {
+  canRequesterEditInventoryRequest,
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
+  INVENTORY_REQUESTER_EDITABLE_FORM_KEYS,
 } from '@/lib/inventory/workflow';
 import type { RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
@@ -127,8 +129,18 @@ export function useInventoryFormEditModal({
     !paymentButtonConfig;
   const canShowHistoryButton = showHistoryButton === true && record?.id != null;
   const canUpdate = Boolean(onUpdate && record?.id != null);
-  /** Requestors review + Verify only — no field edits. */
-  const canEditFields = canUpdate && !isRequester;
+  const requestStatusForEdit =
+    (formData.status != null && String(formData.status).trim() !== ''
+      ? formData.status
+      : undefined) ??
+    (record?.data && typeof record.data === 'object'
+      ? (record.data as Record<string, unknown>).status
+      : undefined) ??
+    (record as { status?: unknown } | null)?.status;
+  const requesterMayEdit =
+    isRequester && canRequesterEditInventoryRequest(requestStatusForEdit);
+  /** Requestors can edit fields until the request is approved. */
+  const canEditFields = canUpdate && (!isRequester || requesterMayEdit);
   const isPaymentModal = Boolean(paymentButtonConfig);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
   const effectiveShowFinalPrice = showFinalPriceSection !== false && !isRequester;
@@ -167,6 +179,9 @@ export function useInventoryFormEditModal({
     () => formModalFields.map((f) => f.key).join('\u0000'),
     [formModalFields]
   );
+  const hasVendorField =
+    formModalFieldsKey.split('\u0000').includes('vendor') ||
+    formModalFieldsKey.split('\u0000').includes('vendor_name');
   const hydratedRecordIdRef = useRef<number | string | null | undefined>(undefined);
 
   const applyLiveTrackingResult = useCallback(
@@ -391,8 +406,8 @@ export function useInventoryFormEditModal({
   }, []);
 
   useEffect(() => {
-    if (open && formModalFields.some((f) => f.key === 'vendor')) fetchVendors();
-  }, [open, fetchVendors, formModalFields]);
+    if (open && hasVendorField) fetchVendors();
+  }, [open, hasVendorField, fetchVendors]);
 
   const saveNewVendor = useCallback(async () => {
     const name = toVendorStorageName((newVendorName ?? '').trim());
@@ -509,7 +524,7 @@ export function useInventoryFormEditModal({
           initial[key] =
             val != null && String(val).trim()
               ? String(val).trim().toUpperCase().replace(/\s+/g, '_')
-              : DEFAULT_SHIPMENT_STATUS;
+              : null;
         } else {
           initial[key] = val !== undefined && val !== null ? val : '';
         }
@@ -774,21 +789,34 @@ export function useInventoryFormEditModal({
       dataToSend.courier_name = String(dataToSend.courier_name ?? '').trim() || null;
       dataToSend.eta = String(dataToSend.eta ?? '').trim() || null;
       const hasTracking = Boolean(link || number);
+      // Requestors are not allowed to move/change the delivery pipeline.
+      // We still allow them to edit other fields without overwriting shipment_status.
+      if (isRequester) {
+        delete dataToSend.shipment_status;
+      } else {
       const statusRaw = String(dataToSend.shipment_status ?? '').trim().toUpperCase().replace(/\s+/g, '_');
       const currentStatus = SHIPMENT_STATUSES.includes(statusRaw as (typeof SHIPMENT_STATUSES)[number])
         ? statusRaw
         : null;
       // Pasting a link/AWB should move the pipeline into ORDERED (not stay blank / NOT_SHIPPED).
       dataToSend.shipment_status = advanceShipmentStatusForTracking(currentStatus, hasTracking);
+      }
 
       const prev = (record?.data && typeof record.data === 'object' ? record.data : {}) as Record<string, unknown>;
-      const keys = [
-        'tracking_number',
-        'tracking_link',
-        'courier_name',
-        'shipment_status',
-        'eta',
-      ] as const;
+      const keys = (isRequester
+        ? ([
+            'tracking_number',
+            'tracking_link',
+            'courier_name',
+            'eta',
+          ] as const)
+        : ([
+            'tracking_number',
+            'tracking_link',
+            'courier_name',
+            'shipment_status',
+            'eta',
+          ] as const));
       const changed = keys.some((k) => String(dataToSend[k] ?? '') !== String(prev[k] ?? ''));
       if (changed) {
         dataToSend.tracking_updated_at = new Date().toISOString();
@@ -796,7 +824,7 @@ export function useInventoryFormEditModal({
         dataToSend.tracking_updated_at = prev.tracking_updated_at;
       }
     },
-    [isInventoryRequest, trackingPasteDraft, record?.data]
+    [isInventoryRequest, trackingPasteDraft, record?.data, isRequester]
   );
 
   const handleActionClick = useCallback(
@@ -1151,11 +1179,20 @@ export function useInventoryFormEditModal({
     ? configuredActionButtons
     : [...workflowButtons, ...configuredActionButtons];
   const hasActionButtons = effectiveActionButtons && effectiveActionButtons.length > 0;
-  const hasEditableField = formModalFields.some((f) => f.enabled);
+  const effectiveFormModalFields = requesterMayEdit
+    ? formModalFields.map((field) => {
+        if (field.key === 'status') return { ...field, enabled: false };
+        if (INVENTORY_REQUESTER_EDITABLE_FORM_KEYS.has(field.key)) {
+          return { ...field, enabled: true };
+        }
+        return field;
+      })
+    : formModalFields;
+  const hasEditableField = effectiveFormModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
-  // Requestors never get Save — they only Verify / Delete.
+  // Requestors get Save only while the request is still pending approval.
   const effectiveShowSaveButton = isRequester
-    ? false
+    ? requesterMayEdit
     : showSaveButton !== undefined
       ? showSaveButton
       : !hasActionButtons;
@@ -1174,7 +1211,7 @@ export function useInventoryFormEditModal({
     return '—';
   })();
 
-  const quantityFieldKeys = formModalFields
+  const quantityFieldKeys = effectiveFormModalFields
     .filter((f) => f.key === 'quantity_required' || f.key === 'quantity')
     .map((f) => f.key);
   const primaryQuantityFieldKey = quantityFieldKeys[0] ?? null;
@@ -1185,7 +1222,7 @@ export function useInventoryFormEditModal({
     onOpenChange,
     record,
     entityType,
-    formModalFields,
+    formModalFields: effectiveFormModalFields,
     actionButtons,
     onUpdate,
     onRecordUpdated,

@@ -51,19 +51,18 @@ export const FIELDS_HIDDEN_FROM_REQUESTER: string[] = ['assigned_to_id', 'commen
 
 /** inventory_request: data keys the requestor is allowed to edit (subset; status and assignee are PM-only). */
 export const EDITABLE_FIELDS_FOR_REQUESTER: string[] = [
-  // 'department',
-  // 'sub_department',
   'project_purpose',
-  // 'item_name_freeform',
-  // 'part_number_or_sku',
+  'item_name_freeform',
+  'specifications',
   'quantity_required',
-  'comments',
-  // Priority is derived from request/requirement dates — not editable as urgency.
-  // 'urgency_level',
-  // 'expected_delivery_date',
-  // 'procurement_type',
   'quantity',
-  // 'notes',
+  'estimated_cost',
+  'vendor',
+  'product_link',
+  'additional_link',
+  'comments',
+  'notes',
+  'department',
 ];
 
 /** Data keys hidden in default record when Final price section is off (matches form modal behavior). */

@@ -7,7 +7,7 @@ import { crmRecordsApi } from '@/lib/api/services/crmRecords';
 import { useAuth } from '@/hooks/useAuth';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { formatCurrencyInputLive, formatPriceForInput, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
-import { getInventoryWorkflowButtons } from '@/lib/inventory/workflow';
+import { canRequesterEditInventoryRequest, getInventoryWorkflowButtons } from '@/lib/inventory/workflow';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import type { RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 import type { RecordDetailModalProps } from './types';
@@ -103,7 +103,10 @@ export function useRecordDetailModal({
       : (editableFieldsProp ?? (entityType ? DEFAULT_EDITABLE_BY_ENTITY[entityType] ?? [] : []))
   );
 
-  const canEditInventoryRequest = canEdit && (!isInventoryRequest || isRequester);
+  const canEditInventoryRequest =
+    canEdit &&
+    (!isInventoryRequest ||
+      (isRequester && canRequesterEditInventoryRequest(requestStatusForWorkflow)));
   /** Only the assigned PM can update status on an inventory request; requester can edit other fields when draft. */
   const canEditStatusForRequest = isInventoryRequest && canEdit && !!user && isAssignee;
 
