@@ -57,6 +57,6 @@ export interface RecordDetailModalProps {
   showFinalPriceSection?: boolean;
   /** Whether requestor can see the "Delete request" button (any status). Default: false. */
   showDeleteRequestButton?: boolean;
-  /** Show "See request history" button and history modal. */
+  /** Show "See request history" button and history view. */
   showHistoryButton?: boolean;
 }
