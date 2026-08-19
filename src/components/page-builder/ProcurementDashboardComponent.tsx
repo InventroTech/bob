@@ -115,7 +115,7 @@ function matchesFilter(row: ProcurementRequestRow, filter: StatusFilter): boolea
     return row.status === 'NEW_REQUEST' || row.status === 'ON_HOLD' || row.status === 'REQ_TO_VERIFY';
   }
   if (filter === 'ordered') {
-    return row.status === 'VENDOR_IDENTIFIED' || row.status === 'IN_SHIPPING';
+    return row.status === 'VENDOR_IDENTIFIED' || row.status === 'IN_CART' || row.status === 'IN_SHIPPING';
   }
   return row.status === 'REJECTED';
 }

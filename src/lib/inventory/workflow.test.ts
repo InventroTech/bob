@@ -8,6 +8,7 @@ import {
   isInventoryProcurementRole,
   isInventoryRequestRowRequester,
   isInventoryTeamLeadRole,
+  applyInventoryCartStatusSideEffects,
 } from './workflow';
 
 describe('inventory Approve/Reject for team lead and PM', () => {
@@ -112,13 +113,46 @@ describe('inventory Approve/Reject for team lead and PM', () => {
     ).toEqual([]);
   });
 
-  it('team lead can Order on VENDOR_IDENTIFIED', () => {
+  it('team lead can add approved items to the cart', () => {
     expect(
       getInventoryWorkflowButtons({
         requestStatus: 'VENDOR_IDENTIFIED',
         roleNameOrKey: 'Team Lead',
       }).map((b) => b.label)
-    ).toEqual(['Put on Hold', 'Order']);
+    ).toEqual(['Put on Hold', 'Add to cart']);
+  });
+
+  it('team lead can remove a cart item back to vendor identified and then Order', () => {
+    expect(
+      getInventoryWorkflowButtons({
+        requestStatus: 'IN_CART',
+        roleNameOrKey: 'Team Lead',
+      }).map((b) => ({ label: b.label, statusValue: b.statusValue }))
+    ).toEqual([
+      { label: 'Put on Hold', statusValue: 'ON_HOLD' },
+      { label: 'Remove from cart', statusValue: 'VENDOR_IDENTIFIED' },
+      { label: 'Order', statusValue: 'IN_SHIPPING' },
+    ]);
+  });
+
+  it('clears cart_id when an item is removed from the cart', () => {
+    const data: Record<string, unknown> = { cart_id: 'cart-1', status: 'IN_CART' };
+    applyInventoryCartStatusSideEffects({
+      previousStatus: 'IN_CART',
+      nextStatus: 'VENDOR_IDENTIFIED',
+      data,
+    });
+    expect(data.cart_id).toBeNull();
+  });
+
+  it('does not clear cart_id on approve into vendor identified', () => {
+    const data: Record<string, unknown> = { cart_id: 'cart-1' };
+    applyInventoryCartStatusSideEffects({
+      previousStatus: 'NEW_REQUEST',
+      nextStatus: 'VENDOR_IDENTIFIED',
+      data,
+    });
+    expect(data.cart_id).toBe('cart-1');
   });
 
   it('recognizes TL and PM roles', () => {
@@ -163,6 +197,7 @@ describe('inventory Approve/Reject for team lead and PM', () => {
     expect(
       filterDuplicateInventoryWorkflowButtons([
         { label: 'Approve', statusValue: 'VENDOR_IDENTIFIED' },
+        { label: 'Add to cart', statusValue: 'IN_CART' },
         { label: 'Custom', statusValue: 'OTHER' },
       ]).map((b) => b.statusValue)
     ).toEqual(['OTHER']);
@@ -173,6 +208,7 @@ describe('inventory Approve/Reject for team lead and PM', () => {
     expect(canRequesterEditInventoryRequest('ON_HOLD')).toBe(true);
     expect(canRequesterEditInventoryRequest('REQ_TO_VERIFY')).toBe(true);
     expect(canRequesterEditInventoryRequest('VENDOR_IDENTIFIED')).toBe(false);
+    expect(canRequesterEditInventoryRequest('IN_CART')).toBe(false);
     expect(canRequesterEditInventoryRequest('IN_SHIPPING')).toBe(false);
     expect(canRequesterEditInventoryRequest('REJECTED')).toBe(false);
     expect(isInventoryRequestRowRequester('user-1', 'user-1', 10)).toBe(true);

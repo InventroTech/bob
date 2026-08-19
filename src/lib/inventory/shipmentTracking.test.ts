@@ -6,9 +6,10 @@ import {
 } from './shipmentTracking';
 
 describe('shipment tracking visibility + paste', () => {
-  it('shows tracking section from VENDOR_IDENTIFIED / IN_SHIPPING', () => {
+  it('shows tracking section from VENDOR_IDENTIFIED / IN_CART / IN_SHIPPING', () => {
     expect(shouldShowShipmentTrackingSection('NEW_REQUEST')).toBe(false);
     expect(shouldShowShipmentTrackingSection('VENDOR_IDENTIFIED')).toBe(true);
+    expect(shouldShowShipmentTrackingSection('IN_CART')).toBe(true);
     expect(shouldShowShipmentTrackingSection('IN_SHIPPING')).toBe(true);
   });
 
