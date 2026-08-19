@@ -12,6 +12,178 @@ export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 
 export const DEFAULT_SHIPMENT_STATUS: ShipmentStatus = 'NOT_SHIPPED';
 
+export type AftershipCourier = {
+  name: string;
+  slug: string;
+};
+
+/** Couriers we alias case-insensitively (FedEx / fedex / FEDEX all work). */
+export const SHIPMENT_COURIER_OPTIONS = [
+  'Amazon',
+  'BlueDart',
+  'Delhivery',
+  'FedEx',
+  'DHL',
+  'DTDC',
+  'Shiprocket',
+  'India Post',
+] as const;
+
+/** Shown first in the courier picker before the user types. */
+export const PREFERRED_SHIPMENT_COURIERS: AftershipCourier[] = [
+  { name: 'Amazon', slug: 'amazon' },
+  { name: 'BlueDart', slug: 'bluedart' },
+  { name: 'Delhivery', slug: 'delhivery' },
+  { name: 'DHL Express', slug: 'dhl' },
+  { name: 'DTDC India', slug: 'dtdc' },
+  { name: 'Ecom Express', slug: 'ecom-express' },
+  { name: 'FedEx', slug: 'fedex' },
+  { name: 'India Post Domestic', slug: 'india-post' },
+  { name: 'Shiprocket X', slug: 'shiprocket' },
+];
+
+const PREFERRED_COURIER_SLUGS = new Set(PREFERRED_SHIPMENT_COURIERS.map((c) => c.slug));
+
+const COURIER_PICK_LIMIT = 80;
+
+function courierSearchKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function filterAftershipCouriers(
+  couriers: AftershipCourier[],
+  query: string,
+  limit = COURIER_PICK_LIMIT
+): AftershipCourier[] {
+  const q = courierSearchKey(query);
+  if (!q) {
+    const bySlug = new Map(couriers.map((c) => [c.slug, c]));
+    return PREFERRED_SHIPMENT_COURIERS.map((preferred) => {
+      const hit = bySlug.get(preferred.slug);
+      return hit ? { ...hit, name: preferred.name } : preferred;
+    });
+  }
+  const compactQ = q.replace(/[^a-z0-9]+/g, '');
+  const scored = couriers
+    .map((courier) => {
+      const name = courier.name.toLowerCase();
+      const slug = courier.slug.toLowerCase();
+      const compactName = name.replace(/[^a-z0-9]+/g, '');
+      let score = 99;
+      if (slug === q || name === q) score = 0;
+      else if (slug.startsWith(q) || name.startsWith(q) || compactName.startsWith(compactQ)) score = 1;
+      else if (slug.includes(q) || name.includes(q) || compactName.includes(compactQ)) score = 2;
+      return { courier, score };
+    })
+    .filter((row) => row.score < 99)
+    .sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      const aPref = PREFERRED_COURIER_SLUGS.has(a.courier.slug) ? 0 : 1;
+      const bPref = PREFERRED_COURIER_SLUGS.has(b.courier.slug) ? 0 : 1;
+      if (aPref !== bPref) return aPref - bPref;
+      return a.courier.name.localeCompare(b.courier.name);
+    });
+  return scored.slice(0, limit).map((row) => row.courier);
+}
+
+export function findAftershipCourier(
+  value: string | null | undefined,
+  catalog: AftershipCourier[] = []
+): AftershipCourier | undefined {
+  const raw = String(value ?? '').trim();
+  if (!raw) return undefined;
+  const lower = raw.toLowerCase();
+  const pool = catalog.length > 0 ? catalog : PREFERRED_SHIPMENT_COURIERS;
+  const bySlug = pool.find((c) => c.slug === lower);
+  if (bySlug) return bySlug;
+  const nameHits = pool.filter((c) => c.name.toLowerCase() === lower);
+  if (nameHits.length === 1) return nameHits[0];
+  if (nameHits.length > 1) {
+    return nameHits.find((c) => PREFERRED_COURIER_SLUGS.has(c.slug)) ?? nameHits[0];
+  }
+  const compact = lower.replace(/[^a-z0-9]+/g, '');
+  const compactHits = pool.filter(
+    (c) =>
+      c.slug.replace(/[^a-z0-9]+/g, '') === compact ||
+      c.name.toLowerCase().replace(/[^a-z0-9]+/g, '') === compact
+  );
+  if (compactHits.length === 1) return compactHits[0];
+  if (compactHits.length > 1) {
+    return compactHits.find((c) => PREFERRED_COURIER_SLUGS.has(c.slug)) ?? compactHits[0];
+  }
+  return undefined;
+}
+
+export function courierDisplayName(
+  value: string | null | undefined,
+  catalog: AftershipCourier[] = []
+): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const found = findAftershipCourier(raw, catalog);
+  if (!found) return normalizeCourierLabel(raw) || raw;
+  const preferred = PREFERRED_SHIPMENT_COURIERS.find((row) => row.slug === found.slug);
+  return preferred?.name ?? found.name;
+}
+
+/** Slug to send to AfterShip; keeps catalog picks like dhl-global-mail intact. */
+export function courierValueForTrack(
+  value: string | null | undefined,
+  catalog: AftershipCourier[] = []
+): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const found = findAftershipCourier(raw, catalog);
+  if (found) return found.slug;
+  return normalizeCourierLabel(raw) || raw;
+}
+
+let aftershipCourierCache: AftershipCourier[] | null = null;
+let aftershipCourierInflight: Promise<AftershipCourier[]> | null = null;
+
+export function getCachedAftershipCouriers(): AftershipCourier[] {
+  return aftershipCourierCache ?? PREFERRED_SHIPMENT_COURIERS;
+}
+
+export async function fetchAftershipCouriers(): Promise<AftershipCourier[]> {
+  if (aftershipCourierCache) return aftershipCourierCache;
+  if (!aftershipCourierInflight) {
+    aftershipCourierInflight = (async () => {
+      try {
+        const { apiClient } = await import('@/lib/api');
+        const res = await apiClient.get<{ couriers?: AftershipCourier[] }>(
+          '/crm-records/shipment-couriers/'
+        );
+        const rows = Array.isArray(res.data?.couriers) ? res.data.couriers : [];
+        const cleaned = rows.filter(
+          (row): row is AftershipCourier =>
+            Boolean(row && typeof row.name === 'string' && typeof row.slug === 'string')
+        );
+        if (cleaned.length > 0) {
+          aftershipCourierCache = cleaned;
+          return cleaned;
+        }
+      } catch (err) {
+        console.warn('[shipment-couriers] catalog fetch failed', err);
+      }
+      aftershipCourierInflight = null;
+      return PREFERRED_SHIPMENT_COURIERS;
+    })();
+  }
+  return aftershipCourierInflight;
+}
+
+/** True when the value is a URL / track link rather than an AWB. */
+export function looksLikeTrackingLinkInput(value: string | null | undefined): boolean {
+  const v = String(value ?? '').trim();
+  if (!v) return false;
+  if (/^https?:\/\//i.test(v)) return true;
+  if (/^www\./i.test(v)) return true;
+  if (v.includes('://')) return true;
+  if (v.includes('/')) return true;
+  return false;
+}
+
 /** Happy-path delivery pipeline shown in the form modal (excludes NOT_SHIPPED / EXCEPTION). */
 export const SHIPMENT_PIPELINE_STEPS = [
   'ORDERED',
@@ -102,20 +274,20 @@ export function looksLikeAmazonTrackingId(value: string | null | undefined): boo
   return false;
 }
 
-/** Map AfterShip slugs / labels onto our Courier select values. */
+/** Map typed courier names onto a canonical label, ignoring case and punctuation. */
 export function normalizeCourierLabel(value: string | null | undefined): string | null {
   const raw = String(value ?? '').trim();
   if (!raw) return null;
-  const key = raw.toLowerCase().replace(/[\s_]+/g, '-');
-  if (key.startsWith('amazon')) return 'Amazon';
-  if (key.startsWith('fedex')) return 'FedEx';
-  if (key === 'dhl' || key.startsWith('dhl-')) return 'DHL';
-  if (key.includes('bluedart') || key.includes('blue-dart')) return 'BlueDart';
-  if (key.includes('delhivery')) return 'Delhivery';
-  if (key.includes('dtdc')) return 'DTDC';
-  if (key.includes('shiprocket')) return 'Shiprocket';
-  if (key.includes('india-post') || key.includes('indiapost')) return 'India Post';
-  return raw;
+  const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (compact.startsWith('amazon') || compact === 'amzn' || compact === 'amzl') return 'Amazon';
+  if (compact.includes('fedex')) return 'FedEx';
+  if (compact === 'dhl' || compact.startsWith('dhl')) return 'DHL';
+  if (compact.includes('bluedart')) return 'BlueDart';
+  if (compact.includes('delhivery')) return 'Delhivery';
+  if (compact.includes('dtdc')) return 'DTDC';
+  if (compact.includes('shiprocket')) return 'Shiprocket';
+  if (compact.includes('indiapost') || compact === 'post') return 'India Post';
+  return raw.replace(/\s+/g, ' ');
 }
 
 export function publicTrackingLink(
