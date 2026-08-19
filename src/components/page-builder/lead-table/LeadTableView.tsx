@@ -77,10 +77,11 @@ export function LeadTableView(props: LeadTableModel) {
     isCustomModalOpen,
     setIsCustomModalOpen,
     apiClient,
-  } = props;
+    displayTitle,
+    tableTitle,
+  } = props as any;
 
-  // DYNAMIC TITLE LOGIC based on URL path
-  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  // Identify if this table is being used for Inventory/Unmanned requests instead of CRM Leads
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
   const forceEntityType = String(
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
@@ -100,30 +101,12 @@ export function LeadTableView(props: LeadTableModel) {
           )
         )
     );
-  // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
-  const configuredTitle = (config?.title || '').trim();
-  let displayTitle =
-    isInventoryLikeForTitle &&
-    (!configuredTitle || configuredTitle.toLowerCase() === 'all leads')
-      ? undefined
-      : configuredTitle || undefined;
-
-  if (!displayTitle && !isInventoryLikeForTitle) {
-    if (pathname.includes('follow')) {
-      displayTitle = "Follow Up Leads";
-    } else if (pathname.includes('pending')) {
-      displayTitle = "Pending Leads";
-    } else {
-      displayTitle = "All Leads";
-    }
-  }
 
   // Navy header/border for Procurement / My Request / Pending Approval / etc.
   // CRM All Leads and other default tables keep black headers.
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
-  const procurementHeaderBg = 'bg-[#1A3673]';
-  const procurementTableFrame = 'overflow-hidden rounded-lg border border-[#1A3673]';
+
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
@@ -155,11 +138,6 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle =
-    isInventoryLikeForTitle && configuredTitle.toLowerCase() === 'all leads'
-      ? ''
-      : configuredTitle;
-
   return (
     <>
       {/* Mobile Page Title - Dynamically changes based on URL */}
@@ -190,7 +168,7 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — tight under page header so All Requests fits with less scroll */}
+        {/* Toolbar - tight under page header so All Requests fits with less scroll */}
         <div
           className={`flex items-center flex-wrap ${
             isProcurementStyleTable ? 'gap-2' : 'gap-3'
