@@ -28,6 +28,7 @@ import {
   type ShipmentTrackDetails,
 } from '@/lib/inventory/shipmentTracking';
 import {
+  applyInventoryCartStatusSideEffects,
   canRequesterEditInventoryRequest,
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
@@ -855,6 +856,14 @@ export function useInventoryFormEditModal({
         };
         if (targetAttribute === 'status') {
           dataToSend.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+          applyInventoryCartStatusSideEffects({
+            previousStatus:
+              record?.data && typeof record.data === 'object'
+                ? (record.data as Record<string, unknown>).status
+                : undefined,
+            nextStatus: btn.statusValue,
+            data: dataToSend,
+          });
           // Order → IN_SHIPPING should start the delivery pipeline at ORDERED.
           if (String(btn.statusValue).toUpperCase().replace(/\s+/g, '_') === 'IN_SHIPPING') {
             dataToSend.shipment_status = advanceShipmentStatusForTracking(

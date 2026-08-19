@@ -48,7 +48,7 @@ export type ProcurementDashboardData = {
 const CATEGORY_COLORS = ['#E8B923', '#7DD3FC', '#F472B6', '#2DD4BF', '#4ADE80', '#A78BFA', '#FB923C', '#94A3B8'];
 
 const PENDING_STATUSES = new Set(['NEW_REQUEST', 'ON_HOLD', 'REQ_TO_VERIFY']);
-const ORDERED_STATUSES = new Set(['VENDOR_IDENTIFIED', 'IN_SHIPPING']);
+const ORDERED_STATUSES = new Set(['VENDOR_IDENTIFIED', 'IN_CART', 'IN_SHIPPING']);
 const REJECTED_STATUSES = new Set(['REJECTED']);
 
 function coerceRecords(payload: unknown): CrmRecord[] {
@@ -190,6 +190,7 @@ function buildKpis(rows: ProcurementRequestRow[], now: Date): KpiMetric[] {
     metric('on_hold', 'On Hold', 'amber', (r) => r.status === 'ON_HOLD'),
     metric('to_verify', 'To Verify', 'violet', (r) => r.status === 'REQ_TO_VERIFY'),
     metric('vendor_identified', 'Vendor Identified', 'green', (r) => r.status === 'VENDOR_IDENTIFIED'),
+    metric('in_cart', 'In Cart', 'violet', (r) => r.status === 'IN_CART'),
     metric('in_shipping', 'In Shipping', 'orange', (r) => r.status === 'IN_SHIPPING'),
     metric('rejected', 'Rejected', 'red', (r) => REJECTED_STATUSES.has(r.status)),
   ];
@@ -294,7 +295,10 @@ function ageDays(from: Date, now: Date): number {
 
 function buildAging(rows: ProcurementRequestRow[], now: Date): AgingBucket[] {
   const pendingLike = rows.filter(
-    (r) => PENDING_STATUSES.has(r.status) || r.status === 'VENDOR_IDENTIFIED'
+    (r) =>
+      PENDING_STATUSES.has(r.status) ||
+      r.status === 'VENDOR_IDENTIFIED' ||
+      r.status === 'IN_CART'
   );
   const buckets: AgingBucket[] = [
     { key: '0_30', label: '0 - 30 Days', amount: 0, count: 0 },

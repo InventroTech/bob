@@ -9,7 +9,12 @@
  *     → (requestor Verify) VENDOR_IDENTIFIED
  *     → (team lead OR PM Approve / Reject / Hold)  [requestor still has Verify]
  *   VENDOR_IDENTIFIED
- *     → (team lead OR PM Order / Hold)
+ *     → (team lead OR PM Add to cart) IN_CART
+ *     → (team lead OR PM Hold)
+ *   IN_CART
+ *     → (team lead OR PM Remove from cart) VENDOR_IDENTIFIED
+ *     → (team lead OR PM Order) IN_SHIPPING
+ *     → (team lead OR PM Hold)
  *
  * Rules:
  * - Team lead can Approve/Reject, including on requests they created.
@@ -57,15 +62,27 @@ export const INVENTORY_REQUESTER_EDITABLE_FORM_KEYS = new Set([
 export const INVENTORY_HOLDABLE_STATUSES = new Set([
   'NEW_REQUEST',
   'VENDOR_IDENTIFIED',
+  'IN_CART',
   'REQ_TO_VERIFY',
 ]);
 
-export const INVENTORY_ORDERABLE_STATUSES = new Set([
+/** Approved items that can be added to a procurement cart. */
+export const INVENTORY_ADD_TO_CART_STATUSES = new Set([
   'VENDOR_IDENTIFIED',
+]);
+
+/** Cart items that can be returned to vendor identified. */
+export const INVENTORY_REMOVE_FROM_CART_STATUSES = new Set([
+  'IN_CART',
+]);
+
+export const INVENTORY_ORDERABLE_STATUSES = new Set([
+  'IN_CART',
 ]);
 
 export const INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES = new Set([
   'VENDOR_IDENTIFIED',
+  'IN_CART',
   'REQ_TO_VERIFY',
   'REJECTED',
   'IN_SHIPPING',
@@ -272,6 +289,22 @@ export function getInventoryWorkflowButtons(opts: {
     });
   }
 
+  if (INVENTORY_ADD_TO_CART_STATUSES.has(status)) {
+    buttons.push({
+      label: 'Add to cart',
+      statusValue: 'IN_CART',
+      statusText: 'IN_CART',
+    });
+  }
+
+  if (INVENTORY_REMOVE_FROM_CART_STATUSES.has(status)) {
+    buttons.push({
+      label: 'Remove from cart',
+      statusValue: 'VENDOR_IDENTIFIED',
+      statusText: 'VENDOR_IDENTIFIED',
+    });
+  }
+
   if (INVENTORY_ORDERABLE_STATUSES.has(status)) {
     buttons.push({
       label: 'Order',
@@ -281,6 +314,19 @@ export function getInventoryWorkflowButtons(opts: {
   }
 
   return buttons;
+}
+
+/** Clear cart linkage when an item is taken out of the cart. */
+export function applyInventoryCartStatusSideEffects(opts: {
+  previousStatus: unknown;
+  nextStatus: unknown;
+  data: Record<string, unknown>;
+}): void {
+  const previous = normalizeStatus(opts.previousStatus);
+  const next = normalizeStatus(opts.nextStatus);
+  if (next === 'VENDOR_IDENTIFIED' && previous === 'IN_CART') {
+    opts.data.cart_id = null;
+  }
 }
 
 /** Drop Page Builder buttons that would duplicate built-in workflow actions. */

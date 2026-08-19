@@ -7,7 +7,7 @@ import { crmRecordsApi } from '@/lib/api/services/crmRecords';
 import { useAuth } from '@/hooks/useAuth';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
 import { formatCurrencyInputLive, formatPriceForInput, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
-import { canRequesterEditInventoryRequest, getInventoryWorkflowButtons, inventoryRequesterIdFromRecord, isInventoryRequestRowRequester } from '@/lib/inventory/workflow';
+import { applyInventoryCartStatusSideEffects, canRequesterEditInventoryRequest, getInventoryWorkflowButtons, inventoryRequesterIdFromRecord, isInventoryRequestRowRequester } from '@/lib/inventory/workflow';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import type { RequestHistoryEntry } from '@/components/page-builder/RequestHistoryPanel';
 import type { RecordDetailModalProps } from './types';
@@ -496,6 +496,11 @@ export function useRecordDetailModal({
         };
         if (targetAttribute === 'status') {
           payload.status_text = (btn.statusText ?? btn.label ?? btn.statusValue).trim();
+          applyInventoryCartStatusSideEffects({
+            previousStatus: existingData.status,
+            nextStatus: btn.statusValue,
+            data: payload,
+          });
         }
 
         // Stage comments history: append a new `{name, role, comment}` object into `data.comments[]`
