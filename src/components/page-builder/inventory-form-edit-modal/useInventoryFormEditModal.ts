@@ -18,13 +18,15 @@ import { cn } from '@/lib/utils';
 import {
   SHIPMENT_STATUSES,
   DEFAULT_SHIPMENT_STATUS,
-  normalizeTrackingPaste,
   advanceShipmentStatusForTracking,
   shouldShowShipmentTrackingSection,
   fetchLiveShipmentStatus,
   shipmentDetailsFromTrackResult,
   publicTrackingLink,
   normalizeCourierLabel,
+  courierValueForTrack,
+  getCachedAftershipCouriers,
+  looksLikeTrackingLinkInput,
   type ShipmentTrackDetails,
 } from '@/lib/inventory/shipmentTracking';
 import {
@@ -286,14 +288,36 @@ export function useInventoryFormEditModal({
       courier_name?: string | null;
       silent?: boolean;
     }) => {
-      const number = String(overrides?.tracking_number ?? formData.tracking_number ?? '').trim();
-      const link = String(overrides?.tracking_link ?? formData.tracking_link ?? '').trim();
-      const courier = String(overrides?.courier_name ?? formData.courier_name ?? '').trim();
+      const number = String(
+        overrides && 'tracking_number' in overrides
+          ? overrides.tracking_number ?? ''
+          : formData.tracking_number ?? ''
+      ).trim();
+      const link = String(
+        overrides && 'tracking_link' in overrides
+          ? overrides.tracking_link ?? ''
+          : formData.tracking_link ?? ''
+      ).trim();
+      const courier = String(
+        overrides && 'courier_name' in overrides
+          ? overrides.courier_name ?? ''
+          : formData.courier_name ?? ''
+      ).trim();
       if (!number && !link) {
         if (!overrides?.silent) {
           toast({
             title: 'Add tracking first',
             description: 'Paste a tracking number or link to refresh the delivery pipeline.',
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+      if (number && !courier && !link) {
+        if (!overrides?.silent) {
+          toast({
+            title: 'Select a courier',
+            description: 'Pick FedEx, DHL, BlueDart, Amazon, or another courier with the tracking number.',
             variant: 'destructive',
           });
         }
@@ -351,29 +375,36 @@ export function useInventoryFormEditModal({
     async (raw: string, { clearDraft = false }: { clearDraft?: boolean } = {}) => {
       const paste = raw.trim();
       if (!paste) return;
-      const normalized = normalizeTrackingPaste(paste);
-      // Bare AWB → number only. Do NOT invent an AfterShip URL before live lookup —
-      // that breaks carrier resolution (same path as typing into Tracking number).
-      const nextNumber = normalized.tracking_number || null;
-      const nextLink = normalized.tracking_link || null;
-      if (nextNumber) setField('tracking_number', nextNumber);
-      if (nextLink) {
-        setField('tracking_link', nextLink);
-      } else if (nextNumber) {
-        // Clear a stale link so live track uses AWB-only (like the old Tracking no field).
-        setField('tracking_link', '');
+      if (looksLikeTrackingLinkInput(paste)) {
+        toast({
+          title: 'Tracking number only',
+          description: 'Enter the AWB / tracking number, not a link.',
+          variant: 'destructive',
+        });
+        return;
       }
-      const nextStatus = advanceShipmentStatusForTracking(
-        formData.shipment_status,
-        Boolean(nextLink || nextNumber)
+      const courier = courierValueForTrack(
+        formData.courier_name,
+        getCachedAftershipCouriers()
       );
+      if (!courier) {
+        toast({
+          title: 'Select a courier',
+          description: 'Pick the courier first, then apply the tracking number.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setField('tracking_number', paste);
+      setField('courier_name', courier);
+      setField('tracking_link', '');
+      const nextStatus = advanceShipmentStatusForTracking(formData.shipment_status, true);
       if (nextStatus) setField('shipment_status', nextStatus);
       if (clearDraft) setTrackingPasteDraft('');
       await refreshLiveTracking({
-        tracking_number: nextNumber,
-        // Only send a real pasted URL — never a synthesized aftership.com link.
-        tracking_link: nextLink,
-        courier_name: String(formData.courier_name ?? '') || null,
+        tracking_number: paste,
+        tracking_link: null,
+        courier_name: courier,
       });
     },
     [
@@ -381,6 +412,7 @@ export function useInventoryFormEditModal({
       formData.courier_name,
       setField,
       refreshLiveTracking,
+      toast,
     ]
   );
 
@@ -773,23 +805,18 @@ export function useInventoryFormEditModal({
   const applyShipmentTrackingOnSave = useCallback(
     (dataToSend: Record<string, unknown>) => {
       if (!isInventoryRequest) return;
-      const paste = trackingPasteDraft.trim();
-      if (paste) {
-        const normalized = normalizeTrackingPaste(paste);
-        if (normalized.tracking_link) dataToSend.tracking_link = normalized.tracking_link;
-        if (normalized.tracking_number) dataToSend.tracking_number = normalized.tracking_number;
-      }
-      const link = String(dataToSend.tracking_link ?? '').trim();
       let number = String(dataToSend.tracking_number ?? '').trim();
-      if (link && !number) {
-        const extracted = normalizeTrackingPaste(link).tracking_number;
-        if (extracted) number = extracted;
+      if (looksLikeTrackingLinkInput(number)) {
+        number = '';
       }
-      dataToSend.tracking_link = link || null;
       dataToSend.tracking_number = number || null;
-      dataToSend.courier_name = String(dataToSend.courier_name ?? '').trim() || null;
+      dataToSend.courier_name =
+        courierValueForTrack(
+          String(dataToSend.courier_name ?? ''),
+          getCachedAftershipCouriers()
+        ) || null;
       dataToSend.eta = String(dataToSend.eta ?? '').trim() || null;
-      const hasTracking = Boolean(link || number);
+      const hasTracking = Boolean(number);
       // Requestors are not allowed to move/change the delivery pipeline.
       // We still allow them to edit other fields without overwriting shipment_status.
       if (isRequester) {
@@ -825,7 +852,7 @@ export function useInventoryFormEditModal({
         dataToSend.tracking_updated_at = prev.tracking_updated_at;
       }
     },
-    [isInventoryRequest, trackingPasteDraft, record?.data, isRequester]
+    [isInventoryRequest, record?.data, isRequester]
   );
 
   const handleActionClick = useCallback(
