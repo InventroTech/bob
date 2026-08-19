@@ -625,6 +625,8 @@ export type HistoryTimelineItem = {
   fieldLabel: string;
   fromText: string;
   toText: string;
+  fromValue: unknown;
+  toValue: unknown;
 };
 
 function collectTimelineItems(entries: RequestHistoryEntry[]): HistoryTimelineItem[] {
@@ -658,11 +660,7 @@ function collectTimelineItems(entries: RequestHistoryEntry[]): HistoryTimelineIt
 
     const visiblePairs = pairs.filter((pair) => {
       if (pair.key === 'request') return true;
-      if (historyValuesLookSame(pair.from, pair.to)) return false;
-      return (
-        formatCompactHistoryValue(pair.key, pair.from) !==
-        formatCompactHistoryValue(pair.key, pair.to)
-      );
+      return !historyValuesLookSame(pair.from, pair.to);
     });
 
     if (visiblePairs.length === 0) {
@@ -679,6 +677,8 @@ function collectTimelineItems(entries: RequestHistoryEntry[]): HistoryTimelineIt
         fieldLabel: pair.key === 'request' ? 'Request created' : humanizeFieldKey(pair.key),
         fromText: formatCompactHistoryValue(pair.key, pair.from),
         toText: formatCompactHistoryValue(pair.key, pair.to),
+        fromValue: pair.from,
+        toValue: pair.to,
       });
     }
   }
@@ -695,6 +695,43 @@ export type RequestHistoryTimelineProps = {
   accentColor?: string;
 };
 
+function isHistoryLinkValue(fieldKey: string, value: unknown): value is string {
+  return typeof value === 'string' && (LINKISH_DATA_KEYS.has(fieldKey) || isHttpUrl(value)) && isHttpUrl(value);
+}
+
+function TimelineValue({
+  fieldKey,
+  value,
+  compactText,
+  muted = false,
+}: {
+  fieldKey: string;
+  value: unknown;
+  compactText: string;
+  muted?: boolean;
+}) {
+  if (isHistoryLinkValue(fieldKey, value)) {
+    return (
+      <span
+        className="inline-flex"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <OpenLinkButton href={value.trim()} label={historyLinkButtonLabel(fieldKey)} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        'break-words',
+        muted ? 'text-muted-foreground line-through decoration-muted-foreground/40' : 'font-semibold text-foreground',
+      )}
+    >
+      {compactText}
+    </span>
+  );
+}
 export function RequestHistoryTimeline({
   loading,
   error,
@@ -720,12 +757,19 @@ export function RequestHistoryTimeline({
       {items.map((item) => {
         const selected = selectedId === item.id;
         return (
-          <button
+          <div
             key={item.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => onSelect?.(item)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect?.(item);
+              }
+            }}
             className={cn(
-              'w-full overflow-hidden rounded-md border bg-white text-left shadow-sm transition-shadow',
+              'w-full cursor-pointer overflow-hidden rounded-md border bg-white text-left shadow-sm transition-shadow',
               selected ? 'shadow-md' : 'hover:shadow-md',
             )}
             style={{
@@ -744,18 +788,16 @@ export function RequestHistoryTimeline({
               <div className="text-xs font-bold uppercase tracking-wide" style={{ color: accentColor }}>
                 {item.fieldLabel}
               </div>
-              <p className="text-sm leading-snug">
-                <span className="text-muted-foreground line-through decoration-muted-foreground/40">
-                  {item.fromText}
-                </span>
-                <span className="mx-1.5 text-muted-foreground">→</span>
-                <span className="font-semibold text-foreground break-words">{item.toText}</span>
-              </p>
+              <div className="flex flex-wrap items-center gap-1.5 text-sm leading-snug">
+                <TimelineValue fieldKey={item.fieldKey} value={item.fromValue} compactText={item.fromText} muted />
+                <span className="text-muted-foreground">→</span>
+                <TimelineValue fieldKey={item.fieldKey} value={item.toValue} compactText={item.toText} />
+              </div>
               <p className="text-right text-[11px] font-medium" style={{ color: accentColor }}>
                 Created by : {item.actorName.toUpperCase()}
               </p>
             </div>
-          </button>
+          </div>
         );
       })}
     </div>
