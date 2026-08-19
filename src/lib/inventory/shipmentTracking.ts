@@ -180,7 +180,7 @@ export function looksLikeTrackingLinkInput(value: string | null | undefined): bo
   if (/^https?:\/\//i.test(v)) return true;
   if (/^www\./i.test(v)) return true;
   if (v.includes('://')) return true;
-  if (/[\/]/.test(v)) return true;
+  if (v.includes('/')) return true;
   return false;
 }
 
