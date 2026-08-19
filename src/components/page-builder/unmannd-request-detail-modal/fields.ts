@@ -1,9 +1,9 @@
 import type { FormModalFieldConfig } from '@/components/page-builder/inventory-form-edit-modal/types';
 
 /**
- * Field order/layout for Unmannd All Requests modal (matches design mock).
- * Row: Item+Status → Qty/Cost/Price → Negotiated/Vendor/Date →
- * Priority/Dept/Shipment Type → Specs+Link → Project → Comments
+ * Field order/layout for Unmannd All Requests item modal (matches design mock).
+ * Image+Item → Status/Qty/Cost → Price/Negotiated/Vendor →
+ * Date/Priority/Dept/Shipment Type → Specs+Link → Project → Comments
  */
 export const DEFAULT_UNMANND_FORM_MODAL_FIELDS: FormModalFieldConfig[] = [
   { key: 'item_name_freeform', label: 'Item', enabled: false },
@@ -33,7 +33,8 @@ export function mergeUnmanndFormModalFields(
     const override = byKey.get(def.key);
     if (!override) return def;
     byKey.delete(def.key);
-    return { ...def, ...override, label: override.label || def.label };
+    // Keep mock labels (Item, Shipment Type, Product Link, …); preserve enabled/link from config.
+    return { ...def, ...override, label: def.label };
   });
   for (const extra of byKey.values()) {
     if (extra.key === 'cart_id') continue;
