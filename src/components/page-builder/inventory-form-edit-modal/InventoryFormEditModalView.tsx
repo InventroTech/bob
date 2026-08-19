@@ -33,10 +33,10 @@ import { StatusActionWarningModal } from '@/components/config_components/StatusA
 import { RequestHistoryViewer } from '@/components/page-builder/RequestHistoryPanel';
 import { ShipmentDeliveryPipeline } from '@/components/page-builder/ShipmentDeliveryPipeline';
 import {
-  SHIPMENT_STATUSES,
   shouldShowShipmentTrackingSection,
-  publicTrackingLink,
+  looksLikeTrackingLinkInput,
 } from '@/lib/inventory/shipmentTracking';
+import { CourierCombobox } from './CourierCombobox';
 import { safeProfileImageUrl } from '@/lib/utils/safeProfileImageUrl';
 
 import type { InventoryFormEditModalModel } from './useInventoryFormEditModal';
@@ -271,8 +271,6 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
     historyLoading,
     historyError,
     historyEntries,
-    trackingPasteDraft,
-    setTrackingPasteDraft,
     myMembershipId,
     setMyMembershipId,
     trackingLiveLoading,
@@ -1008,7 +1006,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {canEditFields
-                    ? 'Paste a tracking link or AWB in Paste tracking, then click Apply. We look up the carrier and update the delivery pipeline when scans are available. Pipeline is read-only.'
+                    ? 'Type the courier and tracking number, then Apply. Links are not accepted. Pipeline is read-only.'
                     : 'Delivery pipeline and tracking details for this request. Refresh to pull the latest carrier scans when available.'}
                 </p>
                 <ShipmentDeliveryPipeline
@@ -1021,97 +1019,66 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     void refreshLiveTracking();
                   }}
                 />
-                {canEditFields ? (
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Paste tracking
-                    </Label>
-                    <div className="flex flex-wrap gap-2">
-                      <Input
-                        className="h-9 text-sm rounded-md flex-1 min-w-[12rem]"
-                        value={trackingPasteDraft}
-                        onChange={(e) => setTrackingPasteDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter') return;
-                          e.preventDefault();
-                          if (!trackingPasteDraft.trim() || trackingLiveLoading) return;
-                          void applyTrackingPaste(trackingPasteDraft);
-                        }}
-                        placeholder="https://… or tracking number"
-                        disabled={trackingLiveLoading}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9"
-                        disabled={!trackingPasteDraft.trim() || trackingLiveLoading}
-                        onClick={() => {
-                          void applyTrackingPaste(trackingPasteDraft);
-                        }}
-                      >
-                        {trackingLiveLoading ? 'Tracking…' : 'Apply'}
-                      </Button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Type or paste here, then click Apply. Nothing is applied until then.
-                    </p>
-                  </div>
-                ) : null}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
                   <div className="space-y-1.5 min-w-0">
                     <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       Tracking number
                     </Label>
                     <Input
-                      className="h-9 text-sm rounded-md font-mono bg-muted/40"
+                      className="h-9 text-sm rounded-md font-mono"
                       value={String(formData.tracking_number ?? '')}
-                      readOnly
-                      tabIndex={-1}
+                      readOnly={!canEditFields}
+                      tabIndex={canEditFields ? 0 : -1}
                       disabled={!canEditFields || trackingLiveLoading}
-                      placeholder={canEditFields ? 'Filled from Paste tracking' : '—'}
-                    />
-                  </div>
-                  <div className="space-y-1.5 min-w-0">
-                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Tracking link
-                    </Label>
-                    <Input
-                      className="h-9 text-sm rounded-md bg-muted/40"
-                      value={String(formData.tracking_link ?? '')}
-                      readOnly
-                      tabIndex={-1}
-                      disabled={!canEditFields || trackingLiveLoading}
-                      placeholder={canEditFields ? 'Filled from Paste tracking' : '—'}
+                      placeholder={canEditFields ? 'AWB / tracking number' : '—'}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (looksLikeTrackingLinkInput(v)) return;
+                        setField('tracking_number', v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        const number = String(formData.tracking_number ?? '').trim();
+                        const courier = String(formData.courier_name ?? '').trim();
+                        if (!canEditFields || !number || !courier || trackingLiveLoading) return;
+                        void applyTrackingPaste(number);
+                      }}
                     />
                   </div>
                   <div className="space-y-1.5 min-w-0">
                     <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       Courier
                     </Label>
-                    <Select
-                      value={String(formData.courier_name ?? '').trim() || '__auto__'}
-                      onValueChange={(v) => {
-                        setField('courier_name', v === '__auto__' ? '' : v);
-                      }}
+                    <CourierCombobox
+                      value={String(formData.courier_name ?? '')}
+                      onChange={(next) => setField('courier_name', next)}
+                      readOnly={!canEditFields}
                       disabled={!canEditFields || trackingLiveLoading}
-                    >
-                      <SelectTrigger className="h-9 w-full text-sm rounded-md">
-                        <SelectValue placeholder="Auto-detect" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__auto__">Auto-detect</SelectItem>
-                        <SelectItem value="Amazon">Amazon</SelectItem>
-                        <SelectItem value="BlueDart">BlueDart</SelectItem>
-                        <SelectItem value="Delhivery">Delhivery</SelectItem>
-                        <SelectItem value="FedEx">FedEx</SelectItem>
-                        <SelectItem value="DHL">DHL</SelectItem>
-                        <SelectItem value="DTDC">DTDC</SelectItem>
-                        <SelectItem value="Shiprocket">Shiprocket</SelectItem>
-                        <SelectItem value="India Post">India Post</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      placeholder={canEditFields ? 'Type to search couriers…' : '—'}
+                    />
                   </div>
+                  {canEditFields ? (
+                    <div className="space-y-1.5 min-w-0 flex items-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        disabled={
+                          trackingLiveLoading ||
+                          !String(formData.tracking_number ?? '').trim() ||
+                          !String(formData.courier_name ?? '').trim() ||
+                          looksLikeTrackingLinkInput(String(formData.tracking_number ?? ''))
+                        }
+                        onClick={() => {
+                          void applyTrackingPaste(String(formData.tracking_number ?? '').trim());
+                        }}
+                      >
+                        {trackingLiveLoading ? 'Tracking…' : 'Apply'}
+                      </Button>
+                    </div>
+                  ) : null}
                   <div className="space-y-1.5 min-w-0">
                     <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       ETA
@@ -1125,6 +1092,11 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     />
                   </div>
                 </div>
+                {canEditFields ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Type a courier name to filter the list, then click a match.
+                  </p>
+                ) : null}
               </div>
             )}
 
