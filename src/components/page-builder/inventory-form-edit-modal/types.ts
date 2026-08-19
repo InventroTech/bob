@@ -64,7 +64,7 @@ export interface InventoryFormEditModalProps {
   showFinalPriceSection?: boolean;
   /** Requestor-only: show "Delete request" for inventory_request (any status). Default false. */
   showDeleteRequestButton?: boolean;
-  /** Show "See request history" button and history modal. */
+  /** Show "See request history" button and history view. */
   showHistoryButton?: boolean;
   /** Called after a successful delete (e.g. refresh table). */
   onDeleted?: (recordId: number) => void;
