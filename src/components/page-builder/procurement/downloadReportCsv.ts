@@ -115,7 +115,10 @@ export function downloadReportCsv(reportId: ReportId, rows: ProcurementRequestRo
     case 'po': {
       // Closest to "PO" in current data: vendor identified / in shipping requests.
       const poRows = rows.filter(
-        (r) => r.status === 'VENDOR_IDENTIFIED' || r.status === 'IN_SHIPPING'
+        (r) =>
+          r.status === 'VENDOR_IDENTIFIED' ||
+          r.status === 'IN_CART' ||
+          r.status === 'IN_SHIPPING'
       );
       downloadCsv(`purchase-orders-${date}.csv`, DETAIL_HEADER, detailLines(poRows));
       return 'Purchase Order';
