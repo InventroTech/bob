@@ -67,6 +67,8 @@ export function TicketTableView(props: TicketTableModel) {
     apiPrefix,
     searchTerm,
     stateToParamValue,
+    dynamicFilters,
+    handleDynamicFilterChange,
   } = props;
 
 if (loading) {
@@ -79,7 +81,7 @@ if (loading) {
 
 return (
   <>
-    {/* ADDED: Mobile Page Title - Only visible on small screens (md:hidden) */}
+    {/* Mobile Page Title - Only visible on small screens (md:hidden) */}
     <div className="md:hidden w-full pb-3 px-4 pt-4">
       <h2 className="text-2xl font-bold text-gray-900">
         {config?.title || "Support Tickets"}
@@ -87,10 +89,9 @@ return (
     </div>
 
     <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      {/* Filter Section */}
+      {/* Filter Section Header */}
       <div className="mb-4 relative">
         <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
-          {/* UPDATED: Added 'hidden md:block' so it doesn't show twice on mobile */}
           <h5 className="hidden md:block">
             {config?.title || "Support Tickets"}
           </h5>
@@ -118,11 +119,74 @@ return (
         </div>
       </div>
 
-      {/* Filter Section */}
+      {/* Filter Section Content */}
       <div className="mb-4">
         {showFilters && (
           <div className="bg-gray-50 p-4 rounded-lg border">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* --- DYNAMIC FILTERS RENDERER FROM CONFIG BUILDER --- */}
+              {config?.filters?.map((filter: any) => {
+                const filterTitle = filter.name || filter.displayName || filter.display_name || filter.label || "Filter";
+                const accessorKey = filter.accessor || filter.key;
+                const selectedValues = dynamicFilters?.[accessorKey] || [];
+
+                return (
+                  <div key={accessorKey} className="md:col-span-1">
+                    <label className="block text-gray-700 mb-2">
+                      {filterTitle}
+                    </label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between"
+                        >
+                          <span className="text-sm">
+                            {selectedValues.length > 0 
+                              ? `${selectedValues.length} selected` 
+                              : `Select ${filterTitle}`}
+                          </span>
+                          <ChevronDown className="h-3 w-3 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-60 p-4" align="start">
+                        <div className="space-y-3">
+                          <h5>Select {filterTitle}</h5>
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {filter.options?.map((opt: any) => {
+                              const optLabel = typeof opt === 'string' ? opt : (opt.label || opt.value);
+                              const optValue = typeof opt === 'string' ? opt : (opt.value || opt.label);
+                              const isChecked = selectedValues.includes(optValue);
+
+                              return (
+                                <div key={optValue} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`filter-${accessorKey}-${optValue}`}
+                                    checked={isChecked}
+                                    onCheckedChange={(checked) => {
+                                      if (handleDynamicFilterChange) {
+                                        handleDynamicFilterChange(accessorKey, optValue, checked === true);
+                                      }
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={`filter-${accessorKey}-${optValue}`}
+                                    className="text-body-sm-medium leading-none cursor-pointer"
+                                  >
+                                    {optLabel}
+                                  </label>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                );
+              })}
+
               <div>
                 <label className="block text-gray-700 mb-2">
                   Resolution Status
@@ -513,24 +577,6 @@ return (
             {/* Filter Summary */}
             <div className="mt-3 text-sm text-gray-600">
               Showing {filteredData.length} of {pagination.totalCount > 0 ? pagination.totalCount : (filtersApplied ? filteredData.length : data.length)} tickets
-              {filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
-                <span className="ml-2">
-                  (Filtered by: 
-                  {resolutionStatusFilter.length > 0 && ` Resolution Status: ${resolutionStatusFilter.map(status => status === null ? 'Open' : status).join(', ')}`}
-                  {assignedToFilter !== 'all' && ` ${resolutionStatusFilter.length > 0 ? ', ' : ''}Assignee: ${assignedToFilter === 'myself' ? 'Myself' : assignedToFilter === 'unassigned' ? 'Unassigned' : getUniqueAssignedTo().find(a => a.id === assignedToFilter)?.name || assignedToFilter}`}
-                  {posterStatusFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all') ? ', ' : ''}Poster Status: ${posterStatusFilter.join(', ')}`}
-                  {stateFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0) ? ', ' : ''}State: ${stateFilter.join(', ')}`}
-                  {callAttemptsFilter.length > 0 && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0) ? ', ' : ''}Call Attempts: ${[...callAttemptsFilter].sort((a, b) => a - b).join(', ')}`}
-                  {(dateRangeFilter.startDate || dateRangeFilter.endDate) && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0) ? ', ' : ''}Date Range: ${dateRangeFilter.startDate ? format(dateRangeFilter.startDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.startTime : 'Any'} to ${dateRangeFilter.endDate ? format(dateRangeFilter.endDate, 'MMM dd, yyyy') + ' ' + dateRangeFilter.endTime : 'Any'}`}
-                  {searchTerm.trim() !== '' && ` ${(resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate) ? ', ' : ''}Search: "${searchTerm}"`}
-                  )
-                </span>
-              )}
-              {!filtersApplied && (resolutionStatusFilter.length > 0 || assignedToFilter !== 'all' || posterStatusFilter.length > 0 || stateFilter.length > 0 || callAttemptsFilter.length > 0 || dateRangeFilter.startDate || dateRangeFilter.endDate || searchTerm.trim() !== '') && (
-                <span className="ml-2 text-orange-600">
-                  (Filters selected - click "Apply Filters" to see results)
-                </span>
-              )}
               {pagination.totalCount > 0 && (
                 <span className="ml-2 text-blue-600">
                   (Page {pagination.currentPage} of {pagination.numberOfPages})
@@ -543,7 +589,6 @@ return (
 
       {/* Table Section */}
       <div className="w-full relative">
-        {/* Loading Overlay */}
         {(tableLoading || searchLoading) && (
           <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
             <div className="flex flex-col items-center space-y-2">
@@ -554,67 +599,6 @@ return (
             </div>
           </div>
         )}
-
-        {/* Mobile Cards */}
-        <div className="md:hidden space-y-4">
-          {filteredData.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No data found
-            </div>
-          ) : (
-            filteredData.map((row: any, index: number) => (
-              <div
-                key={index}
-                onClick={() => handleRowClick(row)}
-                className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm cursor-pointer"
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <ShortProfileCard
-                    image={row.display_pic_url || row.image}
-                    name={row.name}
-                    address=""
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Praja User ID</p>
-                    <p className="font-medium">
-                      {row.user_id ?? row.praja_user_id ?? row.prajaUserId ?? "N/A"}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500">Reason</p>
-                    <p>{row.reason || "N/A"}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500">Poster Status</p>
-                    <Badge
-                      variant="outline"
-                      className={`rounded-full ${getStatusColor(
-                        row.poster ?? row.poster_status ?? row.support_ticket_type ?? ""
-                      )}`}
-                    >
-                      {row.poster ?? row.poster_status ?? row.support_ticket_type ?? "N/A"}
-                    </Badge>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500">Resolution Status</p>
-                    <Badge
-                      variant="outline"
-                      className={`${getStatusColor(row.resolution_status)} rounded-full`}
-                    >
-                      {row.resolution_status || "Open"}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
 
         {/* Desktop Table */}
         <div className="hidden md:block overflow-x-auto w-full max-w-full min-w-0">
@@ -715,7 +699,7 @@ return (
         </div>
       </div>
       
-      {/* Server-side pagination controls */}
+      {/* Pagination Controls */}
       {pagination.totalCount > 0 && filteredData.length > 0 && (
         <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center gap-2">
@@ -744,7 +728,7 @@ return (
               variant="outline"
               size="sm"
               onClick={handlePreviousPage}
-              disabled={!pagination.previousPageLink || tableLoading}
+              disabled={!pagination.nextPageLink || tableLoading}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
@@ -774,28 +758,9 @@ return (
         }
       }}
     >
-      <DialogContent
-        className="font-body max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0"
-        onPointerDownOutside={(event) => {
-          // Portaled popovers render outside dialog DOM; don't dismiss on those clicks.
-          const target = event.target as HTMLElement | null;
-          if (target?.closest?.("[data-radix-popper-content-wrapper]")) {
-            event.preventDefault();
-          }
-        }}
-        onFocusOutside={(event) => {
-          const target = event.target as HTMLElement | null;
-          if (target?.closest?.("[data-radix-popper-content-wrapper]")) {
-            event.preventDefault();
-          }
-        }}
-      >
+      <DialogContent className="font-body max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
         <DialogHeader className="sr-only">
-          <DialogTitle>
-            {selectedTicket?.name
-              ? `Ticket - ${selectedTicket.name}`
-              : `Ticket #${selectedTicket?.id ?? ""}`}
-          </DialogTitle>
+          <DialogTitle>Ticket Details</DialogTitle>
           <DialogDescription>View and manage support ticket details</DialogDescription>
         </DialogHeader>
         {selectedTicket && (
