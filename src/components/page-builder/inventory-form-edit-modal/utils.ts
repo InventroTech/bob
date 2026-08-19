@@ -113,7 +113,7 @@ export const UNMANND_FORM_FIELD_ORDER = [
 ] as const;
 
 export function sortUnmanndFormFields<T extends { key: string }>(fields: T[]): T[] {
-  const rank = new Map(UNMANND_FORM_FIELD_ORDER.map((k, i) => [k, i]));
+  const rank = new Map<string, number>(UNMANND_FORM_FIELD_ORDER.map((k, i) => [k, i]));
   return [...fields].sort((a, b) => {
     const ai = rank.has(a.key) ? rank.get(a.key)! : 1000;
     const bi = rank.has(b.key) ? rank.get(b.key)! : 1000;
@@ -122,31 +122,50 @@ export function sortUnmanndFormFields<T extends { key: string }>(fields: T[]): T
   });
 }
 
+/** Mock labels for the Unmannd item modal (all-caps in UI via CSS). */
+export const UNMANND_FIELD_LABELS: Record<string, string> = {
+  item_name_freeform: 'Item',
+  status: 'Status',
+  quantity_required: 'Quantity',
+  quantity: 'Quantity',
+  estimated_cost: 'Estimated Cost',
+  line_total: 'Price',
+  computed_price: 'Price',
+  negotiated_value: 'Negotiated Value',
+  vendor: 'Vendor',
+  request_date: 'Requested Date',
+  requested_date: 'Requested Date',
+  urgency_level: 'Priority',
+  priority: 'Priority',
+  department: 'Department',
+  category: 'Shipment Type',
+  specifications: 'Specifications',
+  product_link: 'Product Link',
+  project_purpose: 'Project',
+  comments: 'Comments',
+};
+
 export function unmanndFieldColClass(key: string): string {
-  // Exact mock layout on a 3-column grid:
-  // Item(2) + Status(1)
-  // Qty | Cost | Price
-  // Negotiated | Vendor | Date
-  // Priority | Dept | Shipment Type
-  // Specs(1) | Product link(2)
-  // Project(3)
-  // Comments(3)
-  if (key === 'item_name_freeform') return 'md:col-span-2';
-  if (key === 'status') return 'md:col-span-1';
-  if (key === 'quantity_required' || key === 'quantity') return 'md:col-span-1';
-  if (key === 'estimated_cost') return 'md:col-span-1';
-  if (key === 'line_total' || key === 'computed_price') return 'md:col-span-1';
-  if (key === 'negotiated_value') return 'md:col-span-1';
-  if (key === 'vendor') return 'md:col-span-1';
-  if (key === 'request_date' || key === 'requested_date') return 'md:col-span-1';
-  if (key === 'urgency_level' || key === 'priority') return 'md:col-span-1';
-  if (key === 'department') return 'md:col-span-1';
-  if (key === 'category') return 'md:col-span-1';
-  if (key === 'specifications') return 'md:col-span-1';
-  if (key === 'product_link') return 'md:col-span-2';
-  if (key === 'project_purpose') return 'md:col-span-3';
-  if (key === 'comments') return 'md:col-span-3';
-  return 'md:col-span-1';
+  // 12-column mock layout. Image is a separate grid cell: col-span-3 row-span-3.
+  // Beside image (9 cols): Item; then Status | Qty | Cost; then Price | Negotiated | Vendor
+  // Full width below: Date | Priority | Dept | Shipment Type
+  // Specs | Product link → Project → Comments
+  if (key === 'item_name_freeform') return 'md:col-span-9';
+  if (key === 'status') return 'md:col-span-3';
+  if (key === 'quantity_required' || key === 'quantity') return 'md:col-span-3';
+  if (key === 'estimated_cost') return 'md:col-span-3';
+  if (key === 'line_total' || key === 'computed_price') return 'md:col-span-3';
+  if (key === 'negotiated_value') return 'md:col-span-3';
+  if (key === 'vendor') return 'md:col-span-3';
+  if (key === 'request_date' || key === 'requested_date') return 'md:col-span-3';
+  if (key === 'urgency_level' || key === 'priority') return 'md:col-span-3';
+  if (key === 'department') return 'md:col-span-3';
+  if (key === 'category') return 'md:col-span-3';
+  if (key === 'specifications') return 'md:col-span-5';
+  if (key === 'product_link') return 'md:col-span-7';
+  if (key === 'project_purpose') return 'md:col-span-12';
+  if (key === 'comments') return 'md:col-span-12';
+  return 'md:col-span-4';
 }
 
 /** Keys that are typically numbers. */
