@@ -1,6 +1,6 @@
 /** Presentational JSX for the inventory form edit modal. */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Trash2, History } from 'lucide-react';
+import { Loader2, Trash2, History, Wrench } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
 import { formatCalendarDate } from '@/lib/utils/timeUtils';
@@ -24,6 +24,7 @@ import {
   resolvePriorityFromRow,
   inventoryPriorityFieldCardClassName,
   inventoryPriorityValueTextClassName,
+  normalizeInventoryPriorityLevel,
 } from '@/lib/inventory/priority';
 import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventory/statusStyles';
 import { OpenLinkButton } from '@/components/page-builder/OpenLinkButton';
@@ -36,6 +37,7 @@ import {
   shouldShowShipmentTrackingSection,
   publicTrackingLink,
 } from '@/lib/inventory/shipmentTracking';
+import { safeProfileImageUrl } from '@/lib/utils/safeProfileImageUrl';
 
 import type { InventoryFormEditModalModel } from './useInventoryFormEditModal';
 import {
@@ -51,6 +53,7 @@ import {
   PRICE_KEYS,
   sortUnmanndFormFields,
   unmanndFieldColClass,
+  UNMANND_FIELD_LABELS,
   resolveVendorDisplayName,
 } from './utils';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
@@ -60,6 +63,51 @@ import { getRecordModalTitleParts } from '@/lib/utils/recordModalHeader';
 const UNMANND_NAVY = '#1A3673';
 const UNMANND_ID_BG = '#FFFFFF';
 const UNMANND_ID_TEXT = '#1A3673';
+const UNMANND_PILL_BTN =
+  'rounded-full border-white/40 bg-white px-4 text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]';
+const UNMANND_CONTROL = 'bg-white';
+
+function unmanndPriorityBorderClass(value: unknown): string {
+  const level = normalizeInventoryPriorityLevel(value);
+  if (level === 'HIGH') return 'border-orange-500';
+  if (level === 'MEDIUM') return 'border-orange-400';
+  if (level === 'LOW') return 'border-sky-400';
+  return 'border-input';
+}
+
+function unmanndPriorityTextClass(value: unknown): string {
+  const level = normalizeInventoryPriorityLevel(value);
+  if (level === 'HIGH') return 'text-orange-600';
+  if (level === 'MEDIUM') return 'text-orange-500';
+  if (level === 'LOW') return 'text-sky-600';
+  return 'text-foreground';
+}
+
+function UnmanndProductThumb({ src, alt }: { src?: string; alt?: string }) {
+  const preferred = safeProfileImageUrl(src) ?? '';
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [preferred]);
+
+  const showImg = preferred.length > 0 && !failed;
+
+  return (
+    <div className="flex h-full min-h-[11rem] w-full items-center justify-center overflow-hidden rounded-md bg-[#E6E6E6] sm:min-h-[13rem] md:min-h-0">
+      {showImg ? (
+        <img
+          src={preferred}
+          alt={alt || 'Item'}
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <Wrench className="h-16 w-16 -rotate-45 text-gray-400 sm:h-20 sm:w-20" strokeWidth={1.25} aria-hidden />
+      )}
+    </div>
+  );
+}
 
 function UnmanndModalHeader({
   record,
@@ -89,7 +137,7 @@ function UnmanndModalHeader({
     >
       {parts ? (
         <div
-          className="my-1.5 ml-0 mr-1.5 flex w-[5.25rem] shrink-0 items-center justify-center self-stretch rounded-lg px-2 font-mono text-base font-extrabold tabular-nums tracking-tight sm:w-[6.5rem] sm:text-lg"
+          className="mx-2 my-2 flex h-10 w-[5.5rem] shrink-0 items-center justify-center self-center rounded-md px-1.5 font-mono text-sm font-extrabold tabular-nums tracking-tight sm:h-11 sm:w-[6.25rem] sm:text-base"
           style={{
             backgroundColor: UNMANND_ID_BG,
             color: UNMANND_ID_TEXT,
@@ -295,6 +343,12 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
   const isUnmannd = uiVariant === 'unmannd';
   const orderedFields = isUnmannd ? sortUnmanndFormFields(formModalFields) : formModalFields;
+  const productImageSrc = String(
+    formData.product_image ??
+      (record?.data as any)?.product_image ??
+      (record as any)?.product_image ??
+      ''
+  ).trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -302,7 +356,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
         className={cn(
           'max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full',
           isUnmannd &&
-            'gap-0 overflow-hidden border-0 p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:text-white [&>button]:opacity-90 [&>button]:hover:opacity-100'
+            'gap-0 overflow-hidden rounded-xl border-0 p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:text-white [&>button]:opacity-90 [&>button]:hover:opacity-100'
         )}
       >
         {isUnmannd ? (
@@ -366,7 +420,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
           </DialogDescription>
         </DialogHeader>
         )}
-        <div className={cn('flex-1 min-h-0 overflow-y-auto space-y-4', isUnmannd ? 'bg-[#F7F8FA] px-5 py-4 sm:px-6' : 'px-1 py-4')}>
+        <div className={cn('flex-1 min-h-0 overflow-y-auto space-y-4', isUnmannd ? 'bg-white px-5 py-5 sm:px-6' : 'px-1 py-4')}>
           {orderedFields.length === 0 ? (
             <p className="text-sm text-muted-foreground">No fields configured. Add fields in table config.</p>
           ) : (
@@ -374,15 +428,28 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
               className={cn(
                 'grid gap-x-6 gap-y-4',
                 isUnmannd
-                  ? 'grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3'
+                  ? 'grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-4'
                   : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
               )}
             >
+            {isUnmannd ? (
+              <div className="h-44 w-full md:col-span-3 md:row-span-3 md:h-full">
+                <UnmanndProductThumb
+                  src={productImageSrc}
+                  alt={String(
+                    formData.item_name_freeform ??
+                      (record?.data as any)?.item_name_freeform ??
+                      ''
+                  )}
+                />
+              </div>
+            ) : null}
             {orderedFields
               .filter((field) => {
                 if (field.key === 'cart_id') return false;
-                // Rendered inline just after Price (line_total / computed_price).
-                if (field.key === 'negotiated_value') return false;
+                // Classic modal: negotiated is injected just after Price.
+                // Unmannd: render it in the grid like Price/Vendor so heights match.
+                if (field.key === 'negotiated_value') return isUnmannd;
                 // Dedicated shipment section owns these keys for inventory requests.
                 if (!isInventoryRequest || isPaymentModal) return true;
                 return !(TRACKING_FORM_KEYS as readonly string[]).includes(field.key);
@@ -398,7 +465,8 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
               const isLinkField = field.link === true || isLinkLikeFieldKey(field.key);
               const hasUrl = looksLikeUrl(displayStr);
               // Read-only link fields open in a new tab; editable ones stay as inputs.
-              const isClickableProductLink = isLinkField && hasUrl && !isEnabled;
+              // Unmannd mock always shows the URL field + Open link button.
+              const isClickableProductLink = !isUnmannd && isLinkField && hasUrl && !isEnabled;
               const isStatus = field.key === 'status' && statusOptions.length > 0;
               const isVendor = field.key === 'vendor';
               const isBoolean = typeof value === 'boolean';
@@ -460,34 +528,42 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     field.key === 'project_purpose' ||
                     field.key === 'specifications')
                 );
-              const fieldLabel = isPriorityField
-                ? 'Priority'
-                : isLineTotal
-                  ? 'Price'
-                  : isRequestDateField
-                    ? 'Requested Date'
-                    : isRequiredDateField
-                      ? 'Requirement Date'
-                      : field.label || field.key.replace(/_/g, ' ');
+              const fieldLabel =
+                (isUnmannd && UNMANND_FIELD_LABELS[field.key]) ||
+                (isPriorityField
+                  ? 'Priority'
+                  : isLineTotal
+                    ? 'Price'
+                    : isRequestDateField
+                      ? 'Requested Date'
+                      : isRequiredDateField
+                        ? 'Requirement Date'
+                        : field.label || field.key.replace(/_/g, ' '));
 
               const fieldNode = (
                 <div
                   className={cn(
-                    'space-y-1.5 min-w-0',
+                    'min-w-0',
+                    isUnmannd && field.key !== 'comments'
+                      ? 'flex h-full flex-col gap-1.5 [&>:last-child]:mt-auto'
+                      : 'space-y-1.5',
                     isUnmannd
                       ? unmanndFieldColClass(field.key) ||
-                          (spanFullWidth ? 'md:col-span-2 xl:col-span-3' : '')
+                          (spanFullWidth ? 'md:col-span-12' : '')
                       : spanFullWidth && 'md:col-span-2 xl:col-span-3'
                   )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-                    <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2">
+                    <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                       {fieldLabel}
                     </Label>
                   </div>
                   {isLineTotal ? (
                     <div
-                      className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm font-mono tabular-nums font-semibold text-foreground"
+                      className={cn(
+                        'flex h-9 w-full items-center rounded-md border border-border/60 px-3 text-sm font-mono tabular-nums font-semibold text-foreground',
+                        isUnmannd ? 'bg-white' : 'bg-muted/20',
+                      )}
                       role="status"
                       title="Quantity × Estimated cost"
                     >
@@ -495,7 +571,10 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     </div>
                   ) : isRequestDateField || (isRequiredDateField && !isEnabled) ? (
                     <div
-                      className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm text-foreground"
+                      className={cn(
+                        'flex h-9 w-full items-center rounded-md border border-border/60 px-3 text-sm text-foreground',
+                        isUnmannd ? 'bg-white' : 'bg-muted/20',
+                      )}
                       role="status"
                     >
                       {calendarDateDisplay || '—'}
@@ -549,8 +628,8 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                           ) : null}
                           {isUnmannd ? (
                             <Textarea
-                              className="min-h-[52px] resize-none text-sm rounded-md bg-white"
-                              rows={2}
+                              className="min-h-[88px] resize-none text-sm rounded-md bg-white"
+                              rows={3}
                               value={newCommentValue}
                               onChange={(e) => setField('comments', e.target.value)}
                               disabled={!isEnabled}
@@ -569,7 +648,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       );
                     })()
                   ) : isVendor ? (
-                    <div className="flex items-center gap-2 w-full min-w-0">
+                    <div className="flex h-9 w-full min-w-0 flex-nowrap items-center gap-2">
                       <div className="relative min-w-0 flex-1">
                         <Input
                           className="h-9 w-full min-w-0 text-sm rounded-md bg-white"
@@ -639,7 +718,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="h-9 shrink-0"
+                        className={cn('h-9 shrink-0', isUnmannd && 'rounded-full bg-white px-3')}
                         onClick={() => setIsAddVendorModalOpen(true)}
                         disabled={!isEnabled}
                       >
@@ -655,6 +734,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       <SelectTrigger
                         className={cn(
                           'h-9 text-sm rounded-md border font-medium',
+                          isUnmannd && UNMANND_CONTROL,
                           getInventoryStatusToneClass(displayStr || statusOptions[0]),
                         )}
                       >
@@ -689,8 +769,15 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                   ) : isPriorityField ? (
                     <div
                       className={cn(
-                        'rounded-lg border px-3 py-2.5 shadow-sm',
-                        inventoryPriorityFieldCardClassName(priorityDisplay),
+                        isUnmannd
+                          ? cn(
+                              'flex h-9 w-full items-center rounded-md border bg-white px-3',
+                              unmanndPriorityBorderClass(priorityDisplay),
+                            )
+                          : cn(
+                              'rounded-lg border px-3 py-2.5 shadow-sm',
+                              inventoryPriorityFieldCardClassName(priorityDisplay),
+                            ),
                       )}
                       role="status"
                       aria-label="Priority"
@@ -698,8 +785,12 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     >
                       <span
                         className={cn(
-                          'text-base font-bold tracking-wide',
-                          inventoryPriorityValueTextClassName(priorityDisplay),
+                          isUnmannd
+                            ? cn('text-sm font-semibold', unmanndPriorityTextClass(priorityDisplay))
+                            : cn(
+                                'text-base font-bold tracking-wide',
+                                inventoryPriorityValueTextClassName(priorityDisplay),
+                              ),
                         )}
                       >
                         {priorityDisplay}
@@ -715,11 +806,14 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     />
                   ) : isNumber ? (
                     PRICE_KEYS.has(field.key) ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex h-9 items-center gap-2">
                         <Input
                           type="text"
                           inputMode="decimal"
-                          className="h-9 min-w-[7rem] text-sm rounded-md font-mono tabular-nums"
+                          className={cn(
+                            'h-9 min-w-0 flex-1 text-sm rounded-md font-mono tabular-nums',
+                            isUnmannd && UNMANND_CONTROL,
+                          )}
                           value={
                             priceFieldDraft[field.key] ??
                             formatCurrencyDisplay(
@@ -744,12 +838,13 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                           }}
                           disabled={!isEnabled}
                         />
+                        {(!isUnmannd || field.key === 'estimated_cost') ? (
                         <Select
                           value={String(formData.price_currency || 'INR')}
                           onValueChange={(v) => setField('price_currency', v === 'USD' ? 'USD' : 'INR')}
                           disabled={!isEnabled}
                         >
-                          <SelectTrigger className="h-9 w-20 text-sm rounded-md">
+                          <SelectTrigger className={cn('h-9 w-20 shrink-0 text-sm rounded-md', isUnmannd && UNMANND_CONTROL)}>
                             <SelectValue placeholder="INR" />
                           </SelectTrigger>
                           <SelectContent>
@@ -757,11 +852,12 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                             <SelectItem value="USD">USD</SelectItem>
                           </SelectContent>
                         </Select>
+                        ) : null}
                       </div>
                     ) : (
                       <Input
                         type="number"
-                        className="h-9 text-sm rounded-md"
+                        className={cn('h-9 text-sm rounded-md', isUnmannd && UNMANND_CONTROL)}
                         value={displayStr}
                         onChange={(e) => {
                           const v = e.target.value;
@@ -780,21 +876,23 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     >
                       {displayStr}
                     </a>
-                  ) : isLinkField && isEnabled ? (
+                  ) : isLinkField && (isEnabled || isUnmannd) ? (
                     <div className="flex items-center gap-2 min-w-0">
                       <Input
                         type="url"
-                        className="h-9 text-sm rounded-md flex-1 min-w-0"
+                        className={cn('h-9 text-sm rounded-md flex-1 min-w-0', isUnmannd && UNMANND_CONTROL)}
                         value={displayStr}
                         onChange={(e) => setField(field.key, e.target.value)}
                         disabled={!isEnabled}
                         placeholder="https://..."
                       />
-                      {hasUrl ? <OpenLinkButton href={displayStr} /> : null}
+                      {hasUrl ? (
+                        <OpenLinkButton href={displayStr} className={isUnmannd ? 'rounded-full bg-white' : undefined} />
+                      ) : null}
                     </div>
                   ) : (
                     <Input
-                      className="h-9 text-sm rounded-md"
+                      className={cn('h-9 text-sm rounded-md', isUnmannd && UNMANND_CONTROL)}
                       value={displayStr}
                       onChange={(e) => setField(field.key, e.target.value)}
                       disabled={!isEnabled}
@@ -804,7 +902,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 </div>
               );
 
-              if (isLineTotal && isInventoryRequest && !isPaymentModal) {
+              if (isLineTotal && isInventoryRequest && !isPaymentModal && !isUnmannd) {
                 return (
                   <React.Fragment key={field.key}>
                     {fieldNode}
@@ -815,7 +913,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       )}
                     >
                       <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Negotiated value
+                        {isUnmannd ? 'Negotiated Value' : 'Negotiated value'}
                       </Label>
                       {canEditFields ? (
                         <Input
@@ -839,12 +937,18 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                               parsed != null ? Math.round(parsed * 100) / 100 : ''
                             );
                           }}
-                          className="h-9 text-sm rounded-md font-mono tabular-nums"
+                          className={cn(
+                            'h-9 text-sm rounded-md font-mono tabular-nums',
+                            isUnmannd && UNMANND_CONTROL,
+                          )}
                           disabled={!canEditFields}
                         />
                       ) : (
                         <div
-                          className="flex h-9 w-full items-center rounded-md border border-border/60 bg-muted/20 px-3 text-sm font-mono tabular-nums font-semibold text-foreground"
+                          className={cn(
+                            'flex h-9 w-full items-center rounded-md border border-border/60 px-3 text-sm font-mono tabular-nums font-semibold text-foreground',
+                            isUnmannd ? 'bg-white' : 'bg-muted/20',
+                          )}
                           role="status"
                         >
                           {formatCurrencyDisplay(
@@ -1155,7 +1259,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
           className={cn(
             'gap-3 flex-wrap flex-col sm:flex-row sm:items-center sm:justify-between',
             isUnmannd
-              ? 'mt-0 min-h-[4.25rem] border-0 px-4 py-3 sm:px-5'
+              ? 'mt-0 min-h-[4.25rem] border-0 px-4 py-3 sm:justify-end sm:px-5'
               : 'border-t pt-4'
           )}
           style={isUnmannd ? { backgroundColor: UNMANND_NAVY } : undefined}
@@ -1169,7 +1273,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 className={cn(
                   'gap-2 h-9 rounded-md',
                   isUnmannd
-                    ? 'border-white/50 bg-transparent text-white hover:bg-white/10 hover:text-white'
+                    ? 'rounded-full border-white/50 bg-transparent px-4 text-white hover:bg-white/10 hover:text-white'
                     : 'border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70'
                 )}
                 disabled={deleting || applyingStatusValue != null || saving}
@@ -1230,7 +1334,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     className={cn(
                       'gap-2 h-9 rounded-md',
                       isUnmannd
-                        ? 'border-white/40 bg-white text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]'
+                        ? UNMANND_PILL_BTN
                         : urgencyToneButtonClassName(btn.statusValue, urgencyHighlighted),
                     )}
                     disabled={!!applyingStatusValue}
@@ -1258,8 +1362,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 size="default"
                 className={cn(
                   'gap-2 h-9 rounded-md',
-                  isUnmannd &&
-                    'border-white/40 bg-white text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]'
+                  isUnmannd && UNMANND_PILL_BTN
                 )}
                 disabled={saving || applyingStatusValue != null}
                 onClick={handleSaveAll}
