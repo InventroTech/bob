@@ -43,33 +43,85 @@ const PUSH_ENTITY_LABELS: Record<PushEntityType, string> = {
 
 const LOG_PREFIX = '[OperationsPrograms]';
 
-const DISTRICTS = [
-  'Alluri Sitharama Raju', 'Anakapalli', 'Annamayya', 'Anantapur', 'Bapatla', 'Chittoor',
-  'East Godavari', 'Eluru', 'Guntur', 'Kakinada', 'Konaseema (Amalapuram)', 'Krishna',
-  'Kurnool', 'Machilipatnam', 'Nandyal', 'Narasaraopet', 'NTR', 'Ongole', 'Palnadu',
-  'Parvathipuram Manyam', 'Prakasam', 'Rajampet', 'Sri Potti Sriramulu Nellore',
-  'Sri Sathya Sai', 'Srikakulam', 'Tirupati', 'Vijayawada', 'Visakhapatnam', 'Vizianagaram',
-  'West Godavari', 'YSR Kadapa', 'Adilabad', 'Bhadradri Kothagudem', 'Hanumakonda',
-  'Hyderabad', 'Jagtial', 'Jangaon', 'Jayashankar Bhupalpally', 'Jogulamba Gadwal',
-  'Kamareddy', 'Karimnagar', 'Khammam', 'Komaram Bheem Asifabad', 'Mahabubabad',
-  'Mahabubnagar', 'Mancherial', 'Medak', 'Medchal-Malkajgiri', 'Mulugu', 'Nagarkurnool',
-  'Nalgonda', 'Narayanpet', 'Nirmal', 'Nizamabad', 'Peddapalli', 'Rajanna Sircilla',
-  'Rangareddy', 'Sangareddy', 'Secunderabad', 'Siddipet', 'Suryapet', 'Vikarabad',
-  'Wanaparthy', 'Warangal', 'Yadadri Bhuvanagiri', 'Ariyalur', 'Arni', 'Arakkonam',
-  'Chengalpattu', 'Chennai', 'Chidambaram', 'Coimbatore', 'Cuddalore', 'Dharmapuri',
-  'Dindigul', 'Erode', 'Kallakurichi', 'Kancheepuram', 'Kanyakumari', 'Karur',
-  'Krishnagiri', 'Madurai', 'Mayiladuthurai', 'Nagapattinam', 'Namakkal', 'Nilgiris',
-  'Perambalur', 'Pollachi', 'Pudukkottai', 'Ramanathapuram', 'Ranipet', 'Salem',
-  'Sivaganga', 'Sriperumbudur', 'Tenkasi', 'Thanjavur', 'Theni', 'Thoothukudi',
-  'Tiruchirappalli', 'Tirunelveli', 'Tirupattur', 'Tiruppur', 'Tiruvallur', 'Tiruvarur',
-  'Vellore', 'Viluppuram', 'Virudhunagar', 'Bagalkot', 'Bengaluru Central',
-  'Bengaluru North', 'Bengaluru Rural', 'Bengaluru South', 'Bengaluru Urban', 'Belagavi',
-  'Bellary', 'Bidar', 'Chamarajanagar', 'Chikkaballapur', 'Chikkamagaluru', 'Chikodi',
-  'Chitradurga', 'Dakshina Kannada', 'Davanagere', 'Dharwad', 'Gadag', 'Hassan',
-  'Haveri', 'Kalaburagi', 'Kodagu', 'Kolar', 'Koppal', 'Mandya', 'Mysuru', 'Raichur',
-  'Ramanagara', 'Shivamogga', 'Tumakuru', 'Udupi', 'Uttara Kannada', 'Vijayapura',
-  'Vijayanagara', 'Yadgir',
+/** Circle geo/party IDs from pyro-backend geo_party_catalog.json (same shape as live lead payloads). */
+const CIRCLE_GEO: {
+  state_id: string;
+  state: string;
+  districts: { id: string; name: string }[];
+  parties: { id: string; name: string }[];
+}[] = [
+  {
+    state_id: '33009',
+    state: 'Andhra Pradesh',
+    districts: [
+      { id: '90290', name: 'Anakapalli' },
+      { id: '90288', name: 'Alluri Sitharamaraju' },
+      { id: '13279', name: 'Krishna' },
+      { id: '13286', name: 'Guntur' },
+    ],
+    parties: [
+      { id: '31402', name: 'Telugu Desam Party' },
+      { id: '31403', name: 'YSRCP' },
+      { id: '31406', name: 'Janasena Party' },
+      { id: '37788', name: 'BJP Andhra Pradesh' },
+    ],
+  },
+  {
+    state_id: '33010',
+    state: 'Telangana',
+    districts: [
+      { id: '1132', name: 'Hyderabad' },
+      { id: '589', name: 'Bhadradri Kothagudem' },
+      { id: '1127', name: 'Adilabad' },
+    ],
+    parties: [
+      { id: '31405', name: 'Bharat Rashtra Samithi' },
+      { id: '31398', name: 'BJP Telangana' },
+      { id: '31401', name: 'Congress Party Telangana' },
+      { id: '31404', name: 'All India Majlis-E-Ittehadul-Muslimeen' },
+    ],
+  },
+  {
+    state_id: '72631',
+    state: 'Tamil Nadu',
+    districts: [
+      { id: '73581', name: 'Chennai' },
+      { id: '73213', name: 'Chengalpattu' },
+      { id: '73005', name: 'Ariyalur' },
+    ],
+    parties: [
+      { id: '72997', name: 'Dravida Munnetra Kazhagam' },
+      { id: '72998', name: 'All India Anna Dravida Munnetra Kazhagam' },
+      { id: '72994', name: 'Bharatiya Janatha Party Tamilnadu' },
+    ],
+  },
+  {
+    state_id: '95829',
+    state: 'Karnataka',
+    districts: [
+      { id: '97869', name: 'Bengaluru Urban' },
+      { id: '101849', name: 'Mysuru' },
+      { id: '97762', name: 'Bengaluru Rural' },
+    ],
+    parties: [
+      { id: '102341', name: 'Bharatiya Janatha Party Karnataka' },
+      { id: '102344', name: 'Congress Party Karnataka' },
+      { id: '102347', name: 'Janata Dal (Secular) Karnataka' },
+    ],
+  },
 ];
+
+function pickRandom<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function emailFromName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+  return `${slug}@thecircleapp.in`;
+}
 
 function maskSecret(value: string): string {
   if (!value) return '(empty)';
@@ -169,7 +221,6 @@ function randomJatraLink(): string {
 
 // Generate one random lead payload
 function generateRandomLead(): Record<string, unknown> {
-  const parties = ['BJP', 'INC', 'AAP', 'Congress', 'Independent'];
   const leadSources = [
     'APP_INSTALL_SINGLE_PARTY_JOINED_BJP_TG', 'MANUAL', 'APP_INSTALL_SINGLE_LEADER_CIRCLE_JOINED_YSRCP',
     'MANUAL_HIGH_END_DEVICE', 'APP_UNINSTALL_SINGLE_PARTY_JOINED_YSRCP', 'APP_INSTALL_ML_PB',
@@ -190,10 +241,12 @@ function generateRandomLead(): Record<string, unknown> {
   ];
   const leadStatuses = ['SALES LEAD', 'SELF TRIAL'];
   const name = randomName();
-  const states = ['Telangana', 'Andhra Pradesh', 'Tamil Nadu'];
   const phone = randomIndianPhone();
   const phoneClean = phone.replace('+', '');
   const randomId = String(Math.floor(Math.random() * 9000000) + 1000000);
+  const geo = pickRandom(CIRCLE_GEO);
+  const district = pickRandom(geo.districts);
+  const party = pickRandom(geo.parties);
 
   return {
     entity_type: 'lead',
@@ -201,21 +254,23 @@ function generateRandomLead(): Record<string, unknown> {
     data: {
       praja_id: randomId,
       name,
-      state: states[Math.floor(Math.random() * states.length)],
+      state_id: geo.state_id,
+      district_id: district.id,
+      affiliated_party_id: party.id,
+      affiliated_party: party.name,
+      lead_creator: emailFromName(name),
       tasks: generateRandomTasks(),
       lead_score: parseFloat((Math.random() * 65 + 30).toFixed(2)),
       lead_source: leadSources[Math.floor(Math.random() * leadSources.length)],
       lead_status: leadStatuses[Math.floor(Math.random() * leadStatuses.length)],
       phone_number: phone,
       whatsapp_link: `https://wa.me/${phoneClean}`,
-      affiliated_party: parties[Math.floor(Math.random() * parties.length)],
       user_profile_link: `https://www.thecircleapp.in/admin/users/${Math.random().toString(36).substring(7)}`,
       display_pic_url: 'https://a-cdn.thecircleapp.in/capture/01K4QKP9EAD7SBB794NBY1MQ94.png',
       has_upi_autopay_app: Math.random() > 0.5 ? true : null,
       subscription_time_stamp: null,
       release_build_number: 0,
       subscribed_package: '',
-      district: DISTRICTS[Math.floor(Math.random() * DISTRICTS.length)],
     },
   };
 }
