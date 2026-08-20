@@ -6,7 +6,7 @@
  *     → (team lead OR PM Reject / Hold)
  *     → (team lead OR PM Send to verify) REQ_TO_VERIFY  [not shown when already there]
  *   REQ_TO_VERIFY
- *     → (requestor Verify) VENDOR_IDENTIFIED
+ *     → (requestor Verify) NEW_REQUEST
  *     → (team lead OR PM Approve / Reject / Hold)  [requestor still has Verify]
  *   VENDOR_IDENTIFIED
  *     → (team lead OR PM Add to cart) IN_CART
@@ -81,6 +81,7 @@ export const INVENTORY_ORDERABLE_STATUSES = new Set([
 ]);
 
 export const INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES = new Set([
+  'NEW_REQUEST',
   'VENDOR_IDENTIFIED',
   'IN_CART',
   'REQ_TO_VERIFY',
@@ -250,11 +251,12 @@ export function getInventoryWorkflowButtons(opts: {
   const isApprover = isInventoryApproverActor(opts);
 
   // Requestor always gets Verify on this status, even with a TL/PM role.
+  // Verify returns the request to NEW_REQUEST so TL/PM can review and Approve.
   if (opts.isRequester && status === 'REQ_TO_VERIFY') {
     buttons.push({
       label: 'Verify',
-      statusValue: 'VENDOR_IDENTIFIED',
-      statusText: 'VENDOR_IDENTIFIED',
+      statusValue: 'NEW_REQUEST',
+      statusText: 'NEW_REQUEST',
     });
   }
 
@@ -263,7 +265,7 @@ export function getInventoryWorkflowButtons(opts: {
   }
 
   if (INVENTORY_APPROVABLE_STATUSES.has(status)) {
-    // Requestor already has Verify (same destination as Approve).
+    // Requestor already has Verify (back to NEW_REQUEST); don't also show Approve.
     if (!(opts.isRequester && status === 'REQ_TO_VERIFY')) {
       buttons.push({
         label: 'Approve',
