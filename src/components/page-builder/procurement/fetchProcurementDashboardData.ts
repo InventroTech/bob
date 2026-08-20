@@ -12,6 +12,7 @@ export type ProcurementRequestRow = {
   status: string;
   category: string;
   department: string;
+  trackingLink: string | null;
   raw: CrmRecord;
 };
 
@@ -113,6 +114,13 @@ function recordToRow(record: CrmRecord): ProcurementRequestRow {
     parseAmount(data.estimated_cost) ||
     parseAmount(data.negotiated_value) ||
     0;
+  const trackingRaw = String(data.tracking_link ?? data.tracking_url ?? '').trim();
+  const trackingLink = trackingRaw
+    ? /^https?:\/\//i.test(trackingRaw)
+      ? trackingRaw
+      : `https://${trackingRaw}`
+    : null;
+
   return {
     id,
     itemName: String(data.item_name_freeform ?? data.item_name ?? '—'),
@@ -122,8 +130,9 @@ function recordToRow(record: CrmRecord): ProcurementRequestRow {
       parseFlexibleDate(data.requirement_date) ?? parseFlexibleDate(data.required_date),
     amount,
     status: normalizeStatus(data.status ?? record.status),
-    category: String(data.category ?? '').trim() || 'Unspecified',
+    category: String(data.category ?? data.request_category ?? '').trim() || 'Unspecified',
     department: String(data.department ?? '').trim() || '—',
+    trackingLink,
     raw: record,
   };
 }
@@ -184,15 +193,15 @@ function buildKpis(rows: ProcurementRequestRow[], now: Date): KpiMetric[] {
     priorAmount: sumAmount(priorYtd.filter(pred)),
   });
 
+  // Order matches procurement dashboard prototype (7 KPI cards).
   return [
     metric('total', 'Total Spend (YTD)', 'blue', () => true),
     metric('new', 'New Request', 'cyan', (r) => r.status === 'NEW_REQUEST'),
-    metric('on_hold', 'On Hold', 'amber', (r) => r.status === 'ON_HOLD'),
     metric('to_verify', 'To Verify', 'violet', (r) => r.status === 'REQ_TO_VERIFY'),
+    metric('on_hold', 'On Hold', 'amber', (r) => r.status === 'ON_HOLD'),
     metric('vendor_identified', 'Vendor Identified', 'green', (r) => r.status === 'VENDOR_IDENTIFIED'),
-    metric('in_cart', 'In Cart', 'violet', (r) => r.status === 'IN_CART'),
-    metric('in_shipping', 'In Shipping', 'orange', (r) => r.status === 'IN_SHIPPING'),
     metric('rejected', 'Rejected', 'red', (r) => REJECTED_STATUSES.has(r.status)),
+    metric('in_shipping', 'In Shipping', 'orange', (r) => r.status === 'IN_SHIPPING'),
   ];
 }
 

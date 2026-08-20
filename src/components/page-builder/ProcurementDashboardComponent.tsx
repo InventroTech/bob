@@ -12,7 +12,6 @@ import {
   IndianRupee,
   Layers,
   Loader2,
-  MoreVertical,
   Package,
   RefreshCw,
   ShoppingBag,
@@ -76,15 +75,15 @@ export const DEFAULT_PROCUREMENT_DASHBOARD_CONFIG: ProcurementDashboardConfig = 
   entityType: 'unmannd_request',
 };
 
-const REPORTS: { id: ReportId; label: string; color: string }[] = [
-  { id: 'spend', label: 'Procurement Spend', color: 'text-blue-600 bg-blue-50' },
-  { id: 'supplier', label: 'Supplier Performance', color: 'text-emerald-600 bg-emerald-50' },
-  { id: 'department', label: 'Department Spending', color: 'text-orange-600 bg-orange-50' },
-  { id: 'po', label: 'Purchase Order', color: 'text-violet-600 bg-violet-50' },
-  { id: 'invoice', label: 'Invoice Status', color: 'text-rose-600 bg-rose-50' },
-  { id: 'payment', label: 'Payment Report', color: 'text-sky-600 bg-sky-50' },
-  { id: 'budget', label: 'Budget Utilization', color: 'text-amber-600 bg-amber-50' },
-  { id: 'tax', label: 'Tax Report', color: 'text-indigo-600 bg-indigo-50' },
+const REPORTS: { id: ReportId; label: string; color: string; iconBg: string }[] = [
+  { id: 'spend', label: 'Procurement Spend', color: 'text-blue-600', iconBg: 'bg-blue-100' },
+  { id: 'supplier', label: 'Supplier Performance', color: 'text-emerald-600', iconBg: 'bg-emerald-100' },
+  { id: 'department', label: 'Department Spending', color: 'text-orange-600', iconBg: 'bg-orange-100' },
+  { id: 'po', label: 'Purchase Order', color: 'text-violet-600', iconBg: 'bg-violet-100' },
+  { id: 'invoice', label: 'Invoice Status', color: 'text-rose-600', iconBg: 'bg-rose-100' },
+  { id: 'payment', label: 'Payment Report', color: 'text-sky-600', iconBg: 'bg-sky-100' },
+  { id: 'budget', label: 'Budget Utilization', color: 'text-amber-600', iconBg: 'bg-amber-100' },
+  { id: 'tax', label: 'Tax Report', color: 'text-indigo-600', iconBg: 'bg-indigo-100' },
 ];
 
 type StatusFilter = 'all' | 'pending' | 'ordered' | 'rejected';
@@ -108,6 +107,8 @@ const KPI_ICON_WRAP = {
   cyan: 'bg-cyan-100 text-cyan-600',
   violet: 'bg-violet-100 text-violet-600',
 } as const;
+
+const NAVY = '#1A3673';
 
 function matchesFilter(row: ProcurementRequestRow, filter: StatusFilter): boolean {
   if (filter === 'all') return true;
@@ -137,7 +138,6 @@ type PeriodKey = string;
 
 function buildPeriodOptions(now = new Date()): { key: PeriodKey; label: string; year: number; month: number }[] {
   const opts: { key: PeriodKey; label: string; year: number; month: number }[] = [];
-  // Last month first (like the mock)
   for (let i = 1; i <= 6; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const year = d.getFullYear();
@@ -149,7 +149,6 @@ function buildPeriodOptions(now = new Date()): { key: PeriodKey; label: string; 
         : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     opts.push({ key, label, year, month });
   }
-  // Also this month
   opts.unshift({
     key: `${now.getFullYear()}-${now.getMonth()}`,
     label: 'This Month',
@@ -176,6 +175,7 @@ function CategorySpendPanel({
   onPeriodChange,
   breakdown,
   onBreakdownChange,
+  onViewFullReport,
 }: {
   slices: CategorySlice[];
   total: number;
@@ -184,6 +184,7 @@ function CategorySpendPanel({
   onPeriodChange: (key: string) => void;
   breakdown: SpendBreakdownMode;
   onBreakdownChange: (mode: SpendBreakdownMode) => void;
+  onViewFullReport: () => void;
 }) {
   const circumference = 2 * Math.PI * 38;
   let offset = 0;
@@ -203,8 +204,8 @@ function CategorySpendPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-center">
-        <div className="inline-flex rounded-full bg-slate-100 p-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-full bg-slate-100 p-1 self-start">
           {modes.map((m) => {
             const active = breakdown === m.id;
             return (
@@ -212,7 +213,7 @@ function CategorySpendPanel({
                 key={m.id}
                 type="button"
                 onClick={() => onBreakdownChange(m.id)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition sm:px-4 sm:text-sm ${
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition sm:px-4 sm:text-sm ${
                   active
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
@@ -223,118 +224,125 @@ function CategorySpendPanel({
             );
           })}
         </div>
+
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+          {periods.map((p) => {
+            const active = p.key === selectedPeriod;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => onPeriodChange(p.key)}
+                className={`shrink-0 border-b-2 px-2.5 pb-1.5 text-sm transition ${
+                  active
+                    ? 'border-[#1A3673] font-semibold text-[#1A3673]'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {periods.map((p) => {
-          const active = p.key === selectedPeriod;
-          return (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => onPeriodChange(p.key)}
-              className={`shrink-0 border-b-2 px-2 pb-1 text-sm transition ${
-                active
-                  ? 'border-[#E8B923] font-semibold text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:justify-center sm:gap-8">
-        <div className="relative h-48 w-48 shrink-0">
-          <svg className="h-48 w-48 -rotate-90" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="38" fill="none" stroke="#EEF2F7" strokeWidth="10" />
-            {slices.length === 0 ? null : (
-              slices.map((slice) => {
-                const pct = total > 0 ? slice.amount / total : 0;
-                const len = pct * circumference;
-                const circle = (
-                  <circle
-                    key={slice.name}
-                    cx="50"
-                    cy="50"
-                    r="38"
-                    fill="none"
-                    stroke={slice.color}
-                    strokeWidth="10"
-                    strokeDasharray={`${len} ${circumference - len}`}
-                    strokeDashoffset={-offset}
-                  />
-                );
-                offset += len;
-                return circle;
-              })
-            )}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <span className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
-              {formatInrPrecise(total)}
-            </span>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-center">
+        <div className="flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
+          <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48">
+            <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="38" fill="none" stroke="#EEF2F7" strokeWidth="10" />
+              {slices.length === 0 ? null : (
+                slices.map((slice) => {
+                  const pct = total > 0 ? slice.amount / total : 0;
+                  const len = pct * circumference;
+                  const circle = (
+                    <circle
+                      key={slice.name}
+                      cx="50"
+                      cy="50"
+                      r="38"
+                      fill="none"
+                      stroke={slice.color}
+                      strokeWidth="10"
+                      strokeDasharray={`${len} ${circumference - len}`}
+                      strokeDashoffset={-offset}
+                    />
+                  );
+                  offset += len;
+                  return circle;
+                })
+              )}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <span className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+                {formatInrPrecise(total)}
+              </span>
+            </div>
           </div>
+
+          <ul className="w-full max-w-[200px] space-y-2 text-sm">
+            {slices.length === 0 ? (
+              <li className="text-slate-500">{emptyLabel}</li>
+            ) : (
+              slices.map((slice) => (
+                <li key={slice.name} className="flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: slice.color }}
+                    />
+                    <span className="truncate text-slate-600">{slice.name}</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums font-medium text-slate-800">
+                    {slice.percent.toFixed(2)}%
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
         </div>
 
-        <ul className="w-full max-w-[200px] space-y-2 text-sm">
-          {slices.length === 0 ? (
-            <li className="text-slate-500">{emptyLabel}</li>
-          ) : (
-            slices.map((slice) => (
-              <li key={slice.name} className="flex items-center justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: slice.color }}
-                  />
-                  <span className="truncate text-slate-600">{slice.name}</span>
+        <ul className="space-y-3">
+          {slices.map((slice) => {
+            const Icon = categoryIcon(slice.name);
+            const widthPct = Math.max(4, Math.round((slice.amount / maxAmount) * 100));
+            return (
+              <li key={`bar-${slice.name}`} className="flex items-start gap-3">
+                <span
+                  className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: `${slice.color}33`, color: slice.color }}
+                >
+                  <Icon className="h-4 w-4" />
                 </span>
-                <span className="shrink-0 tabular-nums font-medium text-slate-800">
-                  {slice.percent.toFixed(2)}%
-                </span>
-              </li>
-            ))
-          )}
-        </ul>
-      </div>
-
-      <ul className="space-y-3 border-t border-slate-100 pt-4">
-        {slices.map((slice) => {
-          const Icon = categoryIcon(slice.name);
-          const widthPct = Math.max(4, Math.round((slice.amount / maxAmount) * 100));
-          return (
-            <li key={`bar-${slice.name}`} className="flex items-start gap-3">
-              <span
-                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                style={{ backgroundColor: `${slice.color}33`, color: slice.color }}
-              >
-                <Icon className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium text-slate-800">{slice.name}</span>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
-                    {formatInrPrecise(slice.amount)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-slate-800">{slice.name}</span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                      {formatInrPrecise(slice.amount)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${widthPct}%`, backgroundColor: slice.color }}
                     />
                   </div>
-                  <span className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-500">
-                    {slice.percent.toFixed(2)}%
-                  </span>
                 </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="flex justify-end border-t border-slate-100 pt-3">
+        <button
+          type="button"
+          onClick={onViewFullReport}
+          className="text-sm font-medium text-[#1A3673] hover:underline"
+        >
+          View Full Report →
+        </button>
+      </div>
     </div>
   );
 }
@@ -344,7 +352,6 @@ function CategorySpendPanel({
  * Mapped to unmannd/inventory request records (not a separate payments ledger).
  */
 export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> = ({ config }) => {
-  const title = config?.title ?? DEFAULT_PROCUREMENT_DASHBOARD_CONFIG.title;
   const entityType = config?.entityType || 'unmannd_request';
 
   const [data, setData] = useState<ProcurementDashboardData | null>(null);
@@ -386,6 +393,20 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pageRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  // Sliding window of up to 4 page buttons so pages beyond 4 remain reachable.
+  const visiblePageNumbers = useMemo(() => {
+    const maxButtons = 4;
+    if (pageCount <= maxButtons) {
+      return Array.from({ length: pageCount }, (_, i) => i + 1);
+    }
+    let start = Math.max(1, safePage - Math.floor((maxButtons - 1) / 2));
+    let end = start + maxButtons - 1;
+    if (end > pageCount) {
+      end = pageCount;
+      start = end - maxButtons + 1;
+    }
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [pageCount, safePage]);
 
   useEffect(() => {
     setPage(1);
@@ -409,13 +430,28 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
     return buildSpendSlices(rows, spendBreakdown);
   }, [data?.rows, periodOptions, selectedPeriod, spendBreakdown]);
 
+  const handleViewFullReport = () => {
+    if (!categoryView.slices.length) {
+      toast.message('No data to export for this period');
+      return;
+    }
+    const periodRows = (data?.rows ?? []).filter((r) => {
+      const period = periodOptions.find((p) => p.key === selectedPeriod) ?? periodOptions[0]!;
+      return rowInCalendarMonth(r, period.year, period.month);
+    });
+    const reportId =
+      spendBreakdown === 'vendor'
+        ? 'supplier'
+        : spendBreakdown === 'item'
+          ? 'payment'
+          : 'spend';
+    downloadReportCsv(reportId, periodRows);
+    toast.success('Spend breakdown CSV downloaded');
+  };
+
   return (
     <div className="w-full space-y-4 bg-[#F5F7FA] p-3 sm:p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-          <p className="text-sm text-slate-500">Spend and request overview from live records</p>
-        </div>
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={() => void load()}
@@ -427,97 +463,74 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
         </button>
       </div>
 
-      {/* Spend Breakdown (upper left) + KPI cards (right) */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-slate-900">Spend Breakdown</h3>
-          {loading && !data ? (
-            <div className="flex h-40 items-center justify-center text-slate-400">
-              <Loader2 className="h-5 w-5 animate-spin" />
-            </div>
-          ) : (
-            <CategorySpendPanel
-              slices={categoryView.slices}
-              total={categoryView.total}
-              periods={periodOptions}
-              selectedPeriod={selectedPeriod}
-              onPeriodChange={setSelectedPeriod}
-              breakdown={spendBreakdown}
-              onBreakdownChange={setSpendBreakdown}
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              if (!categoryView.slices.length) {
-                toast.message('No data to export for this period');
-                return;
-              }
-              const periodRows = (data?.rows ?? []).filter((r) => {
-                const period =
-                  periodOptions.find((p) => p.key === selectedPeriod) ?? periodOptions[0]!;
-                return rowInCalendarMonth(r, period.year, period.month);
-              });
-              const reportId =
-                spendBreakdown === 'vendor'
-                  ? 'supplier'
-                  : spendBreakdown === 'item'
-                    ? 'payment'
-                    : 'spend';
-              downloadReportCsv(reportId, periodRows);
-              toast.success('Spend breakdown CSV downloaded');
-            }}
-            className="mt-4 text-sm font-medium text-blue-600 hover:underline"
-          >
-            View Full Report →
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3 content-start">
-          {(
-            data?.kpis ??
-            Array.from({ length: 7 }, () => null)
-          ).map((kpi, i) => {
-            const tone =
-              kpi?.tone ??
-              (['blue', 'cyan', 'amber', 'violet', 'green', 'orange', 'red'] as const)[i]!;
-            const Icon = KPI_ICON[tone];
-            return (
-              <div
-                key={kpi?.id ?? `kpi-skeleton-${i}`}
-                className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
-              >
-                <div className={`inline-flex rounded-lg p-1.5 ${KPI_ICON_WRAP[tone]}`}>
-                  <Icon className="h-3.5 w-3.5" />
-                </div>
-                <p className="mt-2 text-[11px] font-medium leading-tight text-slate-500">
-                  {kpi?.label ?? '—'}
-                </p>
-                <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 sm:text-lg">
-                  {loading && !kpi ? '—' : formatInr(kpi?.amount ?? 0)}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+      {/* Spend Breakdown — full width */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        {loading && !data ? (
+          <div className="flex h-40 items-center justify-center text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : (
+          <CategorySpendPanel
+            slices={categoryView.slices}
+            total={categoryView.total}
+            periods={periodOptions}
+            selectedPeriod={selectedPeriod}
+            onPeriodChange={setSelectedPeriod}
+            breakdown={spendBreakdown}
+            onBreakdownChange={setSpendBreakdown}
+            onViewFullReport={handleViewFullReport}
+          />
+        )}
       </div>
 
-      {/* Requests table (Payments-style) */}
+      {/* KPI cards — single row */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        {(
+          data?.kpis ??
+          Array.from({ length: 7 }, () => null)
+        ).map((kpi, i) => {
+          const tone =
+            kpi?.tone ??
+            (['blue', 'cyan', 'violet', 'amber', 'green', 'red', 'orange'] as const)[i]!;
+          const Icon = KPI_ICON[tone];
+          return (
+            <div
+              key={kpi?.id ?? `kpi-skeleton-${i}`}
+              className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+            >
+              <div className={`inline-flex rounded-lg p-1.5 ${KPI_ICON_WRAP[tone]}`}>
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              <p className="mt-2 text-[10px] font-semibold uppercase leading-tight tracking-wide text-slate-500">
+                {kpi?.label ?? '—'}
+              </p>
+              <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 sm:text-lg">
+                {loading && !kpi ? '—' : formatInr(kpi?.amount ?? 0)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Requests table */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-900">Requests</h3>
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+          style={{ backgroundColor: NAVY }}
+        >
+          <h3 className="text-sm font-semibold text-white">Requests</h3>
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700"
+              className="h-8 rounded-md border-0 bg-white/95 px-2 text-xs font-medium text-slate-700 shadow-sm"
             >
               <option value="all">All Requests</option>
               <option value="pending">Pending</option>
               <option value="ordered">Ordered / Approved</option>
               <option value="rejected">Rejected</option>
             </select>
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/95 text-slate-600 shadow-sm">
               <Filter className="h-3.5 w-3.5" />
             </span>
           </div>
@@ -531,24 +544,23 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
                 <th className="px-4 py-2.5">Vendor</th>
                 <th className="px-4 py-2.5">Item</th>
                 <th className="px-4 py-2.5">Request Date</th>
-                <th className="px-4 py-2.5">Req. Date</th>
+                <th className="px-4 py-2.5">Track</th>
                 <th className="px-4 py-2.5">Amount</th>
                 <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && !data ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={7} className="px-4 py-3">
                       <div className="h-4 animate-pulse rounded bg-slate-100" />
                     </td>
                   </tr>
                 ))
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                     No requests found
                   </td>
                 </tr>
@@ -556,15 +568,26 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
                 pageRows.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50/80">
                     <td className="px-4 py-2.5 font-medium text-blue-600">#{row.id}</td>
-                    <td className="px-4 py-2.5 text-slate-700">{row.vendor}</td>
+                    <td className="px-4 py-2.5 uppercase text-slate-700">{row.vendor}</td>
                     <td className="max-w-[180px] truncate px-4 py-2.5 text-slate-700">
                       {row.itemName}
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">
                       {formatDisplayDate(row.requestDate)}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600">
-                      {formatDisplayDate(row.requirementDate)}
+                    <td className="px-4 py-2.5">
+                      {row.trackingLink ? (
+                        <a
+                          href={row.trackingLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-blue-600 hover:underline"
+                        >
+                          Link
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 tabular-nums text-slate-800">
                       {formatInr(row.amount)}
@@ -575,9 +598,6 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
                       >
                         {getInventoryStatusLabel(row.status)}
                       </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-400">
-                      <MoreVertical className="h-4 w-4" />
                     </td>
                   </tr>
                 ))
@@ -601,14 +621,14 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
             >
               ‹
             </button>
-            {Array.from({ length: Math.min(pageCount, 4) }, (_, i) => i + 1).map((n) => (
+            {visiblePageNumbers.map((n) => (
               <button
                 key={n}
                 type="button"
                 onClick={() => setPage(n)}
                 className={`min-w-7 rounded px-2 py-1 ${
                   n === safePage
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-[#1A3673] text-white'
                     : 'border border-slate-200 text-slate-700'
                 }`}
               >
@@ -627,117 +647,112 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
         </div>
       </div>
 
-      {/* Reports */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-slate-900">Reports</h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {REPORTS.map((report) => (
-              <button
-                key={report.id}
-                type="button"
-                onClick={() => handleReportClick(report.id, reportRows)}
-                className="flex flex-col items-center gap-2 rounded-xl border border-slate-100 px-2 py-4 text-center transition hover:border-slate-200 hover:bg-slate-50"
-              >
-                <span className={`rounded-lg p-2 ${report.color}`}>
-                  <IndianRupee className="h-4 w-4" />
-                </span>
-                <span className="text-[11px] font-medium leading-tight text-slate-700">
-                  {report.label}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowReportRangePicker((v) => !v)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                {dateRangeLabel}
-              </button>
-              {showReportRangePicker ? (
-                <div className="absolute bottom-full left-0 z-20 mb-2 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    Report date range
-                  </p>
-                  <div className="space-y-2">
-                    <label className="block text-xs text-slate-600">
-                      From
-                      <input
-                        type="date"
-                        value={reportRange.start}
-                        max={reportRange.end || undefined}
-                        onChange={(e) =>
-                          setReportRange((prev) => ({ ...prev, start: e.target.value }))
-                        }
-                        className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs text-slate-800"
-                      />
-                    </label>
-                    <label className="block text-xs text-slate-600">
-                      To
-                      <input
-                        type="date"
-                        value={reportRange.end}
-                        min={reportRange.start || undefined}
-                        onChange={(e) =>
-                          setReportRange((prev) => ({ ...prev, end: e.target.value }))
-                        }
-                        className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs text-slate-800"
-                      />
-                    </label>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setReportRange(defaultReportRange())}
-                      className="text-xs font-medium text-slate-500 hover:text-slate-700"
-                    >
-                      This month
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowReportRangePicker(false)}
-                      className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800"
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+      {/* Reports — navy panel */}
+      <div className="rounded-xl p-4 shadow-sm sm:p-5" style={{ backgroundColor: NAVY }}>
+        <h3 className="mb-4 text-sm font-semibold text-white">Reports</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {REPORTS.map((report) => (
             <button
+              key={report.id}
               type="button"
-              onClick={() => {
-                if (!reportRows.length) {
-                  toast.message('No request data in this date range');
-                  return;
-                }
-                exportCsv(reportRows);
-                toast.success('Exported Excel (CSV)');
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+              onClick={() => handleReportClick(report.id, reportRows)}
+              className="relative flex flex-col items-start gap-3 rounded-xl bg-white px-3 py-4 text-left shadow-sm transition hover:shadow-md"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              Export Excel
+              <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${report.iconBg} ${report.color}`}>
+                <IndianRupee className="h-4 w-4" />
+              </span>
+              <span className="pr-6 text-xs font-semibold leading-snug text-slate-800">
+                {report.label}
+              </span>
+              <Download className="absolute bottom-3 right-3 h-3.5 w-3.5 text-slate-400" />
             </button>
-            <button
-              type="button"
-              onClick={() => toast.message('PDF export coming soon')}
-              className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Export PDF
-            </button>
-          </div>
+          ))}
         </div>
-
-      <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-        <Download className="h-3 w-3" />
-        Mapped from request fields (estimated cost / line total, vendor, shipment type, status) — not a
-        separate invoice ledger.
-      </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/15 pt-3">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowReportRangePicker((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              {dateRangeLabel}
+            </button>
+            {showReportRangePicker ? (
+              <div className="absolute bottom-full left-0 z-20 mb-2 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Report date range
+                </p>
+                <div className="space-y-2">
+                  <label className="block text-xs text-slate-600">
+                    From
+                    <input
+                      type="date"
+                      value={reportRange.start}
+                      max={reportRange.end || undefined}
+                      onChange={(e) =>
+                        setReportRange((prev) => ({ ...prev, start: e.target.value }))
+                      }
+                      className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs text-slate-800"
+                    />
+                  </label>
+                  <label className="block text-xs text-slate-600">
+                    To
+                    <input
+                      type="date"
+                      value={reportRange.end}
+                      min={reportRange.start || undefined}
+                      onChange={(e) =>
+                        setReportRange((prev) => ({ ...prev, end: e.target.value }))
+                      }
+                      className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs text-slate-800"
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReportRange(defaultReportRange())}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                  >
+                    This month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowReportRangePicker(false)}
+                    className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (!reportRows.length) {
+                toast.message('No request data in this date range');
+                return;
+              }
+              exportCsv(reportRows);
+              toast.success('Exported Excel (CSV)');
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300/80 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Export Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => toast.message('PDF export coming soon')}
+            className="inline-flex items-center gap-1.5 rounded-md border border-rose-300/80 bg-white px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Export PDF
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
