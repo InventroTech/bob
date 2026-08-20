@@ -262,6 +262,8 @@ function generateRandomLead(): Record<string, unknown> {
       lead_creator: pickRandom(RM_LEAD_CREATOR_EMAILS),
       tasks: generateRandomTasks(),
       lead_score: parseFloat((Math.random() * 65 + 30).toFixed(2)),
+      lead_stage: 'FRESH',
+      call_attempts: 0,
       lead_source: leadSources[Math.floor(Math.random() * leadSources.length)],
       lead_status: leadStatuses[Math.floor(Math.random() * leadStatuses.length)],
       phone_number: phone,

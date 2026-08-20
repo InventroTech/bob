@@ -158,6 +158,8 @@ function generateRandomLead() {
         {"task": "Premium Poster/ Video Poster Share", "status": "Null"}
       ],
       lead_score: leadScore,
+      lead_stage: "FRESH",
+      call_attempts: 0,
       phone_number: phoneNumber,
       whatsapp_link: `https://wa.me/${phoneNoClean}`,
       state_id: geo.state_id,
