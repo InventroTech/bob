@@ -115,13 +115,14 @@ function pickRandom<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-function emailFromName(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '.')
-    .replace(/^\.+|\.+$/g, '');
-  return `${slug}@thecircleapp.in`;
-}
+/** Active RM emails for TENANT_ID (authz role key `rm`). Referral pull matches `lead_creator` to these. */
+const RM_LEAD_CREATOR_EMAILS = [
+  'bibhab.pyro@thecircleapp.in',
+  'bibhabindia@gmail.com',
+  'harisudhan.sales@gmail.com',
+  'koyaanirudh@gmail.com',
+  'ritam.pyro@thecircleapp.in',
+];
 
 function maskSecret(value: string): string {
   if (!value) return '(empty)';
@@ -258,7 +259,7 @@ function generateRandomLead(): Record<string, unknown> {
       district_id: district.id,
       affiliated_party_id: party.id,
       affiliated_party: party.name,
-      lead_creator: emailFromName(name),
+      lead_creator: pickRandom(RM_LEAD_CREATOR_EMAILS),
       tasks: generateRandomTasks(),
       lead_score: parseFloat((Math.random() * 65 + 30).toFixed(2)),
       lead_source: leadSources[Math.floor(Math.random() * leadSources.length)],
