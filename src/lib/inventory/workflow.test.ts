@@ -5,6 +5,7 @@ import {
   getInventoryWorkflowButtons,
   inventoryRequesterIdFromRecord,
   isInventoryApproverActor,
+  isInventoryOpsEditorRole,
   isInventoryProcurementRole,
   isInventoryRequestRowRequester,
   isInventoryTeamLeadRole,
@@ -80,6 +81,15 @@ describe('inventory Approve/Reject for team lead and PM', () => {
         isRequester: true,
       })
     ).toBe(false);
+  });
+
+  it('TL and PM remain ops editors on requests they created (tracking/edits)', () => {
+    expect(isInventoryOpsEditorRole('Team Lead', 'team_lead_unmannd')).toBe(true);
+    expect(isInventoryOpsEditorRole('Procurement Manager', 'pm')).toBe(true);
+    expect(isInventoryOpsEditorRole('Engineer', 'AGENT')).toBe(false);
+    // After approval, requestor edit is locked — ops roles still count as editors.
+    expect(canRequesterEditInventoryRequest('VENDOR_IDENTIFIED')).toBe(false);
+    expect(canRequesterEditInventoryRequest('IN_SHIPPING')).toBe(false);
   });
 
   it('assigned team_lead on record can Approve', () => {
