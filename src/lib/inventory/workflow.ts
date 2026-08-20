@@ -19,7 +19,9 @@
  * Rules:
  * - Team lead can Approve/Reject, including on requests they created.
  * - PM can Approve/Reject other people's requests, but NOT their own
- *   (on their own request they are treated like a requestor).
+ *   (on their own request they are treated like a requestor for Approve).
+ * - Team lead and PM may still edit tracking / ops fields on requests they
+ *   created after approval (they are ops editors, not locked requestors).
  * - The requestor always gets Verify on REQ_TO_VERIFY (even if they also have
  *   a team-lead / PM role).
  * - After “Send to requestor to verify”, team lead/PM keep Approve / Reject /
@@ -171,6 +173,21 @@ export function isAssignedInventoryManager(
 /** True when status is still pending approval (requestor may edit). */
 export function canRequesterEditInventoryRequest(status: unknown): boolean {
   return INVENTORY_REQUESTER_EDITABLE_STATUSES.has(normalizeStatus(status));
+}
+
+/**
+ * Team lead / procurement / manager — may keep editing (including tracking)
+ * after approval, even on requests they created themselves.
+ * Matches backend `_reject_requester_edit_if_locked` TL/PM bypass.
+ */
+export function isInventoryOpsEditorRole(
+  roleNameOrKey?: string | null,
+  roleKey?: string | null
+): boolean {
+  const roles = [roleNameOrKey, roleKey];
+  return roles.some(
+    (r) => isInventoryTeamLeadRole(r) || isInventoryProcurementRole(r)
+  );
 }
 
 /** Requester id from a CRM record (data.requester_id, row, or created_by). */

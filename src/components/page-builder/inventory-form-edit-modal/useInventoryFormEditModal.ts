@@ -35,6 +35,7 @@ import {
   filterDuplicateInventoryWorkflowButtons,
   getInventoryWorkflowButtons,
   inventoryRequesterIdFromRecord,
+  isInventoryOpsEditorRole,
   isInventoryRequestRowRequester,
   INVENTORY_REQUESTER_EDITABLE_FORM_KEYS,
 } from '@/lib/inventory/workflow';
@@ -142,8 +143,11 @@ export function useInventoryFormEditModal({
     (record as { status?: unknown } | null)?.status;
   const requesterMayEdit =
     isRequester && canRequesterEditInventoryRequest(requestStatusForEdit);
-  /** Requestors can edit fields until the request is approved. */
-  const canEditFields = canUpdate && (!isRequester || requesterMayEdit);
+  /** TL / PM may edit (incl. tracking) even on requests they created after approval. */
+  const isOpsEditor = isInventoryOpsEditorRole(myRoleName, myRoleKey);
+  /** Requestors can edit fields until approved; TL/PM keep edit access. */
+  const canEditFields =
+    canUpdate && (!isRequester || requesterMayEdit || isOpsEditor);
   const isPaymentModal = Boolean(paymentButtonConfig);
   const hasPriceFieldInForm = formModalFields.some((f) => PRICE_KEYS.has(f.key));
   const effectiveShowFinalPrice = showFinalPriceSection !== false && !isRequester;
@@ -1245,12 +1249,13 @@ export function useInventoryFormEditModal({
     : formModalFields;
   const hasEditableField = effectiveFormModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
-  // Requestors get Save only while the request is still pending approval.
-  const effectiveShowSaveButton = isRequester
-    ? requesterMayEdit
-    : showSaveButton !== undefined
-      ? showSaveButton
-      : !hasActionButtons;
+  // Requestors get Save only while pending approval; TL/PM keep Save for tracking/ops edits.
+  const effectiveShowSaveButton =
+    isRequester && !isOpsEditor
+      ? requesterMayEdit
+      : showSaveButton !== undefined
+        ? showSaveButton
+        : !hasActionButtons;
 
   const finalPriceDisplayValue = (() => {
     const data = record?.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : {};
