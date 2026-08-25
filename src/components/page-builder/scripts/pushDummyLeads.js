@@ -156,10 +156,20 @@ function generateRandomLead() {
         { id: "102344", name: "Congress Party Karnataka" },
       ],
     },
+    {
+      state_id: "113197",
+      districts: [
+        "115813", "115987", "116207", "116327", "116527", "116694", "116873",
+        "117051", "117252", "117472", "117714", "117835", "118031", "118388",
+      ],
+      parties: [],
+    },
   ];
   const geo = circleGeo[Math.floor(Math.random() * circleGeo.length)];
   const districtId = geo.districts[Math.floor(Math.random() * geo.districts.length)];
-  const party = geo.parties[Math.floor(Math.random() * geo.parties.length)];
+  const party = geo.parties.length
+    ? geo.parties[Math.floor(Math.random() * geo.parties.length)]
+    : null;
   const leadCreator = `${firstName}.${lastName}`
     .toLowerCase()
     .replace(/[^a-z0-9.]+/g, '.')
@@ -185,8 +195,9 @@ function generateRandomLead() {
       whatsapp_link: `https://wa.me/${phoneNoClean}`,
       state_id: geo.state_id,
       district_id: districtId,
-      affiliated_party_id: party.id,
-      affiliated_party: party.name,
+      ...(party
+        ? { affiliated_party_id: party.id, affiliated_party: party.name }
+        : {}),
       lead_creator: leadCreator,
       user_profile_link: `https://www.thecircleapp.in/admin/users/${userSlug}`,
       display_pic_url: "https://a-cdn.thecircleapp.in/capture/01K4QKP9EAD7SBB794NBY1MQ94.png",
