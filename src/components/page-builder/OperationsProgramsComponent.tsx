@@ -227,6 +227,27 @@ const CIRCLE_GEO: {
       { id: '102347', name: 'Janata Dal (Secular) Karnataka' },
     ],
   },
+  {
+    state_id: '113197',
+    state: 'Keralam',
+    districts: [
+      { id: '115813', name: 'Alappuzha' },
+      { id: '115987', name: 'Ernakulam' },
+      { id: '116207', name: 'Idukki' },
+      { id: '116327', name: 'Kannur' },
+      { id: '116527', name: 'Kasaragod' },
+      { id: '116694', name: 'Kollam' },
+      { id: '116873', name: 'Kottayam' },
+      { id: '117051', name: 'Kozhikode' },
+      { id: '117252', name: 'Malappuram' },
+      { id: '117472', name: 'Palakkad' },
+      { id: '117714', name: 'Pathanamthitta' },
+      { id: '117835', name: 'Thiruvananthapuram' },
+      { id: '118031', name: 'Thrissur' },
+      { id: '118388', name: 'Wayanad' },
+    ],
+    parties: [],
+  },
 ];
 
 function pickRandom<T>(items: T[]): T {
@@ -365,7 +386,7 @@ function generateRandomLead(): Record<string, unknown> {
   const randomId = String(Math.floor(Math.random() * 9000000) + 1000000);
   const geo = pickRandom(CIRCLE_GEO);
   const district = pickRandom(geo.districts);
-  const party = pickRandom(geo.parties);
+  const party = geo.parties.length ? pickRandom(geo.parties) : null;
 
   return {
     entity_type: 'lead',
@@ -375,8 +396,9 @@ function generateRandomLead(): Record<string, unknown> {
       name,
       state_id: geo.state_id,
       district_id: district.id,
-      affiliated_party_id: party.id,
-      affiliated_party: party.name,
+      ...(party
+        ? { affiliated_party_id: party.id, affiliated_party: party.name }
+        : {}),
       lead_creator: pickRandom(RM_LEAD_CREATOR_EMAILS),
       tasks: generateRandomTasks(),
       lead_score: parseFloat((Math.random() * 65 + 30).toFixed(2)),
@@ -404,7 +426,7 @@ function generateRandomSupportTicket(tenantId: string): Record<string, unknown> 
   const userId = String(Math.floor(Math.random() * 9000000) + 1000000);
   const prajaUserSlug = Math.random().toString(36).substring(2, 10);
 
-  const states = ['Andhra Pradesh', 'Karnataka', 'Tamil Nadu', 'Telangana'];
+  const states = ['Andhra Pradesh', 'Karnataka', 'Keralam', 'Tamil Nadu', 'Telangana'];
   const reasons = ['Others', 'Badge Change', 'Feature Request', 'Refund Issued', 'Subscription Information', 'Layout Feedback'];
   const sources = ['Drawer', 'Webhook', 'Manual', 'App'];
   const layoutStatuses = ['Layout created', 'No Layout', 'Layout Pending'];
