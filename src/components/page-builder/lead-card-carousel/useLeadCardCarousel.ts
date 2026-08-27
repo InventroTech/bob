@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSpoofUserId } from "@/lib/auth/spoof";
 import { groupsApi } from '@/lib/api/services/userSettings';
 import { crmLeadsApi } from '@/lib/api/services/crmLeads';
-import { useRecordUpdated } from "@/hooks/useRecordUpdated";
+import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from "@/hooks/useRecordUpdated";
 import type {
   LeadCardCarouselHandle,
   LeadCardCarouselProps,
@@ -142,6 +142,7 @@ export function useLeadCardCarousel(
     handleNotInterestedClick: () => void;
     handleOpenCallBackDialog: () => void;
   } | null>(null);
+  const pendingDashRefreshTimerRef = useRef<number | null>(null);
 
 
 
@@ -375,11 +376,13 @@ export function useLeadCardCarousel(
     }
   }, []);
 
-  const refreshPendingDashboard = useCallback(async () => {
+  const refreshPendingDashboard = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!session) return;
     if (!activeUserId) return;
 
-    setPendingDash((prev) => ({ ...prev, loading: true }));
+    if (!opts?.quiet) {
+      setPendingDash((prev) => ({ ...prev, loading: true }));
+    }
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -1118,7 +1121,13 @@ export function useLeadCardCarousel(
     if (!showPendingCard || !session) return;
     void refreshPendingDashboard();
     const interval = window.setInterval(() => void refreshPendingDashboard(), 120_000);
-    return () => clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+      if (pendingDashRefreshTimerRef.current != null) {
+        window.clearTimeout(pendingDashRefreshTimerRef.current);
+        pendingDashRefreshTimerRef.current = null;
+      }
+    };
   }, [showPendingCard, session, refreshPendingDashboard]);
 
   useRecordUpdated(
@@ -1162,7 +1171,13 @@ export function useLeadCardCarousel(
           return;
         }
         if (showPendingCard) {
-          void refreshPendingDashboard();
+          if (pendingDashRefreshTimerRef.current != null) {
+            window.clearTimeout(pendingDashRefreshTimerRef.current);
+          }
+          pendingDashRefreshTimerRef.current = window.setTimeout(() => {
+            pendingDashRefreshTimerRef.current = null;
+            void refreshPendingDashboard({ quiet: true });
+          }, REALTIME_LIST_DEBOUNCE_MS);
         }
       },
       [currentLead, showPendingCard, fetchFreshLeadForCard, refreshPendingDashboard],
