@@ -37,7 +37,6 @@ const navigationIconMap: Record<string, JSX.Element> = {
     "all support tickets": <Layers className="h-4 w-4" />,
     "settings": <Settings className="h-4 w-4" />,
     "notifications": <Bell className="h-4 w-4" />,
-    // Legacy mappings for backwards compatibility
     "pending leads": <Sparkles className="h-4 w-4" />,
     "all leads": <Users className="h-4 w-4" />,
     "follow up leads": <FollowUpIcon />,
@@ -52,36 +51,26 @@ const DynamicSidebarIcon = ({
   iconName: string;
   customIcons?: CustomIconRow[];
 }) => {
-  
-  // 1. Check if it's an uploaded custom icon from the database
   const uploadedIcon = customIcons.find(icon => icon.name.toLowerCase() === iconName.toLowerCase());
   
   if (uploadedIcon) {
     return (
       <div 
-        className="h-4 w-4 flex items-center justify-center 
-                   /* 1. Force the SVG to fit the exact 16x16px box */
-                   [&>svg]:h-4 [&>svg]:w-4 
-                   /* 2. Force the internal SVG colors to follow the text color (currentColor) */
-                   [&>svg]:fill-current [&>svg_path]:fill-current [&>svg_circle]:fill-current" 
+        className="h-4 w-4 flex items-center justify-center [&>svg]:h-4 [&>svg]:w-4 [&>svg]:fill-current [&>svg_path]:fill-current [&>svg_circle]:fill-current" 
         dangerouslySetInnerHTML={{ __html: uploadedIcon.svg_content }} 
       />
     );
   }
 
-  // 2. Check if it's one of your new custom Figma icons
   const FigmaIcon = CustomIcons[iconName];
   if (FigmaIcon) return <FigmaIcon className="h-4 w-4" />;
 
-  // 3. Check if it's a custom icon from your manual navigation map
   const CustomMapIcon = navigationIconMap[iconName.toLowerCase()];
   if (CustomMapIcon) return <div className="h-4 w-4 flex items-center justify-center">{CustomMapIcon}</div>;
 
-  // 4. Check if it's a standard Lucide icon name from the library
   const LucideIcon = (icons as any)[iconName];
   if (LucideIcon) return <LucideIcon className="h-4 w-4" />;
 
-  // 5. Final Fallback
   return <Sparkles className="h-4 w-4" />;
 };
 
@@ -134,7 +123,6 @@ const CustomAppLayout: React.FC = () => {
     collapsed: 96,
   };
 
-  // Expose sidebar offset for global overlays (e.g. Sparky on Unmannd top-left).
   useEffect(() => {
     const widthPx = isMobile
       ? 0
@@ -158,9 +146,7 @@ const CustomAppLayout: React.FC = () => {
 
   const dataExtractedRef = useRef(false);
 
-  // Resolve tenant/role from JWT (spoof token when spoofing)
   useEffect(() => {
-    // Reset ref when user changes (e.g., on logout/login)
     if (!user) {
       dataExtractedRef.current = false;
       setTenantId(null);
@@ -169,30 +155,22 @@ const CustomAppLayout: React.FC = () => {
     }
 
     const extractUserDataFromJWT = async () => {
-      // Prevent redundant extraction when user object changes (e.g., on page focus)
       if (dataExtractedRef.current && tenantId && userRoleId) {
         return;
       }
 
       const token = await getEffectiveToken(session?.access_token ?? null);
-      if (!token) {
-        console.error('No session found');
-        return;
-      }
+      if (!token) return;
 
-      // Extract tenant_id and role_id from JWT token (spoof or real)
       const extractedTenantId = getTenantIdFromJWT(token);
       const extractedRoleId = getRoleIdFromJWT(token);
 
       if (extractedTenantId && extractedRoleId) {
-        console.log('Extracted from JWT - tenantId:', extractedTenantId, 'roleId:', extractedRoleId);
         setTenantId(extractedTenantId);
         setUserRoleId(extractedRoleId);
         localStorage.setItem('tenant_id', extractedTenantId);
         dataExtractedRef.current = true;
       } else {
-        console.warn('Could not extract tenant_id or role_id from JWT');
-        // Fallback: try to get from localStorage if available
         const cachedTenantId = localStorage.getItem('tenant_id');
         if (cachedTenantId) {
           setTenantId(cachedTenantId);
@@ -203,7 +181,6 @@ const CustomAppLayout: React.FC = () => {
     extractUserDataFromJWT();
   }, [user, session?.access_token, spoofVersion]);
 
-  // Re-extract and update UI when spoof state changes (same tab or other tab)
   useEffect(() => {
     const onStorageChange = (e: StorageEvent) => {
       if (e.key === SPOOF_JWT_KEY || e.key === SPOOF_LABEL_KEY) {
@@ -225,7 +202,6 @@ const CustomAppLayout: React.FC = () => {
     };
   }, []);
 
-  // Step 2: Fetch pages AND custom icons
   useEffect(() => {
     const fetchPagesAndIcons = async () => {
       if (!tenantId || !userRoleId) return;
@@ -238,16 +214,14 @@ const CustomAppLayout: React.FC = () => {
       }
 
       const token = await getEffectiveToken(session?.access_token ?? null);
-
       const spoofToken =
         typeof window !== 'undefined' ? window.localStorage.getItem(SPOOF_JWT_KEY) : null;
+      
       if (spoofToken && token) {
-        // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
         try {
           const pagesData = await fetchPagesForRole(tenantId, userRoleId, token);
           setPages(pagesData || []);
         } catch (err) {
-          console.error('Pages fetch error (spoof):', err);
           toast.error('Failed to load pages');
           setPages([]);
         }
@@ -264,13 +238,6 @@ const CustomAppLayout: React.FC = () => {
 
       if (error) {
         toast.error('Failed to load pages');
-        const pg = error as { message?: string; code?: string; details?: string; hint?: string };
-        console.error(
-          'Pages fetch error:',
-          pg.message ?? 'unknown',
-          pg.code ? `code=${pg.code}` : '',
-          pg.details || pg.hint || ''
-        );
       } else {
         setPages(pagesData || []);
       }
@@ -292,8 +259,6 @@ const CustomAppLayout: React.FC = () => {
     }
   };
 
-  // Unmannd / procurement apps: navy active nav to match procurement table headers.
-  // CRM tenants (e.g. praja) keep black.
   const isUnmanndApp = (() => {
     const slug = String(tenantSlug || '').toLowerCase();
     if (/unman+d/.test(slug)) return true;
@@ -303,17 +268,13 @@ const CustomAppLayout: React.FC = () => {
     );
     return requestPages.length >= 2;
   })();
-  const activeNavClass = isUnmanndApp
-    ? 'bg-[#1A3673] text-white'
-    : 'bg-black text-white';
-  const activeNavClassMobile = isUnmanndApp
-    ? 'bg-[#1A3673] text-white shadow-sm'
-    : 'bg-black text-white shadow-sm';
+  const activeNavClass = isUnmanndApp ? 'bg-[#1A3673] text-white' : 'bg-black text-white';
+  const activeNavClassMobile = isUnmanndApp ? 'bg-[#1A3673] text-white shadow-sm' : 'bg-black text-white shadow-sm';
   const brandLogoSrc = isUnmanndApp ? '/pyro-ai-logo.png' : '/fire-logo.png';
   const brandLogoAlt = isUnmanndApp ? 'Pyro.ai' : 'Pyro';
   const navItemPad = isUnmanndApp
-    ? { collapsed: 'justify-center px-0 py-1.5', expanded: 'gap-2.5 px-2.5 py-1.5' }
-    : { collapsed: 'justify-center px-0 py-2', expanded: 'gap-3 px-3 py-2' };
+    ? { collapsed: 'justify-center px-0 py-1', expanded: 'gap-2 px-2 py-1' }
+    : { collapsed: 'justify-center px-0 py-1', expanded: 'gap-2 px-2 py-1' };
 
   const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
     <>
@@ -323,7 +284,7 @@ const CustomAppLayout: React.FC = () => {
           to={`/app/${tenantSlug}/pages/${page.id}`}
           onClick={opts.onNavigate}
           className={({ isActive }) =>
-            `flex items-center rounded-xl text-sm font-medium transition ${
+            `flex items-center rounded-lg text-xs font-medium transition ${
               opts.collapsed ? navItemPad.collapsed : navItemPad.expanded
             } ${
               isMobile
@@ -355,15 +316,9 @@ const CustomAppLayout: React.FC = () => {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      // Use the centralized logout function
       await logout();
-      
-      // Close the logout dropdown
       setLogoutOpen(false);
-      
-      // Navigate to login page
       navigate(`/app/${tenantSlug}/login`);
-      
     } catch (error) {
       console.error('Logout navigation error:', error);
     } finally {
@@ -384,94 +339,98 @@ const CustomAppLayout: React.FC = () => {
         ['--sidebar-width' as string]: `${sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded}px`
       }}
     >
-      {isMobile ? (
-        <>
-          <header className="fixed left-0 right-0 top-0 z-50 flex h-14 items-center justify-between bg-black px-3 text-white">
+      {/* Mobile Header */}
+      <header className="md:hidden fixed left-0 right-0 top-0 z-50 flex h-12 items-center justify-between bg-black px-3 text-white">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <img src={brandLogoSrc} alt={brandLogoAlt} className="h-6 object-contain" />
+        <div className="w-8" />
+      </header>
+
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="flex w-[min(100vw-2rem,280px)] flex-col bg-white p-0 h-full max-h-screen overflow-hidden">
+          <div className="flex items-center gap-2 border-b px-3 py-2 shrink-0">
             <button
               type="button"
-              onClick={() => setMobileNavOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg"
-              aria-label="Open menu"
+              onClick={() => setMobileNavOpen(false)}
+              className="flex h-7 w-7 items-center justify-center rounded-md border"
+              aria-label="Close menu"
             >
-              <Menu className="h-6 w-6" />
+              <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            <img src={brandLogoSrc} alt={brandLogoAlt} className="h-8 object-contain" />
-            <div className="w-10" />
-          </header>
-          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-            <SheetContent side="left" className="flex w-[min(100vw-2rem,320px)] flex-col bg-white p-0">
-              <div className="flex items-center gap-2 border-b px-4 py-4">
-                <button
-                  type="button"
-                  onClick={() => setMobileNavOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border"
-                  aria-label="Close menu"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <img src={brandLogoSrc} alt={brandLogoAlt} className="h-8 object-contain" />
-              </div>
-              <nav
-                className={`flex-1 overflow-y-auto p-3 ${isUnmanndApp ? 'space-y-1' : 'space-y-2'}`}
-              >
-                {renderNavLinks({ collapsed: false, onNavigate: () => setMobileNavOpen(false) })}
-              </nav>
-              <div className={`border-t p-3 ${isUnmanndApp ? 'space-y-1.5' : 'space-y-2'}`}>
-                <SparkySidebarButton
-                  placePanelAway
-                  onToggle={() => setMobileNavOpen(false)}
+            <img src={brandLogoSrc} alt={brandLogoAlt} className="h-5 object-contain" />
+          </div>
+          
+          {/* 1st Panel: Scrollable container for dynamic pages */}
+          <nav
+            className={`flex-1 overflow-y-auto min-h-0 p-2 space-y-1`}
+          >
+            {renderNavLinks({ collapsed: false, onNavigate: () => setMobileNavOpen(false) })}
+          </nav>
+
+          {/* 2nd Panel: Ultra-compact fixed footer container */}
+          <div className={`border-t px-2 py-1 shrink-0 bg-white space-y-1`}>
+            <SparkySidebarButton
+              placePanelAway
+              onToggle={() => setMobileNavOpen(false)}
+            />
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700"
+            >
+              <Bell className="h-3 w-3" />
+              Notifications
+            </button>
+            <div className="flex items-center justify-between px-1 py-0.5">
+              <div className="flex items-center gap-2 truncate">
+                <img
+                  src={profileImage || '/default-avatar.png'}
+                  alt={profileName}
+                  className="h-6 w-6 rounded-full object-cover shrink-0"
                 />
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
-                >
-                  <Bell className="h-4 w-4" />
-                  Notifications
-                </button>
-                <div className="flex items-center gap-3 rounded-xl px-3 py-2">
-                  <img
-                    src={profileImage || '/default-avatar.png'}
-                    alt={profileName}
-                    className="h-10 w-10 rounded-full object-cover"
-                  />
-                  <p className="truncate text-sm font-semibold text-gray-900">{profileName}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileNavOpen(false);
-                    void handleLogout();
-                  }}
-                  disabled={isLoggingOut}
-                  className="flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium text-gray-600"
-                >
-                  <LogOut className="h-4 w-4" />
-                  {isLoggingOut ? 'Logging out...' : 'Logout'}
-                </button>
+                <p className="truncate text-xs font-semibold text-gray-900">{profileName}</p>
               </div>
-            </SheetContent>
-          </Sheet>
-        </>
-      ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  void handleLogout();
+                }}
+                disabled={isLoggingOut}
+                className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-gray-600 shrink-0 hover:bg-gray-50"
+              >
+                <LogOut className="h-3 w-3" />
+                <span>{isLoggingOut ? '...' : 'Logout'}</span>
+              </button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Desktop sidebar */}
       <div
-        className={`fixed left-0 top-0 h-full bg-white transition-all duration-200 ${isMobile ? 'hidden' : ''}`}
+        className={`hidden md:block fixed left-0 top-0 h-full bg-white transition-all duration-200`}
         style={{ width: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
             <div
               className={`flex items-center flex-shrink-0 w-full ${
-                sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'
-              } ${isUnmanndApp ? 'pt-3 pb-2' : 'pt-6 pb-4'}`}
+                sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'
+              } pt-2.5 pb-1.5`}
             >
             {sidebarCollapsed ? (
               <button
                 onClick={() => setSidebarCollapsed(false)}
-                className="flex h-8 w-8 items-center justify-center transition hover:bg-gray-100 cursor-pointer rounded-lg"
+                className="flex h-7 w-7 items-center justify-center transition hover:bg-gray-100 cursor-pointer rounded-md"
                 aria-label="Expand sidebar"
               >
-                <img src="/menu_close.svg" alt="Menu" className="h-5 w-5" />
+                <img src="/menu_close.svg" alt="Menu" className="h-4 w-4" />
               </button>
             ) : (
               <>
@@ -479,23 +438,23 @@ const CustomAppLayout: React.FC = () => {
                   <img
                     src={brandLogoSrc}
                     alt={brandLogoAlt}
-                    className={`h-auto w-auto object-contain ${isUnmanndApp ? 'max-h-9' : 'max-h-12'}`}
+                    className="h-7 w-auto object-contain"
                   />
                 </div>
                 <button
                   onClick={() => setSidebarCollapsed(true)}
-                  className="flex h-8 w-8 items-center justify-center transition hover:bg-gray-100 cursor-pointer rounded-lg"
+                  className="flex h-7 w-7 items-center justify-center transition hover:bg-gray-100 cursor-pointer rounded-md"
                   aria-label="Collapse sidebar"
                 >
-                  <img src="/menu_open.svg" alt="Close Menu" className="h-5 w-5" />
+                  <img src="/menu_open.svg" alt="Close Menu" className="h-4 w-4" />
                 </button>
               </>
             )}
           </div>
 
           <nav
-            className={`flex-1 overflow-y-auto ${isUnmanndApp ? 'space-y-1 py-1' : 'space-y-2 py-2'} ${
-              sidebarCollapsed ? 'px-2' : 'px-3'
+            className={`flex-1 overflow-y-auto min-h-0 space-y-1 py-1 ${
+              sidebarCollapsed ? 'px-1' : 'px-2'
             }`}
           >
             {pages.map((page) => (
@@ -503,9 +462,9 @@ const CustomAppLayout: React.FC = () => {
                 key={page.id}
                 to={`/app/${tenantSlug}/pages/${page.id}`}
                 className={({ isActive }) =>
-                  `flex items-center rounded-xl ${
+                  `flex items-center rounded-lg ${
                     sidebarCollapsed ? navItemPad.collapsed : navItemPad.expanded
-                  } text-sm font-medium transition ${
+                  } text-xs font-medium transition ${
                     isActive
                       ? activeNavClass
                       : 'text-gray-700 hover:bg-gray-50'
@@ -514,8 +473,7 @@ const CustomAppLayout: React.FC = () => {
               >
                 {({ isActive }) => (
                   <>
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-white' : 'bg-transparent text-gray-600'}`}>
-                      {/* Call the helper with the icon_name from your database */}
+                    <div className={`flex h-7 w-7 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-white' : 'bg-transparent text-gray-600'}`}>
                       <DynamicSidebarIcon iconName={page.icon_name} customIcons={customIcons} />
                     </div>
                     {!sidebarCollapsed && <span>{page.name}</span>}
@@ -526,41 +484,41 @@ const CustomAppLayout: React.FC = () => {
           </nav>
 
           <div
-            className={`flex-shrink-0 bg-white border-t ${
-              isUnmanndApp ? 'py-2.5 space-y-2' : 'py-4 space-y-3'
-            } ${sidebarCollapsed ? 'px-2' : 'px-3'}`}
+            className={`flex-shrink-0 bg-white border-t py-1.5 space-y-1 ${
+              sidebarCollapsed ? 'px-1' : 'px-2'
+            }`}
           >
             <SparkySidebarButton collapsed={sidebarCollapsed} />
-            <button className={`flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-                <Bell className="h-4 w-4" />
+            <button className={`flex w-full items-center rounded-lg px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50 ${sidebarCollapsed ? 'justify-center' : 'gap-2'}`}>
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+                <Bell className="h-3 w-3" />
               </div>
               {!sidebarCollapsed && <span>Notifications</span>}
             </button>
 
-            <div className={`border-t space-y-2 ${isUnmanndApp ? 'pt-2.5' : 'pt-4'}`}>
-              <div className={`flex items-center rounded-xl px-3 py-2 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+            <div className="border-t pt-1 space-y-1">
+              <div className={`flex items-center rounded-lg px-1.5 py-0.5 ${sidebarCollapsed ? 'justify-center' : 'gap-2'}`}>
               {sidebarCollapsed ? (
                 <img
                   src={profileImage || '/default-avatar.png'}
                   alt={profileName}
-                  className={`${isUnmanndApp ? 'h-8 w-8' : 'h-10 w-10'} rounded-full object-cover`}
+                  className="h-6 w-6 rounded-full object-cover"
                 />
               ) : (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 truncate flex-1">
                   <img
                     src={profileImage || '/default-avatar.png'}
                     alt={profileName}
-                    className={`${isUnmanndApp ? 'h-8 w-8' : 'h-10 w-10'} rounded-full object-cover`}
+                    className="h-6 w-6 rounded-full object-cover shrink-0"
                   />
-                  <p className="text-sm font-semibold text-gray-900">{profileName}</p>
+                  <p className="text-xs font-semibold text-gray-900 truncate">{profileName}</p>
                 </div>
               )}
             </div>
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium transition ${
+              className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1 text-xs font-medium transition ${
                 sidebarCollapsed 
                   ? 'justify-center' 
                   : ''
@@ -570,12 +528,8 @@ const CustomAppLayout: React.FC = () => {
                   : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50'
               }`}
             >
-              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                isLoggingOut 
-                  ? 'bg-gray-100 text-gray-500' 
-                  : 'bg-gray-100 text-gray-500'
-              }`}>
-                <LogOut className="h-4 w-4" />
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-500 shrink-0">
+                <LogOut className="h-3 w-3" />
               </div>
               {!sidebarCollapsed && (
                 <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
@@ -586,14 +540,13 @@ const CustomAppLayout: React.FC = () => {
         </aside>
       </div>
 
-      {/* Main Content — sidebar is fixed, so width must subtract its offset (margin alone overflows). */}
       <main
         className="min-w-0 h-full overflow-x-auto overflow-y-auto bg-white transition-all duration-200"
         style={{
           marginLeft: mainMarginLeft,
           width: `calc(100% - ${mainMarginLeft}px)`,
           maxWidth: `calc(100% - ${mainMarginLeft}px)`,
-          paddingTop: isMobile ? 56 : 0,
+          paddingTop: isMobile ? 48 : 0,
         }}
       >
         {spoofBannerVisible && spoofLabel && (
@@ -611,7 +564,7 @@ const CustomAppLayout: React.FC = () => {
           </div>
         )}
         <div
-          className={isUnmanndApp ? 'h-full min-h-0 w-full' : 'min-h-screen w-full'}
+          className="h-full w-full"
           style={
             isUnmanndApp
               ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
