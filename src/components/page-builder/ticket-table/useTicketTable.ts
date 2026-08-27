@@ -100,13 +100,12 @@ export function useTicketTable({ config }: TicketTableProps) {
       
       const params = new URLSearchParams();
       
-      // Properly map dynamic filter parameters, handling both exact key and __in lookups for multiselects
+      // Clean query parameter mapping without dual params/special lookup suffixes
       Object.entries(dynamicFilterValues).forEach(([key, val]) => {
         if (val !== undefined && val !== null && val !== '') {
           if (Array.isArray(val)) {
             val.forEach(item => {
               params.append(key, String(item));
-              params.append(`${key}__in`, String(item));
             });
           } else {
             params.append(key, String(val));
@@ -431,7 +430,6 @@ export function useTicketTable({ config }: TicketTableProps) {
           if (Array.isArray(val)) {
             val.forEach(item => {
               params.append(key, String(item));
-              params.append(`${key}__in`, String(item));
             });
           } else {
             params.append(key, String(val));

@@ -52,14 +52,6 @@ export function TicketTableView(props: TicketTableModel) {
 
   const [selectSearchTerms, setSelectSearchTerms] = useState<Record<string, string>>({});
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-gray-600">Loading tickets data...</div>
-      </div>
-    );
-  }
-
   // Purely dynamic filters driven from Page Builder config schema
   const configuredFilters = config?.filters || [];
 
@@ -337,12 +329,12 @@ export function TicketTableView(props: TicketTableModel) {
 
         {/* Table Section */}
         <div className="w-full relative">
-          {(tableLoading || searchLoading) && (
-            <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+          {(loading || tableLoading || searchLoading) && (
+            <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10 rounded-lg min-h-[200px]">
               <div className="flex flex-col items-center space-y-2">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 <span className="text-gray-600 font-medium">
-                  {searchLoading ? 'Searching through all tickets...' : 'Loading...'}
+                  {loading ? 'Loading tickets data...' : searchLoading ? 'Searching through all tickets...' : 'Loading...'}
                 </span>
               </div>
             </div>
