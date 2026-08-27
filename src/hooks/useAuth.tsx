@@ -6,7 +6,9 @@ import { toast } from 'sonner';
 import { setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider';
 import {
+  clearRefreshSuppression,
   consumeSignedOutReason,
+  markExpectingSignedOut,
   refreshAccessToken,
   signOutAndClearSession,
 } from '@/lib/auth/authSessionService';
@@ -58,6 +60,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(async () => {
     try {
       console.log('Starting logout process...');
+      // Suppress refresh before clearing local state so an in-flight refresh cannot restore the session.
+      markExpectingSignedOut('intentional');
       clearLocalAuthCaches();
       clearAccessToken();
       clearSentryUser();
@@ -79,6 +83,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       .getSession()
       .then(({ data: { session } }) => {
         if (cancelled) return;
+        if (session?.access_token) {
+          clearRefreshSuppression();
+        }
         setSession(session);
         setAccessToken(session?.access_token ?? null);
         const u = session?.user ?? null;
@@ -136,6 +143,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           toast.error('Your session has expired. Please login again.');
           navigate(loginUrl, { replace: true });
           return;
+        }
+
+        // Re-enable token refresh after a real sign-in (not a late refresh racing logout).
+        if (event === 'SIGNED_IN' && session?.access_token) {
+          clearRefreshSuppression();
         }
 
         setSession(session);
