@@ -120,6 +120,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
+  const latestSearchValueRef = useRef<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const listFetchInFlightRef = useRef(false);
@@ -1274,7 +1275,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     options?: { silent?: boolean; keepPage?: boolean },
   ) => {
     const silent = options?.silent === true;
-    if (silent && listFetchInFlightRef.current) {
+    if (silent && (listFetchInFlightRef.current || searchTimeoutRef.current)) {
       return;
     }
 
@@ -1306,11 +1307,18 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         ? String(paginationRef.current.currentPage || 1)
         : '1';
       const pageSize = String(paginationRef.current.pageSize || 10);
+      const currentSearch = (latestSearchValueRef.current || searchTerm).trim();
 
       if (queryParams) {
         params = queryParams;
       } else if (hasActiveFilters) {
-        params = filterService!.generateQueryParams(filterState.values);
+        const filterValues = { ...filterState.values };
+        if (currentSearch) {
+          filterValues.search = currentSearch;
+        } else {
+          delete filterValues.search;
+        }
+        params = filterService!.generateQueryParams(filterValues);
         // Add pagination parameters for both systems
         params.append('page', page);
         params.append('page_size', pageSize);
@@ -1355,8 +1363,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         }
 
         // Include search and search_fields even when dynamic filters are not configured
-        if (searchTerm && searchTerm.trim() !== '') {
-          params.append('search', searchTerm.trim());
+        if (currentSearch) {
+          params.append('search', currentSearch);
           if (config?.searchFields) {
             params.append('search_fields', config.searchFields);
           }
@@ -1530,8 +1538,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
   };
 
-  // Store the latest search value
-  const latestSearchValueRef = useRef<string>('');
   const lastApiCallTimeRef = useRef<number>(0);
   const MIN_TIME_BETWEEN_CALLS = 1000;
 
@@ -1549,6 +1555,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
 
     searchTimeoutRef.current = setTimeout(() => {
+      searchTimeoutRef.current = null;
       const finalSearchValue = latestSearchValueRef.current;
       const now = Date.now();
       const timeSinceLastCall = now - lastApiCallTimeRef.current;
@@ -1619,6 +1626,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   useRecordUpdated(
     () => {
       if (!session?.access_token) return;
+      if (searchTimeoutRef.current) return;
       void fetchFilteredData(undefined, undefined, { silent: true, keepPage: true });
     },
     {
