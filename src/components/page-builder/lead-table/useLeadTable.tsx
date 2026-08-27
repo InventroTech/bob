@@ -22,7 +22,7 @@ import type { CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/utils/actionApiUtils';
 import { getEffectiveToken, useSpoofUserId } from '@/lib/auth/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
-import { formatCalendarDate } from '@/lib/utils/timeUtils';
+import { formatCalendarDate, formatTableDateShort } from '@/lib/utils/timeUtils';
 import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventory/statusStyles';
 import {
@@ -32,6 +32,7 @@ import {
   normalizeInventoryPriorityLevel,
 } from '@/lib/inventory/priority';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import type { Column, LeadTableProps, PlaceholderAdapter } from './types';
 import {
@@ -48,8 +49,22 @@ import {
 } from './utils';
 import {
   canRequesterEditInventoryRequest,
+  isInventoryOpsEditorRole,
   isInventoryRequestRowRequester,
+  INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES,
 } from '@/lib/inventory/workflow';
+import { SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
+
+/** Uniform pill sizes for All Requests priority / status / shipment chips. */
+const INVENTORY_PRIORITY_CHIP_SIZE =
+  'inline-flex h-7 w-[5rem] shrink-0 items-center justify-center rounded-full px-2 text-xs font-semibold tracking-wide overflow-hidden text-ellipsis whitespace-nowrap';
+const INVENTORY_STATUS_CHIP_SIZE =
+  'inline-flex h-7 w-[9.5rem] shrink-0 items-center justify-center rounded-full px-2.5 text-xs font-semibold tracking-wide overflow-hidden text-ellipsis whitespace-nowrap';
+
+const OPS_STATUS_OPTIONS = Array.from(INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES);
+const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
+const OPS_EDIT_BTN =
+  'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-xs font-semibold text-white hover:bg-[#163a8a] hover:text-white';
 
 export function useLeadTable({ config, pageId }: LeadTableProps) {
   const { toast } = useToast();
@@ -536,6 +551,22 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   });
   const [inlineCellDrafts, setInlineCellDrafts] = useState<Record<string, string>>({});
   const [inlineSavingCell, setInlineSavingCell] = useState<string | null>(null);
+  /** Ops (PM / TL / Admin) row-level edit of Status + Shipment. */
+  const [opsEditingRowId, setOpsEditingRowId] = useState<string | number | null>(null);
+  const [opsRowDrafts, setOpsRowDrafts] = useState<
+    Record<string, { status: string; shipment_status: string }>
+  >({});
+  const [opsRowSavingId, setOpsRowSavingId] = useState<string | number | null>(null);
+
+  const canOpsInlineEditStatusShipment = useMemo(
+    () =>
+      Boolean(
+        !isInPageBuilder &&
+          isInventoryRequestTable &&
+          isInventoryOpsEditorRole(customRole)
+      ),
+    [isInPageBuilder, isInventoryRequestTable, customRole]
+  );
 
   const canInlineEditRows = useMemo(() => {
     return Boolean(
@@ -663,17 +694,114 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return canRequesterEditInventoryRequest(status);
   }, [isInventoryRequestTable, activeUserId, membershipId]);
 
+  const startOpsRowEdit = useCallback((row: any) => {
+    if (row?.id == null) return;
+    const status = String(row?.status ?? row?.data?.status ?? 'NEW_REQUEST').trim().toUpperCase() || 'NEW_REQUEST';
+    const rawShipment = String(row?.shipment_status ?? row?.data?.shipment_status ?? '').trim().toUpperCase();
+    const shipment_status =
+      !rawShipment || rawShipment === 'N/A' || rawShipment === '—' ? 'N/A' : rawShipment;
+    setOpsEditingRowId(row.id);
+    setOpsRowDrafts((prev) => ({
+      ...prev,
+      [String(row.id)]: { status, shipment_status },
+    }));
+  }, []);
+
+  const cancelOpsRowEdit = useCallback((rowId: string | number) => {
+    setOpsEditingRowId((cur) => (cur === rowId ? null : cur));
+    setOpsRowDrafts((prev) => {
+      const next = { ...prev };
+      delete next[String(rowId)];
+      return next;
+    });
+  }, []);
+
+  const saveOpsRowEdit = useCallback(
+    async (row: any) => {
+      if (!canOpsInlineEditStatusShipment || !row?.id || !effectiveApiEndpoint) return;
+      const draft = opsRowDrafts[String(row.id)];
+      if (!draft) return;
+      try {
+        setOpsRowSavingId(row.id);
+        const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+        const url = `${base}/${row.id}/`;
+        const existingData = (row.data as Record<string, unknown>) || {};
+        const shipmentValue =
+          draft.shipment_status === 'N/A' || draft.shipment_status === ''
+            ? ''
+            : draft.shipment_status;
+        const nextData: Record<string, unknown> = {
+          ...existingData,
+          status: draft.status,
+          shipment_status: shipmentValue,
+        };
+        const response = await apiClient.patch(url, { data: nextData });
+        const updated = response.data;
+        const updateRow = (r: any) =>
+          r.id === row.id
+            ? {
+                ...r,
+                ...updated,
+                status: draft.status,
+                shipment_status: shipmentValue || 'N/A',
+                data: updated?.data ?? nextData,
+              }
+            : r;
+        setData((prev) => prev.map(updateRow));
+        setFilteredData((prev) => prev.map(updateRow));
+        cancelOpsRowEdit(row.id);
+        toast({ title: 'Saved', description: 'Status and shipment updated.' });
+      } catch (e: any) {
+        toast({
+          title: 'Update failed',
+          description: e?.message || 'Could not save status/shipment.',
+          variant: 'destructive',
+        });
+      } finally {
+        setOpsRowSavingId((cur) => (cur === row.id ? null : cur));
+      }
+    },
+    [
+      canOpsInlineEditStatusShipment,
+      effectiveApiEndpoint,
+      opsRowDrafts,
+      cancelOpsRowEdit,
+      toast,
+    ]
+  );
+
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
     if (column.accessor === REQUESTER_EDIT_COLUMN_ACCESSOR) {
-      if (!canRequesterEditRow(row)) {
-        return <span className="text-sm text-gray-400">—</span>;
+      // Ops (PM / TL / Admin): Edit toggles inline Status/Shipment; Save commits.
+      // Others: Edit opens the request detail modal.
+      if (canOpsInlineEditStatusShipment) {
+        const isEditing = opsEditingRowId === row.id;
+        const isSaving = opsRowSavingId === row.id;
+        return (
+          <CustomButton
+            variant="default"
+            size="sm"
+            className={OPS_EDIT_BTN}
+            disabled={isSaving || (opsRowSavingId != null && !isEditing)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isEditing) {
+                void saveOpsRowEdit(row);
+              } else {
+                startOpsRowEdit(row);
+              }
+            }}
+          >
+            {isSaving ? 'Saving…' : isEditing ? 'Save' : 'Edit'}
+          </CustomButton>
+        );
       }
       return (
         <CustomButton
-          variant="outline"
+          variant="default"
           size="sm"
-          className="h-8 px-3 text-xs font-semibold"
+          className={OPS_EDIT_BTN}
           onClick={(e) => {
             e.stopPropagation();
             if (effectiveDetailMode === 'none') return;
@@ -740,7 +868,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       displayValue !== 'N/A' &&
       /^\d{4}-\d{2}-\d{2}/.test(displayValue.trim())
     ) {
-      displayValue = formatCalendarDate(displayValue);
+      displayValue = isInventoryRequestTable
+        ? formatTableDateShort(displayValue)
+        : formatCalendarDate(displayValue);
     }
     
     // Helper function to truncate text based on column width
@@ -898,7 +1028,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         );
       }
 
-      const linkLabel = isTrackingCol ? 'Track' : 'Link';
+      const linkLabel = isTrackingCol ? 'LINK' : 'Link';
       
       // Default link rendering
       return (
@@ -906,11 +1036,15 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
+          className={
+            isTrackingCol
+              ? 'text-sm font-semibold text-[#1A44A1] underline underline-offset-2 hover:text-[#163a8a] transition-colors'
+              : 'inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors'
+          }
           onClick={(e) => e.stopPropagation()}
         >
-          <ExternalLink className="h-4 w-4" />
-            <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
+          {isTrackingCol ? null : <ExternalLink className="h-4 w-4" />}
+          <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
         </a>
       );
     }
@@ -957,7 +1091,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     
-    // Priority / urgency: short colored pill (High / Middle / Low).
+    // Priority / urgency: short colored pill (High / Mid / Low) — fixed width.
     const accessorLowerEarly = String(column.accessor || '').toLowerCase();
     const isPriorityColumn =
       accessorLowerEarly === 'urgency_level' || accessorLowerEarly === 'priority';
@@ -966,7 +1100,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       return (
         <Badge
           variant="outline"
-          className={`${inventoryPriorityChipClassName(displayValue)} rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wide hover:opacity-90`}
+          className={`${inventoryPriorityChipClassName(displayValue)} ${INVENTORY_PRIORITY_CHIP_SIZE} hover:opacity-90`}
           title={fullLabel}
         >
           {formatInventoryPriorityShortLabel(displayValue)}
@@ -979,10 +1113,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (column.accessor === 'urgency_level' && (urgencyUpper === 'CRITICAL' || urgencyUpper === 'STANDARD')) {
       return (
         <Badge
-          className={`${getStatusColor(displayValue, config?.statusColors)} text-sm px-2 py-0.5 border font-semibold tracking-wide`}
+          className={`${getStatusColor(displayValue, config?.statusColors)} ${INVENTORY_PRIORITY_CHIP_SIZE} border hover:opacity-90`}
           title={displayValue}
         >
-          {truncateText(displayValue, columnIndex)}
+          {displayValue}
         </Badge>
       );
     }
@@ -991,12 +1125,70 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (column.type === 'chip') {
       const accessorLower = String(column.accessor || '').toLowerCase();
       const useShipmentTone =
-        (config?.entityType === 'inventory_request' || config?.tableType === 'itemsTable') &&
+        (config?.entityType === 'inventory_request' ||
+          config?.entityType === 'unmannd_request' ||
+          config?.tableType === 'itemsTable') &&
         accessorLower === 'shipment_status';
       const useInventoryStatusTone =
-        config?.tableType === 'itemsTable' && accessorLower === 'status';
+        (config?.tableType === 'itemsTable' ||
+          config?.entityType === 'inventory_request' ||
+          config?.entityType === 'unmannd_request') &&
+        accessorLower === 'status';
       const usePriorityTone =
         accessorLower === 'urgency_level' || accessorLower === 'priority';
+
+      // Ops row edit: Status / Shipment become dropdowns.
+      const isOpsEditingThisRow =
+        canOpsInlineEditStatusShipment && opsEditingRowId === row.id;
+      if (isOpsEditingThisRow && (useInventoryStatusTone || useShipmentTone)) {
+        const draft = opsRowDrafts[String(row.id)];
+        const fieldKey = useShipmentTone ? 'shipment_status' : 'status';
+        const current =
+          draft?.[fieldKey] ??
+          (useShipmentTone
+            ? getShipmentStatusLabel(displayValue)
+            : String(displayValue || '').toUpperCase());
+        const options = useShipmentTone
+          ? OPS_SHIPMENT_OPTIONS
+          : (() => {
+              const base = [...OPS_STATUS_OPTIONS];
+              const cur = String(current || '').toUpperCase();
+              if (cur && !base.includes(cur)) base.unshift(cur);
+              return base;
+            })();
+        return (
+          <div className="min-w-[9.5rem]" onClick={(e) => e.stopPropagation()}>
+            <Select
+              value={String(current || (useShipmentTone ? 'N/A' : 'NEW_REQUEST'))}
+              disabled={opsRowSavingId === row.id}
+              onValueChange={(v) => {
+                setOpsRowDrafts((prev) => ({
+                  ...prev,
+                  [String(row.id)]: {
+                    status: prev[String(row.id)]?.status ?? String(row?.status ?? row?.data?.status ?? 'NEW_REQUEST'),
+                    shipment_status:
+                      prev[String(row.id)]?.shipment_status ??
+                      getShipmentStatusLabel(row?.shipment_status ?? row?.data?.shipment_status),
+                    [fieldKey]: v,
+                  },
+                }));
+              }}
+            >
+              <SelectTrigger className="h-8 w-full text-xs font-semibold">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((opt) => (
+                  <SelectItem key={opt} value={opt} className="text-xs">
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+      }
+
       const chipToneClass = useShipmentTone
         ? getShipmentStatusToneClass(displayValue)
         : useInventoryStatusTone
@@ -1011,24 +1203,37 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           : displayValue;
       const chipTitle = usePriorityTone
         ? formatInventoryPriorityLabel(displayValue)
-        : chipLabel;
+        : String(chipLabel);
+      const chipSizeClass = usePriorityTone
+        ? INVENTORY_PRIORITY_CHIP_SIZE
+        : useShipmentTone || useInventoryStatusTone
+          ? INVENTORY_STATUS_CHIP_SIZE
+          : 'rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wide';
       return (
         <Badge
           variant="outline"
-          className={`${chipToneClass} rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wide hover:opacity-90`}
+          className={`${chipToneClass} ${chipSizeClass} hover:opacity-90`}
           title={chipTitle}
         >
-          {usePriorityTone ? chipLabel : truncateText(chipLabel, columnIndex)}
+          {chipLabel}
         </Badge>
       );
     }
 
     // Action button column
     if (column.type === 'action') {
+      const isEditAction =
+        String(column.header || '').trim().toLowerCase() === 'edit' ||
+        String(column.accessor || '').trim().toLowerCase() === 'edit';
       return (
         <CustomButton
-          variant="outline"
+          variant={isEditAction && isInventoryRequestTable ? 'default' : 'outline'}
           size="sm"
+          className={
+            isEditAction && isInventoryRequestTable
+              ? 'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-xs font-semibold text-white hover:bg-[#163a8a] hover:text-white'
+              : undefined
+          }
           onClick={(e) => {
             e.stopPropagation();
             handleActionClick(row, column as Column);
@@ -1157,7 +1362,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditStatusShipment, opsEditingRowId, opsRowDrafts, opsRowSavingId, saveOpsRowEdit, startOpsRowEdit]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
@@ -1760,6 +1965,101 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     removeAssignedToForGM,
   ]);
 
+  /** Jump to an absolute page number (typed in the pagination input). */
+  const handleGoToPage = useCallback(
+    async (pageNum: number) => {
+      const totalPages = Math.max(
+        1,
+        pagination.numberOfPages ||
+          (pagination.pageSize > 0
+            ? Math.ceil((pagination.totalCount || 0) / pagination.pageSize)
+            : 1)
+      );
+      const target = Math.min(Math.max(1, Math.trunc(pageNum)), totalPages);
+      if (!Number.isFinite(target) || target === pagination.currentPage) {
+        return;
+      }
+
+      try {
+        setTableLoading(true);
+
+        let url: string | null = null;
+        const linkSource = pagination.nextPageLink || pagination.previousPageLink;
+        if (linkSource) {
+          try {
+            const absolute = linkSource.startsWith('http')
+              ? linkSource
+              : `${window.location.origin}${linkSource.startsWith('/') ? '' : '/'}${linkSource}`;
+            const u = new URL(absolute);
+            u.searchParams.set('page', String(target));
+            url = linkSource.startsWith('http')
+              ? u.toString()
+              : `${u.pathname}${u.search}`;
+          } catch {
+            url = null;
+          }
+        }
+
+        if (!url) {
+          const built = buildInitialRecordsParams();
+          if (!built) return;
+          built.params.set('page', String(target));
+          built.params.set('page_size', String(pagination.pageSize || 10));
+          if (searchTerm && searchTerm.trim() !== '') {
+            built.params.set('search', searchTerm.trim());
+            if (config?.searchFields) {
+              built.params.set('search_fields', config.searchFields);
+            }
+          }
+          url = buildUrlWithParams(built.endpoint, built.params);
+          updateURL(built.params);
+        }
+
+        const response = await apiClient.get(url);
+        const responseData = response.data;
+        const leads = responseData.data || responseData.results || [];
+        const pageMeta = responseData.page_meta;
+        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+
+        setData(transformedData);
+        setFilteredData(transformedData);
+
+        if (pageMeta) {
+          setPagination({
+            totalCount: pageMeta.total_count || 0,
+            numberOfPages: pageMeta.number_of_pages || 0,
+            currentPage: pageMeta.current_page || target,
+            pageSize: pageMeta.page_size || pagination.pageSize || 10,
+            nextPageLink: pageMeta.next_page_link || null,
+            previousPageLink: pageMeta.previous_page_link || null,
+          });
+        } else {
+          setPagination((prev) => ({ ...prev, currentPage: target }));
+        }
+      } catch (error) {
+        console.error('Error jumping to page:', error);
+        toast({ title: 'Error', description: 'Failed to load that page', variant: 'destructive' });
+      } finally {
+        setTableLoading(false);
+      }
+    },
+    [
+      apiClient,
+      buildInitialRecordsParams,
+      buildUrlWithParams,
+      config,
+      pagination.currentPage,
+      pagination.numberOfPages,
+      pagination.nextPageLink,
+      pagination.pageSize,
+      pagination.previousPageLink,
+      pagination.totalCount,
+      searchTerm,
+      toast,
+      updateURL,
+    ]
+  );
+
   const initialRecordsFetchKey = useMemo(() => {
     if (!session?.access_token || !membershipLoaded || config?.showFallbackOnly) {
       return null;
@@ -1957,6 +2257,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     renderCell,
     handlePreviousPage,
     handleNextPage,
+    handleGoToPage,
     isLeadModalOpen,
     setIsLeadModalOpen,
     setSelectedLead,

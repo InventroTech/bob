@@ -588,7 +588,9 @@ const CustomAppLayout: React.FC = () => {
 
       {/* Main Content — sidebar is fixed, so width must subtract its offset (margin alone overflows). */}
       <main
-        className="min-w-0 h-full overflow-x-auto overflow-y-auto bg-white transition-all duration-200"
+        className={`min-w-0 h-full bg-white transition-all duration-200 ${
+          isUnmanndApp ? 'overflow-hidden flex flex-col' : 'overflow-x-auto overflow-y-auto'
+        }`}
         style={{
           marginLeft: mainMarginLeft,
           width: `calc(100% - ${mainMarginLeft}px)`,
@@ -611,7 +613,11 @@ const CustomAppLayout: React.FC = () => {
           </div>
         )}
         <div
-          className={isUnmanndApp ? 'h-full min-h-0 w-full' : 'min-h-screen w-full'}
+          className={
+            isUnmanndApp
+              ? 'flex h-full min-h-0 w-full flex-1 flex-col'
+              : 'min-h-screen w-full'
+          }
           style={
             isUnmanndApp
               ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }

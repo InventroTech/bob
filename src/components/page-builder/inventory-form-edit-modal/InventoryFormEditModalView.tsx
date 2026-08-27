@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -14,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Trash2, History, Wrench } from 'lucide-react';
+import { Loader2, Trash2, History, Wrench, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
 import { formatCalendarDate } from '@/lib/utils/timeUtils';
@@ -59,13 +60,26 @@ import {
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
 import { getRecordModalTitleParts } from '@/lib/utils/recordModalHeader';
 
-/** Unmannd modal chrome — matches procurement table navy (#1A3673). */
-const UNMANND_NAVY = '#1A3673';
+/** Unmannd modal chrome — popup navy (#1A44A1); dashboard pages keep #0E3777. */
+const UNMANND_NAVY = '#1A44A1';
 const UNMANND_ID_BG = '#FFFFFF';
-const UNMANND_ID_TEXT = '#1A3673';
-const UNMANND_PILL_BTN =
-  'rounded-full border-white/40 bg-white px-4 text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]';
+const UNMANND_ID_TEXT = '#1A44A1';
+const UNMANND_SQUARE_BTN =
+  'rounded-none border-white/40 bg-white px-4 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
 const UNMANND_CONTROL = 'bg-white';
+
+/** Fields from Item through Vendor: tighter label ↔ control spacing. */
+const UNMANND_TIGHT_LABEL_KEYS = new Set([
+  'item_name_freeform',
+  'status',
+  'quantity_required',
+  'quantity',
+  'estimated_cost',
+  'line_total',
+  'computed_price',
+  'negotiated_value',
+  'vendor',
+]);
 
 function unmanndPriorityBorderClass(value: unknown): string {
   const level = normalizeInventoryPriorityLevel(value);
@@ -132,16 +146,16 @@ function UnmanndModalHeader({
 
   return (
     <div
-      className="flex min-h-[4.25rem] items-stretch overflow-visible pr-12 text-white sm:pr-16"
+      className="flex min-h-[4.75rem] items-stretch overflow-hidden text-white"
       style={{ backgroundColor: UNMANND_NAVY }}
     >
+      {/* ID badge — flush left; thin border like the mock */}
       {parts ? (
         <div
-          className="mx-2 my-2 flex h-10 w-[5.5rem] shrink-0 items-center justify-center self-center rounded-md px-1.5 font-mono text-sm font-extrabold tabular-nums tracking-tight sm:h-11 sm:w-[6.25rem] sm:text-base"
+          className="flex w-[5.75rem] shrink-0 items-center justify-center self-stretch border border-[#C8C8C8] border-r-0 px-1.5 font-mono text-sm font-extrabold tabular-nums tracking-tight sm:w-[6.5rem] sm:text-base rounded-tl-[0.75rem]"
           style={{
             backgroundColor: UNMANND_ID_BG,
             color: UNMANND_ID_TEXT,
-            border: '2px solid #000000',
           }}
           title="Request Number"
         >
@@ -149,15 +163,15 @@ function UnmanndModalHeader({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 sm:px-5">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 pr-3 sm:pl-5 sm:pr-4">
+        <div className="min-w-0 flex-1">
           {parts ? (
             canOpenProduct ? (
               <a
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="min-w-0 text-lg font-semibold leading-snug tracking-tight text-white underline-offset-2 hover:underline sm:text-xl"
+                className="block min-w-0 text-base font-bold leading-snug tracking-tight text-white underline-offset-2 hover:underline sm:text-lg"
                 title="Open product link"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -165,40 +179,51 @@ function UnmanndModalHeader({
               </a>
             ) : (
               <span
-                className="min-w-0 text-lg font-semibold leading-snug tracking-tight text-white sm:text-xl"
+                className="block min-w-0 text-base font-bold leading-snug tracking-tight text-white sm:text-lg"
                 title={parts.itemName === '—' ? undefined : parts.itemName}
               >
                 <span className="line-clamp-2 break-words">{parts.itemName}</span>
               </span>
             )
           ) : (
-            <span className="text-xl font-semibold text-white">
+            <span className="text-lg font-bold text-white">
               {formModalTitle ?? 'Edit request'}
             </span>
           )}
         </div>
-        <div className="mr-1 flex w-[7.5rem] shrink-0 flex-col items-stretch gap-1 sm:mr-3">
-          {parts ? (
-            <time
-              className="text-center text-[11px] font-semibold uppercase leading-none tracking-wide text-white/90 sm:text-xs"
-              dateTime={parts.dateTimeAttr}
-            >
-              {parts.dateDisplay}
-            </time>
-          ) : null}
-          {canShowHistoryButton ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 w-full gap-1.5 rounded-full border-transparent bg-white px-2.5 text-[#1A3673] hover:bg-white/90 hover:text-[#1A3673]"
-              disabled={applyingStatusValue != null || saving}
-              onClick={onHistory}
-            >
-              <History className="h-3.5 w-3.5" />
-              History
-            </Button>
-          ) : null}
+
+        {/* Right: date | X on one row; History pill under the date */}
+        <div className="flex shrink-0 items-start gap-2">
+          <div className="flex flex-col items-end gap-1.5">
+            {parts ? (
+              <time
+                className="flex h-5 items-center whitespace-nowrap text-xs font-bold uppercase leading-none tracking-wide text-white sm:text-sm"
+                dateTime={parts.dateTimeAttr}
+              >
+                {parts.dateDisplay}
+              </time>
+            ) : null}
+            {canShowHistoryButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full border-transparent bg-white px-3 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]"
+                disabled={applyingStatusValue != null || saving}
+                onClick={onHistory}
+              >
+                <History className="h-3.5 w-3.5" />
+                History
+              </Button>
+            ) : null}
+          </div>
+          <DialogClose
+            type="button"
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-white opacity-90 transition-opacity hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" strokeWidth={2.5} />
+          </DialogClose>
         </div>
       </div>
     </div>
@@ -348,10 +373,10 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        hideCloseButton={isUnmannd}
         className={cn(
           'max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full',
-          isUnmannd &&
-            'gap-0 overflow-hidden rounded-xl border-0 p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:text-white [&>button]:opacity-90 [&>button]:hover:opacity-100'
+          isUnmannd && 'gap-0 overflow-hidden rounded-xl border-0 p-0'
         )}
       >
         {isUnmannd ? (
@@ -535,12 +560,19 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                         ? 'Requirement Date'
                         : field.label || field.key.replace(/_/g, ' '));
 
+              const isItemField = field.key === 'item_name_freeform';
+              const isTightUnmanndField =
+                isUnmannd && UNMANND_TIGHT_LABEL_KEYS.has(field.key);
+
               const fieldNode = (
                 <div
                   className={cn(
                     'min-w-0',
                     isUnmannd && field.key !== 'comments'
-                      ? 'flex h-full flex-col gap-1.5 [&>:last-child]:mt-auto'
+                      ? cn(
+                          'flex h-full flex-col [&>:last-child]:mt-auto',
+                          isTightUnmanndField ? 'gap-0.5' : 'gap-1.5'
+                        )
                       : 'space-y-1.5',
                     isUnmannd
                       ? unmanndFieldColClass(field.key) ||
@@ -549,7 +581,14 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                   )}
                 >
                   <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2">
-                    <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                    <Label
+                      className={cn(
+                        'font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap',
+                        isUnmannd && isItemField
+                          ? 'text-sm sm:text-base'
+                          : 'text-xs'
+                      )}
+                    >
                       {fieldLabel}
                     </Label>
                   </div>
@@ -887,7 +926,13 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     </div>
                   ) : (
                     <Input
-                      className={cn('h-9 text-sm rounded-md', isUnmannd && UNMANND_CONTROL)}
+                      className={cn(
+                        'rounded-md',
+                        isUnmannd && isItemField
+                          ? 'h-[4.5rem] text-base sm:text-lg'
+                          : 'h-9 text-sm',
+                        isUnmannd && UNMANND_CONTROL
+                      )}
                       value={displayStr}
                       onChange={(e) => setField(field.key, e.target.value)}
                       disabled={!isEnabled}
@@ -1242,7 +1287,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 className={cn(
                   'gap-2 h-9 rounded-md',
                   isUnmannd
-                    ? 'rounded-full border-white/50 bg-transparent px-4 text-white hover:bg-white/10 hover:text-white'
+                    ? 'rounded-none border-white/50 bg-transparent px-4 text-white hover:bg-white/10 hover:text-white'
                     : 'border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70'
                 )}
                 disabled={deleting || applyingStatusValue != null || saving}
@@ -1303,7 +1348,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     className={cn(
                       'gap-2 h-9 rounded-md',
                       isUnmannd
-                        ? UNMANND_PILL_BTN
+                        ? UNMANND_SQUARE_BTN
                         : urgencyToneButtonClassName(btn.statusValue, urgencyHighlighted),
                     )}
                     disabled={!!applyingStatusValue}
@@ -1331,7 +1376,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 size="default"
                 className={cn(
                   'gap-2 h-9 rounded-md',
-                  isUnmannd && UNMANND_PILL_BTN
+                  isUnmannd && UNMANND_SQUARE_BTN
                 )}
                 disabled={saving || applyingStatusValue != null}
                 onClick={handleSaveAll}

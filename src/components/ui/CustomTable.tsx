@@ -28,8 +28,12 @@ export interface CustomTableProps {
   hoverable?: boolean;
   className?: string;
   tableClassName?: string;
-  /** Tighter header/cell padding (Unmannd procurement tables). */
+  /** Tighter header/cell padding. */
   dense?: boolean;
+  /** Tall spacious rows for All Requests prototype (~60–80px). */
+  comfortable?: boolean;
+  /** Stretch to fill parent height; body scrolls inside (All Requests page). */
+  fillHeight?: boolean;
   /**
    * @deprecated Stacked card layout is removed. Prop kept for call-site compatibility.
    * Tables always render as a normal table with horizontal scroll on small screens.
@@ -80,10 +84,13 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   className,
   tableClassName,
   dense = false,
+  comfortable = false,
+  fillHeight = false,
 }) => {
-  const cellY = dense ? 'py-1' : 'py-2';
-  const cellX = dense ? 'px-2.5' : 'px-4';
-  const leftCellX = dense ? 'pl-2 pr-2.5' : 'pl-2 pr-4';
+  const cellY = comfortable ? 'py-4' : dense ? 'py-1' : 'py-2';
+  const cellX = comfortable ? 'px-3' : dense ? 'px-2.5' : 'px-4';
+  const leftCellX = comfortable ? 'pl-3 pr-3' : dense ? 'pl-2 pr-2.5' : 'pl-2 pr-4';
+  const headerUppercase = dense || comfortable;
 
   const defaultRenderCell = (row: any, column: CustomTableColumn, _columnIndex: number) => {
     const value = row[column.accessor];
@@ -116,17 +123,29 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   const cellRenderer = renderCell || defaultRenderCell;
 
   return (
-    <div className={cn('w-full max-w-full min-w-0', className)}>
-      <div className="w-full max-w-full min-w-0 overflow-x-auto overflow-y-hidden">
+    <div
+      className={cn(
+        'w-full max-w-full min-w-0',
+        fillHeight && 'flex h-full min-h-0 flex-col',
+        className
+      )}
+    >
+      <div
+        className={cn(
+          'w-full max-w-full min-w-0 overflow-x-auto',
+          fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-hidden'
+        )}
+      >
         <table className={cn('min-w-max w-full bg-white', tableClassName)}>
-          <thead>
+          <thead className={fillHeight ? 'sticky top-0 z-10' : undefined}>
             <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
               {columns.map((col, idx) => (
                 <th
                   key={idx}
                   className={cn(
                     'text-sm font-medium text-center whitespace-nowrap',
-                    cellY,
+                    headerUppercase && 'uppercase tracking-wide font-semibold',
+                    comfortable ? 'py-3' : cellY,
                     col.align === 'left' ? `${leftCellX} text-left` : cellX,
                     col.align === 'right' && `${cellX} text-right`,
                     col.width && `w-[${col.width}]`
@@ -161,6 +180,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   onClick={() => onRowClick?.(row)}
                   className={cn(
                     'border-b border-gray-200 bg-white',
+                    comfortable && 'h-[4.5rem]',
                     hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
                     !hoverable && 'hover:bg-transparent'
                   )}
@@ -169,7 +189,8 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     <td
                       key={colIdx}
                       className={cn(
-                        'text-sm align-middle whitespace-nowrap',
+                        'text-sm align-middle',
+                        comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
                         cellY,
                         col.align === 'left' ? `${leftCellX} text-left` : `${cellX} text-center`,
                         col.align === 'right' && `${cellX} text-right`
