@@ -1088,8 +1088,8 @@ export function useLeadCardCarousel(
     // Sync immediately
     syncCount();
     
-    // Sync every 2 seconds to keep it up to date
-    const syncInterval = setInterval(syncCount, 2000);
+    // Sync every 15 seconds to keep it up to date
+    const syncInterval = setInterval(syncCount, 15_000);
     
     return () => clearInterval(syncInterval);
   }, [fetchedLeadsCount]);
@@ -1137,7 +1137,7 @@ export function useLeadCardCarousel(
           payload.record_id != null ? String(payload.record_id) : "";
         const currentId = resolveLeadRecordId(currentLead);
         if (currentId != null && String(currentId) === recordId) {
-          // Instant Task Progress update from WS payload (full HTTP refresh follows).
+          // Instant Task Progress from the slim WS payload; skip a full GET when tasks are present.
           const data = payload.data;
           if (data && typeof data === 'object' && 'tasks' in data && data.tasks !== undefined) {
             setCurrentLead((prev) => {
@@ -1166,11 +1166,21 @@ export function useLeadCardCarousel(
                   prevData.reject_reason,
               } as typeof prev;
             });
+            return;
           }
           void fetchFreshLeadForCard(currentId);
           return;
         }
         if (showPendingCard) {
+          const assignee =
+            payload.assigned_to != null ? String(payload.assigned_to) : "";
+          if (
+            assignee &&
+            activeUserId &&
+            assignee !== String(activeUserId)
+          ) {
+            return;
+          }
           if (pendingDashRefreshTimerRef.current != null) {
             window.clearTimeout(pendingDashRefreshTimerRef.current);
           }
@@ -1180,7 +1190,7 @@ export function useLeadCardCarousel(
           }, REALTIME_LIST_DEBOUNCE_MS);
         }
       },
-      [currentLead, showPendingCard, fetchFreshLeadForCard, refreshPendingDashboard],
+      [currentLead, showPendingCard, activeUserId, fetchFreshLeadForCard, refreshPendingDashboard],
     ),
     { entityType: "lead" },
   );
