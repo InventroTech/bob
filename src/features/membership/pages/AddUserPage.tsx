@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { forceLogoutIfDeletedSelf } from '@/lib/auth/deletedUserSession';
@@ -19,10 +19,12 @@ import {
   useMembershipRoles,
   useMembershipUsers,
 } from '../hooks/useMembership';
+import { ZohoMailConnectCard } from '@/features/integrations/components/ZohoMailConnectCard';
 
 const AddUserPage = () => {
   const { session } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
@@ -31,6 +33,29 @@ const AddUserPage = () => {
   const [formData, setFormData] = useState({ name: '', email: '', department: '' });
   const [showRoleFields, setShowRoleFields] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Zoho Mail OAuth return: backend redirects here with ?zoho_mail=ok|error
+  useEffect(() => {
+    const result = searchParams.get('zoho_mail');
+    if (!result) return;
+
+    const email = searchParams.get('email') || '';
+    const detail = searchParams.get('detail') || '';
+
+    if (result === 'ok') {
+      toast.success(
+        email ? `Zoho Mail connected (${email})` : 'Zoho Mail connected successfully'
+      );
+    } else {
+      toast.error(detail || 'Zoho Mail connect failed');
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('zoho_mail');
+    next.delete('email');
+    next.delete('detail');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const {
     data: roles = [],
@@ -267,6 +292,8 @@ const AddUserPage = () => {
   return (
     <DashboardLayout>
       <div className="p-6 max-w-4xl mx-auto space-y-8">
+        <ZohoMailConnectCard />
+
         <div className="space-y-6">
           <h5>Add User</h5>
 
