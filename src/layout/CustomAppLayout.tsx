@@ -326,17 +326,13 @@ const CustomAppLayout: React.FC = () => {
     }
   };
 
-  const mainMarginLeft = isMobile
-    ? 0
-    : sidebarCollapsed
-      ? sidebarWidths.collapsed
-      : sidebarWidths.expanded;
+  const currentSidebarWidth = sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded;
 
   return (
     <div
       className="flex h-svh w-full overflow-hidden"
       style={{
-        ['--sidebar-width' as string]: `${sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded}px`
+        ['--sidebar-width' as string]: `${currentSidebarWidth}px`
       }}
     >
       {/* Mobile Header */}
@@ -416,7 +412,7 @@ const CustomAppLayout: React.FC = () => {
       {/* Desktop sidebar */}
       <div
         className={`hidden md:block fixed left-0 top-0 h-full bg-white transition-all duration-200`}
-        style={{ width: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
+        style={{ width: currentSidebarWidth }}
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
             <div
@@ -541,13 +537,7 @@ const CustomAppLayout: React.FC = () => {
       </div>
 
       <main
-        className="min-w-0 h-full overflow-x-auto overflow-y-auto bg-white transition-all duration-200"
-        style={{
-          marginLeft: mainMarginLeft,
-          width: `calc(100% - ${mainMarginLeft}px)`,
-          maxWidth: `calc(100% - ${mainMarginLeft}px)`,
-          paddingTop: isMobile ? 48 : 0,
-        }}
+        className="min-w-0 h-full overflow-x-auto overflow-y-auto bg-white transition-all duration-200 md:ml-[var(--sidebar-width)] md:w-[calc(100%-var(--sidebar-width))] pt-12 md:pt-0"
       >
         {spoofBannerVisible && spoofLabel && (
           <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">
