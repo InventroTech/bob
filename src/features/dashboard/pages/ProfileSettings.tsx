@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,7 @@ import {
   Camera,
   Database,
   Palette,
+  Puzzle,
   Settings2,
   Shield,
   User,
@@ -31,6 +33,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { membershipService } from "@/lib/api/services/membership";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { ZohoMailConnectCard } from "@/features/integrations/components/ZohoMailConnectCard";
+
+const SETTINGS_TABS = new Set(["profile", "notifications", "appearance", "admin", "integrations"]);
 
 function readRoleDepartmentFromMetadata(user: SupabaseUser): { role: string; department: string } {
   const m = user.user_metadata ?? {};
@@ -55,7 +60,50 @@ const ProfileSettings = () => {
   const { user, session } = useAuth();
   const userRef = useRef(user);
   userRef.current = user;
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isSettingUp, setIsSettingUp] = useState(false);
+
+  const tabFromUrl = searchParams.get("tab") || "";
+  const activeTab = SETTINGS_TABS.has(tabFromUrl) ? tabFromUrl : "profile";
+
+  const setActiveTab = useCallback(
+    (next: string) => {
+      const params = new URLSearchParams(searchParams);
+      if (next === "profile") {
+        params.delete("tab");
+      } else {
+        params.set("tab", next);
+      }
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  // Zoho Mail OAuth return lands on /settings?zoho_mail=ok|error&tab=integrations
+  useEffect(() => {
+    const result = searchParams.get("zoho_mail");
+    if (!result) return;
+
+    const email = searchParams.get("email") || "";
+    const detail = searchParams.get("detail") || "";
+
+    if (result === "ok") {
+      toast.success(
+        email ? `Zoho Mail connected (${email})` : "Zoho Mail connected successfully"
+      );
+    } else {
+      toast.error(detail || "Zoho Mail connect failed");
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("zoho_mail");
+    next.delete("email");
+    next.delete("detail");
+    if (!next.get("tab")) {
+      next.set("tab", "integrations");
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const [profileFullName, setProfileFullName] = useState("");
   const [role, setRole] = useState("");
@@ -275,13 +323,13 @@ const ProfileSettings = () => {
             <div className="min-w-0 space-y-1.5">
               <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
               <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
-                Manage your profile, notifications, appearance, and admin tools from one place.
+                Manage your profile, notifications, appearance, integrations, and admin tools from one place.
               </p>
             </div>
           </div>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-1.5 shadow-sm backdrop-blur-sm">
             <TabsTrigger
               value="profile"
@@ -303,6 +351,13 @@ const ProfileSettings = () => {
             >
               <Palette className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
               Appearance
+            </TabsTrigger>
+            <TabsTrigger
+              value="integrations"
+              className="flex-1 gap-2 rounded-xl px-3 py-2.5 text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=inactive]:text-muted-foreground min-[440px]:flex-none sm:px-4"
+            >
+              <Puzzle className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+              Integrations
             </TabsTrigger>
             <TabsTrigger
               value="admin"
@@ -665,6 +720,13 @@ const ProfileSettings = () => {
                 <Button>Save Preferences</Button>
               </CardFooter>
             </Card>
+          </TabsContent>
+
+          <TabsContent
+            value="integrations"
+            className="mt-0 space-y-6 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <ZohoMailConnectCard />
           </TabsContent>
 
           <TabsContent value="admin" className="mt-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
