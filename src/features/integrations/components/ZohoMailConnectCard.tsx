@@ -126,7 +126,7 @@ export function ZohoMailConnectCard() {
           </div>
           <div className="min-w-0 space-y-1">
             <CardTitle className="text-lg font-semibold tracking-tight">Zoho Mail</CardTitle>
-            <CardDescription className="leading-relaxed">
+            <CardDescription className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
               One-time connect for your ops inbox. We read shipment emails and auto-fill empty
               tracking fields on inventory requests. This is separate from Zoho login.
             </CardDescription>
