@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
 import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
+import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import { FilterService } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
@@ -124,6 +125,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const listFetchInFlightRef = useRef(false);
+  const createdRefreshTimerRef = useRef<number | null>(null);
   const requestSequenceRef = useRef<number>(0);
   const lastInitialFetchKeyRef = useRef<string>('');
   const initialFetchInFlightKeyRef = useRef<string | null>(null);
@@ -1624,15 +1626,60 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
 
   useRecordUpdated(
-    () => {
+    (payload: RecordUpdatedPayload) => {
       if (!session?.access_token) return;
       if (searchTimeoutRef.current) return;
-      void fetchFilteredData(undefined, undefined, { silent: true, keepPage: true });
+
+      const recordId = payload.record_id != null ? String(payload.record_id) : '';
+      if (!recordId) return;
+
+      const matches = (row: any) => {
+        const id = row?.id != null ? String(row.id) : '';
+        const rid = row?.record_id != null ? String(row.record_id) : '';
+        return id === recordId || rid === recordId;
+      };
+
+      const patchRow = (row: any) => {
+        const stage =
+          payload.lead_stage != null && String(payload.lead_stage).trim()
+            ? String(payload.lead_stage)
+            : undefined;
+        const nextData =
+          payload.data && typeof payload.data === 'object'
+            ? { ...(row.data && typeof row.data === 'object' ? row.data : {}), ...payload.data }
+            : row.data;
+        return {
+          ...row,
+          ...(stage ? { lead_stage: stage, status: stage } : {}),
+          ...(payload.assigned_to !== undefined ? { assigned_to: payload.assigned_to } : {}),
+          ...(nextData !== undefined ? { data: nextData } : {}),
+        };
+      };
+
+      let found = false;
+      const patchList = (prev: any[]) => {
+        const idx = prev.findIndex(matches);
+        if (idx < 0) return prev;
+        found = true;
+        const next = prev.slice();
+        next[idx] = patchRow(prev[idx]);
+        return next;
+      };
+      setFilteredData(patchList);
+      setData(patchList);
+
+      if (found || !payload.created) return;
+      if (createdRefreshTimerRef.current != null) {
+        window.clearTimeout(createdRefreshTimerRef.current);
+      }
+      createdRefreshTimerRef.current = window.setTimeout(() => {
+        createdRefreshTimerRef.current = null;
+        void fetchFilteredData(undefined, undefined, { silent: true, keepPage: true });
+      }, REALTIME_LIST_DEBOUNCE_MS);
     },
     {
       entityType: 'lead',
       enabled: !config?.entityType || config.entityType === 'lead',
-      debounceMs: REALTIME_LIST_DEBOUNCE_MS,
     },
   );
 
@@ -1946,6 +1993,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
+      }
+      if (createdRefreshTimerRef.current != null) {
+        window.clearTimeout(createdRefreshTimerRef.current);
+        createdRefreshTimerRef.current = null;
       }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();

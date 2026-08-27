@@ -1,12 +1,45 @@
 import { buildNotificationsWsUrl } from "./buildWsUrl";
 import { dispatchRecordUpdated } from "./recordUpdatedBus";
-import type { RealtimePayload } from "./types";
+import type { RealtimePayload, RecordUpdatedPayload } from "./types";
 
 type MessageHandler = (payload: RealtimePayload) => void;
 type StatusHandler = (status: "connecting" | "connected" | "disconnected" | "error") => void;
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const PING_INTERVAL_MS = 25_000;
+
+function detachSocket(socket: WebSocket | null): void {
+  if (!socket) return;
+  socket.onopen = null;
+  socket.onmessage = null;
+  socket.onerror = null;
+  socket.onclose = null;
+}
+
+/** Drop the full CRM JSONB blob; keep only fields the UI actually reads. */
+function slimRecordUpdated(payload: RecordUpdatedPayload): RecordUpdatedPayload {
+  const raw = payload.data;
+  let data: Record<string, unknown> | undefined;
+  if (raw && typeof raw === "object") {
+    const tasks = (raw as { tasks?: unknown }).tasks;
+    const reject_reason = (raw as { reject_reason?: unknown }).reject_reason;
+    if (tasks !== undefined || reject_reason !== undefined) {
+      data = {};
+      if (tasks !== undefined) data.tasks = tasks;
+      if (reject_reason !== undefined) data.reject_reason = reject_reason;
+    }
+  }
+  return {
+    event: "record_updated",
+    record_id: payload.record_id,
+    entity_type: payload.entity_type,
+    lead_stage: payload.lead_stage,
+    assigned_to: payload.assigned_to,
+    created: payload.created,
+    updated_at: payload.updated_at,
+    ...(data ? { data } : {}),
+  };
+}
 
 export class NotificationsWsClient {
   private socket: WebSocket | null = null;
@@ -30,19 +63,20 @@ export class NotificationsWsClient {
   stop(): void {
     this.shouldRun = false;
     this.clearTimers();
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
+    const socket = this.socket;
+    this.socket = null;
+    detachSocket(socket);
+    socket?.close();
     this.onStatus("disconnected");
   }
 
   reconnect(): void {
     if (!this.shouldRun) return;
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
+    this.clearTimers();
+    const socket = this.socket;
+    this.socket = null;
+    detachSocket(socket);
+    socket?.close();
     this.connect();
   }
 
@@ -65,6 +99,10 @@ export class NotificationsWsClient {
   }
 
   private startPing(): void {
+    if (this.pingTimer != null) {
+      window.clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
     this.pingTimer = window.setInterval(() => {
       if (this.socket?.readyState === WebSocket.OPEN) {
         this.socket.send("ping");
@@ -73,10 +111,8 @@ export class NotificationsWsClient {
   }
 
   private handlePayload(payload: RealtimePayload): void {
-    this.onMessage(payload);
-    if (payload.event === "record_updated") {
-      dispatchRecordUpdated(payload as import("./types").RecordUpdatedPayload);
-    }
+    if (payload.event !== "record_updated") return;
+    dispatchRecordUpdated(slimRecordUpdated(payload as RecordUpdatedPayload));
   }
 
   private connect(): void {
@@ -92,18 +128,25 @@ export class NotificationsWsClient {
     this.onStatus("connecting");
 
     try {
+      detachSocket(this.socket);
+      this.socket?.close();
+
       const socket = new WebSocket(url);
       this.socket = socket;
 
       socket.onopen = () => {
+        if (this.socket !== socket) return;
         this.reconnectAttempts = 0;
         this.onStatus("connected");
         this.startPing();
       };
 
       socket.onmessage = (event) => {
+        if (this.socket !== socket) return;
+        const raw = String(event.data);
+        if (raw === "pong" || raw === "ping") return;
         try {
-          const payload = JSON.parse(String(event.data)) as RealtimePayload;
+          const payload = JSON.parse(raw) as RealtimePayload;
           this.handlePayload(payload);
         } catch {
           // ignore malformed frames
@@ -111,19 +154,20 @@ export class NotificationsWsClient {
       };
 
       socket.onerror = () => {
+        if (this.socket !== socket) return;
         this.onStatus("error");
       };
 
       socket.onclose = () => {
-        this.socket = null;
-        if (this.pingTimer != null) {
-          window.clearInterval(this.pingTimer);
-          this.pingTimer = null;
+        if (this.socket === socket) {
+          this.socket = null;
         }
+        this.clearTimers();
         if (!this.shouldRun) {
           this.onStatus("disconnected");
           return;
         }
+        if (this.socket != null) return;
         this.onStatus("disconnected");
         this.scheduleReconnect();
       };
