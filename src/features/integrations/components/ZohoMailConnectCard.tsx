@@ -66,6 +66,15 @@ export function ZohoMailConnectCard() {
         toast.error('Zoho authorize URL missing. Check backend ZOHO_* env vars.');
         return;
       }
+      // Return to this Settings/User Management page after Zoho consent.
+      try {
+        sessionStorage.setItem(
+          'zoho_oauth_return',
+          `${window.location.pathname}${window.location.search}`
+        );
+      } catch {
+        // ignore storage failures
+      }
       window.location.href = data.authorize_url;
     } catch (err) {
       toast.error(errorMessage(err, 'Could not start Zoho Mail connect'));

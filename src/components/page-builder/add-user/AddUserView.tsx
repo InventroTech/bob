@@ -1,6 +1,7 @@
 /** Presentational JSX for AddUserComponent — columns/fields from tenant config. */
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -8,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format } from "date-fns";
 import { Trash2, UserPlus, Pencil, Check, X, Search, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { toast } from 'sonner';
 import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
 import { formatResolveRateGoal, isCseRole } from './utils';
@@ -18,6 +20,7 @@ import {
   type UserManagementColumn,
   type UserManagementCustomField,
 } from './userManagementConfig';
+import { ZohoMailConnectCard } from '@/features/integrations/components/ZohoMailConnectCard';
 
 function SupportDailyDualDisplay({
   selfTrial,
@@ -125,6 +128,7 @@ function boundCustomFieldDisplay(user: User, fieldKey: string): string {
 }
 
 export function AddUserView(props: AddUserModel) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     config,
     roles,
@@ -185,6 +189,29 @@ export function AddUserView(props: AddUserModel) {
   const { schema, showField } = useUserManagementConfig(config);
   const showCustomForm = (key: string) =>
     schema.customFields.some((f) => f.key === key && f.showInForm);
+
+  // Zoho OAuth return may land back on this Settings page with ?zoho_mail=ok|error
+  useEffect(() => {
+    const result = searchParams.get('zoho_mail');
+    if (!result) return;
+
+    const email = searchParams.get('email') || '';
+    const detail = searchParams.get('detail') || '';
+
+    if (result === 'ok') {
+      toast.success(
+        email ? `Zoho Mail connected (${email})` : 'Zoho Mail connected successfully'
+      );
+    } else {
+      toast.error(detail || 'Zoho Mail connect failed');
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('zoho_mail');
+    next.delete('email');
+    next.delete('detail');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const customFormFields = schema.customFields.filter(
     (f) => f.showInForm && !isBoundCustomField(f.key)
@@ -778,7 +805,9 @@ export function AddUserView(props: AddUserModel) {
   };
 
   return (
-    <Card className="w-full">
+    <div className="w-full space-y-6">
+      <ZohoMailConnectCard />
+      <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div className="flex items-center gap-2">
           <UserPlus className="h-5 w-5" />
@@ -1461,5 +1490,6 @@ export function AddUserView(props: AddUserModel) {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
