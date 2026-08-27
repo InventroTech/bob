@@ -1,6 +1,8 @@
 import { getAccessToken } from "@/lib/auth/accessTokenProvider";
 
 export function buildNotificationsWsUrl(): string | null {
+  if (import.meta.env.VITE_ENABLE_REALTIME === "false") return null;
+
   const token = getAccessToken();
   if (!token) return null;
 

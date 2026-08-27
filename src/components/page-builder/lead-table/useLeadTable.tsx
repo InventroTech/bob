@@ -14,7 +14,7 @@ import ShortProfileCard from '../../ui/ShortProfileCard';
 import { Input } from '@/components/ui/input';
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
-import { useRecordUpdated } from '@/hooks/useRecordUpdated';
+import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
 import { FilterService } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
@@ -122,6 +122,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const listFetchInFlightRef = useRef(false);
   const requestSequenceRef = useRef<number>(0);
   const lastInitialFetchKeyRef = useRef<string>('');
   const initialFetchInFlightKeyRef = useRef<string | null>(null);
@@ -527,6 +528,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     nextPageLink: null,
     previousPageLink: null
   });
+  const paginationRef = useRef(pagination);
+  paginationRef.current = pagination;
   const [filterOptions, setFilterOptions] = useState<{
     lead_statuses: string[];
     sources: string[];
@@ -1265,21 +1268,30 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   };
 
   // Apply filters using the records endpoint
-  const fetchFilteredData = async (requestSequence?: number, queryParams?: URLSearchParams) => {
-    try {
-      setTableLoading(true);
+  const fetchFilteredData = async (
+    requestSequence?: number,
+    queryParams?: URLSearchParams,
+    options?: { silent?: boolean; keepPage?: boolean },
+  ) => {
+    const silent = options?.silent === true;
+    if (silent && listFetchInFlightRef.current) {
+      return;
+    }
 
-      // Cancel any previous request
-      if (abortControllerRef.current) {
+    const abortController = new AbortController();
+    listFetchInFlightRef.current = true;
+    try {
+      if (!silent) setTableLoading(true);
+
+      if (!silent && abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      if (!silent) {
+        abortControllerRef.current = abortController;
+      }
 
       if (!effectiveApiEndpoint) {
         console.warn('LeadTableComponent: apiEndpoint is not configured.');
-        setTableLoading(false);
         return;
       }
 
@@ -1290,13 +1302,18 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       let params: URLSearchParams;
 
       // Use new dynamic filter system if filters are configured
+      const page = options?.keepPage
+        ? String(paginationRef.current.currentPage || 1)
+        : '1';
+      const pageSize = String(paginationRef.current.pageSize || 10);
+
       if (queryParams) {
         params = queryParams;
       } else if (hasActiveFilters) {
         params = filterService!.generateQueryParams(filterState.values);
         // Add pagination parameters for both systems
-        params.append('page', '1');
-        params.append('page_size', '10');
+        params.append('page', page);
+        params.append('page_size', pageSize);
       } else {
         // Fallback to legacy filter system
         params = new URLSearchParams();
@@ -1346,8 +1363,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         }
         
         // Add pagination parameters for both systems
-        params.append('page', '1');
-        params.append('page_size', '10');
+        params.append('page', page);
+        params.append('page_size', pageSize);
       }
 
       // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
@@ -1405,7 +1422,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       console.error('Error applying filters:', error);
       toast({ title: 'Error', description: 'Failed to apply filters', variant: 'destructive' });
     } finally {
-      setTableLoading(false);
+      listFetchInFlightRef.current = false;
+      if (!silent && abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+      if (!silent) setTableLoading(false);
     }
   };
 
@@ -1595,15 +1616,17 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }, 1000);
   }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
 
-  const refreshLeadsFromRealtime = useCallback(() => {
-    if (!session?.access_token) return;
-    void fetchFilteredData();
-  }, [session?.access_token, fetchFilteredData]);
-
-  useRecordUpdated(refreshLeadsFromRealtime, {
-    entityType: 'lead',
-    enabled: !config?.entityType || config.entityType === 'lead',
-  });
+  useRecordUpdated(
+    () => {
+      if (!session?.access_token) return;
+      void fetchFilteredData(undefined, undefined, { silent: true, keepPage: true });
+    },
+    {
+      entityType: 'lead',
+      enabled: !config?.entityType || config.entityType === 'lead',
+      debounceMs: REALTIME_LIST_DEBOUNCE_MS,
+    },
+  );
 
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
