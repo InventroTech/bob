@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
+import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import { buildActionApiRequest } from '@/lib/utils/actionApiUtils';
 import { convertGMTtoIST } from '@/lib/utils/timeUtils';
 
@@ -50,6 +51,7 @@ const [displaySearchTerm, setDisplaySearchTerm] = useState<string>(''); // Separ
 const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 const abortControllerRef = useRef<AbortController | null>(null);
 const listFetchInFlightRef = useRef(false);
+const createdRefreshTimerRef = useRef<number | null>(null);
 const requestSequenceRef = useRef<number>(0);
 /** Base data for client-side search (initial load or filter result). Search runs across all fields on this. */
 const baseDataRef = useRef<any[]>([]);
@@ -1038,11 +1040,42 @@ const handlePageChange = async (pageNumber: string) => {
 };
 
 useRecordUpdated(
-  () => {
+  (payload: RecordUpdatedPayload) => {
     if (!session?.access_token) return;
-    void applyFilters(undefined, { silent: true, keepPage: true });
+
+    const recordId = payload.record_id != null ? String(payload.record_id) : '';
+    if (!recordId) return;
+
+    const matches = (row: any) => {
+      const id = row?.id != null ? String(row.id) : '';
+      return id === recordId;
+    };
+
+    let found = false;
+    const patchList = (prev: any[]) => {
+      const idx = prev.findIndex(matches);
+      if (idx < 0) return prev;
+      found = true;
+      const next = prev.slice();
+      next[idx] = {
+        ...prev[idx],
+        ...(payload.assigned_to !== undefined ? { assigned_to: payload.assigned_to } : {}),
+      };
+      return next;
+    };
+    setFilteredData(patchList);
+    setData(patchList);
+
+    if (found || !payload.created) return;
+    if (createdRefreshTimerRef.current != null) {
+      window.clearTimeout(createdRefreshTimerRef.current);
+    }
+    createdRefreshTimerRef.current = window.setTimeout(() => {
+      createdRefreshTimerRef.current = null;
+      void applyFilters(undefined, { silent: true, keepPage: true });
+    }, REALTIME_LIST_DEBOUNCE_MS);
   },
-  { entityType: 'support_ticket', debounceMs: REALTIME_LIST_DEBOUNCE_MS },
+  { entityType: 'support_ticket' },
 );
 
 const handleTicketUpdate = (updatedTicket: any) => {
@@ -1233,6 +1266,10 @@ useEffect(() => {
   return () => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
+    }
+    if (createdRefreshTimerRef.current != null) {
+      window.clearTimeout(createdRefreshTimerRef.current);
+      createdRefreshTimerRef.current = null;
     }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
