@@ -207,21 +207,23 @@ const CustomAppPage: React.FC = () => {
   };
 
   const headerTitle = getHeaderTitle();
-  const requestTableTypes = new Set([
+  /** Inventory / procurement tables render their own page title — not generic CRM leadTable. */
+  const inventoryRequestTableTypes = new Set([
     'procurementTable',
     'myRequestTable',
     'inventoryTable',
-    'leadTable',
     'vendorIdentifiedTable',
     'pendingApprovalTable',
     'rejectedTable',
   ]);
-  const pageHasRequestTable =
+  const pageHasInventoryRequestTable =
     Array.isArray(page.config) &&
-    page.config.some((comp: { type?: string }) => requestTableTypes.has(String(comp.type || '')));
-  // Request tables render their own "ALL REQUEST" + search/filters row — hide the sticky duplicate.
+    page.config.some((comp: { type?: string }) =>
+      inventoryRequestTableTypes.has(String(comp.type || ''))
+    );
+  // Hide sticky duplicate only on inventory request tables (All Requests, etc.).
   const hidePageHeader =
-    pageHasRequestTable ||
+    pageHasInventoryRequestTable ||
     (Array.isArray(page.config) &&
       page.config.some(
         (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
@@ -262,7 +264,7 @@ const CustomAppPage: React.FC = () => {
         <div
           className={`max-w-full min-w-0 ${
             isUnmanndApp
-              ? `px-2 pt-1 pb-2 flex flex-1 min-h-0 flex-col ${pageHasRequestTable ? 'h-full' : ''}`
+              ? `px-2 pt-1 pb-2 flex flex-1 min-h-0 flex-col ${pageHasInventoryRequestTable ? 'h-full' : ''}`
               : 'pt-1'
           }`}
         >
@@ -273,7 +275,7 @@ const CustomAppPage: React.FC = () => {
                 // Skip header components if they exist in the config (we show it as fixed header above)
                 if (component.type === 'header') return null;
                 const fillHeight =
-                  isUnmanndApp && requestTableTypes.has(String(component.type || ''));
+                  isUnmanndApp && inventoryRequestTableTypes.has(String(component.type || ''));
                 return (
                   <div
                     key={component.id}

@@ -51,7 +51,6 @@ import {
   canRequesterEditInventoryRequest,
   isInventoryOpsEditorRole,
   isInventoryRequestRowRequester,
-  INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES,
 } from '@/lib/inventory/workflow';
 import { SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
 
@@ -61,7 +60,6 @@ const INVENTORY_PRIORITY_CHIP_SIZE =
 const INVENTORY_STATUS_CHIP_SIZE =
   'inline-flex h-7 w-[9.5rem] shrink-0 items-center justify-center rounded-full px-2.5 text-xs font-semibold tracking-wide overflow-hidden text-ellipsis whitespace-nowrap';
 
-const OPS_STATUS_OPTIONS = Array.from(INVENTORY_WORKFLOW_BUILTIN_STATUS_VALUES);
 const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
   'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-xs font-semibold text-white hover:bg-[#163a8a] hover:text-white';
@@ -551,14 +549,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   });
   const [inlineCellDrafts, setInlineCellDrafts] = useState<Record<string, string>>({});
   const [inlineSavingCell, setInlineSavingCell] = useState<string | null>(null);
-  /** Ops (PM / TL / Admin) row-level edit of Status + Shipment. */
+  /** Ops (PM / TL / Admin): inline Shipment column edit — status stays workflow-only in the modal. */
   const [opsEditingRowId, setOpsEditingRowId] = useState<string | number | null>(null);
-  const [opsRowDrafts, setOpsRowDrafts] = useState<
-    Record<string, { status: string; shipment_status: string }>
-  >({});
+  const [opsShipmentDrafts, setOpsShipmentDrafts] = useState<Record<string, string>>({});
   const [opsRowSavingId, setOpsRowSavingId] = useState<string | number | null>(null);
 
-  const canOpsInlineEditStatusShipment = useMemo(
+  const canOpsInlineEditShipment = useMemo(
     () =>
       Boolean(
         !isInPageBuilder &&
@@ -694,32 +690,28 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return canRequesterEditInventoryRequest(status);
   }, [isInventoryRequestTable, activeUserId, membershipId]);
 
-  const startOpsRowEdit = useCallback((row: any) => {
+  const startOpsShipmentEdit = useCallback((row: any) => {
     if (row?.id == null) return;
-    const status = String(row?.status ?? row?.data?.status ?? 'NEW_REQUEST').trim().toUpperCase() || 'NEW_REQUEST';
     const rawShipment = String(row?.shipment_status ?? row?.data?.shipment_status ?? '').trim().toUpperCase();
     const shipment_status =
       !rawShipment || rawShipment === 'N/A' || rawShipment === '—' ? 'N/A' : rawShipment;
     setOpsEditingRowId(row.id);
-    setOpsRowDrafts((prev) => ({
-      ...prev,
-      [String(row.id)]: { status, shipment_status },
-    }));
+    setOpsShipmentDrafts((prev) => ({ ...prev, [String(row.id)]: shipment_status }));
   }, []);
 
-  const cancelOpsRowEdit = useCallback((rowId: string | number) => {
+  const cancelOpsShipmentEdit = useCallback((rowId: string | number) => {
     setOpsEditingRowId((cur) => (cur === rowId ? null : cur));
-    setOpsRowDrafts((prev) => {
+    setOpsShipmentDrafts((prev) => {
       const next = { ...prev };
       delete next[String(rowId)];
       return next;
     });
   }, []);
 
-  const saveOpsRowEdit = useCallback(
+  const saveOpsShipmentEdit = useCallback(
     async (row: any) => {
-      if (!canOpsInlineEditStatusShipment || !row?.id || !effectiveApiEndpoint) return;
-      const draft = opsRowDrafts[String(row.id)];
+      if (!canOpsInlineEditShipment || !row?.id || !effectiveApiEndpoint) return;
+      const draft = opsShipmentDrafts[String(row.id)];
       if (!draft) return;
       try {
         setOpsRowSavingId(row.id);
@@ -727,14 +719,17 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         const url = `${base}/${row.id}/`;
         const existingData = (row.data as Record<string, unknown>) || {};
         const shipmentValue =
-          draft.shipment_status === 'N/A' || draft.shipment_status === ''
-            ? ''
-            : draft.shipment_status;
+          draft === 'N/A' || draft === '' ? '' : draft;
+        const prevShipment = String(
+          existingData.shipment_status ?? row.shipment_status ?? ''
+        ).trim();
         const nextData: Record<string, unknown> = {
           ...existingData,
-          status: draft.status,
           shipment_status: shipmentValue,
         };
+        if (String(shipmentValue) !== prevShipment) {
+          nextData.tracking_updated_at = new Date().toISOString();
+        }
         const response = await apiClient.patch(url, { data: nextData });
         const updated = response.data;
         const updateRow = (r: any) =>
@@ -742,19 +737,18 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             ? {
                 ...r,
                 ...updated,
-                status: draft.status,
                 shipment_status: shipmentValue || 'N/A',
                 data: updated?.data ?? nextData,
               }
             : r;
         setData((prev) => prev.map(updateRow));
         setFilteredData((prev) => prev.map(updateRow));
-        cancelOpsRowEdit(row.id);
-        toast({ title: 'Saved', description: 'Status and shipment updated.' });
+        cancelOpsShipmentEdit(row.id);
+        toast({ title: 'Saved', description: 'Shipment updated.' });
       } catch (e: any) {
         toast({
           title: 'Update failed',
-          description: e?.message || 'Could not save status/shipment.',
+          description: e?.message || 'Could not save shipment.',
           variant: 'destructive',
         });
       } finally {
@@ -762,10 +756,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
     },
     [
-      canOpsInlineEditStatusShipment,
+      canOpsInlineEditShipment,
       effectiveApiEndpoint,
-      opsRowDrafts,
-      cancelOpsRowEdit,
+      opsShipmentDrafts,
+      cancelOpsShipmentEdit,
       toast,
     ]
   );
@@ -773,9 +767,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
     if (column.accessor === REQUESTER_EDIT_COLUMN_ACCESSOR) {
-      // Ops (PM / TL / Admin): Edit toggles inline Status/Shipment; Save commits.
-      // Others: Edit opens the request detail modal.
-      if (canOpsInlineEditStatusShipment) {
+      if (canOpsInlineEditShipment) {
         const isEditing = opsEditingRowId === row.id;
         const isSaving = opsRowSavingId === row.id;
         return (
@@ -787,9 +779,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             onClick={(e) => {
               e.stopPropagation();
               if (isEditing) {
-                void saveOpsRowEdit(row);
+                void saveOpsShipmentEdit(row);
               } else {
-                startOpsRowEdit(row);
+                startOpsShipmentEdit(row);
               }
             }}
           >
@@ -797,6 +789,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           </CustomButton>
         );
       }
+      // Status changes use inventory workflow actions in the detail modal (Approve / Reject / Order, etc.).
       return (
         <CustomButton
           variant="default"
@@ -1137,40 +1130,27 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       const usePriorityTone =
         accessorLower === 'urgency_level' || accessorLower === 'priority';
 
-      // Ops row edit: Status / Shipment become dropdowns.
-      const isOpsEditingThisRow =
-        canOpsInlineEditStatusShipment && opsEditingRowId === row.id;
-      if (isOpsEditingThisRow && (useInventoryStatusTone || useShipmentTone)) {
-        const draft = opsRowDrafts[String(row.id)];
-        const fieldKey = useShipmentTone ? 'shipment_status' : 'status';
+      // Ops row edit: Shipment becomes a dropdown; Status stays read-only (workflow modal).
+      const isOpsEditingShipment =
+        canOpsInlineEditShipment && opsEditingRowId === row.id && useShipmentTone;
+      if (isOpsEditingShipment) {
         const current =
-          draft?.[fieldKey] ??
-          (useShipmentTone
-            ? getShipmentStatusLabel(displayValue)
-            : String(displayValue || '').toUpperCase());
-        const options = useShipmentTone
-          ? OPS_SHIPMENT_OPTIONS
-          : (() => {
-              const base = [...OPS_STATUS_OPTIONS];
-              const cur = String(current || '').toUpperCase();
-              if (cur && !base.includes(cur)) base.unshift(cur);
-              return base;
-            })();
+          opsShipmentDrafts[String(row.id)] ??
+          getShipmentStatusLabel(row?.shipment_status ?? row?.data?.shipment_status);
+        const options = [...OPS_SHIPMENT_OPTIONS];
+        const cur = String(current || '').toUpperCase();
+        if (cur && cur !== 'N/A' && !options.includes(cur as typeof options[number])) {
+          options.unshift(cur as typeof options[number]);
+        }
         return (
           <div className="min-w-[9.5rem]" onClick={(e) => e.stopPropagation()}>
             <Select
-              value={String(current || (useShipmentTone ? 'N/A' : 'NEW_REQUEST'))}
+              value={String(current || 'N/A')}
               disabled={opsRowSavingId === row.id}
               onValueChange={(v) => {
-                setOpsRowDrafts((prev) => ({
+                setOpsShipmentDrafts((prev) => ({
                   ...prev,
-                  [String(row.id)]: {
-                    status: prev[String(row.id)]?.status ?? String(row?.status ?? row?.data?.status ?? 'NEW_REQUEST'),
-                    shipment_status:
-                      prev[String(row.id)]?.shipment_status ??
-                      getShipmentStatusLabel(row?.shipment_status ?? row?.data?.shipment_status),
-                    [fieldKey]: v,
-                  },
+                  [String(row.id)]: v,
                 }));
               }}
             >
@@ -1362,7 +1342,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditStatusShipment, opsEditingRowId, opsRowDrafts, opsRowSavingId, saveOpsRowEdit, startOpsRowEdit]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
