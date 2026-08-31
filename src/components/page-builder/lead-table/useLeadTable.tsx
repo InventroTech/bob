@@ -228,7 +228,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         // If URL parsing fails (relative URL), try regex replacement
         endpoint = endpoint.replace(/[?&]assigned_to=[^&]*/g, '');
         // Clean up double ? or trailing &
-        endpoint = endpoint.replace(/\?&/g, '?').replace(/[?&]$/, '');
+        endpoint = endpoint.replace(/\?&/g, '').replace(/[?&]$/, '');
         console.log('[LeadTableComponent] GM user detected, removed assigned_to from endpoint URL (regex fallback)');
       }
     }
@@ -916,7 +916,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink className="h-4 w-4" />
-            <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
+          <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
         </a>
       );
     }
@@ -1112,7 +1112,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           );
         }
       }
-      // If no valid phone number, fall through to default text rendering below
     }
     
     // Special handling for columns with configured linkField
@@ -1174,8 +1173,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [config?.tableType, config?.statusButtons]);
 
   // Build table columns from config only. No auto-appended Status column.
-  // Status column appears only if you add a column with key "status" in the Columns config (shows data.status).
-  // "Status action buttons" in config are used only in the row-click modal (record detail / form modal), not as a table column.
   const tableColumns: Column[] = useMemo(() => {
     const leftAlignKeys = new Set([
       'specifications',
@@ -1213,11 +1210,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       actionApiMethod: col.actionApiMethod,
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
-      // Keep date / short columns centered under stacked headers (e.g. ETA).
       align: (leftAlignKeys.has(String(col.key || '')) ? 'left' : 'center') as Column['align'],
     };
     });
-    // Drop duplicate ETA if both requirement date and eta were in config.
     const deduped: typeof mapped = [];
     const seenKeys = new Set<string>();
     for (const col of mapped) {
@@ -1304,8 +1299,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Build query parameters
       let params: URLSearchParams;
 
-      // Use new dynamic filter system if filters are configured
-      const page = options?.keepPage
+      // If it's an Unmannd/inventory request table and keepPage is not explicitly provided, 
+      // default to keeping the current page so edits don't bounce the user back to Page 1.
+      const shouldKeepPage = options?.keepPage || isInventoryRequestTable;
+
+      const page = shouldKeepPage
         ? String(paginationRef.current.currentPage || 1)
         : '1';
       const pageSize = String(paginationRef.current.pageSize || 10);
