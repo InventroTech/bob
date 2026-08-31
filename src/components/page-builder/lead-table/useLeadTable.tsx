@@ -228,7 +228,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         // If URL parsing fails (relative URL), try regex replacement
         endpoint = endpoint.replace(/[?&]assigned_to=[^&]*/g, '');
         // Clean up double ? or trailing &
-        endpoint = endpoint.replace(/\?&/g, '').replace(/[?&]$/, '');
+        endpoint = endpoint.replace(/\?&/g, '?').replace(/[?&]$/, '');
         console.log('[LeadTableComponent] GM user detected, removed assigned_to from endpoint URL (regex fallback)');
       }
     }
