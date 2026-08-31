@@ -13,6 +13,20 @@ import { useAuth } from '@/hooks/useAuth';
 // Module-level cache to prevent duplicate page fetches across component remounts
 const pageCache = new Map<string, { data: any; timestamp: number }>();
 const PAGE_CACHE_TTL = 5000; // 5 seconds
+const PAGE_CACHE_MAX = 8;
+
+function setPageCache(key: string, value: { data: any; timestamp: number }) {
+  const now = Date.now();
+  for (const [k, v] of pageCache) {
+    if (now - v.timestamp > PAGE_CACHE_TTL) pageCache.delete(k);
+  }
+  pageCache.set(key, value);
+  while (pageCache.size > PAGE_CACHE_MAX) {
+    const oldest = pageCache.keys().next().value;
+    if (oldest === undefined) break;
+    pageCache.delete(oldest);
+  }
+}
 
 type ComponentMap = Record<string, ComponentType<any>>;
 
@@ -127,7 +141,7 @@ const CustomAppPage: React.FC = () => {
           fetchingRef.current = null;
           if (pageData) {
             setPage(pageData);
-            pageCache.set(cacheKey, { data: pageData, timestamp: now });
+            setPageCache(cacheKey, { data: pageData, timestamp: now });
             setLoading(false);
           } else {
             pageCache.delete(cacheKey);
@@ -158,7 +172,7 @@ const CustomAppPage: React.FC = () => {
             header_title: data.header_title,
           };
           setPage(pageData);
-          pageCache.set(cacheKey, { data: pageData, timestamp: now });
+          setPageCache(cacheKey, { data: pageData, timestamp: now });
           setLoading(false);
         } else {
           pageCache.delete(cacheKey);

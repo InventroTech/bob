@@ -14,7 +14,8 @@ import ShortProfileCard from '../../ui/ShortProfileCard';
 import { Input } from '@/components/ui/input';
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
-import { useRecordUpdated } from '@/hooks/useRecordUpdated';
+import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
+import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import { FilterService } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
@@ -133,8 +134,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
+  const latestSearchValueRef = useRef<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const listFetchInFlightRef = useRef(false);
+  const createdRefreshTimerRef = useRef<number | null>(null);
   const requestSequenceRef = useRef<number>(0);
   const lastInitialFetchKeyRef = useRef<string>('');
   const initialFetchInFlightKeyRef = useRef<string | null>(null);
@@ -540,6 +544,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     nextPageLink: null,
     previousPageLink: null
   });
+  const paginationRef = useRef(pagination);
+  paginationRef.current = pagination;
   const [filterOptions, setFilterOptions] = useState<{
     lead_statuses: string[];
     sources: string[];
@@ -1291,7 +1297,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           );
         }
       }
-      // If no valid phone number, fall through to default text rendering below
     }
     
     // Special handling for columns with configured linkField
@@ -1353,8 +1358,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [config?.tableType, config?.statusButtons]);
 
   // Build table columns from config only. No auto-appended Status column.
-  // Status column appears only if you add a column with key "status" in the Columns config (shows data.status).
-  // "Status action buttons" in config are used only in the row-click modal (record detail / form modal), not as a table column.
   const tableColumns: Column[] = useMemo(() => {
     const leftAlignKeys = new Set([
       'specifications',
@@ -1392,11 +1395,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       actionApiMethod: col.actionApiMethod,
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
-      // Keep date / short columns centered under stacked headers (e.g. ETA).
       align: (leftAlignKeys.has(String(col.key || '')) ? 'left' : 'center') as Column['align'],
     };
     });
-    // Drop duplicate ETA if both requirement date and eta were in config.
     const deduped: typeof mapped = [];
     const seenKeys = new Set<string>();
     for (const col of mapped) {
@@ -1450,21 +1451,30 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   };
 
   // Apply filters using the records endpoint
-  const fetchFilteredData = async (requestSequence?: number, queryParams?: URLSearchParams) => {
-    try {
-      setTableLoading(true);
+  const fetchFilteredData = async (
+    requestSequence?: number,
+    queryParams?: URLSearchParams,
+    options?: { silent?: boolean; keepPage?: boolean },
+  ) => {
+    const silent = options?.silent === true;
+    if (silent && (listFetchInFlightRef.current || searchTimeoutRef.current)) {
+      return;
+    }
 
-      // Cancel any previous request
-      if (abortControllerRef.current) {
+    const abortController = new AbortController();
+    listFetchInFlightRef.current = true;
+    try {
+      if (!silent) setTableLoading(true);
+
+      if (!silent && abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      if (!silent) {
+        abortControllerRef.current = abortController;
+      }
 
       if (!effectiveApiEndpoint) {
         console.warn('LeadTableComponent: apiEndpoint is not configured.');
-        setTableLoading(false);
         return;
       }
 
@@ -1474,14 +1484,29 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Build query parameters
       let params: URLSearchParams;
 
-      // Use new dynamic filter system if filters are configured
+      // If it's an Unmannd/inventory request table and keepPage is not explicitly provided, 
+      // default to keeping the current page so edits don't bounce the user back to Page 1.
+      const shouldKeepPage = options?.keepPage || isInventoryRequestTable;
+
+      const page = shouldKeepPage
+        ? String(paginationRef.current.currentPage || 1)
+        : '1';
+      const pageSize = String(paginationRef.current.pageSize || 10);
+      const currentSearch = (latestSearchValueRef.current || searchTerm).trim();
+
       if (queryParams) {
         params = queryParams;
       } else if (hasActiveFilters) {
-        params = filterService!.generateQueryParams(filterState.values);
+        const filterValues = { ...filterState.values };
+        if (currentSearch) {
+          filterValues.search = currentSearch;
+        } else {
+          delete filterValues.search;
+        }
+        params = filterService!.generateQueryParams(filterValues);
         // Add pagination parameters for both systems
-        params.append('page', '1');
-        params.append('page_size', '10');
+        params.append('page', page);
+        params.append('page_size', pageSize);
       } else {
         // Fallback to legacy filter system
         params = new URLSearchParams();
@@ -1523,16 +1548,16 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         }
 
         // Include search and search_fields even when dynamic filters are not configured
-        if (searchTerm && searchTerm.trim() !== '') {
-          params.append('search', searchTerm.trim());
+        if (currentSearch) {
+          params.append('search', currentSearch);
           if (config?.searchFields) {
             params.append('search_fields', config.searchFields);
           }
         }
         
         // Add pagination parameters for both systems
-        params.append('page', '1');
-        params.append('page_size', '10');
+        params.append('page', page);
+        params.append('page_size', pageSize);
       }
 
       // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
@@ -1590,7 +1615,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       console.error('Error applying filters:', error);
       toast({ title: 'Error', description: 'Failed to apply filters', variant: 'destructive' });
     } finally {
-      setTableLoading(false);
+      listFetchInFlightRef.current = false;
+      if (!silent && abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+      if (!silent) setTableLoading(false);
     }
   };
 
@@ -1694,8 +1723,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
   };
 
-  // Store the latest search value
-  const latestSearchValueRef = useRef<string>('');
   const lastApiCallTimeRef = useRef<number>(0);
   const MIN_TIME_BETWEEN_CALLS = 1000;
 
@@ -1713,6 +1740,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
 
     searchTimeoutRef.current = setTimeout(() => {
+      searchTimeoutRef.current = null;
       const finalSearchValue = latestSearchValueRef.current;
       const now = Date.now();
       const timeSinceLastCall = now - lastApiCallTimeRef.current;
@@ -1780,15 +1808,63 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }, 1000);
   }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
 
-  const refreshLeadsFromRealtime = useCallback(() => {
-    if (!session?.access_token) return;
-    void fetchFilteredData();
-  }, [session?.access_token, fetchFilteredData]);
+  useRecordUpdated(
+    (payload: RecordUpdatedPayload) => {
+      if (!session?.access_token) return;
+      if (searchTimeoutRef.current) return;
 
-  useRecordUpdated(refreshLeadsFromRealtime, {
-    entityType: 'lead',
-    enabled: !config?.entityType || config.entityType === 'lead',
-  });
+      const recordId = payload.record_id != null ? String(payload.record_id) : '';
+      if (!recordId) return;
+
+      const matches = (row: any) => {
+        const id = row?.id != null ? String(row.id) : '';
+        const rid = row?.record_id != null ? String(row.record_id) : '';
+        return id === recordId || rid === recordId;
+      };
+
+      const patchRow = (row: any) => {
+        const stage =
+          payload.lead_stage != null && String(payload.lead_stage).trim()
+            ? String(payload.lead_stage)
+            : undefined;
+        const nextData =
+          payload.data && typeof payload.data === 'object'
+            ? { ...(row.data && typeof row.data === 'object' ? row.data : {}), ...payload.data }
+            : row.data;
+        return {
+          ...row,
+          ...(stage ? { lead_stage: stage, status: stage } : {}),
+          ...(payload.assigned_to !== undefined ? { assigned_to: payload.assigned_to } : {}),
+          ...(nextData !== undefined ? { data: nextData } : {}),
+        };
+      };
+
+      let found = false;
+      const patchList = (prev: any[]) => {
+        const idx = prev.findIndex(matches);
+        if (idx < 0) return prev;
+        found = true;
+        const next = prev.slice();
+        next[idx] = patchRow(prev[idx]);
+        return next;
+      };
+      setFilteredData(patchList);
+      setData(patchList);
+
+      if (found || !payload.created) return;
+      if (createdRefreshTimerRef.current != null) {
+        window.clearTimeout(createdRefreshTimerRef.current);
+      }
+      createdRefreshTimerRef.current = window.setTimeout(() => {
+        createdRefreshTimerRef.current = null;
+        void fetchFilteredData(undefined, undefined, { silent: true, keepPage: true });
+      }, REALTIME_LIST_DEBOUNCE_MS);
+    },
+    {
+      entityType: 'lead',
+      enabled: !config?.entityType || config.entityType === 'lead',
+    },
+  );
 
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
@@ -2195,6 +2271,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
+      }
+      if (createdRefreshTimerRef.current != null) {
+        window.clearTimeout(createdRefreshTimerRef.current);
+        createdRefreshTimerRef.current = null;
       }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
