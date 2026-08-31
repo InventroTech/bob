@@ -611,7 +611,11 @@ const CustomAppLayout: React.FC = () => {
           </div>
         )}
         <div
-          className={isUnmanndApp ? 'h-full min-h-0 w-full' : 'min-h-screen w-full'}
+          className={
+            isUnmanndApp
+              ? 'flex min-h-0 w-full flex-col'
+              : 'min-h-screen w-full'
+          }
           style={
             isUnmanndApp
               ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
