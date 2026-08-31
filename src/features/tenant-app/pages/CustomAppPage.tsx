@@ -221,13 +221,29 @@ const CustomAppPage: React.FC = () => {
   };
 
   const headerTitle = getHeaderTitle();
-  const hidePageHeader =
+  /** Inventory / procurement tables render their own page title — not generic CRM leadTable. */
+  const inventoryRequestTableTypes = new Set([
+    'procurementTable',
+    'myRequestTable',
+    'inventoryTable',
+    'vendorIdentifiedTable',
+    'pendingApprovalTable',
+    'rejectedTable',
+  ]);
+  const pageHasInventoryRequestTable =
     Array.isArray(page.config) &&
-    page.config.some(
-      (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
-        (comp.type === 'dispatchCardList' || comp.type === 'dispatchDashboard') &&
-        comp.config?.hidePageHeader !== false
+    page.config.some((comp: { type?: string }) =>
+      inventoryRequestTableTypes.has(String(comp.type || ''))
     );
+  // Hide sticky duplicate only on inventory request tables (All Requests, etc.).
+  const hidePageHeader =
+    pageHasInventoryRequestTable ||
+    (Array.isArray(page.config) &&
+      page.config.some(
+        (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
+          (comp.type === 'dispatchCardList' || comp.type === 'dispatchDashboard') &&
+          comp.config?.hidePageHeader !== false
+      ));
 
   return (
     <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'h-full min-h-0 flex flex-col' : ''}`}>
@@ -254,20 +270,33 @@ const CustomAppPage: React.FC = () => {
       )}
       
       {/* Page Content */}
-      <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'flex-1 min-h-0' : ''}`}>
-        <div className={`max-w-full min-w-0 ${isUnmanndApp ? 'px-2 pt-0 h-full' : 'pt-1'}`}>
+      <div
+        className={`w-full max-w-full min-w-0 ${
+          isUnmanndApp ? 'flex flex-1 min-h-0 flex-col' : ''
+        }`}
+      >
+        <div
+          className={`max-w-full min-w-0 ${
+            isUnmanndApp
+              ? `px-2 pt-1 pb-2 flex flex-1 min-h-0 flex-col ${pageHasInventoryRequestTable ? 'h-full' : ''}`
+              : 'pt-1'
+          }`}
+        >
           {Array.isArray(page.config)
             ? (page.config as any[]).map((component) => {
                 const Renderer = componentMap[component.type];
                 if (!Renderer) return null;
                 // Skip header components if they exist in the config (we show it as fixed header above)
                 if (component.type === 'header') return null;
+                const fillHeight =
+                  isUnmanndApp && inventoryRequestTableTypes.has(String(component.type || ''));
                 return (
-                  <Renderer
+                  <div
                     key={component.id}
-                    {...component.props}
-                    config={component.config}
-                  />
+                    className={fillHeight ? 'flex min-h-0 flex-1 flex-col' : undefined}
+                  >
+                    <Renderer {...component.props} config={component.config} />
+                  </div>
                 );
               })
             : null}
