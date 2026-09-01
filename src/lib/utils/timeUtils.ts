@@ -102,20 +102,19 @@ export const formatCalendarDate = (dateString: string): string => {
 };
 
 /**
- * Compact table date: YYYY-MM-DD → DD/MM/YY (prototype All Requests table).
+ * Compact table date: YYYY-MM-DD → DD/MM/YYYY (All Requests table).
  */
 export const formatTableDateShort = (dateString: string): string => {
   if (!dateString) return '—';
   const trimmed = String(dateString).trim();
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
   if (dateOnly) {
-    const yy = dateOnly[1].slice(-2);
-    return `${dateOnly[3]}/${dateOnly[2]}/${yy}`;
+    return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
   }
   const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return trimmed;
   const dd = String(parsed.getDate()).padStart(2, '0');
   const mm = String(parsed.getMonth() + 1).padStart(2, '0');
-  const yy = String(parsed.getFullYear()).slice(-2);
-  return `${dd}/${mm}/${yy}`;
+  const yyyy = String(parsed.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
 };

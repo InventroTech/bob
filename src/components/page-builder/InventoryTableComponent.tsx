@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { mergeInventoryTrackingColumns } from '@/lib/inventory/shipmentTracking';
+import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 interface RecordsTableProps {
   /**
@@ -37,8 +38,14 @@ export const InventoryTableComponent: React.FC<RecordsTableProps> = ({ config })
     detailMode === 'none';
 
   const mergedConfig = {
-    title: config?.title || '',
     ...(config || {}),
+    inventoryTableKind: 'inventory',
+    title:
+      resolveInventoryTableDisplayTitle({
+        configuredTitle: config?.title,
+        inventoryTableKind: 'inventory',
+        pageDisplayName: config?.pageDisplayName,
+      }) || '',
     ...(columns ? { columns } : {}),
     ...(isInventoryRequest && !keepSpecial ? { detailMode: 'record_form_modal' } : {}),
   };

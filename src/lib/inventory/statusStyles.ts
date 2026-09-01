@@ -4,14 +4,14 @@ const STATUS_COLOR_CLASS_MAP: Record<string, string> = {
   VENDOR_IDENTIFIED: 'border-sky-500 bg-white text-sky-700',
   IN_CART: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   IN_SHIPPING: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  ON_HOLD: 'border-amber-300 bg-amber-50 text-amber-700',
+  ON_HOLD: 'border-amber-300 bg-amber-50 text-amber-900',
   REJECTED: 'border-rose-200 bg-rose-50 text-rose-800',
 };
 
 /** shipment_status chip tones (separate from request status). */
 const SHIPMENT_STATUS_COLOR_CLASS_MAP: Record<string, string> = {
-  NOT_SHIPPED: 'border-sky-200 bg-sky-50 text-sky-800',
-  ORDERED: 'border-sky-200 bg-sky-50 text-sky-800',
+  NOT_SHIPPED: 'border-sky-300 bg-sky-50 text-slate-900',
+  ORDERED: 'border-sky-300 bg-sky-50 text-slate-900',
   IN_TRANSIT: 'border-indigo-200 bg-indigo-50 text-indigo-800',
   OUT_FOR_DELIVERY: 'border-amber-200 bg-amber-50 text-amber-900',
   DELIVERED: 'border-emerald-200 bg-emerald-50 text-emerald-800',
