@@ -65,6 +65,36 @@ const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
   'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-xs font-semibold text-white hover:bg-[#163a8a] hover:text-white';
 
+/** All Requests: fixed rem widths on data columns; item name absorbs the rest (no gaping chips). */
+function procurementColumnLayout(
+  accessor: string
+): { width?: string; minWidth?: string; maxWidth?: string } | undefined {
+  const key = String(accessor || '').trim().toLowerCase();
+  const chipCol = { width: '11rem', minWidth: '11rem', maxWidth: '11rem' };
+  const priorityCol = { width: '6.5rem', minWidth: '6.5rem', maxWidth: '6.5rem' };
+  const dateCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '6rem' };
+  const costCol = { width: '6.75rem', minWidth: '6.75rem', maxWidth: '7.25rem' };
+  const vendorCol = { width: '5rem', minWidth: '5rem', maxWidth: '5.5rem' };
+  const requesterCol = { width: '7.5rem', minWidth: '7.5rem', maxWidth: '9rem' };
+  const editCol = { width: '4.25rem', minWidth: '4.25rem', maxWidth: '4.25rem' };
+  const layouts: Record<string, { width?: string; minWidth?: string; maxWidth?: string }> = {
+    item_name_freeform: {},
+    item_name: {},
+    requester_name: requesterCol,
+    estimated_cost: costCol,
+    vendor: vendorCol,
+    request_date: dateCol,
+    eta: dateCol,
+    urgency_level: priorityCol,
+    priority: priorityCol,
+    status: chipCol,
+    shipment_status: chipCol,
+    [REQUESTER_EDIT_COLUMN_ACCESSOR]: editCol,
+    edit: editCol,
+  };
+  return layouts[key];
+}
+
 export function useLeadTable({ config, pageId }: LeadTableProps) {
   const { toast } = useToast();
   /** In Page Builder we disable row-click modal so editing isn't interrupted; modal opens on row click only on the live page. */
@@ -852,8 +882,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
     }
 
-    // Keep Requirement Date in the same calendar format as Request Date
-    // (e.g. "31 July 2026"), even if the column type is text in Page Builder.
+    // Keep Requirement Date in the same compact format as Request Date (DD/MM/YYYY).
     const calendarDateAccessors = new Set([
       'request_date',
       'requested_date',
@@ -1068,7 +1097,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           compact
           wrapName
           useDefaultItemImage
-          className="mx-auto"
+          className="mx-auto w-full min-w-0 max-w-full"
         />
       );
     }
@@ -1196,13 +1225,15 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           ? INVENTORY_STATUS_CHIP_SIZE
           : 'rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wide';
       return (
-        <Badge
-          variant="outline"
-          className={`${chipToneClass} ${chipSizeClass} hover:opacity-90`}
-          title={chipTitle}
-        >
-          {chipLabel}
-        </Badge>
+        <div className="flex justify-center">
+          <Badge
+            variant="outline"
+            className={`${chipToneClass} ${chipSizeClass} hover:opacity-90`}
+            title={chipTitle}
+          >
+            {chipLabel}
+          </Badge>
+        </div>
       );
     }
 
@@ -1396,6 +1427,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
       align: (leftAlignKeys.has(String(col.key || '')) ? 'left' : 'center') as Column['align'],
+      ...(config?.tableType === 'itemsTable' && isInventoryRequestTable
+        ? procurementColumnLayout(resolvedKey)
+        : {}),
     };
     });
     const deduped: typeof mapped = [];
@@ -1422,6 +1456,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           accessor: REQUESTER_EDIT_COLUMN_ACCESSOR,
           type: 'action',
           align: 'center',
+          ...procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR),
         });
       }
     }

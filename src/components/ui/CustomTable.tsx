@@ -14,6 +14,8 @@ export type CustomTableColumn = {
   actionApiPayload?: string;
   align?: 'left' | 'center' | 'right';
   width?: string;
+  minWidth?: string;
+  maxWidth?: string;
 };
 
 export interface CustomTableProps {
@@ -34,6 +36,11 @@ export interface CustomTableProps {
   comfortable?: boolean;
   /** Stretch to fill parent height; body scrolls inside (All Requests page). */
   fillHeight?: boolean;
+  /**
+   * Fit table to parent width (table-layout: fixed). Use on All Requests so the
+   * page does not scroll horizontally; status/shipment pills keep their size.
+   */
+  fitViewport?: boolean;
   /**
    * @deprecated Stacked card layout is removed. Prop kept for call-site compatibility.
    * Tables always render as a normal table with horizontal scroll on small screens.
@@ -86,10 +93,17 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   dense = false,
   comfortable = false,
   fillHeight = false,
+  fitViewport = false,
 }) => {
-  const cellY = comfortable ? 'py-4' : dense ? 'py-1' : 'py-2';
-  const cellX = comfortable ? 'px-3' : dense ? 'px-2.5' : 'px-4';
-  const leftCellX = comfortable ? 'pl-3 pr-3' : dense ? 'pl-2 pr-2.5' : 'pl-2 pr-4';
+  const cellY = comfortable ? (fitViewport ? 'py-3' : 'py-4') : dense ? 'py-1' : 'py-2';
+  const cellX = comfortable ? (fitViewport ? 'px-2.5' : 'px-3') : dense ? 'px-2.5' : 'px-4';
+  const leftCellX = comfortable
+    ? fitViewport
+      ? 'pl-2.5 pr-2.5'
+      : 'pl-3 pr-3'
+    : dense
+      ? 'pl-2 pr-2.5'
+      : 'pl-2 pr-4';
   const headerUppercase = dense || comfortable;
 
   const defaultRenderCell = (row: any, column: CustomTableColumn, _columnIndex: number) => {
@@ -132,11 +146,32 @@ export const CustomTable: React.FC<CustomTableProps> = ({
     >
       <div
         className={cn(
-          'w-full max-w-full min-w-0 overflow-x-auto',
+          'w-full max-w-full min-w-0',
+          fitViewport ? 'overflow-x-hidden' : 'overflow-x-auto',
           fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-hidden'
         )}
       >
-        <table className={cn('min-w-max w-full bg-white', tableClassName)}>
+        <table
+          className={cn(
+            fitViewport ? 'table-fixed w-full' : 'min-w-max w-full',
+            'bg-white',
+            tableClassName
+          )}
+        >
+          {fitViewport ? (
+            <colgroup>
+              {columns.map((col, idx) => (
+                <col
+                  key={idx}
+                  style={{
+                    width: col.width,
+                    minWidth: col.minWidth,
+                    maxWidth: col.maxWidth,
+                  }}
+                />
+              ))}
+            </colgroup>
+          ) : null}
           <thead className={fillHeight ? 'sticky top-0 z-10' : undefined}>
             <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
               {columns.map((col, idx) => (
@@ -150,7 +185,11 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     col.align === 'right' && `${cellX} text-right`,
                     col.width && `w-[${col.width}]`
                   )}
-                  style={col.width ? { width: col.width } : undefined}
+                  style={
+                    col.width || col.minWidth || col.maxWidth
+                      ? { width: col.width, minWidth: col.minWidth, maxWidth: col.maxWidth }
+                      : undefined
+                  }
                 >
                   {renderStackedHeader(
                     col.header,
@@ -191,6 +230,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                       className={cn(
                         'text-sm align-middle',
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
+                        fitViewport && 'max-w-0',
                         cellY,
                         col.align === 'left' ? `${leftCellX} text-left` : `${cellX} text-center`,
                         col.align === 'right' && `${cellX} text-right`

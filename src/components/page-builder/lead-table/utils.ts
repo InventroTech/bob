@@ -1,6 +1,6 @@
 /** Pure helpers for the lead table module. */
 
-import { formatCalendarDate } from '@/lib/utils/timeUtils';
+import { formatCalendarDate, formatTableDateShort } from '@/lib/utils/timeUtils';
 import { PLACEHOLDER_REGEX } from './constants';
 import type { LeadTableProps } from './types';
 
@@ -180,6 +180,18 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
     // Apply transformations for configured columns
     config.columns.forEach(col => {
       const value = lead.data?.[col.key] !== undefined ? lead.data?.[col.key] : lead[col.key];
+      const entityType = String(config?.entityType || '');
+      const useSlashTableDate =
+        entityType.startsWith('inventory_') || entityType === 'unmannd_request';
+      const calendarKeys = new Set([
+        'request_date',
+        'requested_date',
+        'required_date',
+        'requirement_date',
+        'eta',
+      ]);
+      const formatTableDate = (raw: string) =>
+        useSlashTableDate ? formatTableDateShort(raw) : formatCalendarDate(raw);
       
       // Use custom transform if provided
       if (col.transform) {
@@ -192,8 +204,7 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
               transformedLead[col.key] = 'N/A';
               break;
             }
-            const entityType = String(config?.entityType || '');
-            // Request / requirement / inventory / unmannd: show calendar day (e.g. 24 July 2026), not "12 hours ago".
+            // Request / requirement / inventory / unmannd: calendar day in table.
             const useCalendarDate =
               entityType.startsWith('inventory_') ||
               entityType === 'unmannd_request' ||
@@ -203,26 +214,19 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
               col.key === 'requirement_date' ||
               col.key === 'created_at';
             transformedLead[col.key] = useCalendarDate
-              ? formatCalendarDate(String(value))
+              ? formatTableDate(String(value))
               : formatRelativeTime(String(value));
             break;
           }
           default: {
-            // Even if Page Builder marks these as text, keep the same calendar format as Request Date.
-            const calendarKeys = new Set([
-              'request_date',
-              'requested_date',
-              'required_date',
-              'requirement_date',
-              'eta',
-            ]);
+            // Even if Page Builder marks these as text, keep the same format as Request Date.
             if (
               calendarKeys.has(col.key) &&
               value !== null &&
               value !== undefined &&
               String(value).trim() !== ''
             ) {
-              transformedLead[col.key] = formatCalendarDate(String(value));
+              transformedLead[col.key] = formatTableDate(String(value));
             } else {
               transformedLead[col.key] = value !== null && value !== undefined ? value : 'N/A';
             }
@@ -275,3 +279,171 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
     product_image: lead.product_image || lead.data?.product_image || null,
   };
 };
+
+export type InventoryTableKind =
+  | 'procurement'
+  | 'my_request'
+  | 'pending_approval'
+  | 'vendor_identified'
+  | 'rejected'
+  | 'inventory';
+
+const INVENTORY_TABLE_KIND_DEFAULT_TITLES: Record<InventoryTableKind, string> = {
+  procurement: 'All Requests',
+  my_request: 'My Requests',
+  pending_approval: 'Pending Approvals',
+  vendor_identified: 'Vendor Identified',
+  rejected: 'Rejected',
+  inventory: '',
+};
+
+/** Saved Page Builder configs often copy "All Requests" onto every inventory table. */
+export function isGenericInventoryTableTitle(title: string | undefined | null): boolean {
+  const t = String(title || '').trim().toLowerCase();
+  return !t || t === 'all leads' || t === 'all request' || t === 'all requests';
+}
+
+export function resolveInventoryTableDisplayTitle(options: {
+  configuredTitle?: string | null;
+  inventoryTableKind?: InventoryTableKind | string | null;
+  pageDisplayName?: string | null;
+}): string | undefined {
+  const configured = String(options.configuredTitle || '').trim();
+  const kind = String(options.inventoryTableKind || '').trim() as InventoryTableKind;
+  const pageName = String(options.pageDisplayName || '').trim();
+
+  if (isGenericInventoryTableTitle(configured)) {
+    const kindDefault = kind ? INVENTORY_TABLE_KIND_DEFAULT_TITLES[kind] : '';
+    if (kindDefault) return kindDefault;
+    if (pageName) return pageName;
+    return undefined;
+  }
+  return configured || undefined;
+}
+
+/** Map Page Builder table widget types to inventory page kinds. */
+export const TABLE_COMPONENT_KIND_MAP: Record<string, InventoryTableKind> = {
+  procurementTable: 'procurement',
+  myRequestTable: 'my_request',
+  pendingApprovalTable: 'pending_approval',
+  vendorIdentifiedTable: 'vendor_identified',
+  rejectedTable: 'rejected',
+  inventoryTable: 'inventory',
+};
+
+export function isInventoryLikeTableConfig(
+  config: Record<string, unknown> | undefined | null
+): boolean {
+  if (!config) return false;
+  const entityType = String(config.entityType || '').trim();
+  const forceEntityType = String(
+    (config.forceQueryParams as Record<string, string> | undefined)?.entity_type || ''
+  ).trim();
+  const apiEndpoint = String(config.apiEndpoint || '').trim();
+  if (entityType === 'inventory_request' || entityType === 'unmannd_request') return true;
+  if (forceEntityType === 'inventory_request' || forceEntityType === 'unmannd_request') return true;
+  if (/(?:^|[?&])entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(apiEndpoint)) {
+    return true;
+  }
+  const columns = config.columns;
+  if (Array.isArray(columns)) {
+    return columns.some((col: { key?: string }) =>
+      ['item_name_freeform', 'item_name', 'quantity_required', 'urgency_level'].includes(
+        String(col?.key || '')
+      )
+    );
+  }
+  return false;
+}
+
+export function inferInventoryTableKindFromPageName(pageName: string): InventoryTableKind | undefined {
+  const n = pageName.trim().toLowerCase();
+  if (!n) return undefined;
+  if (n === 'all request' || n === 'all requests' || n === 'all leads') return 'procurement';
+  if (n.includes('my request')) return 'my_request';
+  if (n.includes('pending approval')) return 'pending_approval';
+  if (n.includes('vendor identified')) return 'vendor_identified';
+  if (n === 'rejected' || n.startsWith('rejected ')) return 'rejected';
+  if (n.includes('in cart') || n.includes('ordered') || n.includes('delivered')) return 'inventory';
+  return undefined;
+}
+
+export function resolveTableComponentInventoryKind(
+  componentType: string,
+  pageName: string,
+  config: Record<string, unknown> | undefined | null
+): InventoryTableKind | undefined {
+  const fromType = TABLE_COMPONENT_KIND_MAP[componentType];
+  if (fromType) return fromType;
+  if (componentType === 'leadTable' && isInventoryLikeTableConfig(config)) {
+    return inferInventoryTableKindFromPageName(pageName) ?? 'inventory';
+  }
+  if (componentType === 'inventoryTable') return 'inventory';
+  return undefined;
+}
+
+/** Normalize saved table config title using page name + widget type (handles generic leadTable). */
+export function enrichInventoryTableConfig(
+  componentType: string,
+  pageName: string,
+  config: Record<string, unknown> | undefined | null
+): Record<string, unknown> {
+  const base = config ? { ...config } : {};
+  const inventoryLike =
+    Boolean(TABLE_COMPONENT_KIND_MAP[componentType]) || isInventoryLikeTableConfig(base);
+  if (!inventoryLike) return base;
+
+  const trimmedPageName = pageName.trim();
+  const inventoryTableKind =
+    resolveTableComponentInventoryKind(componentType, trimmedPageName, base) ??
+    inferInventoryTableKindFromPageName(trimmedPageName);
+
+  const title = resolveInventoryTableDisplayTitle({
+    configuredTitle: base.title as string | undefined,
+    inventoryTableKind,
+    pageDisplayName: trimmedPageName,
+  });
+
+  const { inventoryTableKind: _staleKind, ...withoutStaleKind } = base;
+
+  return {
+    ...withoutStaleKind,
+    ...(trimmedPageName ? { pageDisplayName: trimmedPageName } : {}),
+    pageComponentType: componentType,
+    ...(title ? { title } : {}),
+  };
+}
+
+/** Only the All Requests page uses the branded ALL REQUEST toolbar label. */
+export function formatInventoryTableToolbarTitle(
+  title: string | undefined,
+  inventoryTableKind?: InventoryTableKind | string | null
+): string | undefined {
+  if (!title) return undefined;
+  const kind = String(inventoryTableKind || '').trim();
+  if (kind === 'procurement' && isGenericInventoryTableTitle(title)) {
+    return 'ALL REQUEST';
+  }
+  return title;
+}
+
+/** Resolve toolbar title using sidebar page name (authoritative) + widget type. */
+export function resolveInventoryPageTitle(options: {
+  configuredTitle?: string | null;
+  pageDisplayName?: string | null;
+  inventoryTableKind?: InventoryTableKind | string | null;
+  pageComponentType?: string | null;
+}): string | undefined {
+  const pageName = String(options.pageDisplayName || '').trim();
+  const kindFromPageName = inferInventoryTableKindFromPageName(pageName);
+  const kind =
+    kindFromPageName ||
+    TABLE_COMPONENT_KIND_MAP[String(options.pageComponentType || '')] ||
+    String(options.inventoryTableKind || '').trim();
+
+  return resolveInventoryTableDisplayTitle({
+    configuredTitle: options.configuredTitle,
+    inventoryTableKind: kind,
+    pageDisplayName: pageName,
+  });
+}
