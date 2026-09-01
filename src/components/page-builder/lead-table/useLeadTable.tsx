@@ -55,11 +55,11 @@ import {
 } from '@/lib/inventory/workflow';
 import { SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
 
-/** Uniform pill sizes for All Requests priority / status / shipment chips. */
-const INVENTORY_PRIORITY_CHIP_SIZE =
-  'inline-flex h-7 w-[5rem] shrink-0 items-center justify-center rounded-full px-2 text-xs font-semibold tracking-wide overflow-hidden text-ellipsis whitespace-nowrap';
-const INVENTORY_STATUS_CHIP_SIZE =
-  'inline-flex h-7 w-[9.5rem] shrink-0 items-center justify-center rounded-full px-2.5 text-xs font-semibold tracking-wide overflow-hidden text-ellipsis whitespace-nowrap';
+/** Uniform rounded-rectangle chips for All Requests priority / status / shipment. */
+const INVENTORY_CHIP_SHAPE =
+  '!rounded-[8px] inline-flex h-7 shrink-0 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide overflow-hidden text-ellipsis whitespace-nowrap border';
+const INVENTORY_PRIORITY_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[5rem] min-w-[4.5rem]`;
+const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[9.5rem] min-w-[6.5rem]`;
 
 const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
@@ -1223,7 +1223,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         ? INVENTORY_PRIORITY_CHIP_SIZE
         : useShipmentTone || useInventoryStatusTone
           ? INVENTORY_STATUS_CHIP_SIZE
-          : 'rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wide';
+          : 'rounded-[8px] px-3 py-0.5 text-xs font-semibold uppercase tracking-wide border';
       return (
         <div className="flex justify-center">
           <Badge
@@ -1391,6 +1391,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   // Build table columns from config only. No auto-appended Status column.
   const tableColumns: Column[] = useMemo(() => {
     const leftAlignKeys = new Set([
+      'item_name',
+      'item_name_freeform',
       'specifications',
       'comments',
       'requester_name',

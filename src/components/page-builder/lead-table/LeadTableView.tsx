@@ -425,7 +425,8 @@ export function LeadTableView(props: LeadTableModel) {
           </div>
         )}
 
-        {/* Mobile Card View */}
+        {/* Mobile Card View - Praja CRM only; Unmannd inventory tables use the responsive table below */}
+        {!isProcurementStyleTable && (
         <div className="md:hidden space-y-4 mt-1.5">
           {filteredData.map((item, index) => {
             const lead = item;
@@ -483,12 +484,13 @@ export function LeadTableView(props: LeadTableModel) {
             );
           })}
         </div>
+        )}
 
-        {/* Desktop Table */}
+        {/* Desktop / responsive table (Unmannd inventory tables also use this on mobile) */}
         <div
           className={
             isProcurementStyleTable
-              ? 'relative mt-1 hidden min-h-0 w-full max-w-full flex-1 md:flex md:flex-col'
+              ? 'relative mt-1 block min-h-0 w-full max-w-full flex-1 md:flex md:flex-col'
               : 'hidden md:block w-full max-w-full min-w-0 relative mt-1.5'
           }
         >

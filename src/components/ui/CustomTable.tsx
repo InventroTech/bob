@@ -49,24 +49,38 @@ export interface CustomTableProps {
 }
 
 /**
- * Stack multi-word headers (e.g. "Request Date").
- * Centered under the column by default; left-aligned columns keep words left.
+ * Multi-word headers stack vertically to fit narrow columns (e.g. "Request Date").
+ * Item name stays one line when fitViewport is enabled.
  */
-function renderStackedHeader(header: string, align: 'left' | 'center' | 'right' = 'center') {
-  const words = String(header || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (words.length <= 1) return header;
+function isItemNameAccessor(accessor: string): boolean {
+  const key = String(accessor || '').trim().toLowerCase();
+  return key === 'item_name' || key === 'item_name_freeform';
+}
+
+function renderStackedHeader(
+  header: string,
+  align: 'left' | 'center' | 'right' = 'center',
+  singleLine = false
+) {
+  const text = String(header || '').trim();
+  if (singleLine || !text.includes(' ')) {
+    return (
+      <span
+        className={cn(
+          'block whitespace-nowrap',
+          align === 'left' && 'text-left',
+          align === 'right' && 'text-right',
+          align === 'center' && 'text-center'
+        )}
+      >
+        {text}
+      </span>
+    );
+  }
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return text;
   return (
-    <span
-      className={cn(
-        'inline-flex flex-col gap-0.5 leading-tight',
-        align === 'left' && 'items-start',
-        align === 'right' && 'items-end',
-        align === 'center' && 'items-center justify-center'
-      )}
-    >
+    <span className="inline-flex flex-col items-center justify-center gap-0.5 leading-tight">
       {words.map((word, i) => (
         <span key={`${word}-${i}`}>{word}</span>
       ))}
@@ -174,15 +188,25 @@ export const CustomTable: React.FC<CustomTableProps> = ({
           ) : null}
           <thead className={fillHeight ? 'sticky top-0 z-10' : undefined}>
             <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
-              {columns.map((col, idx) => (
+              {columns.map((col, idx) => {
+                const itemNameCol = isItemNameAccessor(col.accessor);
+                const headerSingleLine = fitViewport && itemNameCol;
+                const headerPadLeft =
+                  fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                return (
                 <th
                   key={idx}
                   className={cn(
-                    'text-sm font-medium text-center whitespace-nowrap',
+                    'text-sm font-medium',
+                    fitViewport && 'overflow-hidden',
+                    headerSingleLine && 'whitespace-nowrap',
                     headerUppercase && 'uppercase tracking-wide font-semibold',
                     comfortable ? 'py-3' : cellY,
-                    col.align === 'left' ? `${leftCellX} text-left` : cellX,
-                    col.align === 'right' && `${cellX} text-right`,
+                    col.align === 'left'
+                      ? `${headerPadLeft} text-left`
+                      : col.align === 'right'
+                        ? `${cellX} text-right`
+                        : `${cellX} text-center`,
                     col.width && `w-[${col.width}]`
                   )}
                   style={
@@ -193,10 +217,12 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                 >
                   {renderStackedHeader(
                     col.header,
-                    col.align === 'left' || col.align === 'right' ? col.align : 'center'
+                    col.align === 'left' || col.align === 'right' ? col.align : 'center',
+                    headerSingleLine
                   )}
                 </th>
-              ))}
+                );
+              })}
             </tr>
           </thead>
           <tbody className="text-gray-600 text-sm bg-white">
@@ -224,7 +250,11 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     !hoverable && 'hover:bg-transparent'
                   )}
                 >
-                  {columns.map((col, colIdx) => (
+                  {columns.map((col, colIdx) => {
+                    const itemNameCol = isItemNameAccessor(col.accessor);
+                    const cellPadLeft =
+                      fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                    return (
                     <td
                       key={colIdx}
                       className={cn(
@@ -232,13 +262,14 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
                         fitViewport && 'max-w-0',
                         cellY,
-                        col.align === 'left' ? `${leftCellX} text-left` : `${cellX} text-center`,
+                        col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
                         col.align === 'right' && `${cellX} text-right`
                       )}
                     >
                       {cellRenderer(row, col, colIdx)}
                     </td>
-                  ))}
+                    );
+                  })}
                 </tr>
               ))
             )}
