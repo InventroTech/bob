@@ -1,6 +1,7 @@
 /** Presentational JSX for the lead table. */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useOutletContext, useParams } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X } from 'lucide-react';
 import LeadCardCarousel from '../lead-card-carousel';
@@ -19,6 +20,18 @@ import {
   DEFAULT_PAYMENT_MODAL_FIELDS,
 } from './constants';
 import type { LeadTableModel } from './useLeadTable';
+import {
+  formatInventoryTableToolbarTitle,
+  inferInventoryTableKindFromPageName,
+  resolveInventoryPageTitle,
+  TABLE_COMPONENT_KIND_MAP,
+} from './utils';
+import { useInventoryTablePageName } from './InventoryTablePageContext';
+
+type CustomAppOutletContext = {
+  pages?: { id: string; name: string }[];
+  isUnmanndApp?: boolean;
+};
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -80,6 +93,15 @@ export function LeadTableView(props: LeadTableModel) {
     apiClient,
   } = props;
 
+  const { pageId: routePageId } = useParams<{ pageId?: string }>();
+  const outletContext = useOutletContext<CustomAppOutletContext | undefined>();
+  const contextPageName = useInventoryTablePageName();
+  const sidebarPageName = useMemo(() => {
+    if (contextPageName) return contextPageName;
+    if (!routePageId || !outletContext?.pages?.length) return '';
+    return (outletContext.pages.find((p) => p.id === routePageId)?.name || '').trim();
+  }, [contextPageName, routePageId, outletContext?.pages]);
+
   // DYNAMIC TITLE LOGIC based on URL path
   const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
@@ -102,17 +124,27 @@ export function LeadTableView(props: LeadTableModel) {
         )
     );
   // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
-  const configuredTitle = (config?.title || '').trim();
-  const configuredTitleLower = configuredTitle.toLowerCase();
-  const isAllRequestTitle =
-    !configuredTitle ||
-    configuredTitleLower === 'all leads' ||
-    configuredTitleLower === 'all request' ||
-    configuredTitleLower === 'all requests';
-  let displayTitle =
-    isInventoryLikeForTitle && isAllRequestTitle
-      ? 'ALL REQUEST'
-      : configuredTitle || undefined;
+  let displayTitle: string | undefined;
+  if (isInventoryLikeForTitle) {
+    const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
+    const pageDisplayName =
+      sidebarPageName ||
+      (config as { pageDisplayName?: string } | undefined)?.pageDisplayName ||
+      '';
+    const inventoryTableKind =
+      inferInventoryTableKindFromPageName(pageDisplayName) ||
+      TABLE_COMPONENT_KIND_MAP[pageComponentType || ''] ||
+      (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind;
+    const resolved = resolveInventoryPageTitle({
+      configuredTitle: config?.title,
+      pageDisplayName,
+      inventoryTableKind,
+      pageComponentType,
+    });
+    displayTitle = formatInventoryTableToolbarTitle(resolved, inventoryTableKind);
+  } else {
+    displayTitle = (config?.title || '').trim() || undefined;
+  }
 
   if (!displayTitle && !isInventoryLikeForTitle) {
     if (pathname.includes('follow')) {
@@ -187,10 +219,7 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle =
-    isInventoryLikeForTitle && isAllRequestTitle
-      ? 'ALL REQUEST'
-      : configuredTitle;
+  const tableTitle = displayTitle;
 
   const pageTitleText = (displayTitle || tableTitle || '').trim();
   const pageTitleDisplay = isProcurementStyleTable
@@ -487,6 +516,9 @@ export function LeadTableView(props: LeadTableModel) {
               actionApiHeaders: col.actionApiHeaders,
               actionApiPayload: col.actionApiPayload,
               align: col.align,
+              width: col.width,
+              minWidth: col.minWidth,
+              maxWidth: col.maxWidth,
             })) as CustomTableColumn[]}
             data={filteredData}
             loading={tableLoading}
@@ -499,6 +531,7 @@ export function LeadTableView(props: LeadTableModel) {
             dense={false}
             comfortable={isProcurementStyleTable}
             fillHeight={isProcurementStyleTable}
+            fitViewport={isProcurementStyleTable}
             className={isProcurementStyleTable ? procurementTableFrame : undefined}
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
           />

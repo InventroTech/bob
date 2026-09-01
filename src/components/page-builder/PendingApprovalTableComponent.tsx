@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { resolvePriorityFromRow } from '@/lib/inventory/priority';
+import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 export type PendingApprovalTableColumn = {
   key: string;
@@ -135,8 +136,13 @@ export const PendingApprovalTableComponent: React.FC<PendingApprovalTableProps> 
 
     return {
       ...(config || {}),
-      // Table card has no in-component title (page header / nav can name the page).
-      title: '',
+      inventoryTableKind: 'pending_approval',
+      title:
+        resolveInventoryTableDisplayTitle({
+          configuredTitle: config?.title,
+          inventoryTableKind: 'pending_approval',
+          pageDisplayName: config?.pageDisplayName,
+        }) || 'Pending Approvals',
       columns,
       entityType,
       tableType: config?.tableType === 'default' ? 'default' : 'itemsTable',

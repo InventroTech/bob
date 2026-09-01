@@ -3,7 +3,8 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { resolvePriorityFromRow } from '@/lib/inventory/priority';
-import { mergeInventoryTrackingColumns } from '@/lib/inventory/shipmentTracking';
+import { mergeInventoryTrackingColumns, excludeInventoryTrackColumn } from '@/lib/inventory/shipmentTracking';
+import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 export type ProcurementTableColumn = {
   key: string;
@@ -199,9 +200,13 @@ export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ con
     const isInventoryLike =
       entityType === 'inventory_request' || entityType === 'unmannd_request';
     const columns = withPriorityTransform(
-      (isInventoryLike
-        ? mergeInventoryTrackingColumns(config?.columns || DEFAULT_PROCUREMENT_TABLE_COLUMNS)
-        : config?.columns || []) as ProcurementTableColumn[]
+      excludeInventoryTrackColumn(
+        (isInventoryLike
+          ? mergeInventoryTrackingColumns(config?.columns || DEFAULT_PROCUREMENT_TABLE_COLUMNS, {
+              includeTrack: false,
+            })
+          : config?.columns || []) as ProcurementTableColumn[]
+      )
     );
     const detailMode = resolveProcurementDetailMode(config?.detailMode, isInventoryLike);
 
@@ -211,6 +216,13 @@ export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ con
 
     return {
       ...restConfig,
+      inventoryTableKind: 'procurement',
+      title:
+        resolveInventoryTableDisplayTitle({
+          configuredTitle: config?.title,
+          inventoryTableKind: 'procurement',
+          pageDisplayName: config?.pageDisplayName,
+        }) || 'All Requests',
       columns,
       entityType,
       tableType,
