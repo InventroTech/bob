@@ -4,6 +4,13 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { componentMap as staticComponentMap } from '@/features/page-builder/componentMap';
 import {
+  enrichInventoryTableConfig,
+  isGenericInventoryTableTitle,
+  isInventoryLikeTableConfig,
+  TABLE_COMPONENT_KIND_MAP,
+} from '@/components/page-builder/lead-table/utils';
+import { InventoryTablePageProvider } from '@/components/page-builder/lead-table/InventoryTablePageContext';
+import {
   fetchPageConfig,
   fetchPagesForRole,
   getEffectiveToken,
@@ -201,40 +208,60 @@ const CustomAppPage: React.FC = () => {
   if (error) return <div className="p-4 text-red-600">{error}</div>;
   if (!page) return <div className="p-4">Loading page...</div>;
 
+  const effectivePageName = (
+    sidebarPages.find((p) => p.id === pageId)?.name ||
+    page.name ||
+    ''
+  ).trim();
+
   // Extract header title from page-level header_title or from header component in config
   const getHeaderTitle = () => {
+    const pageName = effectivePageName;
+
     // First check page-level header_title
     if (page.header_title) {
-      return page.header_title;
+      const header = page.header_title.trim();
+      if (isGenericInventoryTableTitle(header) && pageName && !isGenericInventoryTableTitle(pageName)) {
+        return pageName;
+      }
+      return header;
     }
-    
+
     // Then check if there's a header component in the config
     if (Array.isArray(page.config)) {
       const headerComponent = page.config.find((comp: any) => comp.type === 'header');
       if (headerComponent?.config?.title) {
-        return headerComponent.config.title;
+        const header = String(headerComponent.config.title).trim();
+        if (isGenericInventoryTableTitle(header) && pageName && !isGenericInventoryTableTitle(pageName)) {
+          return pageName;
+        }
+        return header;
       }
     }
-    
+
     // Fallback to page name if no header title found
-    return page.name || null;
+    return pageName || null;
   };
 
   const headerTitle = getHeaderTitle();
-  /** Inventory / procurement tables render their own page title — not generic CRM leadTable. */
-  const inventoryRequestTableTypes = new Set([
-    'procurementTable',
-    'myRequestTable',
-    'inventoryTable',
-    'vendorIdentifiedTable',
-    'pendingApprovalTable',
-    'rejectedTable',
-  ]);
-  const pageHasInventoryRequestTable =
-    Array.isArray(page.config) &&
-    page.config.some((comp: { type?: string }) =>
-      inventoryRequestTableTypes.has(String(comp.type || ''))
+  const isInventoryTableComponent = (comp: { type?: string; config?: Record<string, unknown> }) => {
+    if (!isUnmanndApp) {
+      return (
+        Boolean(TABLE_COMPONENT_KIND_MAP[String(comp.type || '')]) ||
+        (String(comp.type || '') === 'leadTable' && isInventoryLikeTableConfig(comp.config))
+      );
+    }
+    const type = String(comp.type || '');
+    return (
+      Boolean(TABLE_COMPONENT_KIND_MAP[type]) ||
+      type === 'leadTable' ||
+      type === 'inventoryTable' ||
+      isInventoryLikeTableConfig(comp.config)
     );
+  };
+
+  const pageHasInventoryRequestTable =
+    Array.isArray(page.config) && page.config.some((comp) => isInventoryTableComponent(comp));
   // Hide sticky duplicate only on inventory request tables (All Requests, etc.).
   const hidePageHeader =
     pageHasInventoryRequestTable ||
@@ -246,6 +273,7 @@ const CustomAppPage: React.FC = () => {
       ));
 
   return (
+    <InventoryTablePageProvider pageName={effectivePageName}>
     <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'h-full min-h-0 flex flex-col' : ''}`}>
       {/* Fixed Header — compact so request tables start closer to the title */}
       {headerTitle && !hidePageHeader && (
@@ -289,13 +317,18 @@ const CustomAppPage: React.FC = () => {
                 // Skip header components if they exist in the config (we show it as fixed header above)
                 if (component.type === 'header') return null;
                 const fillHeight =
-                  isUnmanndApp && inventoryRequestTableTypes.has(String(component.type || ''));
+                  isUnmanndApp && isInventoryTableComponent(component);
+                const tableConfig = enrichInventoryTableConfig(
+                  String(component.type || ''),
+                  effectivePageName,
+                  component.config as Record<string, unknown> | undefined
+                );
                 return (
                   <div
                     key={component.id}
                     className={fillHeight ? 'flex min-h-0 flex-1 flex-col' : undefined}
                   >
-                    <Renderer {...component.props} config={component.config} />
+                    <Renderer {...component.props} config={tableConfig} />
                   </div>
                 );
               })
@@ -303,6 +336,7 @@ const CustomAppPage: React.FC = () => {
         </div>
       </div>
     </div>
+    </InventoryTablePageProvider>
   );
 };
 

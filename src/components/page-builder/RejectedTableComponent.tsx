@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { resolvePriorityFromRow } from '@/lib/inventory/priority';
+import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 export type RejectedTableColumn = {
   key: string;
@@ -134,7 +135,13 @@ export const RejectedTableComponent: React.FC<RejectedTableProps> = ({ config })
 
     return {
       ...(config || {}),
-      title: '',
+      inventoryTableKind: 'rejected',
+      title:
+        resolveInventoryTableDisplayTitle({
+          configuredTitle: config?.title,
+          inventoryTableKind: 'rejected',
+          pageDisplayName: config?.pageDisplayName,
+        }) || 'Rejected',
       columns,
       entityType,
       tableType: config?.tableType === 'default' ? 'default' : 'itemsTable',

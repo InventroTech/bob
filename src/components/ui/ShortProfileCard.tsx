@@ -52,7 +52,7 @@ const ShortProfileCard = ({
       className={cn(
         'flex min-w-0 flex-row',
         wrapName
-          ? 'max-w-[16rem] items-center sm:max-w-[20rem]'
+          ? 'w-full max-w-full min-w-0 items-center'
           : 'max-w-[14rem] items-center sm:max-w-[18rem]',
         wrapName ? 'gap-3' : compact ? 'gap-2' : 'gap-3',
         className
