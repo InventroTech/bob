@@ -425,68 +425,68 @@ export function LeadTableView(props: LeadTableModel) {
           </div>
         )}
 
-        {/* Mobile Card View - Praja CRM only; Unmannd inventory tables use the responsive table below */}
+        {/* Mobile Card View - Only for Praja CRM */}
         {!isProcurementStyleTable && (
-        <div className="md:hidden space-y-4 mt-1.5">
-          {filteredData.map((item, index) => {
-            const lead = item;
+          <div className="md:hidden space-y-4 mt-1.5">
+            {filteredData.map((item, index) => {
+              const lead = item;
 
-            return (
-              <div
-                key={lead.id || index}
-                className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
-                onClick={() => {
-                  if (!isInPageBuilder && effectiveDetailMode !== 'none') {
-                    handleRowClick(item);
-                  }
-                }}
-              >
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <div>
-                    <p className="text-xs text-gray-500">Name</p>
-                    <p className="font-semibold">{lead.name}</p>
-                  </div>
+              return (
+                <div
+                  key={lead.id || index}
+                  className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    if (!isInPageBuilder && effectiveDetailMode !== 'none') {
+                      handleRowClick(item);
+                    }
+                  }}
+                >
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Name</p>
+                      <p className="font-semibold">{lead.name}</p>
+                    </div>
 
-                  <div>
-                    <p className="text-xs text-gray-500">Praja ID</p>
-                    <p>{lead.praja_id}</p>
-                  </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Praja ID</p>
+                      <p>{lead.praja_id}</p>
+                    </div>
 
-                  <div>
-                    <p className="text-xs text-gray-500">Phone Number</p>
-                    <p>{lead.phone_number}</p>
-                  </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Phone Number</p>
+                      <p>{lead.phone_number}</p>
+                    </div>
 
-                  <div>
-                    <p className="text-xs text-gray-500">Party</p>
-                    <p>{lead.affiliated_party}</p>
-                  </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Party</p>
+                      <p>{lead.affiliated_party}</p>
+                    </div>
 
-                  <div className="col-span-2">
-                    <p className="text-xs text-gray-500">Lead Score</p>
-                    <p>{lead.lead_score}</p>
-                  </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Lead Score</p>
+                      <p>{lead.lead_score}</p>
+                    </div>
 
-                  <div className="col-span-2">
-                    <Button
-                      className="w-full mt-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedLead(item);
-                        setIsLeadModalOpen(true);
-                      }}
-                    >
-                      View Profile
-                    </Button>
+                    <div className="col-span-2">
+                      <Button
+                        className="w-full mt-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedLead(item);
+                          setIsLeadModalOpen(true);
+                        }}
+                      >
+                        View Profile
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
         )}
 
-        {/* Desktop / responsive table (Unmannd inventory tables also use this on mobile) */}
+        {/* Desktop / Responsive Table */}
         <div
           className={
             isProcurementStyleTable
