@@ -75,12 +75,10 @@ const DynamicSidebarIcon = ({
 };
 
 function NavIcon({
-  isMobile,
   isActive,
   iconName,
   customIcons,
 }: {
-  isMobile: boolean;
   isActive: boolean;
   iconName: string;
   customIcons: CustomIconRow[];
@@ -88,13 +86,7 @@ function NavIcon({
   return (
     <div
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-        isMobile
-          ? isActive
-            ? 'text-white'
-            : 'text-gray-600'
-          : isActive
-            ? 'text-white'
-            : 'text-gray-600'
+        isActive ? 'text-white' : 'text-gray-600'
       }`}
     >
       <DynamicSidebarIcon iconName={iconName} customIcons={customIcons} />
@@ -287,20 +279,15 @@ const CustomAppLayout: React.FC = () => {
             `flex items-center rounded-lg text-xs font-medium transition ${
               opts.collapsed ? navItemPad.collapsed : navItemPad.expanded
             } ${
-              isMobile
-                ? isActive
-                  ? activeNavClassMobile
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                : isActive
-                  ? activeNavClass
-                  : 'text-gray-700 hover:bg-gray-50'
+              isActive
+                ? `${activeNavClassMobile} md:${activeNavClass.replace('text-white', 'text-white')} md:hover:bg-inherit`
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 md:bg-transparent md:text-gray-700 md:hover:bg-gray-50'
             }`
           }
         >
           {({ isActive }) => (
             <>
               <NavIcon
-                isMobile={isMobile}
                 isActive={isActive}
                 iconName={page.icon_name}
                 customIcons={customIcons}
@@ -554,7 +541,7 @@ const CustomAppLayout: React.FC = () => {
           </div>
         )}
         <div
-          className={isUnmanndApp ? 'h-full min-h-0 w-full' : 'min-h-screen w-full'}
+          className={isUnmanndApp ? 'h-full min-h-0 w-full flex-1 flex flex-col' : 'min-h-screen w-full'}
           style={
             isUnmanndApp
               ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
