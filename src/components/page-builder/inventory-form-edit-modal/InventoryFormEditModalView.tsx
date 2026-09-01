@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Trash2, History, Wrench, X } from 'lucide-react';
+import { Loader2, Trash2, History, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
 import { formatCalendarDate } from '@/lib/utils/timeUtils';
@@ -65,8 +65,17 @@ const UNMANND_NAVY = '#1A44A1';
 const UNMANND_ID_BG = '#FFFFFF';
 const UNMANND_ID_TEXT = '#1A44A1';
 const UNMANND_SQUARE_BTN =
-  'rounded-none border-white/40 bg-white px-4 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
+  'rounded-[8px] border-white/40 bg-white px-4 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
 const UNMANND_CONTROL = 'bg-white';
+const UNMANND_ITEM_NAME_STYLE: React.CSSProperties = {
+  fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif",
+  fontWeight: 700,
+  fontSize: '15pt',
+  lineHeight: 1.2,
+};
+const UNMANND_ITEM_NAME_CLASS =
+  'block min-w-0 tracking-tight text-white';
+const UNMANND_ITEM_PLACEHOLDER_SRC = '/unmannd-item-placeholder.png';
 
 /** Fields from Item through Vendor: tighter label ↔ control spacing. */
 const UNMANND_TIGHT_LABEL_KEYS = new Set([
@@ -117,7 +126,12 @@ function UnmanndProductThumb({ src, alt }: { src?: string; alt?: string }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <Wrench className="h-16 w-16 -rotate-45 text-gray-400 sm:h-20 sm:w-20" strokeWidth={1.25} aria-hidden />
+        <img
+          src={UNMANND_ITEM_PLACEHOLDER_SRC}
+          alt=""
+          className="h-full w-full object-cover"
+          aria-hidden
+        />
       )}
     </div>
   );
@@ -171,7 +185,8 @@ function UnmanndModalHeader({
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block min-w-0 text-base font-bold leading-snug tracking-tight text-white underline-offset-2 hover:underline sm:text-lg"
+                className={cn(UNMANND_ITEM_NAME_CLASS, 'underline-offset-2 hover:underline')}
+                style={UNMANND_ITEM_NAME_STYLE}
                 title="Open product link"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -179,7 +194,8 @@ function UnmanndModalHeader({
               </a>
             ) : (
               <span
-                className="block min-w-0 text-base font-bold leading-snug tracking-tight text-white sm:text-lg"
+                className={UNMANND_ITEM_NAME_CLASS}
+                style={UNMANND_ITEM_NAME_STYLE}
                 title={parts.itemName === '—' ? undefined : parts.itemName}
               >
                 <span className="line-clamp-2 break-words">{parts.itemName}</span>
@@ -1287,7 +1303,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 className={cn(
                   'gap-2 h-9 rounded-md',
                   isUnmannd
-                    ? 'rounded-none border-white/50 bg-transparent px-4 text-white hover:bg-white/10 hover:text-white'
+                    ? 'rounded-[8px] border-white/50 bg-transparent px-4 text-white hover:bg-white/10 hover:text-white'
                     : 'border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/70'
                 )}
                 disabled={deleting || applyingStatusValue != null || saving}
