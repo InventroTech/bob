@@ -620,7 +620,7 @@ export function LeadTableView(props: LeadTableModel) {
           leadCardRef.current = null;
         }
       }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0" hideCloseButton>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="sr-only">
             <DialogTitle>
               {selectedLead?.name || (selectedLead as any)?.data?.name || 'Lead Details'}
@@ -629,6 +629,21 @@ export function LeadTableView(props: LeadTableModel) {
               View and manage lead information
             </DialogDescription>
           </DialogHeader>
+
+          {/* Close button for mobile/desktop drawer view */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsLeadModalOpen(false);
+              setSelectedLead(null);
+              setActionButtonsVisible(false);
+            }}
+            className="absolute right-4 top-4 z-50 rounded-full p-2 bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+            aria-label="Close modal"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
           {selectedLead && (() => {
             const transformLeadForCard = (lead: any) => {
               const originalLead = data.find(l => 
