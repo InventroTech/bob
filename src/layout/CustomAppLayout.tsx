@@ -98,7 +98,7 @@ function NavIcon({
 }) {
   return (
     <div
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+      className={`flex h-4 w-4 shrink-0 items-center justify-center ${
         isMobile
           ? isActive
             ? 'text-white'
@@ -341,7 +341,7 @@ const CustomAppLayout: React.FC = () => {
           className={({ isActive }) =>
             `flex items-center rounded-sm font-medium transition ${
               opts.collapsed ? navItemPad.collapsed : navItemPad.expanded
-            } ${isMobileLandscape ? 'py-0 px-0.5 text-[8px] gap-0.5 h-5' : 'text-sm'} ${
+            } ${isMobileLandscape ? 'py-0 px-0.5 text-[8px] gap-1 h-4' : 'text-sm'} ${
               isTabletOrLandscapeMobile
                 ? isActive
                   ? activeNavClassMobile
@@ -615,7 +615,7 @@ const CustomAppLayout: React.FC = () => {
         {spoofBannerVisible && spoofLabel && (
           <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">
             <span className="truncate">
-              Spoofing as <span className="font-semibold">{spoofLabel}</span>
+              Spoofing as <span className="font-semibold">{profileName}</span>
             </span>
             <button
               type="button"
