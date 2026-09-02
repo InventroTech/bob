@@ -47,8 +47,11 @@ export function useTicketTable({ config }: TicketTableProps) {
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const listFetchInFlightRef = useRef(false);
   const requestSequenceRef = useRef<number>(0);
   const baseDataRef = useRef<any[]>([]);
+  const latestSearchValueRef = useRef<string>('');
+  latestSearchValueRef.current = searchTerm;
   
   const [pagination, setPagination] = useState<{
     totalCount: number;
@@ -66,7 +69,10 @@ export function useTicketTable({ config }: TicketTableProps) {
     previousPageLink: null
   });
 
-  const { session } = useAuth();
+  const paginationRef = useRef(pagination);
+  paginationRef.current = pagination;
+
+  const { session, user } = useAuth();
 
   const tableColumns: Column[] = useMemo(() => 
     config?.columns?.map(col => ({
@@ -82,16 +88,27 @@ export function useTicketTable({ config }: TicketTableProps) {
     [config?.columns]
   );
 
-  const applyFilters = async (requestSequence?: number) => {
+  const applyFilters = async (
+    requestSequence?: number,
+    options?: { silent?: boolean; keepPage?: boolean }
+  ) => {
+    const silent = options?.silent === true;
+    if (silent && listFetchInFlightRef.current) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    listFetchInFlightRef.current = true;
     try {
-      setTableLoading(true);
+      if (!silent) setTableLoading(true);
       
-      if (abortControllerRef.current) {
+      if (!silent && abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
       
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      if (!silent) {
+        abortControllerRef.current = abortController;
+      }
       
       const currentSequence = requestSequence || ++requestSequenceRef.current;
       const authToken = session?.access_token;
@@ -100,34 +117,39 @@ export function useTicketTable({ config }: TicketTableProps) {
       
       const params = new URLSearchParams();
       
-      // Clean query parameter mapping without dual params/special lookup suffixes
       Object.entries(dynamicFilterValues).forEach(([key, val]) => {
         if (val !== undefined && val !== null && val !== '') {
-          if (Array.isArray(val)) {
-            val.forEach(item => {
-              params.append(key, String(item));
-            });
-          } else {
-            params.append(key, String(val));
-          }
+          const keysToAppend = key === 'reason' 
+            ? ['reason', 'reason__in', 'reason__icontains', 'ticket_reason'] 
+            : [key];
+
+          keysToAppend.forEach(pK => {
+            if (Array.isArray(val)) {
+              if (val.length > 0) {
+                params.append(pK, val.join(','));
+                val.forEach(item => {
+                  params.append(pK, String(item));
+                });
+              }
+            } else {
+              params.append(pK, String(val));
+            }
+          });
         }
       });
 
-      // Dynamic Date Range Filter Processing
       if (dateRangeFilter.startDate) {
         const startDateTime = new Date(dateRangeFilter.startDate);
-        const [startH, startM] = dateRangeFilter.startTime.split(':').map(Number);
-        startDateTime.setHours(isNaN(startH) ? 0 : startH, isNaN(startM) ? 0 : startM, 0, 0);
+        startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
         params.append('created_at__gte', startDateTime.toISOString());
       }
       if (dateRangeFilter.endDate) {
         const endDateTime = new Date(dateRangeFilter.endDate);
-        const [endH, endM] = dateRangeFilter.endTime.split(':').map(Number);
-        endDateTime.setHours(isNaN(endH) ? 23 : endH, isNaN(endM) ? 59 : endM, 0, 0);
+        endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
         params.append('created_at__lte', endDateTime.toISOString());
       }
 
-      const currentSearchTerm = searchTerm.trim();
+      const currentSearchTerm = latestSearchValueRef.current.trim();
       if (currentSearchTerm) {
         params.append('search', currentSearchTerm);
         if (config?.searchFields) {
@@ -135,7 +157,10 @@ export function useTicketTable({ config }: TicketTableProps) {
         }
       }
       
-      params.append('page', '1');
+      const page = options?.keepPage 
+        ? String(paginationRef.current.currentPage || 1) 
+        : '1';
+      params.append('page', page);
       params.append('page_size', '50');
       
       const fullUrl = `${apiUrl}?${params.toString()}`;
@@ -213,9 +238,17 @@ export function useTicketTable({ config }: TicketTableProps) {
       const err = error as { name?: string; message?: string };
       if (err.name === 'AbortError') return;
       console.error('Error applying filters:', error);
-      toast.error('Failed to apply filters');
+      if (err.message?.includes('Rate limit')) {
+        toast.error('Rate limit exceeded. Please wait a moment.');
+      } else {
+        toast.error('Failed to apply filters');
+      }
     } finally {
-      setTableLoading(false);
+      listFetchInFlightRef.current = false;
+      if (!silent && abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+      if (!silent) setTableLoading(false);
     }
   };
 
@@ -427,26 +460,33 @@ export function useTicketTable({ config }: TicketTableProps) {
 
       Object.entries(dynamicFilterValues).forEach(([key, val]) => {
         if (val !== undefined && val !== null && val !== '') {
-          if (Array.isArray(val)) {
-            val.forEach(item => {
-              params.append(key, String(item));
-            });
-          } else {
-            params.append(key, String(val));
-          }
+          const keysToAppend = key === 'reason' 
+            ? ['reason', 'reason__in', 'reason__icontains', 'ticket_reason'] 
+            : [key];
+
+          keysToAppend.forEach(pK => {
+            if (Array.isArray(val)) {
+              if (val.length > 0) {
+                params.append(pK, val.join(','));
+                val.forEach(item => {
+                  params.append(pK, String(item));
+                });
+              }
+            } else {
+              params.append(pK, String(val));
+            }
+          });
         }
       });
 
       if (dateRangeFilter.startDate) {
         const startDateTime = new Date(dateRangeFilter.startDate);
-        const [h, m] = dateRangeFilter.startTime.split(':').map(Number);
-        startDateTime.setHours(isNaN(h) ? 0 : h, isNaN(m) ? 0 : m, 0, 0);
+        startDateTime.setHours(parseInt(dateRangeFilter.startTime.split(':')[0]), parseInt(dateRangeFilter.startTime.split(':')[1]));
         params.append('created_at__gte', startDateTime.toISOString());
       }
       if (dateRangeFilter.endDate) {
         const endDateTime = new Date(dateRangeFilter.endDate);
-        const [h, m] = dateRangeFilter.endTime.split(':').map(Number);
-        endDateTime.setHours(isNaN(h) ? 23 : h, isNaN(m) ? 59 : m, 0, 0);
+        endDateTime.setHours(parseInt(dateRangeFilter.endTime.split(':')[0]), parseInt(dateRangeFilter.endTime.split(':')[1]));
         params.append('created_at__lte', endDateTime.toISOString());
       }
 
@@ -505,7 +545,7 @@ export function useTicketTable({ config }: TicketTableProps) {
 
   useRecordUpdated(useCallback(() => {
     if (!session?.access_token) return;
-    void applyFilters();
+    void applyFilters(undefined, { silent: true, keepPage: true });
   }, [session?.access_token, applyFilters]), { entityType: 'support_ticket' });
 
   const handleTicketUpdate = (updatedTicket: any) => {
