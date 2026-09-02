@@ -43,32 +43,224 @@ const PUSH_ENTITY_LABELS: Record<PushEntityType, string> = {
 
 const LOG_PREFIX = '[OperationsPrograms]';
 
-const DISTRICTS = [
-  'Alluri Sitharama Raju', 'Anakapalli', 'Annamayya', 'Anantapur', 'Bapatla', 'Chittoor',
-  'East Godavari', 'Eluru', 'Guntur', 'Kakinada', 'Konaseema (Amalapuram)', 'Krishna',
-  'Kurnool', 'Machilipatnam', 'Nandyal', 'Narasaraopet', 'NTR', 'Ongole', 'Palnadu',
-  'Parvathipuram Manyam', 'Prakasam', 'Rajampet', 'Sri Potti Sriramulu Nellore',
-  'Sri Sathya Sai', 'Srikakulam', 'Tirupati', 'Vijayawada', 'Visakhapatnam', 'Vizianagaram',
-  'West Godavari', 'YSR Kadapa', 'Adilabad', 'Bhadradri Kothagudem', 'Hanumakonda',
-  'Hyderabad', 'Jagtial', 'Jangaon', 'Jayashankar Bhupalpally', 'Jogulamba Gadwal',
-  'Kamareddy', 'Karimnagar', 'Khammam', 'Komaram Bheem Asifabad', 'Mahabubabad',
-  'Mahabubnagar', 'Mancherial', 'Medak', 'Medchal-Malkajgiri', 'Mulugu', 'Nagarkurnool',
-  'Nalgonda', 'Narayanpet', 'Nirmal', 'Nizamabad', 'Peddapalli', 'Rajanna Sircilla',
-  'Rangareddy', 'Sangareddy', 'Secunderabad', 'Siddipet', 'Suryapet', 'Vikarabad',
-  'Wanaparthy', 'Warangal', 'Yadadri Bhuvanagiri', 'Ariyalur', 'Arni', 'Arakkonam',
-  'Chengalpattu', 'Chennai', 'Chidambaram', 'Coimbatore', 'Cuddalore', 'Dharmapuri',
-  'Dindigul', 'Erode', 'Kallakurichi', 'Kancheepuram', 'Kanyakumari', 'Karur',
-  'Krishnagiri', 'Madurai', 'Mayiladuthurai', 'Nagapattinam', 'Namakkal', 'Nilgiris',
-  'Perambalur', 'Pollachi', 'Pudukkottai', 'Ramanathapuram', 'Ranipet', 'Salem',
-  'Sivaganga', 'Sriperumbudur', 'Tenkasi', 'Thanjavur', 'Theni', 'Thoothukudi',
-  'Tiruchirappalli', 'Tirunelveli', 'Tirupattur', 'Tiruppur', 'Tiruvallur', 'Tiruvarur',
-  'Vellore', 'Viluppuram', 'Virudhunagar', 'Bagalkot', 'Bengaluru Central',
-  'Bengaluru North', 'Bengaluru Rural', 'Bengaluru South', 'Bengaluru Urban', 'Belagavi',
-  'Bellary', 'Bidar', 'Chamarajanagar', 'Chikkaballapur', 'Chikkamagaluru', 'Chikodi',
-  'Chitradurga', 'Dakshina Kannada', 'Davanagere', 'Dharwad', 'Gadag', 'Hassan',
-  'Haveri', 'Kalaburagi', 'Kodagu', 'Kolar', 'Koppal', 'Mandya', 'Mysuru', 'Raichur',
-  'Ramanagara', 'Shivamogga', 'Tumakuru', 'Udupi', 'Uttara Kannada', 'Vijayapura',
-  'Vijayanagara', 'Yadgir',
+/** Circle geo/party IDs from pyro-backend geo_party_catalog.json (District Names V1). */
+const CIRCLE_GEO: {
+  state_id: string;
+  state: string;
+  districts: { id: string; name: string }[];
+  parties: { id: string; name: string }[];
+}[] = [
+  {
+    state_id: '33009',
+    state: 'Andhra Pradesh',
+    districts: [
+      { id: '90288', name: 'Alluri Sitharamaraju' },
+      { id: '90290', name: 'Anakapalli' },
+      { id: '13284', name: 'Anantapur' },
+      { id: '90300', name: 'Annamayya' },
+      { id: '90295', name: 'Baptla' },
+      { id: '13290', name: 'Chittoor' },
+      { id: '90296', name: 'Dr. B. R. Ambedkar Konaseema' },
+      { id: '13280', name: 'East Godavari' },
+      { id: '90297', name: 'Eluru' },
+      { id: '13286', name: 'Guntur' },
+      { id: '90460', name: 'Kakinada' },
+      { id: '13279', name: 'Krishna' },
+      { id: '13283', name: 'Kurnool' },
+      { id: '90299', name: 'Markapuram' },
+      { id: '90302', name: 'Nandyal' },
+      { id: '13285', name: 'Nellore Sri Potti Sriramulu' },
+      { id: '90228', name: 'NTR' },
+      { id: '39808', name: 'Others' },
+      { id: '90287', name: 'Palnadu' },
+      { id: '90291', name: 'Parvathipuram Manyam' },
+      { id: '90294', name: 'Polavaram' },
+      { id: '13281', name: 'Prakasam' },
+      { id: '90303', name: 'Sri Sathya Sai' },
+      { id: '13287', name: 'Srikakulam' },
+      { id: '90301', name: 'Tirupati' },
+      { id: '13288', name: 'Visakhapatnam' },
+      { id: '13291', name: 'Vizianagaram' },
+      { id: '13282', name: 'West Godavari' },
+      { id: '13289', name: 'YSR Kadapa' },
+    ],
+    parties: [
+      { id: '31402', name: 'Telugu Desam Party' },
+      { id: '31403', name: 'YSRCP' },
+      { id: '31406', name: 'Janasena Party' },
+      { id: '37788', name: 'BJP Andhra Pradesh' },
+    ],
+  },
+  {
+    state_id: '33010',
+    state: 'Telangana',
+    districts: [
+      { id: '1127', name: 'Adilabad' },
+      { id: '589', name: 'Bhadradri Kothagudem' },
+      { id: '1146', name: 'Hanamkonda' },
+      { id: '1132', name: 'Hyderabad' },
+      { id: '1144', name: 'Jagtial' },
+      { id: '1139', name: 'Jangaon' },
+      { id: '1147', name: 'Jayashankar Bhupalapalle' },
+      { id: '1129', name: 'Jogulamba Gadwal' },
+      { id: '1140', name: 'Kamareddy' },
+      { id: '1150', name: 'Karimnagar' },
+      { id: '1', name: 'Khammam' },
+      { id: '1137', name: 'Komaram Bheem' },
+      { id: '1143', name: 'Mahabubabad' },
+      { id: '1126', name: 'Mahabubnagar' },
+      { id: '1145', name: 'Mancherial' },
+      { id: '1130', name: 'Medak' },
+      { id: '1148', name: 'Medchal-Malkajgiri' },
+      { id: '1152', name: 'Mulugu' },
+      { id: '1123', name: 'Nagarkurnool' },
+      { id: '1124', name: 'Nalgonda' },
+      { id: '1151', name: 'Narayanpet' },
+      { id: '1142', name: 'Nirmal' },
+      { id: '1136', name: 'Nizamabad' },
+      { id: '1135', name: 'Peddapalli' },
+      { id: '1149', name: 'Rajanna Siricilla' },
+      { id: '1122', name: 'Rangareddy' },
+      { id: '1133', name: 'Sangareddy' },
+      { id: '1128', name: 'Siddipet' },
+      { id: '1134', name: 'Suryapet' },
+      { id: '1141', name: 'Vikarabad' },
+      { id: '1131', name: 'Wanaparthy' },
+      { id: '1138', name: 'Warangal Rural' },
+      { id: '1125', name: 'Yadadri Bhongiri' },
+    ],
+    parties: [
+      { id: '31405', name: 'Bharat Rashtra Samithi' },
+      { id: '31398', name: 'BJP Telangana' },
+      { id: '31401', name: 'Congress Party Telangana' },
+      { id: '31404', name: 'All India Majlis-E-Ittehadul-Muslimeen' },
+    ],
+  },
+  {
+    state_id: '72631',
+    state: 'Tamil Nadu',
+    districts: [
+      { id: '73005', name: 'Ariyalur' },
+      { id: '73213', name: 'Chengalpattu' },
+      { id: '73581', name: 'Chennai' },
+      { id: '73584', name: 'Coimbatore' },
+      { id: '73825', name: 'Cuddalore' },
+      { id: '74523', name: 'Dharmapuri' },
+      { id: '74785', name: 'Dindigul' },
+      { id: '75106', name: 'Erode' },
+      { id: '75346', name: 'Kallakurichi' },
+      { id: '75768', name: 'Kancheepuram' },
+      { id: '76048', name: 'Kanniyakumari' },
+      { id: '76153', name: 'Karur' },
+      { id: '76319', name: 'Krishnagiri' },
+      { id: '76664', name: 'Madurai' },
+      { id: '77098', name: 'Mayiladuthurai' },
+      { id: '77344', name: 'Nagapattinam' },
+      { id: '77544', name: 'Namakkal' },
+      { id: '80955', name: 'Nilgiris' },
+      { id: '77882', name: 'Perambalur' },
+      { id: '78007', name: 'Pudukkottai' },
+      { id: '78518', name: 'Ramanathapuram' },
+      { id: '78959', name: 'Ranipet' },
+      { id: '79255', name: 'Salem' },
+      { id: '79661', name: 'Sivaganga' },
+      { id: '80119', name: 'Tenkasi' },
+      { id: '80351', name: 'Thanjavur' },
+      { id: '80997', name: 'Theni' },
+      { id: '81136', name: 'Thoothukkudi' },
+      { id: '81552', name: 'Tiruchirappalli' },
+      { id: '81971', name: 'Tirunelveli' },
+      { id: '82185', name: 'Tirupattur' },
+      { id: '82400', name: 'Tiruppur' },
+      { id: '82679', name: 'Tiruvallur' },
+      { id: '83220', name: 'Tiruvannamalai' },
+      { id: '84100', name: 'Tiruvarur' },
+      { id: '84541', name: 'Vellore' },
+      { id: '84796', name: 'Viluppuram' },
+      { id: '85498', name: 'Virudhunagar' },
+    ],
+    parties: [
+      { id: '72997', name: 'Dravida Munnetra Kazhagam' },
+      { id: '72998', name: 'All India Anna Dravida Munnetra Kazhagam' },
+      { id: '72994', name: 'Bharatiya Janatha Party Tamilnadu' },
+    ],
+  },
+  {
+    state_id: '95829',
+    state: 'Karnataka',
+    districts: [
+      { id: '96050', name: 'Bagalkot' },
+      { id: '99443', name: 'Ballari' },
+      { id: '96255', name: 'Belagavi' },
+      { id: '97762', name: 'Bengaluru Rural' },
+      { id: '98693', name: 'Bengaluru South' },
+      { id: '97869', name: 'Bengaluru Urban' },
+      { id: '99545', name: 'Bidar' },
+      { id: '100618', name: 'Chamarajanagar' },
+      { id: '97968', name: 'Chikkaballapur' },
+      { id: '100754', name: 'Chikkamagaluru' },
+      { id: '98134', name: 'Chitradurga' },
+      { id: '100993', name: 'Dakshina Kannada' },
+      { id: '98329', name: 'Davanagere' },
+      { id: '96777', name: 'Dharwad' },
+      { id: '96930', name: 'Gadag' },
+      { id: '101225', name: 'Hassan' },
+      { id: '97060', name: 'Haveri' },
+      { id: '99739', name: 'Kalaburagi' },
+      { id: '101501', name: 'Kodagu' },
+      { id: '98530', name: 'Kolar' },
+      { id: '100011', name: 'Koppal' },
+      { id: '101611', name: 'Mandya' },
+      { id: '101849', name: 'Mysuru' },
+      { id: '100172', name: 'Raichur' },
+      { id: '98825', name: 'Shivamogga' },
+      { id: '99103', name: 'Tumakuru' },
+      { id: '102113', name: 'Udupi' },
+      { id: '97292', name: 'Uttara Kannada' },
+      { id: '100343', name: 'Vijayanagara' },
+      { id: '97536', name: 'Vijayapura' },
+      { id: '100487', name: 'Yadgir' },
+    ],
+    parties: [
+      { id: '102341', name: 'Bharatiya Janatha Party Karnataka' },
+      { id: '102344', name: 'Congress Party Karnataka' },
+      { id: '102347', name: 'Janata Dal (Secular) Karnataka' },
+    ],
+  },
+  {
+    state_id: '113197',
+    state: 'Keralam',
+    districts: [
+      { id: '115813', name: 'Alappuzha' },
+      { id: '115987', name: 'Ernakulam' },
+      { id: '116207', name: 'Idukki' },
+      { id: '116327', name: 'Kannur' },
+      { id: '116527', name: 'Kasaragod' },
+      { id: '116694', name: 'Kollam' },
+      { id: '116873', name: 'Kottayam' },
+      { id: '117051', name: 'Kozhikode' },
+      { id: '117252', name: 'Malappuram' },
+      { id: '117472', name: 'Palakkad' },
+      { id: '117714', name: 'Pathanamthitta' },
+      { id: '117835', name: 'Thiruvananthapuram' },
+      { id: '118031', name: 'Thrissur' },
+      { id: '118388', name: 'Wayanad' },
+    ],
+    parties: [],
+  },
+];
+
+function pickRandom<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+/** Active RM emails for TENANT_ID (authz role key `rm`). Referral pull matches `lead_creator` to these. */
+const RM_LEAD_CREATOR_EMAILS = [
+  'bibhab.pyro@thecircleapp.in',
+  'bibhabindia@gmail.com',
+  'harisudhan.sales@gmail.com',
+  'koyaanirudh@gmail.com',
+  'ritam.pyro@thecircleapp.in',
 ];
 
 function maskSecret(value: string): string {
@@ -169,7 +361,6 @@ function randomJatraLink(): string {
 
 // Generate one random lead payload
 function generateRandomLead(): Record<string, unknown> {
-  const parties = ['BJP', 'INC', 'AAP', 'Congress', 'Independent'];
   const leadSources = [
     'APP_INSTALL_SINGLE_PARTY_JOINED_BJP_TG', 'MANUAL', 'APP_INSTALL_SINGLE_LEADER_CIRCLE_JOINED_YSRCP',
     'MANUAL_HIGH_END_DEVICE', 'APP_UNINSTALL_SINGLE_PARTY_JOINED_YSRCP', 'APP_INSTALL_ML_PB',
@@ -190,10 +381,12 @@ function generateRandomLead(): Record<string, unknown> {
   ];
   const leadStatuses = ['SALES LEAD', 'SELF TRIAL'];
   const name = randomName();
-  const states = ['Telangana', 'Andhra Pradesh', 'Tamil Nadu'];
   const phone = randomIndianPhone();
   const phoneClean = phone.replace('+', '');
   const randomId = String(Math.floor(Math.random() * 9000000) + 1000000);
+  const geo = pickRandom(CIRCLE_GEO);
+  const district = pickRandom(geo.districts);
+  const party = geo.parties.length ? pickRandom(geo.parties) : null;
 
   return {
     entity_type: 'lead',
@@ -201,21 +394,26 @@ function generateRandomLead(): Record<string, unknown> {
     data: {
       praja_id: randomId,
       name,
-      state: states[Math.floor(Math.random() * states.length)],
+      state_id: geo.state_id,
+      district_id: district.id,
+      ...(party
+        ? { affiliated_party_id: party.id, affiliated_party: party.name }
+        : {}),
+      lead_creator: pickRandom(RM_LEAD_CREATOR_EMAILS),
       tasks: generateRandomTasks(),
       lead_score: parseFloat((Math.random() * 65 + 30).toFixed(2)),
+      lead_stage: 'FRESH',
+      call_attempts: 0,
       lead_source: leadSources[Math.floor(Math.random() * leadSources.length)],
       lead_status: leadStatuses[Math.floor(Math.random() * leadStatuses.length)],
       phone_number: phone,
       whatsapp_link: `https://wa.me/${phoneClean}`,
-      affiliated_party: parties[Math.floor(Math.random() * parties.length)],
       user_profile_link: `https://www.thecircleapp.in/admin/users/${Math.random().toString(36).substring(7)}`,
       display_pic_url: 'https://a-cdn.thecircleapp.in/capture/01K4QKP9EAD7SBB794NBY1MQ94.png',
       has_upi_autopay_app: Math.random() > 0.5 ? true : null,
       subscription_time_stamp: null,
       release_build_number: 0,
       subscribed_package: '',
-      district: DISTRICTS[Math.floor(Math.random() * DISTRICTS.length)],
     },
   };
 }
@@ -228,7 +426,7 @@ function generateRandomSupportTicket(tenantId: string): Record<string, unknown> 
   const userId = String(Math.floor(Math.random() * 9000000) + 1000000);
   const prajaUserSlug = Math.random().toString(36).substring(2, 10);
 
-  const states = ['Andhra Pradesh', 'Karnataka', 'Tamil Nadu', 'Telangana'];
+  const states = ['Andhra Pradesh', 'Karnataka', 'Keralam', 'Tamil Nadu', 'Telangana'];
   const reasons = ['Others', 'Badge Change', 'Feature Request', 'Refund Issued', 'Subscription Information', 'Layout Feedback'];
   const sources = ['Drawer', 'Webhook', 'Manual', 'App'];
   const layoutStatuses = ['Layout created', 'No Layout', 'Layout Pending'];

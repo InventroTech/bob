@@ -933,6 +933,10 @@ export function useInventoryRequestForm({
       const firstId = items[0]?.id;
       if (firstId) {
         for (const f of REQUIRED_ITEM_FIELDS) {
+          // Skip required validation ONLY for product_link (specifications remains required)
+          if (f.key === 'product_link') {
+            continue;
+          }
           missingKeys.push(`item:${firstId}:${String(f.key)}`);
         }
         missingLabels.push('Item details');
@@ -942,6 +946,10 @@ export function useInventoryRequestForm({
     } else {
       for (const item of rowsToValidate) {
         for (const f of REQUIRED_ITEM_FIELDS) {
+          // Skip required validation ONLY for product_link (specifications remains required)
+          if (f.key === 'product_link') {
+            continue;
+          }
           if (isMissingRequired(item, f.key)) {
             missingKeys.push(`item:${item.id}:${String(f.key)}`);
             missingLabels.push(f.label);
@@ -1194,8 +1202,6 @@ export function useInventoryRequestForm({
     handleClear,
     isFormEmpty,
   };
-
-
 }
 
 export type InventoryRequestFormModel = ReturnType<typeof useInventoryRequestForm>;

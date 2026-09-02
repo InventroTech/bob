@@ -14,6 +14,8 @@ export type CustomTableColumn = {
   actionApiPayload?: string;
   align?: 'left' | 'center' | 'right';
   width?: string;
+  minWidth?: string;
+  maxWidth?: string;
 };
 
 export interface CustomTableProps {
@@ -28,8 +30,17 @@ export interface CustomTableProps {
   hoverable?: boolean;
   className?: string;
   tableClassName?: string;
-  /** Tighter header/cell padding (Unmannd procurement tables). */
+  /** Tighter header/cell padding. */
   dense?: boolean;
+  /** Tall spacious rows for All Requests prototype (~60–80px). */
+  comfortable?: boolean;
+  /** Stretch to fill parent height; body scrolls inside (All Requests page). */
+  fillHeight?: boolean;
+  /**
+   * Fit table to parent width (table-layout: fixed). Use on All Requests so the
+   * page does not scroll horizontally; status/shipment pills keep their size.
+   */
+  fitViewport?: boolean;
   /**
    * @deprecated Stacked card layout is removed. Prop kept for call-site compatibility.
    * Tables always render as a normal table with horizontal scroll on small screens.
@@ -38,24 +49,38 @@ export interface CustomTableProps {
 }
 
 /**
- * Stack multi-word headers (e.g. "Request Date").
- * Centered under the column by default; left-aligned columns keep words left.
+ * Multi-word headers stack vertically to fit narrow columns (e.g. "Request Date").
+ * Item name stays one line when fitViewport is enabled.
  */
-function renderStackedHeader(header: string, align: 'left' | 'center' | 'right' = 'center') {
-  const words = String(header || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (words.length <= 1) return header;
+function isItemNameAccessor(accessor: string): boolean {
+  const key = String(accessor || '').trim().toLowerCase();
+  return key === 'item_name' || key === 'item_name_freeform';
+}
+
+function renderStackedHeader(
+  header: string,
+  align: 'left' | 'center' | 'right' = 'center',
+  singleLine = false
+) {
+  const text = String(header || '').trim();
+  if (singleLine || !text.includes(' ')) {
+    return (
+      <span
+        className={cn(
+          'block whitespace-nowrap',
+          align === 'left' && 'text-left',
+          align === 'right' && 'text-right',
+          align === 'center' && 'text-center'
+        )}
+      >
+        {text}
+      </span>
+    );
+  }
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= 1) return text;
   return (
-    <span
-      className={cn(
-        'inline-flex flex-col gap-0.5 leading-tight',
-        align === 'left' && 'items-start',
-        align === 'right' && 'items-end',
-        align === 'center' && 'items-center justify-center'
-      )}
-    >
+    <span className="inline-flex flex-col items-center justify-center gap-0.5 leading-tight">
       {words.map((word, i) => (
         <span key={`${word}-${i}`}>{word}</span>
       ))}
@@ -80,10 +105,20 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   className,
   tableClassName,
   dense = false,
+  comfortable = false,
+  fillHeight = false,
+  fitViewport = false,
 }) => {
-  const cellY = dense ? 'py-1' : 'py-2';
-  const cellX = dense ? 'px-2.5' : 'px-4';
-  const leftCellX = dense ? 'pl-2 pr-2.5' : 'pl-2 pr-4';
+  const cellY = comfortable ? (fitViewport ? 'py-3' : 'py-4') : dense ? 'py-1' : 'py-2';
+  const cellX = comfortable ? (fitViewport ? 'px-2.5' : 'px-3') : dense ? 'px-2.5' : 'px-4';
+  const leftCellX = comfortable
+    ? fitViewport
+      ? 'pl-2.5 pr-2.5'
+      : 'pl-3 pr-3'
+    : dense
+      ? 'pl-2 pr-2.5'
+      : 'pl-2 pr-4';
+  const headerUppercase = dense || comfortable;
 
   const defaultRenderCell = (row: any, column: CustomTableColumn, _columnIndex: number) => {
     const value = row[column.accessor];
@@ -116,29 +151,78 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   const cellRenderer = renderCell || defaultRenderCell;
 
   return (
-    <div className={cn('w-full max-w-full min-w-0', className)}>
-      <div className="w-full max-w-full min-w-0 overflow-x-auto overflow-y-hidden">
-        <table className={cn('min-w-max w-full bg-white', tableClassName)}>
-          <thead>
-            <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
+    <div
+      className={cn(
+        'w-full max-w-full min-w-0',
+        fillHeight && 'flex h-full min-h-0 flex-col',
+        className
+      )}
+    >
+      <div
+        className={cn(
+          'w-full max-w-full min-w-0',
+          fitViewport ? 'overflow-x-hidden' : 'overflow-x-auto',
+          fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-hidden'
+        )}
+      >
+        <table
+          className={cn(
+            fitViewport ? 'table-fixed w-full' : 'min-w-max w-full',
+            'bg-white',
+            tableClassName
+          )}
+        >
+          {fitViewport ? (
+            <colgroup>
               {columns.map((col, idx) => (
+                <col
+                  key={idx}
+                  style={{
+                    width: col.width,
+                    minWidth: col.minWidth,
+                    maxWidth: col.maxWidth,
+                  }}
+                />
+              ))}
+            </colgroup>
+          ) : null}
+          <thead className={fillHeight ? 'sticky top-0 z-10' : undefined}>
+            <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
+              {columns.map((col, idx) => {
+                const itemNameCol = isItemNameAccessor(col.accessor);
+                const headerSingleLine = fitViewport && itemNameCol;
+                const headerPadLeft =
+                  fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                return (
                 <th
                   key={idx}
                   className={cn(
-                    'text-sm font-medium text-center whitespace-nowrap',
-                    cellY,
-                    col.align === 'left' ? `${leftCellX} text-left` : cellX,
-                    col.align === 'right' && `${cellX} text-right`,
+                    'text-sm font-medium',
+                    fitViewport && 'overflow-hidden',
+                    headerSingleLine && 'whitespace-nowrap',
+                    headerUppercase && 'uppercase tracking-wide font-semibold',
+                    comfortable ? 'py-3' : cellY,
+                    col.align === 'left'
+                      ? `${headerPadLeft} text-left`
+                      : col.align === 'right'
+                        ? `${cellX} text-right`
+                        : `${cellX} text-center`,
                     col.width && `w-[${col.width}]`
                   )}
-                  style={col.width ? { width: col.width } : undefined}
+                  style={
+                    col.width || col.minWidth || col.maxWidth
+                      ? { width: col.width, minWidth: col.minWidth, maxWidth: col.maxWidth }
+                      : undefined
+                  }
                 >
                   {renderStackedHeader(
                     col.header,
-                    col.align === 'left' || col.align === 'right' ? col.align : 'center'
+                    col.align === 'left' || col.align === 'right' ? col.align : 'center',
+                    headerSingleLine
                   )}
                 </th>
-              ))}
+                );
+              })}
             </tr>
           </thead>
           <tbody className="text-gray-600 text-sm bg-white">
@@ -161,23 +245,31 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   onClick={() => onRowClick?.(row)}
                   className={cn(
                     'border-b border-gray-200 bg-white',
+                    comfortable && 'h-[4.5rem]',
                     hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
                     !hoverable && 'hover:bg-transparent'
                   )}
                 >
-                  {columns.map((col, colIdx) => (
+                  {columns.map((col, colIdx) => {
+                    const itemNameCol = isItemNameAccessor(col.accessor);
+                    const cellPadLeft =
+                      fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                    return (
                     <td
                       key={colIdx}
                       className={cn(
-                        'text-sm align-middle whitespace-nowrap',
+                        'text-sm align-middle',
+                        comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
+                        fitViewport && 'max-w-0',
                         cellY,
-                        col.align === 'left' ? `${leftCellX} text-left` : `${cellX} text-center`,
+                        col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
                         col.align === 'right' && `${cellX} text-right`
                       )}
                     >
                       {cellRenderer(row, col, colIdx)}
                     </td>
-                  ))}
+                    );
+                  })}
                 </tr>
               ))
             )}

@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { resolvePriorityFromRow } from '@/lib/inventory/priority';
 import { mergeInventoryTrackingColumns } from '@/lib/inventory/shipmentTracking';
+import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 export type MyRequestTableColumn = {
   key: string;
@@ -94,6 +95,13 @@ export const MyRequestTableComponent: React.FC<MyRequestTableProps> = ({ config 
 
     return {
       ...(config || {}),
+      inventoryTableKind: 'my_request',
+      title:
+        resolveInventoryTableDisplayTitle({
+          configuredTitle: config?.title,
+          inventoryTableKind: 'my_request',
+          pageDisplayName: config?.pageDisplayName,
+        }) || 'My Requests',
       columns,
       ...(entityType ? { entityType } : {}),
       // Form modal so requestors get Verify (and other workflow actions) in the footer.

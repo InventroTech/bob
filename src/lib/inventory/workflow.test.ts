@@ -5,6 +5,7 @@ import {
   getInventoryWorkflowButtons,
   inventoryRequesterIdFromRecord,
   isInventoryApproverActor,
+  isInventoryOpsEditorRole,
   isInventoryProcurementRole,
   isInventoryRequestRowRequester,
   isInventoryTeamLeadRole,
@@ -25,8 +26,8 @@ describe('inventory Approve/Reject for team lead and PM', () => {
         requestStatus: 'REQ_TO_VERIFY',
         isRequester: true,
         roleNameOrKey: 'Engineer',
-      }).map((b) => b.label)
-    ).toEqual(['Verify']);
+      }).map((b) => ({ label: b.label, statusValue: b.statusValue }))
+    ).toEqual([{ label: 'Verify', statusValue: 'NEW_REQUEST' }]);
   });
 
   it('team lead can Approve/Reject on NEW_REQUEST', () => {
@@ -72,14 +73,23 @@ describe('inventory Approve/Reject for team lead and PM', () => {
         requestStatus: 'REQ_TO_VERIFY',
         isRequester: true,
         roleNameOrKey: 'Procurement Manager',
-      }).map((b) => b.label)
-    ).toEqual(['Verify']);
+      }).map((b) => ({ label: b.label, statusValue: b.statusValue }))
+    ).toEqual([{ label: 'Verify', statusValue: 'NEW_REQUEST' }]);
     expect(
       isInventoryApproverActor({
         roleNameOrKey: 'Procurement Manager',
         isRequester: true,
       })
     ).toBe(false);
+  });
+
+  it('TL and PM remain ops editors on requests they created (tracking/edits)', () => {
+    expect(isInventoryOpsEditorRole('Team Lead', 'team_lead_unmannd')).toBe(true);
+    expect(isInventoryOpsEditorRole('Procurement Manager', 'pm')).toBe(true);
+    expect(isInventoryOpsEditorRole('Engineer', 'AGENT')).toBe(false);
+    // After approval, requestor edit is locked — ops roles still count as editors.
+    expect(canRequesterEditInventoryRequest('VENDOR_IDENTIFIED')).toBe(false);
+    expect(canRequesterEditInventoryRequest('IN_SHIPPING')).toBe(false);
   });
 
   it('assigned team_lead on record can Approve', () => {
@@ -189,13 +199,18 @@ describe('inventory Approve/Reject for team lead and PM', () => {
         requestStatus: 'REQ_TO_VERIFY',
         isRequester: true,
         roleNameOrKey: 'Team Lead',
-      }).map((b) => b.label)
-    ).toEqual(['Verify', 'Reject', 'Put on Hold']);
+      }).map((b) => ({ label: b.label, statusValue: b.statusValue }))
+    ).toEqual([
+      { label: 'Verify', statusValue: 'NEW_REQUEST' },
+      { label: 'Reject', statusValue: 'REJECTED' },
+      { label: 'Put on Hold', statusValue: 'ON_HOLD' },
+    ]);
   });
 
   it('filters duplicate Page Builder status buttons', () => {
     expect(
       filterDuplicateInventoryWorkflowButtons([
+        { label: 'Verify', statusValue: 'NEW_REQUEST' },
         { label: 'Approve', statusValue: 'VENDOR_IDENTIFIED' },
         { label: 'Add to cart', statusValue: 'IN_CART' },
         { label: 'Custom', statusValue: 'OTHER' },

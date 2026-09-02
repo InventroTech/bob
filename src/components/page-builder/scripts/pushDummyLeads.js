@@ -100,10 +100,81 @@ function generateRandomLead() {
     'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]
   ).join('');
   
-  // Random affiliated party
-  const parties = ["BJP", "INC", "AAP", "Congress", "Independent", "TMC", "BSP"];
-  const affiliatedParty = parties[Math.floor(Math.random() * parties.length)];
-  
+  const circleGeo = [
+    {
+      state_id: "33009",
+      districts: [
+        "90288", "90290", "13284", "90300", "90295", "13290", "90296", "13280",
+        "90297", "13286", "90460", "13279", "13283", "90299", "90302", "13285",
+        "90228", "39808", "90287", "90291", "90294", "13281", "90303", "13287",
+        "90301", "13288", "13291", "13282", "13289",
+      ],
+      parties: [
+        { id: "31402", name: "Telugu Desam Party" },
+        { id: "31403", name: "YSRCP" },
+        { id: "31406", name: "Janasena Party" },
+      ],
+    },
+    {
+      state_id: "33010",
+      districts: [
+        "1127", "589", "1146", "1132", "1144", "1139", "1147", "1129", "1140",
+        "1150", "1", "1137", "1143", "1126", "1145", "1130", "1148", "1152",
+        "1123", "1124", "1151", "1142", "1136", "1135", "1149", "1122", "1133",
+        "1128", "1134", "1141", "1131", "1138", "1125",
+      ],
+      parties: [
+        { id: "31405", name: "Bharat Rashtra Samithi" },
+        { id: "31398", name: "BJP Telangana" },
+        { id: "31401", name: "Congress Party Telangana" },
+      ],
+    },
+    {
+      state_id: "72631",
+      districts: [
+        "73005", "73213", "73581", "73584", "73825", "74523", "74785", "75106",
+        "75346", "75768", "76048", "76153", "76319", "76664", "77098", "77344",
+        "77544", "80955", "77882", "78007", "78518", "78959", "79255", "79661",
+        "80119", "80351", "80997", "81136", "81552", "81971", "82185", "82400",
+        "82679", "83220", "84100", "84541", "84796", "85498",
+      ],
+      parties: [
+        { id: "72997", name: "Dravida Munnetra Kazhagam" },
+        { id: "72998", name: "All India Anna Dravida Munnetra Kazhagam" },
+      ],
+    },
+    {
+      state_id: "95829",
+      districts: [
+        "96050", "99443", "96255", "97762", "98693", "97869", "99545", "100618",
+        "97968", "100754", "98134", "100993", "98329", "96777", "96930", "101225",
+        "97060", "99739", "101501", "98530", "100011", "101611", "101849", "100172",
+        "98825", "99103", "102113", "97292", "100343", "97536", "100487",
+      ],
+      parties: [
+        { id: "102341", name: "Bharatiya Janatha Party Karnataka" },
+        { id: "102344", name: "Congress Party Karnataka" },
+      ],
+    },
+    {
+      state_id: "113197",
+      districts: [
+        "115813", "115987", "116207", "116327", "116527", "116694", "116873",
+        "117051", "117252", "117472", "117714", "117835", "118031", "118388",
+      ],
+      parties: [],
+    },
+  ];
+  const geo = circleGeo[Math.floor(Math.random() * circleGeo.length)];
+  const districtId = geo.districts[Math.floor(Math.random() * geo.districts.length)];
+  const party = geo.parties.length
+    ? geo.parties[Math.floor(Math.random() * geo.parties.length)]
+    : null;
+  const leadCreator = `${firstName}.${lastName}`
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, '.')
+    .replace(/^\.+|\.+$/g, '') + '@thecircleapp.in';
+
   return {
     name: fullName,
     data: {
@@ -118,9 +189,16 @@ function generateRandomLead() {
         {"task": "Premium Poster/ Video Poster Share", "status": "Null"}
       ],
       lead_score: leadScore,
+      lead_stage: "FRESH",
+      call_attempts: 0,
       phone_number: phoneNumber,
       whatsapp_link: `https://wa.me/${phoneNoClean}`,
-      affiliated_party: affiliatedParty,
+      state_id: geo.state_id,
+      district_id: districtId,
+      ...(party
+        ? { affiliated_party_id: party.id, affiliated_party: party.name }
+        : {}),
+      lead_creator: leadCreator,
       user_profile_link: `https://www.thecircleapp.in/admin/users/${userSlug}`,
       display_pic_url: "https://a-cdn.thecircleapp.in/capture/01K4QKP9EAD7SBB794NBY1MQ94.png",
     }

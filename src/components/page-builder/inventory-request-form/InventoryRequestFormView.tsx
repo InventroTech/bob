@@ -21,7 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, User, Send, Loader2, Plus, Trash2, MapPin, RefreshCw } from 'lucide-react';
+import {
+  Calendar,
+  User,
+  Send,
+  Loader2,
+  Plus,
+  Trash2,
+  MapPin,
+  RefreshCw,
+} from 'lucide-react';
 import { formatCurrencyDisplay, formatCurrencyInputLive } from '@/lib/utils/currencyFormat';
 
 import { REQUEST_CATEGORY_OPTIONS, PRIORITY_OPTIONS } from './constants';
@@ -104,6 +113,18 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
   );
   const itemKey = (itemId: string, field: string) => `item:${itemId}:${field}`;
 
+  /** Prototype: small muted uppercase labels */
+  const fieldLabelClass =
+    'text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
+
+  const itemFieldLabelClass = 'text-xs font-medium text-foreground';
+
+  const helpTextClass = 'text-[11px] leading-snug text-muted-foreground';
+
+  const inputBorderClass = useNavyTheme
+    ? 'border-[#D0D7E5] focus-visible:border-[#1A3673]/55 focus-visible:ring-[#1A3673]/20'
+    : '';
+
   const addVendorDialog = (
     <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
       <DialogContent className="max-w-md">
@@ -148,16 +169,9 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     </Dialog>
   );
 
-  const sectionLabel = (title: string) => (
-    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-  );
-
-  const renderProjectField = (opts: {
-    id: string;
-    labelClassName: string;
-  }) => (
+  const renderProjectField = (opts: { id: string }) => (
     <div className="space-y-1.5">
-      <Label htmlFor={opts.id} className={opts.labelClassName}>
+      <Label htmlFor={opts.id} className={fieldLabelClass}>
         Project <span className="text-destructive">*</span>
       </Label>
       {wrapShake(
@@ -184,7 +198,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
               clearFieldShake('projectPurpose');
               setProjectSuggestionsOpen(true);
             }}
-            className="h-10"
+            className={cn('h-10', inputBorderClass)}
             autoComplete="off"
           />
           {projectSuggestionsOpen &&
@@ -217,11 +231,16 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
   );
 
   const navyBtn = useNavyTheme
-    ? '!bg-[#1A3673] !text-white hover:!bg-[#152c5e] focus-visible:!ring-[#1A3673] shadow-sm shadow-[#1A3673]/20'
+    ? '!bg-[#1A3673] !text-white hover:!bg-[#152c5e] focus-visible:!ring-[#1A3673]'
     : '';
   const navyOutline = useNavyTheme
-    ? '!border-[#1A3673]/40 !text-[#1A3673] hover:!bg-[#1A3673]/[0.06] hover:!text-[#1A3673] hover:!border-[#1A3673]/60'
+    ? '!border-[#1A3673] !text-[#1A3673] hover:!bg-[#1A3673]/[0.04] hover:!text-[#1A3673]'
     : '';
+
+  const readonlyInputClass = cn(
+    'h-10 bg-white font-medium text-[#0B1F4D]',
+    inputBorderClass
+  );
 
   return (
     <>
@@ -247,236 +266,181 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     ) : null}
     <Card
       className={cn(
-        'max-w-full min-w-0 overflow-x-hidden shadow-md',
-        useNavyTheme
-          ? [
-              'rounded-xl border border-[#1A3673]/35 bg-gradient-to-b from-[#F7F9FC] to-white',
-              'shadow-[0_10px_40px_-12px_rgba(26,54,115,0.18)]',
-              // Soft focus rings on controls — layout unchanged
-              '[&_input:not(:disabled)]:bg-white [&_input]:border-[#1A3673]/18',
-              '[&_input:focus-visible]:border-[#1A3673]/55 [&_input:focus-visible]:ring-[#1A3673]/25',
-              '[&_textarea]:bg-white [&_textarea]:border-[#1A3673]/18',
-              '[&_textarea:focus-visible]:border-[#1A3673]/55 [&_textarea:focus-visible]:ring-[#1A3673]/25',
-              '[&_button[role=combobox]]:border-[#1A3673]/18 [&_button[role=combobox]]:bg-white',
-              '[&_button[role=combobox]]:focus:ring-[#1A3673]/25',
-            ].join(' ')
-          : 'border border-border/60'
+        'max-w-full min-w-0 overflow-x-hidden rounded-lg border bg-white shadow-none',
+        useNavyTheme ? 'border-[#D8DEE9]' : 'border-border/60'
       )}
     >
       <form onSubmit={handleSubmit}>
         <CardContent
           className={cn(
-            'space-y-3 px-4 pt-3 pb-2',
-            useNavyTheme && 'space-y-4 px-5 pt-2.5 pb-3 sm:px-6'
+            'space-y-5 px-4 pb-3 pt-4 sm:px-6 sm:pt-5',
+            useNavyTheme && 'pt-3 sm:pt-4'
           )}
         >
-          <section className={cn('space-y-2', useNavyTheme && 'space-y-3')}>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label
-                  className={cn(
-                    'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
-                    useNavyTheme ? 'text-gray-900' : 'text-muted-foreground'
-                  )}
-                >
-                  <User className="h-3.5 w-3.5" />
+          {/* Header fields — 3-col like prototype */}
+          <section className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className={fieldLabelClass}>
                   Requester name <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  value={requesterDisplay}
-                  readOnly
-                  disabled
-                  className={cn(
-                    'h-10 font-medium',
-                    useNavyTheme ? 'bg-white/80 text-[#0B1F4D]' : 'bg-muted/50'
-                  )}
-                />
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={requesterDisplay}
+                    readOnly
+                    disabled
+                    className={cn(readonlyInputClass, 'pl-9')}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label
-                  className={cn(
-                    'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
-                    useNavyTheme ? 'text-gray-900' : 'text-muted-foreground'
-                  )}
-                >
-                  <Calendar className="h-3.5 w-3.5" />
-                  Date <span className="text-destructive">*</span>
+              <div className="space-y-1.5">
+                <Label htmlFor="department" className={fieldLabelClass}>
+                  Department
                 </Label>
                 <Input
-                  value={formatRequestDateDisplay(requestDate)}
+                  id="department"
+                  value={department}
                   readOnly
                   disabled
-                  className={cn(
-                    'h-10 font-medium',
-                    useNavyTheme ? 'bg-white/80 text-[#0B1F4D]' : 'bg-muted/50'
-                  )}
+                  placeholder="—"
+                  className={readonlyInputClass}
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label className={fieldLabelClass}>
+                  Date <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={formatRequestDateDisplay(requestDate)}
+                    readOnly
+                    disabled
+                    className={cn(readonlyInputClass, 'pl-9')}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="department"
-                className={cn(
-                  'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
-                  useNavyTheme ? 'text-gray-900' : 'text-muted-foreground'
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {renderProjectField({ id: 'project-purpose-default' })}
+              <div className="space-y-1.5">
+                <Label htmlFor="request-category-default" className={fieldLabelClass}>
+                  Shipment Type <span className="text-destructive">*</span>
+                </Label>
+                {wrapShake(
+                  'requestCategory',
+                  <Select
+                    value={requestCategory || undefined}
+                    onValueChange={(v) => {
+                      setRequestCategory(v === 'International' ? 'International' : 'Domestic');
+                      clearFieldShake('requestCategory');
+                    }}
+                  >
+                    <SelectTrigger
+                      id="request-category-default"
+                      className={cn('h-10', useNavyTheme && 'border-[#D0D7E5]')}
+                    >
+                      <SelectValue placeholder="Select shipment type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REQUEST_CATEGORY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
-              >
-                Department
-              </Label>
-              <Input
-                id="department"
-                value={department}
-                readOnly
-                disabled
-                placeholder="—"
-                className={cn(
-                  'h-10 font-medium',
-                  useNavyTheme ? 'bg-white/80 text-[#0B1F4D]' : 'bg-muted/50'
-                )}
-              />
-            </div>
-              <div className="space-y-2">
-              <Label
-                htmlFor="request-category-default"
-                className={cn(
-                  'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
-                  useNavyTheme ? 'text-gray-900' : 'text-muted-foreground'
-                )}
-              >
-                Shipment Type <span className="text-destructive">*</span>
-              </Label>
-              {wrapShake(
-                'requestCategory',
-                <Select
-                  value={requestCategory || undefined}
-                  onValueChange={(v) => {
-                    setRequestCategory(v === 'International' ? 'International' : 'Domestic');
-                    clearFieldShake('requestCategory');
-                  }}
-                >
-                  <SelectTrigger id="request-category-default" className="h-10">
-                    <SelectValue placeholder="Select shipment type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REQUEST_CATEGORY_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            {renderProjectField({
-              id: 'project-purpose-default',
-              labelClassName: useNavyTheme
-                ? 'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-gray-900'
-                : 'text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
-            })}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label
-                  htmlFor="delivery-pincode"
-                  className={cn(
-                    'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
-                    useNavyTheme ? 'text-gray-900' : 'text-muted-foreground'
-                  )}
-                >
-                  <MapPin className="h-3.5 w-3.5" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="delivery-pincode" className={fieldLabelClass}>
                   Delivery PIN code <span className="text-destructive">*</span>
                 </Label>
                 {wrapShake(
                   'deliveryPincode',
-                  <Input
-                    id="delivery-pincode"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="e.g. 560001"
-                    value={deliveryPincode}
-                    onChange={(e) => {
-                      setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                      clearFieldShake('deliveryPincode');
-                    }}
-                    className="h-10 font-medium"
-                  />
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="delivery-pincode"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="e.g. 560001"
+                      value={deliveryPincode}
+                      onChange={(e) => {
+                        setDeliveryPincode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                        clearFieldShake('deliveryPincode');
+                      }}
+                      className={cn('h-10 pl-9 font-medium', inputBorderClass)}
+                    />
+                  </div>
                 )}
-                <p className="text-[11px] text-muted-foreground">
+                <p className={helpTextClass}>
                   6-digit PIN for where this order should arrive.
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label
-                  htmlFor="delivery-address"
-                  className={cn(
-                    'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider',
-                    useNavyTheme ? 'text-gray-900' : 'text-muted-foreground'
-                  )}
-                >
-                  Delivery address <span className="text-destructive">*</span>
-                </Label>
-                {wrapShake(
-                  'deliveryAddress',
-                  <Input
-                    id="delivery-address"
-                    placeholder="Building, street, city"
-                    value={deliveryAddress}
-                    onChange={(e) => {
-                      setDeliveryAddress(e.target.value);
-                      clearFieldShake('deliveryAddress');
-                    }}
-                    className="h-10 font-medium"
-                  />
-                )}
-                <p className="text-[11px] text-muted-foreground">
-                  Where this order should be delivered.
-                </p>
-              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="delivery-address" className={fieldLabelClass}>
+                Delivery address <span className="text-destructive">*</span>
+              </Label>
+              {wrapShake(
+                'deliveryAddress',
+                <Input
+                  id="delivery-address"
+                  placeholder="Building, street, city"
+                  value={deliveryAddress}
+                  onChange={(e) => {
+                    setDeliveryAddress(e.target.value);
+                    clearFieldShake('deliveryAddress');
+                  }}
+                  className={cn('h-10 font-medium', inputBorderClass)}
+                />
+              )}
+              <p className={helpTextClass}>
+                Where this order should be delivered.
+              </p>
             </div>
           </section>
 
-          <section
-            className={cn(
-              'space-y-2 border-t pt-3',
-              useNavyTheme && 'space-y-3 border-[#1A3673]/15 pt-5'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <Label
-                className={cn(
-                  'text-sm font-medium',
-                  useNavyTheme && 'text-base font-semibold tracking-tight text-[#0B1F4D]'
-                )}
-              >
-                Items
-              </Label>
-            </div>
+          {/* Items — prototype: heading + bordered item cards (no outer tinted wrapper) */}
+          <section className="space-y-3">
+            <p
+              className={cn(
+                'text-xs font-semibold uppercase tracking-wider',
+                useNavyTheme ? 'text-[#1A3673]' : 'text-muted-foreground'
+              )}
+            >
+              Items
+            </p>
 
             {items.map((item) => (
               <div
                 key={item.id}
-                className={
-                  useNavyTheme
-                    ? 'space-y-3 rounded-xl border border-[#1A3673]/20 bg-white p-4 shadow-sm shadow-[#1A3673]/[0.04] ring-1 ring-[#1A3673]/[0.04]'
-                    : 'rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3'
-                }
+                className={cn(
+                  'relative space-y-3 rounded-lg border bg-white p-4 pt-10',
+                  useNavyTheme ? 'border-[#D8DEE9]' : 'border-border/60'
+                )}
               >
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeItem(item.id)}
-                    disabled={items.length <= 1}
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                    aria-label="Remove item"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">
-                      Item link <span className="text-destructive">*</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeItem(item.id)}
+                  disabled={items.length <= 1}
+                  className="absolute right-2 top-2 h-8 w-8 p-0 text-destructive hover:bg-destructive/5 hover:text-destructive"
+                  aria-label="Remove item"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+
+                <div className="space-y-3">
+                  {/* 1st Position: Item Link (Optional) */}
+                  <div className="space-y-1.5">
+                    <Label className={itemFieldLabelClass}>
+                      Item link
                     </Label>
                     {wrapShake(
                       itemKey(item.id, 'product_link'),
@@ -486,7 +450,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                           placeholder="https://… (Amazon, Robu, vendor page, etc.)"
                           value={item.product_link}
                           onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                          className="h-9 flex-1"
+                          className={cn('h-9 flex-1', inputBorderClass)}
                           disabled={!!linkFetchLoadingByItemId[item.id]}
                         />
                         <Button
@@ -512,202 +476,212 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                         </Button>
                       </div>
                     )}
-                    <p className="text-[11px] text-muted-foreground">
-                      Paste a product URL, then click Fetch details to fill name, vendor, and cost.
+                    <p className={helpTextClass}>
+                      Paste the product URL from the vendor site.
                     </p>
                   </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">
+                  {/* 2nd Position: Item Name (Mandatory) */}
+                  <div className="space-y-1.5">
+                    <Label className={itemFieldLabelClass}>
                       Item name <span className="text-destructive">*</span>
                     </Label>
                     {wrapShake(
                       itemKey(item.id, 'item_name_freeform'),
-                    <div className="relative">
-                      <div className="flex items-center gap-2">
-                        {item.product_image ? (
-                          <img
-                            src={item.product_image}
-                            alt=""
-                            className="h-9 w-9 shrink-0 rounded-md border border-border object-cover bg-muted"
+                      <div className="relative">
+                        <div className="flex items-center gap-2">
+                          {item.product_image ? (
+                            <img
+                              src={item.product_image}
+                              alt=""
+                              className="h-9 w-9 shrink-0 rounded-md border border-border bg-muted object-cover"
+                            />
+                          ) : null}
+                          <Input
+                            placeholder="Describe the item"
+                            value={item.item_name_freeform}
+                            onFocus={() => {
+                              setFocusedItemNameId(item.id);
+                              setItemNameQuery(item.item_name_freeform || '');
+                              if ((item.item_name_freeform || '').trim().length >= 2) {
+                                setItemNameSuggestionsOpen(itemNameSuggestions.length > 0);
+                              }
+                            }}
+                            onBlur={() => {
+                              window.setTimeout(() => {
+                                setFocusedItemNameId((prev) => (prev === item.id ? null : prev));
+                                setItemNameSuggestionsOpen(false);
+                              }, 150);
+                            }}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              updateItem(item.id, 'item_name_freeform', v);
+                              setFocusedItemNameId(item.id);
+                              setItemNameQuery(v);
+                              if (v.trim().length >= 2) setItemNameSuggestionsOpen(true);
+                            }}
+                            className={cn('h-9 flex-1', inputBorderClass)}
                           />
-                        ) : null}
-                        <Input
-                          placeholder="Describe the item"
-                          value={item.item_name_freeform}
-                        onFocus={() => {
-                          setFocusedItemNameId(item.id);
-                          setItemNameQuery(item.item_name_freeform || '');
-                          if ((item.item_name_freeform || '').trim().length >= 2) {
-                            setItemNameSuggestionsOpen(itemNameSuggestions.length > 0);
-                          }
-                        }}
-                        onBlur={() => {
-                          window.setTimeout(() => {
-                            setFocusedItemNameId((prev) => (prev === item.id ? null : prev));
-                            setItemNameSuggestionsOpen(false);
-                          }, 150);
-                        }}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          updateItem(item.id, 'item_name_freeform', v);
-                          setFocusedItemNameId(item.id);
-                          setItemNameQuery(v);
-                          if (v.trim().length >= 2) setItemNameSuggestionsOpen(true);
-                        }}
-                        className="h-9 flex-1"
-                      />
-                      </div>
-
-                      {focusedItemNameId === item.id && (itemNameSuggestionsOpen || itemNameSuggestionsLoading) && (
-                        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
-                          {itemNameSuggestionsLoading ? (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">Searching…</div>
-                          ) : itemNameSuggestions.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">No matches</div>
-                          ) : (
-                            <div className="max-h-56 overflow-auto">
-                              {itemNameSuggestions.map((s) => (
-                                <button
-                                  key={s.id}
-                                  type="button"
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => {
-                                    updateItem(item.id, 'item_name_freeform', s.name);
-                                    const d = s.data || {};
-
-                                    const vendor = toVendorStorageName(String((d.default_vendor ?? d.vendor ?? '') as any).trim());
-                                    if (vendor) updateItem(item.id, 'vendor', vendor);
-
-                                    const costRaw = d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
-                                    const costNum = costRaw === '' || costRaw == null ? '' : Number(costRaw);
-                                    if (costNum !== '' && Number.isFinite(costNum)) updateItem(item.id, 'estimated_cost', costNum);
-                                    const suggestedCurrency = String((d.price_currency ?? d.currency ?? 'INR') as any).trim().toUpperCase();
-                                    if (suggestedCurrency === 'USD' || suggestedCurrency === 'INR') {
-                                      updateItem(item.id, 'price_currency', suggestedCurrency as 'INR' | 'USD');
-                                    }
-
-                                    const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
-                                    if (productLink) updateItem(item.id, 'product_link', productLink);
-                                    const productImage = String((d.product_image ?? d.image ?? '') as any).trim();
-                                    if (productImage) updateItem(item.id, 'product_image', productImage);
-
-                                    const catalogSpecs = String(
-                                      (d.specifications ?? d.specs ?? d.specification ?? d.short_description ?? '') as any
-                                    ).trim();
-                                    if (catalogSpecs) {
-                                      updateItem(item.id, 'specifications', catalogSpecs.slice(0, 180));
-                                    }
-
-                                    setItemNameSuggestionsOpen(false);
-                                    setFocusedItemNameId(null);
-                                  }}
-                                >
-                                  <span className="truncate">{s.name}</span>
-                                  <span className="text-xs text-muted-foreground shrink-0">#{s.id}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
                         </div>
-                      )}
-                    </div>
+
+                        {focusedItemNameId === item.id && (itemNameSuggestionsOpen || itemNameSuggestionsLoading) && (
+                          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-md">
+                            {itemNameSuggestionsLoading ? (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">Searching…</div>
+                            ) : itemNameSuggestions.length === 0 ? (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">No matches</div>
+                            ) : (
+                              <div className="max-h-56 overflow-auto">
+                                {itemNameSuggestions.map((s) => (
+                                  <button
+                                    key={s.id}
+                                    type="button"
+                                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => {
+                                      updateItem(item.id, 'item_name_freeform', s.name);
+                                      const d = s.data || {};
+
+                                      const vendor = toVendorStorageName(String((d.default_vendor ?? d.vendor ?? '') as any).trim());
+                                      if (vendor) updateItem(item.id, 'vendor', vendor);
+
+                                      const costRaw = d.default_cost_per_unit ?? d.estimated_cost ?? d.cost_per_unit;
+                                      const costNum = costRaw === '' || costRaw == null ? '' : Number(costRaw);
+                                      if (costNum !== '' && Number.isFinite(costNum)) updateItem(item.id, 'estimated_cost', costNum);
+                                      const suggestedCurrency = String((d.price_currency ?? d.currency ?? 'INR') as any).trim().toUpperCase();
+                                      if (suggestedCurrency === 'USD' || suggestedCurrency === 'INR') {
+                                        updateItem(item.id, 'price_currency', suggestedCurrency as 'INR' | 'USD');
+                                      }
+
+                                      const productLink = String((d.product_link ?? d.link ?? '') as any).trim();
+                                      if (productLink) updateItem(item.id, 'product_link', productLink);
+                                      const productImage = String((d.product_image ?? d.image ?? '') as any).trim();
+                                      if (productImage) updateItem(item.id, 'product_image', productImage);
+
+                                      const catalogSpecs = String(
+                                        (d.specifications ?? d.specs ?? d.specification ?? d.short_description ?? '') as any
+                                      ).trim();
+                                      if (catalogSpecs) {
+                                        updateItem(item.id, 'specifications', catalogSpecs.slice(0, 180));
+                                      }
+
+                                      setItemNameSuggestionsOpen(false);
+                                      setFocusedItemNameId(null);
+                                    }}
+                                  >
+                                    <span className="truncate">{s.name}</span>
+                                    <span className="shrink-0 text-xs text-muted-foreground">#{s.id}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">
+                  {/* Specifications (Restored as Mandatory with *) */}
+                  <div className="space-y-1.5">
+                    <Label className={itemFieldLabelClass}>
                       Specifications <span className="text-destructive">*</span>
                     </Label>
                     {wrapShake(
                       itemKey(item.id, 'specifications'),
-                    <Input
-                      placeholder="e.g. 30 cm, USB A to Mini B, gold-plated, with cable"
-                      value={item.specifications}
-                      onChange={(e) => updateItem(item.id, 'specifications', e.target.value)}
-                      className="h-9"
-                    />
+                      <Input
+                        placeholder="e.g. 30 cm, USB A to Mini B, gold-plated, with cable"
+                        value={item.specifications}
+                        onChange={(e) => updateItem(item.id, 'specifications', e.target.value)}
+                        className={cn('h-9', inputBorderClass)}
+                      />
                     )}
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className={helpTextClass}>
                       Size, connector, model, or other distinguishing details.
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-end gap-4 sm:col-span-2 w-full">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium">Quantity *</Label>
+                  {/* Qty | Cost | Vendor + Add | Priority — one row on desktop */}
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                    <div className="w-full space-y-1.5 lg:w-24 shrink-0">
+                      <Label className={itemFieldLabelClass}>Quantity *</Label>
                       {wrapShake(
                         itemKey(item.id, 'quantity_required'),
-                      <Input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={item.quantity_required === '' ? '' : item.quantity_required}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          updateItem(item.id, 'quantity_required', v === '' ? '' : Number(v));
-                        }}
-                        placeholder="0"
-                        className='h-9 w-24'
-                      />
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={item.quantity_required === '' ? '' : item.quantity_required}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            updateItem(item.id, 'quantity_required', v === '' ? '' : Number(v));
+                          }}
+                          placeholder="0"
+                          className={cn('h-9 w-full', inputBorderClass)}
+                        />
                       )}
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium">Estimated cost *</Label>
+
+                    <div className="w-full space-y-1.5 lg:w-40 shrink-0">
+                      <Label className={itemFieldLabelClass}>Estimated cost *</Label>
                       {wrapShake(
                         itemKey(item.id, 'estimated_cost'),
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                          value={
-                            priceDraftByItemId[item.id] ??
-                            formatCurrencyDisplay(item.estimated_cost)
-                          }
-                          onChange={(e) => {
-                            const { display, value } = formatCurrencyInputLive(e.target.value);
-                            setPriceDraftByItemId((prev) => ({ ...prev, [item.id]: display }));
-                            updateItem(item.id, 'estimated_cost', value);
-                          }}
-                          onBlur={() => {
-                            setPriceDraftByItemId((prev) => {
-                              const next = { ...prev };
-                              delete next[item.id];
-                              return next;
-                            });
-                            if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
-                              updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
-                            }
-                          }}
-                          className='h-9 min-w-[7.5rem] font-mono tabular-nums'
-                        />
-                        <Select
-                          value={item.price_currency || 'INR'}
-                          onValueChange={(v) => updateItem(item.id, 'price_currency', (v === 'USD' ? 'USD' : 'INR'))}
+                        <div
+                          className={cn(
+                            'flex h-9 overflow-hidden rounded-md border bg-white',
+                            useNavyTheme ? 'border-[#D0D7E5]' : 'border-input'
+                          )}
                         >
-                          <SelectTrigger className="h-9 w-20">
-                            <SelectValue placeholder="INR" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="INR">INR</SelectItem>
-                            <SelectItem value="USD">USD</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={
+                              priceDraftByItemId[item.id] ??
+                              formatCurrencyDisplay(item.estimated_cost)
+                            }
+                            onChange={(e) => {
+                              const { display, value } = formatCurrencyInputLive(e.target.value);
+                              setPriceDraftByItemId((prev) => ({ ...prev, [item.id]: display }));
+                              updateItem(item.id, 'estimated_cost', value);
+                            }}
+                            onBlur={() => {
+                              setPriceDraftByItemId((prev) => {
+                                const next = { ...prev };
+                                delete next[item.id];
+                                return next;
+                              });
+                              if (item.estimated_cost !== '' && typeof item.estimated_cost === 'number') {
+                                updateItem(item.id, 'estimated_cost', Math.round(item.estimated_cost * 100) / 100);
+                              }
+                            }}
+                            className="h-9 min-w-0 flex-1 rounded-none border-0 font-mono tabular-nums shadow-none focus-visible:ring-0"
+                          />
+                          <Select
+                            value={item.price_currency || 'INR'}
+                            onValueChange={(v) => updateItem(item.id, 'price_currency', (v === 'USD' ? 'USD' : 'INR'))}
+                          >
+                            <SelectTrigger className="h-9 w-[3.75rem] shrink-0 rounded-none border-0 border-l border-[#D0D7E5] bg-[#F3F5F9] text-xs font-medium text-muted-foreground shadow-none focus:ring-0">
+                              <SelectValue placeholder="INR" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="INR">INR</SelectItem>
+                              <SelectItem value="USD">USD</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       )}
                     </div>
-                    <div className="space-y-1.5 flex-1 min-w-0 basis-[180px]">
-                      <Label className="text-xs font-medium">Vendor *</Label>
-                      {wrapShake(
-                        itemKey(item.id, 'vendor'),
+
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <Label className={itemFieldLabelClass}>Vendor *</Label>
                       <div className="flex items-center gap-2">
-                        <div className="relative w-full">
+                        {wrapShake(
+                          itemKey(item.id, 'vendor'),
+                          <div className="relative min-w-0 flex-1">
                             <Input
                               value={item.vendor}
                               placeholder="Search or add vendor"
-                              className='h-9 w-full'
+                              className={cn('h-9 w-full', inputBorderClass)}
                               onFocus={() => {
                                 setFocusedVendorId(item.id);
                                 setVendorQuery(item.vendor || '');
@@ -729,7 +703,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                             />
 
                             {focusedVendorId === item.id && vendorSuggestionsOpen && (
-                              <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-background shadow-md overflow-hidden">
+                              <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-md">
                                 {vendorsLoading ? (
                                   <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
                                 ) : (
@@ -750,7 +724,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                                         <button
                                           key={v.id}
                                           type="button"
-                                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                                           onMouseDown={(ev) => ev.preventDefault()}
                                           onClick={() => {
                                             updateItem(item.id, 'vendor', v.name);
@@ -759,7 +733,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                                           }}
                                         >
                                           <span className="truncate">{v.name}</span>
-                                          <span className="text-xs text-muted-foreground shrink-0">#{v.id}</span>
+                                          <span className="shrink-0 text-xs text-muted-foreground">#{v.id}</span>
                                         </button>
                                       ));
                                     })()}
@@ -767,12 +741,13 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                                 )}
                               </div>
                             )}
-                        </div>
+                          </div>
+                        )}
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          className={`h-9 shrink-0 ${navyOutline}`}
+                          className={cn('h-9 shrink-0 whitespace-nowrap', navyOutline)}
                           onClick={() => {
                             startAddVendor(item.id);
                             setVendorSuggestionsOpen(false);
@@ -782,50 +757,52 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                           + Add vendor
                         </Button>
                       </div>
+                    </div>
+
+                    <div className="w-full space-y-1.5 lg:w-44 shrink-0">
+                      <Label className={itemFieldLabelClass}>Priority *</Label>
+                      {wrapShake(
+                        itemKey(item.id, 'urgency_level'),
+                        <Select
+                          value={item.urgency_level || undefined}
+                          onValueChange={(v) => updateItem(item.id, 'urgency_level', v)}
+                        >
+                          <SelectTrigger className={cn('h-9', useNavyTheme && 'border-[#D0D7E5]')}>
+                            <SelectValue placeholder="Select priority" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PRIORITY_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       )}
                     </div>
                   </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Priority *</Label>
-                    {wrapShake(
-                      itemKey(item.id, 'urgency_level'),
-                    <Select
-                      value={item.urgency_level || undefined}
-                      onValueChange={(v) => updateItem(item.id, 'urgency_level', v)}
-                    >
-                      <SelectTrigger className='h-9'>
-                        <SelectValue placeholder="Select priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PRIORITY_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    )}
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Comments (optional)</Label>
+
+                  <div className="space-y-1.5">
+                    <Label className={itemFieldLabelClass}>Comments (optional)</Label>
                     <Textarea
                       placeholder="Additional comments for this item"
                       value={item.comments}
                       onChange={(e) => updateItem(item.id, 'comments', e.target.value)}
                       rows={2}
-                      className="resize-y min-h-[60px] h-auto text-sm"
+                      className={cn('min-h-[72px] h-auto resize-y text-sm', inputBorderClass)}
                     />
                   </div>
                 </div>
               </div>
             ))}
-            <div className={cn('pt-1', useNavyTheme && 'pt-2')}>
+
+            <div className="pt-1">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addItem}
-                className={cn('gap-1', navyOutline, useNavyTheme && 'rounded-lg px-3')}
+                className={cn('h-9 gap-1.5 rounded-md px-3', navyOutline)}
               >
                 <Plus className="h-4 w-4" />
                 Add item
@@ -835,22 +812,30 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
         </CardContent>
 
         <CardFooter
-          className={
-            useNavyTheme
-              ? 'flex flex-wrap items-center justify-between gap-3 border-t border-[#1A3673]/15 bg-white/90 px-5 py-4 backdrop-blur sm:px-6'
-              : 'flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-6 py-4'
-          }
+          className={cn(
+            'flex flex-wrap items-center justify-end gap-3 border-t bg-white px-4 py-4 sm:px-6',
+            useNavyTheme ? 'border-[#E4E8F0]' : 'border-border'
+          )}
         >
-          <div>
+          <div className="mr-auto">
             {!user && (
-              <span className="text-muted-foreground text-sm">You must be signed in to submit.</span>
+              <span className="text-sm text-muted-foreground">You must be signed in to submit.</span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button
+              type="button"
+              variant="outline"
+              onClick={handleClear}
+              disabled={submitting || isFormEmpty}
+              className={cn('h-10 min-w-[100px] rounded-md', navyOutline)}
+            >
+              Clear form
+            </Button>
+            <Button
               type="submit"
               disabled={submitting || !user}
-              className={cn('min-w-[140px] gap-2 shadow-sm', navyBtn, useNavyTheme && 'rounded-lg h-10')}
+              className={cn('h-10 min-w-[140px] gap-2 rounded-md', navyBtn)}
             >
               {submitting ? (
                 <>
@@ -864,58 +849,12 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                 </>
               )}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClear}
-              disabled={submitting || isFormEmpty}
-              className={cn('min-w-[100px]', navyOutline, useNavyTheme && 'rounded-lg h-10')}
-            >
-              Clear form
-            </Button>
           </div>
         </CardFooter>
       </form>
 
-      <Dialog open={addVendorForItemId !== null} onOpenChange={(open) => { if (!open) cancelAddVendor(); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add vendor</DialogTitle>
-            <DialogDescription>Create a vendor and auto-fill it for this item.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              placeholder="Vendor name *"
-              value={newVendorName}
-              onChange={(e) => setNewVendorName(e.target.value)}
-              className="h-9"
-            />
-            <Input
-              placeholder="Vendor site link (optional)"
-              type="url"
-              value={newVendorLink}
-              onChange={(e) => setNewVendorLink(e.target.value)}
-              className="h-9"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={cancelAddVendor}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={saveNewVendor}
-              disabled={savingNewVendor || !newVendorName.trim()}
-            >
-              {savingNewVendor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save vendor
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       {addVendorDialog}
     </Card>
     </>
   );
-
 }
