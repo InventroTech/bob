@@ -543,8 +543,29 @@ export function useTicketTable({ config }: TicketTableProps) {
     }
   };
 
-  useRecordUpdated(useCallback(() => {
+  useRecordUpdated(useCallback((payload: any) => {
     if (!session?.access_token) return;
+    const recordId = payload.record_id != null ? String(payload.record_id) : '';
+    if (!recordId) return;
+
+    const matches = (item: any) => String(item?.id ?? item?.ticket_id ?? '') === recordId;
+    let found = false;
+    const patchList = (prev: any[]) => {
+      const idx = prev.findIndex(matches);
+      if (idx < 0) return prev;
+      found = true;
+      const next = prev.slice();
+      next[idx] = {
+        ...prev[idx],
+        ...(payload.assigned_to !== undefined ? { assigned_to: payload.assigned_to } : {}),
+      };
+      return next;
+    };
+
+    setFilteredData(patchList);
+    setData(patchList);
+
+    if (found || !payload.created) return;
     void applyFilters(undefined, { silent: true, keepPage: true });
   }, [session?.access_token, applyFilters]), { entityType: 'support_ticket' });
 
