@@ -11,6 +11,8 @@ export interface BillingMember {
   membership_id: number;
   name: string;
   email: string;
+  state_id?: number | null;
+  state?: string | null;
   role: BillingRole | null;
   is_active: boolean;
   is_deleted?: boolean;
