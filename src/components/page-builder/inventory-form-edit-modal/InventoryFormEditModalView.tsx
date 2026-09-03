@@ -68,7 +68,7 @@ const UNMANND_ID_TEXT = '#1A44A1';
 const UNMANND_SQUARE_BTN =
   'rounded-[8px] border-white/40 bg-white px-4 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
 const UNMANND_SAVE_BTN =
-  'h-[23px] min-w-[55px] rounded-[6px] border-0 bg-[linear-gradient(180deg,#11243C_0%,#2E60A2_100%)] px-3 text-xs font-semibold text-white hover:brightness-110 hover:text-white';
+  'h-9 rounded-[8px] border-white/40 bg-white px-4 text-sm font-semibold text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
 const UNMANND_CONTROL = 'bg-white border-[#E5E7EB]';
 const UNMANND_ITEM_NAME_STYLE: React.CSSProperties = {
   fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif",
@@ -1571,7 +1571,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
             {canEditFields && hasEditableField && effectiveShowSaveButton && (
               <Button
                 type="button"
-                variant={isUnmannd ? 'outline' : 'default'}
+                variant="outline"
                 size="default"
                 className={cn(
                   'gap-2',
