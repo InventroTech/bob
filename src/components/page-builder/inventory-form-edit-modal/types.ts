@@ -73,6 +73,14 @@ export interface InventoryFormEditModalProps {
    * Default keeps the classic light modal used by inventory_request.
    */
   uiVariant?: 'default' | 'unmannd';
+  /** Move to the previous/next row without closing the modal (e.g. table row navigation). */
+  onNavigate?: (direction: 'prev' | 'next') => void;
+  /** Whether a previous record exists relative to the current one. */
+  hasPrevious?: boolean;
+  /** Whether a next record exists relative to the current one. */
+  hasNext?: boolean;
+  /** Current position within the list, e.g. { index: 2, total: 24 } for "3 of 24". */
+  navigationPosition?: { index: number; total: number };
 }
 
 export type StatusHistoryEntry = {
