@@ -282,6 +282,11 @@ export async function seedBrowserSession(page: Page) {
 }
 
 export async function openLoggedIn(page: Page, path = '/') {
+  // Pre-seed tenant_slug in localStorage before the page initializes so tests can read it
+  await page.addInitScript(() => {
+    localStorage.setItem('tenant_slug', 'qa-org');
+  });
+
   await mockSupabaseAuth(page, 'accept-login');
   await mockBackendApis(page);
   await seedBrowserSession(page);

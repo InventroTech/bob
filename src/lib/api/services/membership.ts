@@ -356,15 +356,24 @@ export const membershipService = {
    * @returns Promise with membership info (tenant_id, role_id, role_key, etc.) or null if not found
    */
   async getMyMembership(tenantSlug?: string): Promise<MyMembershipResponse | null> {
+    // Fallback to localStorage if tenantSlug is not explicitly passed (useful for E2E tests and components)
+    const activeSlug = tenantSlug || (typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_slug') || undefined : undefined);
+
+    // Guard clause: Prevent request if activeSlug is missing/empty to avoid 400 Tenant not found errors
+    if (!activeSlug) {
+      if (import.meta.env.DEV) {
+        console.warn('[membershipService] getMyMembership: skipped, tenantSlug is missing');
+      }
+      return null;
+    }
+
     try {
       if (import.meta.env.DEV) {
         console.log('[membershipService] getMyMembership: GET /membership/me/role/');
       }
 
       const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/', {
-        ...(tenantSlug
-          ? { headers: { 'X-Tenant-Slug': tenantSlug } as Record<string, string> }
-          : {}),
+        headers: { 'X-Tenant-Slug': activeSlug } as Record<string, string>,
       });
 
       if (import.meta.env.DEV) {
@@ -422,4 +431,3 @@ export const membershipService = {
     return response.data;
   },
 };
-
