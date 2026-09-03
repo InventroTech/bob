@@ -47,23 +47,51 @@ import {
   getNestedValue,
   applyPlaceholderTemplate,
   transformLeadData,
+  formatBulkActionLabel,
+  resolveEffectiveInventoryTableKind,
 } from './utils';
+import { useInventoryTablePageName } from './InventoryTablePageContext';
 import {
+  applyInventoryCartStatusSideEffects,
   canRequesterEditInventoryRequest,
+  filterDuplicateInventoryWorkflowButtons,
+  getInventoryWorkflowButtons,
   isInventoryOpsEditorRole,
   isInventoryRequestRowRequester,
 } from '@/lib/inventory/workflow';
-import { SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
+import { advanceShipmentStatusForTracking, excludeInventoryTrackColumn, SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
 
 /** Uniform rounded-rectangle chips for All Requests priority / status / shipment. */
 const INVENTORY_CHIP_SHAPE =
   '!rounded-[8px] inline-flex h-7 shrink-0 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide overflow-hidden text-ellipsis whitespace-nowrap border';
+
+function bulkActionButtonKey(btn: { statusValue: string; targetAttribute?: string }): string {
+  return `${btn.statusValue}::${(btn.targetAttribute || 'status').trim() || 'status'}`;
+}
+
+function normalizeBulkRowId(id: unknown): string | null {
+  if (id == null || id === '') return null;
+  return String(id);
+}
+
+function getBulkRowStatus(row: any): string {
+  const raw =
+    (row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>).status : undefined) ??
+    row?.status;
+  return String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_');
+}
+
 const INVENTORY_PRIORITY_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[5rem] min-w-[4.5rem]`;
 const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[9.5rem] min-w-[6.5rem]`;
 
 const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
-  'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-xs font-semibold text-white hover:bg-[#163a8a] hover:text-white';
+  'h-[23px] w-[55px] min-w-[55px] justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#2885FF_0%,#0A5ECD_100%)] px-0 text-xs font-semibold text-white hover:brightness-105 hover:text-white';
+const OPS_SAVE_BTN =
+  'h-[23px] w-[55px] min-w-[55px] justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#11243C_0%,#2E60A2_100%)] px-0 text-xs font-semibold text-white hover:brightness-110 hover:text-white';
 
 /** All Requests: fixed rem widths on data columns; item name absorbs the rest (no gaping chips). */
 function procurementColumnLayout(
@@ -169,6 +197,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const listFetchInFlightRef = useRef(false);
   const createdRefreshTimerRef = useRef<number | null>(null);
+  const fetchFilteredDataRef = useRef<
+    | ((
+        requestSequence?: number,
+        queryParams?: URLSearchParams,
+        options?: { silent?: boolean; keepPage?: boolean },
+      ) => Promise<void>)
+    | null
+  >(null);
   const requestSequenceRef = useRef<number>(0);
   const lastInitialFetchKeyRef = useRef<string>('');
   const initialFetchInFlightKeyRef = useRef<string | null>(null);
@@ -176,6 +212,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const { session, user } = useAuth();
   const spoofUserId = useSpoofUserId();
   const { customRole, membershipLoaded, membershipId } = useTenant();
+  const inventoryTablePageName = useInventoryTablePageName();
   const sessionUser = session?.user ?? null;
   const activeUser = user ?? sessionUser ?? null;
   // Spoof JWT `sub` when active; otherwise Supabase user id (aligns with API `{{current_user}}`).
@@ -810,7 +847,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           <CustomButton
             variant="default"
             size="sm"
-            className={OPS_EDIT_BTN}
+            className={isEditing ? OPS_SAVE_BTN : OPS_EDIT_BTN}
             disabled={isSaving || (opsRowSavingId != null && !isEditing)}
             onClick={(e) => {
               e.stopPropagation();
@@ -1107,6 +1144,26 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (isItemsTableFirstColumn) {
       return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
     }
+
+    const isRequesterNameColumn =
+      accessorLowerForName === 'requester_name' ||
+      accessorLowerForName === 'requested_by' ||
+      headerLower === 'requested by' ||
+      headerLower === 'requester' ||
+      headerLower === 'requester name' ||
+      headerLower === 'requestor' ||
+      headerLower === 'requestor name';
+    if (isRequesterNameColumn) {
+      const requesterName =
+        displayValue && displayValue !== 'N/A'
+          ? displayValue
+          : String(row.requester_name || row.name || '').trim();
+      return (
+        <span className="mx-auto block w-full text-center text-sm" title={requesterName || undefined}>
+          {requesterName || 'N/A'}
+        </span>
+      );
+    }
     
     // Special handling for name column - show avatar, name, and email
     if (column.accessor === 'name' || headerLower.includes('name')) {
@@ -1388,6 +1445,417 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return list;
   }, [config?.tableType, config?.statusButtons]);
 
+  const inventoryTableKind = useMemo(
+    () =>
+      resolveEffectiveInventoryTableKind({
+        pageDisplayName:
+          inventoryTablePageName ||
+          (config as { pageDisplayName?: string } | undefined)?.pageDisplayName,
+        pageComponentType: (config as { pageComponentType?: string } | undefined)?.pageComponentType,
+        configuredKind: (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind,
+      }),
+    [config, inventoryTablePageName]
+  );
+
+  const isMyRequestPage = inventoryTableKind === 'my_request';
+
+  const bulkSelectionEnabled =
+    !isInPageBuilder &&
+    isInventoryRequestTable &&
+    config?.tableType === 'itemsTable' &&
+    !isMyRequestPage;
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  const [bulkApplying, setBulkApplying] = useState<string | null>(null);
+
+  const getRowWorkflowButtons = useCallback(
+    (row: any) => {
+      const data =
+        row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : {};
+      const requesterId = data.requester_id ?? row?.requester_id ?? data.created_by_id;
+      const isRequester = isInventoryRequestRowRequester(requesterId, activeUserId, membershipId);
+      return getInventoryWorkflowButtons({
+        requestStatus: data.status ?? row?.status,
+        roleNameOrKey: customRole,
+        membershipId,
+        userId: activeUserId,
+        teamLeadOnRecord: data.team_lead,
+        managerOnRecord: data.manager,
+        isRequester,
+        workflowMode: config?.inventoryWorkflowMode ?? 'auto',
+      });
+    },
+    [activeUserId, config?.inventoryWorkflowMode, customRole, membershipId]
+  );
+
+  const mergeBulkActionButtons = useCallback(
+    (
+      buttonsList: Array<
+        Array<{ label: string; statusValue: string; targetAttribute?: string; statusText?: string }>
+      >
+    ) => {
+      const map = new Map<
+        string,
+        { label: string; statusValue: string; targetAttribute?: string; statusText?: string }
+      >();
+      for (const list of buttonsList) {
+        for (const btn of list) {
+          if (!(btn?.label ?? '').trim() || !(btn?.statusValue ?? '').trim()) continue;
+          map.set(bulkActionButtonKey(btn), btn);
+        }
+      }
+      return Array.from(map.values());
+    },
+    []
+  );
+
+  const selectedRowCount = selectedRowIds.size;
+
+  const bulkSelectionStatus = useMemo(() => {
+    if (selectedRowIds.size === 0) return null;
+    for (const row of filteredData) {
+      const rowId = normalizeBulkRowId(row?.id);
+      if (rowId != null && selectedRowIds.has(rowId)) {
+        return getBulkRowStatus(row) || null;
+      }
+    }
+    return null;
+  }, [filteredData, selectedRowIds]);
+
+  const canSelectBulkRow = useCallback(
+    (row: any) => {
+      if (!bulkSelectionEnabled) return false;
+      if (normalizeBulkRowId(row?.id) == null) return false;
+      if (bulkSelectionStatus == null) return true;
+      return getBulkRowStatus(row) === bulkSelectionStatus;
+    },
+    [bulkSelectionEnabled, bulkSelectionStatus]
+  );
+
+  const toggleBulkRowSelection = useCallback(
+    (row: any, selected: boolean) => {
+      const rowId = normalizeBulkRowId(row?.id);
+      if (rowId == null) return;
+
+      if (!selected) {
+        setSelectedRowIds((prev) => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
+        return;
+      }
+
+      const rowStatus = getBulkRowStatus(row);
+      setSelectedRowIds((prev) => {
+        if (prev.size > 0) {
+          let anchorStatus: string | null = null;
+          for (const existing of filteredData) {
+            const existingId = normalizeBulkRowId(existing?.id);
+            if (existingId != null && prev.has(existingId)) {
+              anchorStatus = getBulkRowStatus(existing);
+              break;
+            }
+          }
+          if (anchorStatus != null && rowStatus !== anchorStatus) {
+            toast({
+              title: 'Different status',
+              description: 'Bulk select only works for requests with the same status as the first selected row.',
+              variant: 'destructive',
+            });
+            return prev;
+          }
+        }
+        const next = new Set(prev);
+        next.add(rowId);
+        return next;
+      });
+    },
+    [filteredData, toast]
+  );
+
+  const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
+  const [bulkStatusPickerOptions, setBulkStatusPickerOptions] = useState<
+    Array<{ status: string; count: number }>
+  >([]);
+
+  const getPageStatusCounts = useCallback(() => {
+    const counts = new Map<string, number>();
+    for (const row of filteredData) {
+      if (normalizeBulkRowId(row?.id) == null) continue;
+      const status = getBulkRowStatus(row);
+      if (!status) continue;
+      counts.set(status, (counts.get(status) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => a.status.localeCompare(b.status));
+  }, [filteredData]);
+
+  const selectBulkRowsByStatus = useCallback(
+    (status: string) => {
+      const matchingIds = filteredData
+        .filter((row) => getBulkRowStatus(row) === status)
+        .map((row) => normalizeBulkRowId(row?.id))
+        .filter((id): id is string => id != null);
+      setSelectedRowIds(new Set(matchingIds));
+      setBulkStatusPickerOpen(false);
+      setBulkStatusPickerOptions([]);
+    },
+    [filteredData]
+  );
+
+  const toggleBulkSelectAll = useCallback(() => {
+    // If a status is already locked by current selection, toggle that group only.
+    if (selectedRowIds.size > 0) {
+      let anchorStatus: string | null = null;
+      for (const row of filteredData) {
+        const rowId = normalizeBulkRowId(row?.id);
+        if (rowId != null && selectedRowIds.has(rowId)) {
+          anchorStatus = getBulkRowStatus(row);
+          break;
+        }
+      }
+      if (anchorStatus) {
+        const matchingIds = filteredData
+          .filter((row) => getBulkRowStatus(row) === anchorStatus)
+          .map((row) => normalizeBulkRowId(row?.id))
+          .filter((id): id is string => id != null);
+        const allMatchingSelected =
+          matchingIds.length > 0 && matchingIds.every((id) => selectedRowIds.has(id));
+        setSelectedRowIds(allMatchingSelected ? new Set() : new Set(matchingIds));
+        return;
+      }
+    }
+
+    const statusOptions = getPageStatusCounts();
+    if (statusOptions.length === 0) return;
+
+    if (statusOptions.length === 1) {
+      selectBulkRowsByStatus(statusOptions[0].status);
+      return;
+    }
+
+    // Mixed statuses on this page — ask which status to select.
+    setBulkStatusPickerOptions(statusOptions);
+    setBulkStatusPickerOpen(true);
+  }, [filteredData, getPageStatusCounts, selectBulkRowsByStatus, selectedRowIds]);
+
+  const clearBulkSelection = useCallback(() => {
+    setSelectedRowIds(new Set());
+    setBulkStatusPickerOpen(false);
+    setBulkStatusPickerOptions([]);
+  }, []);
+
+  useEffect(() => {
+    setSelectedRowIds(new Set());
+    setBulkStatusPickerOpen(false);
+    setBulkStatusPickerOptions([]);
+  }, [pagination.currentPage, effectiveApiEndpoint]);
+
+  const rowSupportsBulkAction = useCallback(
+    (row: any, button: { statusValue: string; targetAttribute?: string }) => {
+      const key = bulkActionButtonKey(button);
+      const workflowMatch = getRowWorkflowButtons(row).some((btn) => bulkActionButtonKey(btn) === key);
+      if (workflowMatch) return true;
+      return effectiveStatusButtons.some((btn) => bulkActionButtonKey(btn) === key);
+    },
+    [effectiveStatusButtons, getRowWorkflowButtons]
+  );
+
+  const bulkActionButtons = useMemo(() => {
+    if (!bulkSelectionEnabled || selectedRowIds.size === 0) return [];
+
+    const selectedRows = filteredData.filter((row) => {
+      const rowId = normalizeBulkRowId(row?.id);
+      return rowId != null && selectedRowIds.has(rowId);
+    });
+    if (selectedRows.length === 0) return [];
+
+    const perRowButtons = selectedRows.map((row) => getRowWorkflowButtons(row));
+    const configured = filterDuplicateInventoryWorkflowButtons(effectiveStatusButtons);
+    const candidateButtons = mergeBulkActionButtons([...perRowButtons, configured]);
+
+    return candidateButtons.filter((btn) =>
+      selectedRows.some((row) => rowSupportsBulkAction(row, btn))
+    );
+  }, [
+    bulkSelectionEnabled,
+    effectiveStatusButtons,
+    filteredData,
+    getRowWorkflowButtons,
+    mergeBulkActionButtons,
+    rowSupportsBulkAction,
+    selectedRowIds,
+  ]);
+
+  const patchInventoryRowStatus = useCallback(
+    async (
+      row: any,
+      button: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }
+    ) => {
+      if (!effectiveApiEndpoint || !row?.id) return null;
+      const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+      const url = `${base}/${row.id}/`;
+      const existingData = (row.data as Record<string, unknown>) || {};
+      const targetAttribute = (button.targetAttribute || 'status').trim() || 'status';
+      const dataToSend: Record<string, unknown> = { ...existingData };
+      dataToSend[targetAttribute] = button.statusValue;
+      if (targetAttribute === 'status') {
+        dataToSend.status_text = (button.statusText ?? button.label ?? button.statusValue).trim();
+        applyInventoryCartStatusSideEffects({
+          previousStatus: existingData.status,
+          nextStatus: button.statusValue,
+          data: dataToSend,
+        });
+        if (String(button.statusValue).toUpperCase().replace(/\s+/g, '_') === 'IN_SHIPPING') {
+          dataToSend.shipment_status = advanceShipmentStatusForTracking(
+            dataToSend.shipment_status,
+            true
+          );
+        }
+      }
+      const response = await apiClient.patch(url, { data: dataToSend });
+      return response.data;
+    },
+    [effectiveApiEndpoint]
+  );
+
+  const handleBulkStatusAction = useCallback(
+    async (button: {
+      label: string;
+      statusValue: string;
+      targetAttribute?: string;
+      statusText?: string;
+    }) => {
+      if (!bulkSelectionEnabled || selectedRowIds.size === 0) return;
+      const applyingKey = bulkActionButtonKey(button);
+      const selectedRows = filteredData.filter((row) => {
+        const rowId = normalizeBulkRowId(row?.id);
+        return rowId != null && selectedRowIds.has(rowId);
+      });
+      const eligibleRows = selectedRows.filter((row) => rowSupportsBulkAction(row, button));
+      const skippedCount = selectedRows.length - eligibleRows.length;
+
+      if (eligibleRows.length === 0) {
+        toast({
+          title: 'No eligible rows',
+          description: `None of the selected requests can be updated with "${formatBulkActionLabel(button.label, selectedRows.length)}".`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setBulkApplying(applyingKey);
+      const results = await Promise.allSettled(
+        eligibleRows.map((row) => patchInventoryRowStatus(row, button))
+      );
+
+      let successCount = 0;
+      let failCount = 0;
+      const updatedById = new Map<string, any>();
+
+      results.forEach((result, index) => {
+        const row = eligibleRows[index];
+        const rowId = normalizeBulkRowId(row?.id);
+        if (result.status === 'fulfilled' && result.value && rowId != null) {
+          updatedById.set(rowId, result.value);
+          successCount += 1;
+        } else {
+          failCount += 1;
+        }
+      });
+
+      if (updatedById.size > 0) {
+        const applyUpdate = (r: any) => {
+          const rowId = normalizeBulkRowId(r?.id);
+          if (rowId == null) return r;
+          const updated = updatedById.get(rowId);
+          if (!updated) return r;
+          const targetAttribute = (button.targetAttribute || 'status').trim() || 'status';
+          const existingData = (r.data as Record<string, unknown>) || {};
+          const nextData: Record<string, unknown> = {
+            ...existingData,
+            ...(updated?.data && typeof updated.data === 'object'
+              ? (updated.data as Record<string, unknown>)
+              : { [targetAttribute]: button.statusValue }),
+          };
+          if (nextData[targetAttribute] == null) {
+            nextData[targetAttribute] = button.statusValue;
+          }
+          if (targetAttribute === 'status') {
+            nextData.status_text =
+              nextData.status_text ??
+              (button.statusText ?? button.label ?? button.statusValue).trim();
+          }
+          const merged: Record<string, unknown> = {
+            ...r,
+            ...updated,
+            data: nextData,
+            [targetAttribute]: nextData[targetAttribute],
+          };
+          if (targetAttribute === 'status') {
+            merged.status = nextData.status;
+            merged.status_text = nextData.status_text;
+            if (nextData.shipment_status != null) {
+              merged.shipment_status = nextData.shipment_status;
+            }
+          }
+          return transformLeadData(merged, config);
+        };
+        setData((prev) => prev.map(applyUpdate));
+        setFilteredData((prev) => prev.map(applyUpdate));
+      }
+
+      setBulkApplying(null);
+      const actionLabel = formatBulkActionLabel(button.label, selectedRows.length);
+
+      if (successCount > 0 && failCount === 0 && skippedCount === 0) {
+        toast({
+          title: 'Updated',
+          description: `${successCount} request${successCount === 1 ? '' : 's'} updated with "${actionLabel}".`,
+        });
+        setSelectedRowIds(new Set());
+      } else if (successCount > 0) {
+        const parts: string[] = [`${successCount} updated with "${actionLabel}"`];
+        if (failCount > 0) parts.push(`${failCount} failed`);
+        if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+        toast({
+          title: failCount > 0 ? 'Partially updated' : 'Updated',
+          description: `${parts.join(', ')}.`,
+          variant: failCount > 0 ? 'destructive' : undefined,
+        });
+        if (failCount === 0) setSelectedRowIds(new Set());
+      } else {
+        toast({
+          title: 'Update failed',
+          description: 'Could not update the selected requests.',
+          variant: 'destructive',
+        });
+      }
+
+      if (successCount > 0) {
+        try {
+          await fetchFilteredDataRef.current?.(undefined, undefined, {
+            silent: true,
+            keepPage: true,
+          });
+        } catch (e) {
+          console.error('Error refreshing table after bulk status update', e);
+        }
+      }
+    },
+    [
+      bulkSelectionEnabled,
+      config,
+      filteredData,
+      patchInventoryRowStatus,
+      rowSupportsBulkAction,
+      selectedRowIds,
+      toast,
+    ]
+  );
+
   // Build table columns from config only. No auto-appended Status column.
   const tableColumns: Column[] = useMemo(() => {
     const leftAlignKeys = new Set([
@@ -1395,11 +1863,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       'item_name_freeform',
       'specifications',
       'comments',
-      'requester_name',
       'department',
       'project_purpose',
     ]);
-    const mapped = (config?.columns ?? [])
+    const isMyRequestTable = isMyRequestPage;
+    const configuredColumns = isMyRequestTable
+      ? excludeInventoryTrackColumn(config?.columns)
+      : config?.columns;
+    const mapped = (configuredColumns ?? [])
       .filter((col) => {
         const key = String(col.key || '').trim();
         return key !== 'tracking_details' && key !== 'tracking_number' && key !== 'courier_name';
@@ -1463,7 +1934,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
     }
     return base;
-  }, [config?.columns, config?.tableType, effectiveStatusButtons, isInPageBuilder, isInventoryRequestTable]);
+  }, [config?.columns, config?.tableType, effectiveStatusButtons, inventoryTableKind, isInPageBuilder, isInventoryRequestTable, isMyRequestPage]);
 
   // Get unique values for filters
   const getUniqueLeadStatuses = () => {
@@ -1659,6 +2130,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       if (!silent) setTableLoading(false);
     }
   };
+  fetchFilteredDataRef.current = fetchFilteredData;
 
   // Reset filters
   const resetFilters = async () => {
@@ -2376,6 +2848,21 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     isCustomModalOpen,
     setIsCustomModalOpen,
     apiClient,
+    bulkSelectionEnabled,
+    selectedRowIds,
+    selectedRowCount,
+    bulkSelectionStatus,
+    bulkActionButtons,
+    bulkApplying,
+    canSelectBulkRow,
+    toggleBulkRowSelection,
+    toggleBulkSelectAll,
+    clearBulkSelection,
+    handleBulkStatusAction,
+    bulkStatusPickerOpen,
+    setBulkStatusPickerOpen,
+    bulkStatusPickerOptions,
+    selectBulkRowsByStatus,
   };
 }
 
