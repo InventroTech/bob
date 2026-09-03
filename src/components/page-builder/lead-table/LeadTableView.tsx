@@ -238,24 +238,25 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — title left; search + Filters right, nudged slightly below heading. */}
+        {/* Toolbar — title left; search + Filters right.
+            On mobile, title takes its own row so it isn't squeezed away by flex-nowrap + min-width search. */}
         <div
-          className={`mb-3 flex shrink-0 flex-nowrap items-start gap-3 border-b border-gray-200 pb-3 ${
-            pageTitleDisplay ? 'justify-between' : 'justify-end'
+          className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3 ${
+            pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
           }`}
         >
           {pageTitleDisplay ? (
             <h1
               className={
                 isProcurementStyleTable
-                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900'
+                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900 max-sm:text-2xl'
                   : '!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900'
               }
             >
               {pageTitleDisplay}
             </h1>
           ) : null}
-          <div className="mt-1.5 flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 sm:mt-1.5">
             <div
               className={`relative flex-1 max-w-sm ${
                 isProcurementStyleTable ? 'min-w-[180px]' : 'min-w-[200px]'
