@@ -83,10 +83,10 @@ const ShortProfileCard = ({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden font-body text-left">
         <span
           className={cn(
-            'font-bold text-gray-900',
+            'text-gray-900',
             wrapName
-              ? 'text-[15px] leading-snug whitespace-normal break-words [overflow-wrap:anywhere] line-clamp-3'
-              : 'block truncate text-sm'
+              ? 'font-[Inter,sans-serif] text-[14px] font-medium leading-[20px] tracking-normal whitespace-normal break-words [overflow-wrap:anywhere] line-clamp-3'
+              : 'block truncate text-sm font-bold'
           )}
           title={nameTitle || name || undefined}
         >

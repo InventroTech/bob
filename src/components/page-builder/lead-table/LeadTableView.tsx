@@ -1,9 +1,9 @@
 /** Presentational JSX for the lead table. */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { useOutletContext, useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X } from 'lucide-react';
+import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X, Loader2 } from 'lucide-react';
 import LeadCardCarousel from '../lead-card-carousel';
 import { RecordDetailModal } from '../record-detail-modal';
 import { InventoryFormEditModal } from '../inventory-form-edit-modal';
@@ -21,17 +21,13 @@ import {
 } from './constants';
 import type { LeadTableModel } from './useLeadTable';
 import {
+  formatBulkActionLabel,
   formatInventoryTableToolbarTitle,
   inferInventoryTableKindFromPageName,
-  resolveInventoryPageTitle,
   TABLE_COMPONENT_KIND_MAP,
 } from './utils';
-import { useInventoryTablePageName } from './InventoryTablePageContext';
-
-type CustomAppOutletContext = {
-  pages?: { id: string; name: string }[];
-  isUnmanndApp?: boolean;
-};
+import { usePageDisplayTitle } from './InventoryTablePageContext';
+import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -91,19 +87,46 @@ export function LeadTableView(props: LeadTableModel) {
     isCustomModalOpen,
     setIsCustomModalOpen,
     apiClient,
+    bulkSelectionEnabled,
+    selectedRowIds,
+    selectedRowCount,
+    bulkSelectionStatus,
+    bulkActionButtons,
+    bulkApplying,
+    canSelectBulkRow,
+    toggleBulkRowSelection,
+    toggleBulkSelectAll,
+    clearBulkSelection,
+    handleBulkStatusAction,
+    bulkStatusPickerOpen,
+    setBulkStatusPickerOpen,
+    bulkStatusPickerOptions,
+    selectBulkRowsByStatus,
   } = props;
 
-  const { pageId: routePageId } = useParams<{ pageId?: string }>();
-  const outletContext = useOutletContext<CustomAppOutletContext | undefined>();
-  const contextPageName = useInventoryTablePageName();
-  const sidebarPageName = useMemo(() => {
-    if (contextPageName) return contextPageName;
-    if (!routePageId || !outletContext?.pages?.length) return '';
-    return (outletContext.pages.find((p) => p.id === routePageId)?.name || '').trim();
-  }, [contextPageName, routePageId, outletContext?.pages]);
+  // Row navigation for the detail modals: lets users page through filteredData
+  // without closing the modal, scrolling back to the table, and reopening the next row.
+  const selectedRecordIndex = useMemo(() => {
+    if (selectedRecord?.id == null) return -1;
+    return filteredData.findIndex((r: any) => r.id === selectedRecord.id);
+  }, [filteredData, selectedRecord]);
 
-  // DYNAMIC TITLE LOGIC based on URL path
-  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  const handleNavigateRecord = useCallback(
+    (direction: 'prev' | 'next') => {
+      if (selectedRecordIndex === -1) return;
+      const nextIndex = direction === 'next' ? selectedRecordIndex + 1 : selectedRecordIndex - 1;
+      if (nextIndex < 0 || nextIndex >= filteredData.length) return;
+      setSelectedRecord(filteredData[nextIndex]);
+    },
+    [selectedRecordIndex, filteredData, setSelectedRecord]
+  );
+
+  const navigationPosition =
+    selectedRecordIndex !== -1 ? { index: selectedRecordIndex, total: filteredData.length } : undefined;
+  const hasPreviousRecord = selectedRecordIndex > 0;
+  const hasNextRecord = selectedRecordIndex !== -1 && selectedRecordIndex < filteredData.length - 1;
+
+  // Used for Unmannd procurement table chrome (navy headers).
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
   const forceEntityType = String(
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
@@ -123,38 +146,6 @@ export function LeadTableView(props: LeadTableModel) {
           )
         )
     );
-  // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
-  let displayTitle: string | undefined;
-  if (isInventoryLikeForTitle) {
-    const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
-    const pageDisplayName =
-      sidebarPageName ||
-      (config as { pageDisplayName?: string } | undefined)?.pageDisplayName ||
-      '';
-    const inventoryTableKind =
-      inferInventoryTableKindFromPageName(pageDisplayName) ||
-      TABLE_COMPONENT_KIND_MAP[pageComponentType || ''] ||
-      (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind;
-    const resolved = resolveInventoryPageTitle({
-      configuredTitle: config?.title,
-      pageDisplayName,
-      inventoryTableKind,
-      pageComponentType,
-    });
-    displayTitle = formatInventoryTableToolbarTitle(resolved, inventoryTableKind);
-  } else {
-    displayTitle = (config?.title || '').trim() || undefined;
-  }
-
-  if (!displayTitle && !isInventoryLikeForTitle) {
-    if (pathname.includes('follow')) {
-      displayTitle = "Follow Up Leads";
-    } else if (pathname.includes('pending')) {
-      displayTitle = "Pending Leads";
-    } else {
-      displayTitle = "All Leads";
-    }
-  }
 
   // Navy header/border for Procurement / My Request / Pending Approval / etc.
   // CRM All Leads and other default tables keep black headers.
@@ -162,7 +153,20 @@ export function LeadTableView(props: LeadTableModel) {
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
   const procurementHeaderBg = 'bg-[#0E3777]';
-  const procurementTableFrame = 'overflow-hidden rounded-lg border border-[#0E3777]/30';
+  const procurementTableFrame = 'overflow-hidden mb-3';
+  const pageChromeTitle = usePageDisplayTitle().trim();
+  const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
+  const inventoryTableKindForTitle =
+    inferInventoryTableKindFromPageName(pageChromeTitle) ||
+    TABLE_COMPONENT_KIND_MAP[pageComponentType || ''] ||
+    (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind;
+  const pageTitleText =
+    (isProcurementStyleTable
+      ? formatInventoryTableToolbarTitle(pageChromeTitle, inventoryTableKindForTitle)
+      : pageChromeTitle || (config?.title || '').trim()) || pageChromeTitle;
+  const pageTitleDisplay = isProcurementStyleTable
+    ? pageTitleText.toUpperCase()
+    : pageTitleText;
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
@@ -219,13 +223,6 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle = displayTitle;
-
-  const pageTitleText = (displayTitle || tableTitle || '').trim();
-  const pageTitleDisplay = isProcurementStyleTable
-    ? pageTitleText.toUpperCase()
-    : pageTitleText;
-
   return (
     <div
       className={
@@ -234,27 +231,6 @@ export function LeadTableView(props: LeadTableModel) {
           : undefined
       }
     >
-      {/* Mobile Page Title - Dynamically changes based on URL */}
-      {pageTitleDisplay ? (
-        <div
-          className={
-            isProcurementStyleTable
-              ? 'md:hidden w-full shrink-0 pb-2 px-3 pt-2'
-              : 'md:hidden w-full pb-3 px-4 pt-4'
-          }
-        >
-          <h2
-            className={
-              isProcurementStyleTable
-                ? 'text-2xl font-bold uppercase tracking-tight text-gray-900'
-                : 'text-2xl font-bold text-gray-900'
-            }
-          >
-            {pageTitleDisplay}
-          </h2>
-        </div>
-      ) : null}
-
       <div
         className={
           isProcurementStyleTable
@@ -262,24 +238,25 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — title left; search + Filters right (All Requests prototype) */}
+        {/* Toolbar — title left; search + Filters right.
+            On mobile, title takes its own row so it isn't squeezed away by flex-nowrap + min-width search. */}
         <div
-          className={`flex shrink-0 items-center flex-wrap ${
-            isProcurementStyleTable ? 'gap-3 mb-3' : 'gap-3'
-          } ${pageTitleDisplay ? 'justify-between' : 'justify-end'}`}
+          className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3 ${
+            pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
+          }`}
         >
           {pageTitleDisplay ? (
             <h1
               className={
                 isProcurementStyleTable
-                  ? 'hidden md:block !m-0 text-2xl font-bold uppercase tracking-tight text-gray-900 sm:text-3xl'
-                  : 'hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900'
+                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900 max-sm:text-2xl'
+                  : '!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900'
               }
             >
               {pageTitleDisplay}
             </h1>
           ) : null}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 sm:mt-1.5">
             <div
               className={`relative flex-1 max-w-sm ${
                 isProcurementStyleTable ? 'min-w-[180px]' : 'min-w-[200px]'
@@ -299,8 +276,8 @@ export function LeadTableView(props: LeadTableModel) {
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className={
                   isProcurementStyleTable
-                    ? 'h-9 rounded-full border-gray-200 bg-white pl-9 text-sm shadow-sm'
-                    : 'pl-9 h-8'
+                    ? 'h-9 rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm'
+                    : 'pl-9 h-8 rounded-md'
                 }
               />
             </div>
@@ -315,8 +292,8 @@ export function LeadTableView(props: LeadTableModel) {
               className={
                 isProcurementStyleTable
                   ? showFilters
-                    ? 'h-9 rounded-md border-0 bg-[#0E3777] px-4 text-white hover:bg-[#0b2d61] hover:text-white'
-                    : 'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-white hover:bg-[#163a8a] hover:text-white'
+                    ? 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[#0E3777] px-3 text-white shadow-[0_4px_10px_rgba(10,94,205,0.35)] hover:bg-[#0b2d61] hover:text-white'
+                    : 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-3 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white hover:shadow-[0_4px_10px_rgba(10,94,205,0.28)]'
                   : undefined
               }
             >
@@ -328,6 +305,56 @@ export function LeadTableView(props: LeadTableModel) {
             </CustomButton>
           </div>
         </div>
+
+        {bulkSelectionEnabled && selectedRowCount > 0 && bulkActionButtons.length > 0 ? (
+          <div
+            className={
+              isProcurementStyleTable
+                ? 'mb-2 flex shrink-0 flex-wrap items-center gap-3 rounded-md border border-[#0E3777]/20 bg-[#F4F8FF] px-3 py-2'
+                : 'mb-2 flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2'
+            }
+          >
+            <span className="text-sm font-medium text-gray-800">
+              {selectedRowCount} selected
+              {bulkSelectionStatus ? (
+                <span className="ml-1 font-normal text-gray-500">
+                  ({bulkSelectionStatus.replace(/_/g, ' ')})
+                </span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              className="text-sm text-[#1A44A1] underline-offset-2 hover:underline"
+              onClick={clearBulkSelection}
+            >
+              Clear
+            </button>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {bulkActionButtons.map((btn) => {
+                const applyingKey = `${btn.statusValue}::${(btn.targetAttribute || 'status').trim() || 'status'}`;
+                const applyingThis = bulkApplying === applyingKey;
+                const bulkLabel = formatBulkActionLabel(btn.label, selectedRowCount);
+                return (
+                  <Button
+                    key={`${btn.label}-${btn.statusValue}-${btn.targetAttribute || 'status'}`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-9 gap-1.5 rounded-md px-4 font-semibold',
+                      urgencyToneButtonClassName(btn.statusValue, applyingThis)
+                    )}
+                    disabled={bulkApplying != null}
+                    onClick={() => void handleBulkStatusAction(btn)}
+                  >
+                    {applyingThis ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                    {applyingThis ? 'Updating…' : bulkLabel}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {showFilters && (
           <div className={isProcurementStyleTable ? 'mt-1.5 mb-2 shrink-0' : 'mt-2 mb-1.5'}>
@@ -534,6 +561,16 @@ export function LeadTableView(props: LeadTableModel) {
             fitViewport={isProcurementStyleTable}
             className={isProcurementStyleTable ? procurementTableFrame : undefined}
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
+            rowSelection={
+              bulkSelectionEnabled
+                ? {
+                    selectedRowIds,
+                    onToggleRow: (row, selected) => toggleBulkRowSelection(row, selected),
+                    onToggleAll: toggleBulkSelectAll,
+                    canSelectRow: canSelectBulkRow,
+                  }
+                : undefined
+            }
           />
         </div>
 
@@ -543,7 +580,7 @@ export function LeadTableView(props: LeadTableModel) {
             <div
               className={
                 isProcurementStyleTable
-                  ? 'mt-auto flex shrink-0 items-center justify-end gap-4 border-t border-gray-200 pt-3 pb-1'
+                  ? 'mt-auto -mx-1 flex shrink-0 items-center justify-end gap-4 border-t border-gray-300 px-1 pt-4 pb-1 sm:-mx-2 sm:px-2'
                   : 'flex justify-between items-center mt-2 pt-2 border-t border-gray-200'
               }
             >
@@ -566,7 +603,7 @@ export function LeadTableView(props: LeadTableModel) {
                         commitPageInput();
                       }
                     }}
-                    className="h-9 w-12 rounded-md border-gray-300 bg-white px-1 text-center text-sm font-medium tabular-nums text-gray-900 shadow-none"
+                    className="h-9 w-12 rounded-lg border-gray-200 bg-white px-1 text-center text-sm font-medium tabular-nums text-gray-900 shadow-none"
                   />
                   <span className="text-sm text-gray-500 tabular-nums">
                     of {String(totalPages).padStart(2, '0')}
@@ -584,7 +621,7 @@ export function LeadTableView(props: LeadTableModel) {
                   disabled={!pagination.previousPageLink || tableLoading}
                   className={
                     isProcurementStyleTable
-                      ? 'h-9 rounded-full border-0 bg-gray-100 px-5 font-semibold text-gray-800 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
+                      ? 'h-9 rounded-full border-0 bg-gray-100 px-5 font-semibold text-gray-500 hover:bg-gray-200 hover:text-gray-600 disabled:opacity-60 disabled:cursor-not-allowed'
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed'
                   }
                 >
@@ -598,7 +635,7 @@ export function LeadTableView(props: LeadTableModel) {
                   disabled={!pagination.nextPageLink || tableLoading}
                   className={
                     isProcurementStyleTable
-                      ? 'h-9 rounded-full border-0 bg-gray-300 px-5 font-semibold text-gray-900 hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed'
+                      ? 'h-9 rounded-full border-0 bg-gray-200 px-5 font-bold text-gray-900 hover:bg-gray-300 disabled:opacity-60 disabled:cursor-not-allowed'
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed'
                   }
                 >
@@ -608,6 +645,33 @@ export function LeadTableView(props: LeadTableModel) {
             </div>
           )}
       </div>
+
+      <Dialog open={bulkStatusPickerOpen} onOpenChange={setBulkStatusPickerOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Select by status</DialogTitle>
+            <DialogDescription>
+              This page has requests with different statuses. Choose which status to select.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-2">
+            {bulkStatusPickerOptions.map((opt) => (
+              <Button
+                key={opt.status}
+                type="button"
+                variant="outline"
+                className="h-10 justify-between rounded-md px-4"
+                onClick={() => selectBulkRowsByStatus(opt.status)}
+              >
+                <span className="font-semibold uppercase tracking-wide">
+                  {opt.status.replace(/_/g, ' ')}
+                </span>
+                <span className="text-muted-foreground">{opt.count}</span>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Lead Modal with LeadCard */}
       <Dialog open={isLeadModalOpen} onOpenChange={(open) => {
@@ -898,6 +962,10 @@ export function LeadTableView(props: LeadTableModel) {
               console.error('Error refreshing table after delete:', e);
             }
           }}
+          onNavigate={handleNavigateRecord}
+          hasPrevious={hasPreviousRecord}
+          hasNext={hasNextRecord}
+          navigationPosition={navigationPosition}
         />
       )}
 
@@ -990,6 +1058,10 @@ export function LeadTableView(props: LeadTableModel) {
               console.error('Error refreshing table after delete:', e);
             }
           }}
+          onNavigate={handleNavigateRecord}
+          hasPrevious={hasPreviousRecord}
+          hasNext={hasNextRecord}
+          navigationPosition={navigationPosition}
         />
       )}
 

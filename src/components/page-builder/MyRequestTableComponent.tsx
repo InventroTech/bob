@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { resolvePriorityFromRow } from '@/lib/inventory/priority';
-import { mergeInventoryTrackingColumns } from '@/lib/inventory/shipmentTracking';
+import { mergeInventoryTrackingColumns, excludeInventoryTrackColumn } from '@/lib/inventory/shipmentTracking';
 import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 export type MyRequestTableColumn = {
@@ -66,8 +66,8 @@ function entityTypeFromEndpoint(apiEndpoint?: string): string | undefined {
 
 /**
  * My Request table for Page Builder.
- * Columns come from config; for inventory/unmannd requests, shipment tracking
- * columns are merged in the same way as All Requests / Procurement Table.
+ * Columns come from config; for inventory/unmannd requests, shipment status is merged in
+ * but the Track link column is omitted (requestors use Shipment status only).
  */
 export const MyRequestTableComponent: React.FC<MyRequestTableProps> = ({ config }) => {
   const mergedConfig = useMemo(() => {
@@ -77,7 +77,9 @@ export const MyRequestTableComponent: React.FC<MyRequestTableProps> = ({ config 
       entityType === 'inventory_request' || entityType === 'unmannd_request';
     const columns = withPriorityTransform(
       (isInventoryLike
-        ? mergeInventoryTrackingColumns(config?.columns || [])
+        ? excludeInventoryTrackColumn(
+            mergeInventoryTrackingColumns(config?.columns || [], { includeTrack: false })
+          )
         : config?.columns || []) as MyRequestTableColumn[]
     );
 

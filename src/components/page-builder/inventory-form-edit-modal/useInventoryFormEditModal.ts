@@ -79,6 +79,10 @@ export function useInventoryFormEditModal({
   showHistoryButton,
   onDeleted,
   uiVariant = 'default',
+  onNavigate,
+  hasPrevious,
+  hasNext,
+  navigationPosition,
 }: InventoryFormEditModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -988,7 +992,6 @@ export function useInventoryFormEditModal({
           description: `${((btn.targetAttribute || 'status').trim() || 'status')} set to ${btn.statusValue.replace(/_/g, ' ')}.`,
         });
         onRecordUpdated?.(record.id);
-        onOpenChange(false);
       } catch (e: any) {
         toast({
           title: 'Update failed',
@@ -999,7 +1002,7 @@ export function useInventoryFormEditModal({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, isPaymentModal, applyShipmentTrackingOnSave]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, isPaymentModal, applyShipmentTrackingOnSave]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -1095,7 +1098,6 @@ export function useInventoryFormEditModal({
       setTrackingPasteDraft('');
       toast({ title: 'Saved', description: 'All changes saved.' });
       onRecordUpdated?.(record.id);
-      onOpenChange(false);
     } catch (e: any) {
       toast({
         title: 'Update failed',
@@ -1105,7 +1107,7 @@ export function useInventoryFormEditModal({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, applyShipmentTrackingOnSave, isRequester]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, applyShipmentTrackingOnSave, isRequester]);
 
   const handleDeleteRequest = useCallback(async () => {
     if (!canShowDeleteRequestButton || !record?.id) return;
@@ -1296,6 +1298,10 @@ export function useInventoryFormEditModal({
     showHistoryButton,
     onDeleted,
     uiVariant,
+    onNavigate,
+    hasPrevious,
+    hasNext,
+    navigationPosition,
     _formModalDescription,
     toast,
     user,
