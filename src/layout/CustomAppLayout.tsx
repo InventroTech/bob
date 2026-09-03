@@ -98,7 +98,7 @@ function NavIcon({
 }) {
   return (
     <div
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+      className={`flex h-4 w-4 shrink-0 items-center justify-center ${
         isMobile
           ? isActive
             ? 'text-white'
@@ -129,6 +129,22 @@ const CustomAppLayout: React.FC = () => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const isMobile = useIsMobile();
 
+  // Detect mobile landscape orientation smoothly
+  const [isLandscape, setIsLandscape] = useState(() => 
+    typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLandscape(window.innerWidth > window.innerHeight);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobileLandscape = isMobile && isLandscape;
+  const isTabletOrLandscapeMobile = isMobile || (typeof window !== 'undefined' && window.innerWidth < 1024 && isLandscape);
+
   const sidebarWidths = {
     expanded: 288,
     collapsed: 96,
@@ -136,7 +152,7 @@ const CustomAppLayout: React.FC = () => {
 
   // Expose sidebar offset for global overlays (e.g. Sparky on Unmannd top-left).
   useEffect(() => {
-    const widthPx = isMobile
+    const widthPx = isTabletOrLandscapeMobile
       ? 0
       : sidebarCollapsed
         ? sidebarWidths.collapsed
@@ -145,7 +161,7 @@ const CustomAppLayout: React.FC = () => {
     return () => {
       document.documentElement.style.removeProperty('--app-sidebar-width');
     };
-  }, [isMobile, sidebarCollapsed]);
+  }, [isTabletOrLandscapeMobile, sidebarCollapsed]);
 
   const profileImage = user?.user_metadata?.picture || user?.user_metadata?.avatar_url || '';
   const spoofLabel = getSpoofUserLabel();
@@ -324,10 +340,10 @@ const CustomAppLayout: React.FC = () => {
           to={`/app/${tenantSlug}/pages/${page.id}`}
           onClick={opts.onNavigate}
           className={({ isActive }) =>
-            `flex items-center rounded-xl text-sm font-medium transition ${
+            `flex items-center rounded-sm font-medium transition ${
               opts.collapsed ? navItemPad.collapsed : navItemPad.expanded
-            } ${
-              isMobile
+            } ${isMobileLandscape ? 'py-0 px-0.5 text-[8px] gap-1 h-4' : 'text-sm'} ${
+              isTabletOrLandscapeMobile
                 ? isActive
                   ? activeNavClassMobile
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -340,12 +356,12 @@ const CustomAppLayout: React.FC = () => {
           {({ isActive }) => (
             <>
               <NavIcon
-                isMobile={isMobile}
+                isMobile={isTabletOrLandscapeMobile}
                 isActive={isActive}
                 iconName={page.icon_name}
                 customIcons={customIcons}
               />
-              {!opts.collapsed && <span>{page.name}</span>}
+              {!opts.collapsed && <span className="truncate">{page.name}</span>}
             </>
           )}
         </NavLink>
@@ -372,7 +388,7 @@ const CustomAppLayout: React.FC = () => {
     }
   };
 
-  const mainMarginLeft = isMobile
+  const mainMarginLeft = isTabletOrLandscapeMobile
     ? 0
     : sidebarCollapsed
       ? sidebarWidths.collapsed
@@ -385,57 +401,57 @@ const CustomAppLayout: React.FC = () => {
         ['--sidebar-width' as string]: `${sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded}px`
       }}
     >
-      {isMobile ? (
+      {isTabletOrLandscapeMobile ? (
         <>
-          <header className="fixed left-0 right-0 top-0 z-50 flex h-14 items-center justify-between bg-black px-3 text-white">
+          <header className="fixed left-0 right-0 top-0 z-50 flex h-12 items-center justify-between bg-black px-3 text-white">
             <button
               type="button"
               onClick={() => setMobileNavOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg"
+              className="flex h-8 w-8 items-center justify-center rounded-lg"
               aria-label="Open menu"
             >
-              <Menu className="h-6 w-6" />
+              <Menu className="h-5 w-5" />
             </button>
-            <img src={brandLogoSrc} alt={brandLogoAlt} className="h-8 object-contain" />
-            <div className="w-10" />
+            <img src={brandLogoSrc} alt={brandLogoAlt} className="h-6 object-contain" />
+            <div className="w-8" />
           </header>
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-            <SheetContent side="left" className="flex w-[min(100vw-2rem,320px)] flex-col bg-white p-0">
-              <div className="flex items-center gap-2 border-b px-4 py-4">
+            <SheetContent side="left" className={`flex flex-col bg-white p-0 ${isMobileLandscape ? 'w-[100px]' : 'w-[min(100vw-2rem,320px)]'}`}>
+              <div className={`flex items-center gap-1 border-b ${isMobileLandscape ? 'px-1 py-0.5' : 'px-4 py-4'}`}>
                 <button
                   type="button"
                   onClick={() => setMobileNavOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border"
+                  className={`flex items-center justify-center rounded border ${isMobileLandscape ? 'h-3.5 w-3.5' : 'h-9 w-9'}`}
                   aria-label="Close menu"
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft className={isMobileLandscape ? 'h-2 w-2' : 'h-5 w-5'} />
                 </button>
-                <img src={brandLogoSrc} alt={brandLogoAlt} className="h-8 object-contain" />
+                <img src={brandLogoSrc} alt={brandLogoAlt} className={isMobileLandscape ? 'h-3 object-contain' : 'h-8 object-contain'} />
               </div>
               <nav
-                className={`flex-1 overflow-y-auto p-3 ${isUnmanndApp ? 'space-y-1' : 'space-y-2'}`}
+                className={`flex-1 overflow-y-auto ${isMobileLandscape ? 'p-0.5 space-y-0.5' : 'p-3 space-y-2'}`}
               >
                 {renderNavLinks({ collapsed: false, onNavigate: () => setMobileNavOpen(false) })}
               </nav>
-              <div className={`border-t p-3 ${isUnmanndApp ? 'space-y-1.5' : 'space-y-2'}`}>
+              <div className={`border-t ${isMobileLandscape ? 'p-0.5 space-y-0.5' : 'p-3 space-y-2'}`}>
                 <SparkySidebarButton
                   placePanelAway
                   onToggle={() => setMobileNavOpen(false)}
                 />
                 <button
                   type="button"
-                  className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
+                  className={`flex w-full items-center gap-1 rounded bg-gray-100 font-medium text-gray-700 ${isMobileLandscape ? 'px-1 py-0.5 text-[8px]' : 'px-3 py-2 text-sm'}`}
                 >
-                  <Bell className="h-4 w-4" />
+                  <Bell className={isMobileLandscape ? 'h-2 w-2' : 'h-4 w-4'} />
                   Notifications
                 </button>
-                <div className="flex items-center gap-3 rounded-xl px-3 py-2">
+                <div className={`flex items-center gap-1 rounded ${isMobileLandscape ? 'px-1 py-0.5' : 'px-3 py-2'}`}>
                   <img
                     src={profileImage || '/default-avatar.png'}
                     alt={profileName}
-                    className="h-10 w-10 rounded-full object-cover"
+                    className={`rounded-full object-cover ${isMobileLandscape ? 'h-3 w-3' : 'h-10 w-10'}`}
                   />
-                  <p className="truncate text-sm font-semibold text-gray-900">{profileName}</p>
+                  <p className={`truncate font-semibold text-gray-900 ${isMobileLandscape ? 'text-[8px]' : 'text-sm'}`}>{profileName}</p>
                 </div>
                 <button
                   type="button"
@@ -444,9 +460,9 @@ const CustomAppLayout: React.FC = () => {
                     void handleLogout();
                   }}
                   disabled={isLoggingOut}
-                  className="flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium text-gray-600"
+                  className={`flex w-full items-center gap-1 rounded border font-medium text-gray-600 ${isMobileLandscape ? 'px-1 py-0.5 text-[8px]' : 'px-3 py-2 text-sm'}`}
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className={isMobileLandscape ? 'h-2 w-2' : 'h-4 w-4'} />
                   {isLoggingOut ? 'Logging out...' : 'Logout'}
                 </button>
               </div>
@@ -457,7 +473,7 @@ const CustomAppLayout: React.FC = () => {
 
       {/* Desktop sidebar */}
       <div
-        className={`fixed left-0 top-0 h-full bg-white transition-all duration-200 ${isMobile ? 'hidden' : ''}`}
+        className={`fixed left-0 top-0 h-full bg-white transition-all duration-200 ${isTabletOrLandscapeMobile ? 'hidden' : ''}`}
         style={{ width: sidebarCollapsed ? sidebarWidths.collapsed : sidebarWidths.expanded }}
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
@@ -594,13 +610,13 @@ const CustomAppLayout: React.FC = () => {
           marginLeft: mainMarginLeft,
           width: `calc(100% - ${mainMarginLeft}px)`,
           maxWidth: `calc(100% - ${mainMarginLeft}px)`,
-          paddingTop: isMobile ? 56 : 0,
+          paddingTop: isTabletOrLandscapeMobile ? 48 : 0,
         }}
       >
         {spoofBannerVisible && spoofLabel && (
           <div className="w-full bg-yellow-300 text-black text-xs px-4 py-1 flex items-center justify-between shrink-0">
             <span className="truncate">
-              Spoofing as <span className="font-semibold">{spoofLabel}</span>
+              Spoofing as <span className="font-semibold">{profileName}</span>
             </span>
             <button
               type="button"
