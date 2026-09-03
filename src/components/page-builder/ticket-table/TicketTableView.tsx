@@ -21,6 +21,8 @@ import {
   SUPPORT_TICKET_STATE_FILTER_OPTIONS,
   SUPPORT_TICKET_CALL_ATTEMPT_FILTER_OPTIONS,
 } from './utils';
+import { usePageDisplayTitle } from '@/components/page-builder/lead-table/InventoryTablePageContext';
+
 export function TicketTableView(props: TicketTableModel) {
   const {
     config,
@@ -68,6 +70,11 @@ export function TicketTableView(props: TicketTableModel) {
     stateToParamValue,
   } = props;
 
+  const pageTitleDisplay =
+    usePageDisplayTitle().trim() ||
+    (config?.title || '').trim() ||
+    'Support Tickets';
+
 if (loading) {
   return (
     <div className="flex items-center justify-center p-8">
@@ -79,10 +86,13 @@ if (loading) {
 return (
   <>
     <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      {/* Filter Section — page title lives in CustomAppPage sticky header */}
-      <div className="mb-4 relative">
-        <div className="flex justify-end items-center mb-4 gap-4 flex-wrap">
-          <div className="flex items-center gap-2 relative">
+      {/* Title + search/filters — same top row, controls slightly below heading */}
+      <div className="relative mb-4 border-b border-gray-200 pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h1 className="!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900">
+            {pageTitleDisplay}
+          </h1>
+          <div className="mt-1.5 flex items-center gap-2 relative">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input

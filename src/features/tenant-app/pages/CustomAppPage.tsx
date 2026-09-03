@@ -262,15 +262,29 @@ const CustomAppPage: React.FC = () => {
 
   const pageHasInventoryRequestTable =
     Array.isArray(page.config) && page.config.some((comp) => isInventoryTableComponent(comp));
-  // Sticky Header Title shows on every screen size. Only dispatch widgets can opt out
-  // (mobile-app “hide page header” setting).
-  const hidePageHeader =
+  const pageHasRecordsTable =
     Array.isArray(page.config) &&
-    page.config.some(
-      (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
-        (comp.type === 'dispatchCardList' || comp.type === 'dispatchDashboard') &&
-        comp.config?.hidePageHeader !== false
-    );
+    page.config.some((comp: { type?: string }) => {
+      const t = String(comp.type || '');
+      return (
+        t === 'leadTable' ||
+        t === 'oeLeadsTable' ||
+        t === 'ticketTable' ||
+        t === 'inventoryTable' ||
+        Boolean(TABLE_COMPONENT_KIND_MAP[t])
+      );
+    });
+  // Tables render title + search in one toolbar row — hide sticky duplicate.
+  // Dispatch widgets can also opt out (mobile-app setting).
+  const hidePageHeader =
+    pageHasInventoryRequestTable ||
+    pageHasRecordsTable ||
+    (Array.isArray(page.config) &&
+      page.config.some(
+        (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
+          (comp.type === 'dispatchCardList' || comp.type === 'dispatchDashboard') &&
+          comp.config?.hidePageHeader !== false
+      ));
 
   return (
     <InventoryTablePageProvider pageName={effectivePageName} headerTitle={headerTitle ?? ''}>

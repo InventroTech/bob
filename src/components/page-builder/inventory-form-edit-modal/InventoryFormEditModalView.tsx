@@ -1,6 +1,6 @@
 /** Presentational JSX for the inventory form edit modal. */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogClose,
@@ -99,11 +99,9 @@ function unmanndPriorityTextClass(value: unknown): string {
 function UnmanndProductThumb({
   src,
   alt,
-  onImageLoad,
 }: {
   src?: string;
   alt?: string;
-  onImageLoad?: () => void;
 }) {
   const preferred = safeProfileImageUrl(src) ?? '';
   const [failed, setFailed] = useState(false);
@@ -121,7 +119,6 @@ function UnmanndProductThumb({
           src={preferred}
           alt={alt || 'Item'}
           className="h-full w-full object-cover"
-          onLoad={onImageLoad}
           onError={() => setFailed(true)}
         />
       ) : (
@@ -129,7 +126,6 @@ function UnmanndProductThumb({
           src={UNMANND_ITEM_PLACEHOLDER_SRC}
           alt=""
           className="h-full w-full object-cover"
-          onLoad={onImageLoad}
           aria-hidden
         />
       )}
@@ -169,15 +165,10 @@ function ModalSideNavBubble({
   );
 }
 
-type ModalNavAnchor = {
-  top: number;
-  left: number;
-  width: number;
-};
-
 /**
- * Single fixed row holding both prev/next bubbles, aligned to the modal edges.
- * `anchor` is measured from the dialog so buttons track the modal — not the viewport center.
+ * Prev/next bubbles — fixed to the viewport, aligned to the dialog box edges.
+ * Vertical position is a fixed offset from the dialog top (not a form field),
+ * so it never jumps between records and never affects dialog layout/centering.
  */
 function ModalSideNavRow({
   onNavigate,
@@ -190,7 +181,7 @@ function ModalSideNavRow({
   hasPrevious?: boolean;
   hasNext?: boolean;
   disabled?: boolean;
-  anchor: ModalNavAnchor | null;
+  anchor: { top: number; left: number; width: number } | null;
 }) {
   if (!anchor) return null;
 
@@ -203,10 +194,9 @@ function ModalSideNavRow({
         top: anchor.top,
         left: anchor.left - bubbleOffset,
         width: anchor.width + bubbleOffset * 2,
-        transform: 'translateY(-50%)',
       }}
     >
-      <div className="relative flex h-0 w-full items-center justify-between">
+      <div className="flex w-full items-center justify-between">
         <ModalSideNavBubble
           direction="prev"
           disabled={disabled || !hasPrevious}
@@ -423,7 +413,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
     effectiveShowFinalPrice,
     setField,
     formModalFieldsRef,
-    formModalFieldsKey,
+    formModalFieldsKey: _formModalFieldsKey,
     hydratedRecordIdRef,
     applyLiveTrackingResult,
     persistShipmentTrackingPatch,
@@ -463,62 +453,37 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState('');
-
   const dialogContentRef = useRef<HTMLDivElement | null>(null);
-  const navAlignRef = useRef<HTMLElement | null>(null);
-  const measureNavRef = useRef<(() => void) | null>(null);
-  const [navAnchor, setNavAnchor] = useState<ModalNavAnchor | null>(null);
-  const [navVisible, setNavVisible] = useState(false);
+  const [navAnchor, setNavAnchor] = useState<{ top: number; left: number; width: number } | null>(
+    null
+  );
 
-  const setNavAlignEl = useCallback((el: HTMLElement | null) => {
-    if (navAlignRef.current === el) return;
-    navAlignRef.current = el;
-    measureNavRef.current?.();
-  }, []);
-
-  useEffect(() => {
-    if (!open) {
-      setNavVisible(false);
-      return;
-    }
-    // Wait for the dialog open animation (~200ms) before showing side nav.
-    const showTimer = window.setTimeout(() => setNavVisible(true), 220);
-    return () => window.clearTimeout(showTimer);
-  }, [open]);
-
+  // Anchor prev/next to the dialog box only (fixed offset from dialog top). Never measure
+  // form fields — that was shifting buttons and, with overflow-visible, broke centering.
   useEffect(() => {
     if (!open || typeof onNavigate !== 'function') {
       setNavAnchor(null);
       return;
     }
 
+    const NAV_TOP_OFFSET_PX = 132; // ~8.25rem — level with the date row under the navy header
+
     const measure = () => {
-      const alignEl = navAlignRef.current;
       const dialogEl = dialogContentRef.current;
-      if (!alignEl || !dialogEl) {
-        setNavAnchor((prev) => (prev === null ? prev : null));
-        return;
-      }
-
-      const controlRect = alignEl.getBoundingClientRect();
-      const dialogRect = dialogEl.getBoundingClientRect();
-      if (controlRect.height <= 0 || dialogRect.height <= 0) {
-        setNavAnchor((prev) => (prev === null ? prev : null));
-        return;
-      }
-
-      const next: ModalNavAnchor = {
-        top: controlRect.top + controlRect.height / 2,
-        left: dialogRect.left,
-        width: dialogRect.width,
+      if (!dialogEl) return;
+      const rect = dialogEl.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const next = {
+        top: rect.top + NAV_TOP_OFFSET_PX,
+        left: rect.left,
+        width: rect.width,
       };
-
       setNavAnchor((prev) => {
         if (
           prev &&
-          prev.top === next.top &&
-          prev.left === next.left &&
-          prev.width === next.width
+          Math.abs(prev.top - next.top) < 1 &&
+          Math.abs(prev.left - next.left) < 1 &&
+          Math.abs(prev.width - next.width) < 1
         ) {
           return prev;
         }
@@ -526,30 +491,14 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
       });
     };
 
-    measureNavRef.current = measure;
     measure();
-
-    const settleTimers = [0, 50, 150, 300, 450].map((ms) =>
-      window.setTimeout(measure, ms)
-    );
-
-    const alignEl = navAlignRef.current;
-    const dialogEl = dialogContentRef.current;
-    const scrollEl = dialogEl?.querySelector('[data-modal-scroll]');
-    const ro = new ResizeObserver(measure);
-    if (alignEl) ro.observe(alignEl);
-    if (dialogEl) ro.observe(dialogEl);
-    scrollEl?.addEventListener('scroll', measure, { passive: true });
+    const timers = [50, 220, 400].map((ms) => window.setTimeout(measure, ms));
     window.addEventListener('resize', measure);
-
     return () => {
-      settleTimers.forEach((id) => window.clearTimeout(id));
-      measureNavRef.current = null;
-      ro.disconnect();
-      scrollEl?.removeEventListener('scroll', measure);
+      timers.forEach((id) => window.clearTimeout(id));
       window.removeEventListener('resize', measure);
     };
-  }, [open, onNavigate, record?.id, formModalFieldsKey]);
+  }, [open, onNavigate, record?.id]);
 
   // Left/Right arrow keys page to the previous/next record while the modal is open —
   // lets ops move through the queue without closing, scrolling the table, and reopening.
@@ -590,7 +539,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {open && canNavigate && navVisible ? (
+      {open && canNavigate ? (
         <DialogPortal>
           <ModalSideNavRow
             onNavigate={onNavigate!}
@@ -628,8 +577,8 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
           }
         }}
         className={cn(
-          'max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl sm:w-full',
-          isUnmannd && 'gap-0 overflow-hidden rounded-xl border-0 p-0'
+          'max-h-[94vh] flex flex-col w-[calc(100vw-1rem)] max-w-6xl border-none sm:w-full',
+          isUnmannd && 'gap-0 overflow-hidden rounded-xl border-none p-0 shadow-lg'
         )}
       >
         {isUnmannd ? (
@@ -717,7 +666,6 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                       (record?.data as any)?.item_name_freeform ??
                       ''
                   )}
-                  onImageLoad={() => measureNavRef.current?.()}
                 />
               </div>
             ) : null}
@@ -855,8 +803,6 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     </div>
                   ) : isRequestDateField || (isRequiredDateField && !isEnabled) ? (
                     <div
-                      ref={isRequestDateField ? setNavAlignEl : undefined}
-                      data-modal-nav-align
                       className={cn(
                         'flex h-9 w-full items-center rounded-md border px-3 text-sm text-foreground',
                         isUnmannd ? 'border-[#E5E7EB] bg-white' : 'border-border/60 bg-muted/20',
@@ -868,8 +814,6 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                   ) : isRequiredDateField && isEnabled ? (
                     <Input
                       type="date"
-                      ref={isRequestDateField ? setNavAlignEl : undefined}
-                      data-modal-nav-align
                       className={cn('h-9 text-sm rounded-md', isUnmannd && UNMANND_CONTROL)}
                       value={String(calendarDateRaw || '').slice(0, 10)}
                       onChange={(e) => setField(field.key, e.target.value)}

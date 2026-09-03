@@ -22,7 +22,11 @@ import {
 import type { LeadTableModel } from './useLeadTable';
 import {
   formatBulkActionLabel,
+  formatInventoryTableToolbarTitle,
+  inferInventoryTableKindFromPageName,
+  TABLE_COMPONENT_KIND_MAP,
 } from './utils';
+import { usePageDisplayTitle } from './InventoryTablePageContext';
 import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 
 export function LeadTableView(props: LeadTableModel) {
@@ -122,7 +126,7 @@ export function LeadTableView(props: LeadTableModel) {
   const hasPreviousRecord = selectedRecordIndex > 0;
   const hasNextRecord = selectedRecordIndex !== -1 && selectedRecordIndex < filteredData.length - 1;
 
-  // Used for Unmannd procurement table chrome (navy headers). Page title is the sticky header.
+  // Used for Unmannd procurement table chrome (navy headers).
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
   const forceEntityType = String(
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
@@ -150,6 +154,19 @@ export function LeadTableView(props: LeadTableModel) {
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
   const procurementHeaderBg = 'bg-[#0E3777]';
   const procurementTableFrame = 'overflow-hidden mb-3';
+  const pageChromeTitle = usePageDisplayTitle().trim();
+  const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
+  const inventoryTableKindForTitle =
+    inferInventoryTableKindFromPageName(pageChromeTitle) ||
+    TABLE_COMPONENT_KIND_MAP[pageComponentType || ''] ||
+    (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind;
+  const pageTitleText =
+    (isProcurementStyleTable
+      ? formatInventoryTableToolbarTitle(pageChromeTitle, inventoryTableKindForTitle)
+      : pageChromeTitle || (config?.title || '').trim()) || pageChromeTitle;
+  const pageTitleDisplay = isProcurementStyleTable
+    ? pageTitleText.toUpperCase()
+    : pageTitleText;
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
@@ -221,13 +238,24 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — search + Filters. Page title lives in CustomAppPage sticky header. */}
+        {/* Toolbar — title left; search + Filters right, nudged slightly below heading. */}
         <div
-          className={`flex shrink-0 flex-nowrap items-center justify-end ${
-            isProcurementStyleTable ? 'gap-3 mb-3' : 'gap-3'
+          className={`mb-3 flex shrink-0 flex-nowrap items-start gap-3 border-b border-gray-200 pb-3 ${
+            pageTitleDisplay ? 'justify-between' : 'justify-end'
           }`}
         >
-          <div className="flex shrink-0 items-center gap-2">
+          {pageTitleDisplay ? (
+            <h1
+              className={
+                isProcurementStyleTable
+                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900'
+                  : '!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900'
+              }
+            >
+              {pageTitleDisplay}
+            </h1>
+          ) : null}
+          <div className="mt-1.5 flex shrink-0 items-center gap-2">
             <div
               className={`relative flex-1 max-w-sm ${
                 isProcurementStyleTable ? 'min-w-[180px]' : 'min-w-[200px]'

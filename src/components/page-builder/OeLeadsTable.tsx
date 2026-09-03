@@ -9,6 +9,8 @@ import { LeadFormComponent } from './LeadsTableForm';
 import { Trash2 } from 'lucide-react'; 
 import { PrajaTable } from '../ui/prajaTable';
 import { toast } from 'sonner';
+import { usePageDisplayTitle } from '@/components/page-builder/lead-table/InventoryTablePageContext';
+
 interface Column {
   header: string;
   accessor: string;
@@ -43,6 +45,11 @@ export const OeLeadsTable: React.FC<OeLeadsTableProps> = ({ config }) => {
   const [loading, setLoading] = useState(true);
   const entriesPerPage = 15;
   const { session } = useAuth();
+  const pageTitleDisplay =
+    usePageDisplayTitle().trim() ||
+    (config?.title || '').trim() ||
+    'Potential Leads';
+
   // Use configured columns or fallback to default
   const tableColumns: Column[] = config?.columns?.map(col => ({
     header: col.label,
@@ -154,6 +161,7 @@ export const OeLeadsTable: React.FC<OeLeadsTableProps> = ({ config }) => {
         <PrajaTable 
           columns={tableColumns} 
           data={data} 
+          title={pageTitleDisplay}
         />
       )}
     </div>
