@@ -21,6 +21,7 @@ import {
   SUPPORT_TICKET_STATE_FILTER_OPTIONS,
   SUPPORT_TICKET_CALL_ATTEMPT_FILTER_OPTIONS,
 } from './utils';
+import { usePageDisplayTitle } from '@/components/page-builder/lead-table/InventoryTablePageContext';
 
 export function TicketTableView(props: TicketTableModel) {
   const {
@@ -69,6 +70,11 @@ export function TicketTableView(props: TicketTableModel) {
     stateToParamValue,
   } = props;
 
+  const pageTitleDisplay =
+    usePageDisplayTitle().trim() ||
+    (config?.title || '').trim() ||
+    'Support Tickets';
+
 if (loading) {
   return (
     <div className="flex items-center justify-center p-8">
@@ -82,7 +88,7 @@ return (
     {/* ADDED: Mobile Page Title - Only visible on small screens (md:hidden) */}
     <div className="md:hidden w-full pb-3 px-4 pt-4">
       <h2 className="text-2xl font-bold text-gray-900">
-        {config?.title || "Support Tickets"}
+        {pageTitleDisplay}
       </h2>
     </div>
 
@@ -92,7 +98,7 @@ return (
         <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
           {/* UPDATED: Added 'hidden md:block' so it doesn't show twice on mobile */}
           <h5 className="hidden md:block">
-            {config?.title || "Support Tickets"}
+            {pageTitleDisplay}
           </h5>
           <div className="flex items-center gap-2 relative">
             <div className="relative flex-1 min-w-[200px] max-w-sm">

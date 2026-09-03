@@ -37,6 +37,7 @@ import { REQUEST_CATEGORY_OPTIONS, PRIORITY_OPTIONS } from './constants';
 import { toVendorStorageName, formatRequestDateDisplay } from './utils';
 import { looksLikeProductUrl } from '@/lib/inventory/productLinkExtract';
 import type { InventoryRequestFormModel } from './useInventoryRequestForm';
+import { usePageDisplayTitle } from '@/components/page-builder/lead-table/InventoryTablePageContext';
 import { cn } from '@/lib/utils';
 
 export function InventoryRequestFormView(props: InventoryRequestFormModel) {
@@ -99,6 +100,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     handleClear,
     isFormEmpty,
   } = props;
+
+  const pageTitleDisplay = usePageDisplayTitle().toUpperCase();
 
   const shakeN = (fieldKey: string) => fieldShakeNonce[fieldKey] ?? 0;
   const isShaking = (fieldKey: string) => shakeN(fieldKey) > 0;
@@ -263,6 +266,16 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
           <p className="text-sm text-muted-foreground">Taking you to your requests…</p>
         </div>
       </div>
+    ) : null}
+    {pageTitleDisplay ? (
+      <>
+        <h2 className="mb-2 px-1 text-2xl font-bold uppercase tracking-tight text-gray-900 md:hidden">
+          {pageTitleDisplay}
+        </h2>
+        <h1 className="mb-3 hidden px-1 text-2xl font-bold uppercase tracking-tight text-gray-900 sm:text-3xl md:block">
+          {pageTitleDisplay}
+        </h1>
+      </>
     ) : null}
     <Card
       className={cn(

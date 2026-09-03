@@ -1,6 +1,7 @@
 /** Presentational JSX for AddUserComponent — columns/fields from tenant config. */
 
 import React from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -18,6 +19,12 @@ import {
   type UserManagementColumn,
   type UserManagementCustomField,
 } from './userManagementConfig';
+import { usePageDisplayTitle } from '@/components/page-builder/lead-table/InventoryTablePageContext';
+import { cn } from '@/lib/utils';
+
+type CustomAppOutletContext = {
+  isUnmanndApp?: boolean;
+};
 
 function SupportDailyDualDisplay({
   selfTrial,
@@ -218,6 +225,12 @@ export function AddUserView(props: AddUserModel) {
     showStateForm ||
     showDistrictForm ||
     showPartyForm;
+
+  const outletContext = useOutletContext<CustomAppOutletContext | undefined>();
+  const isUnmanndApp = Boolean(outletContext?.isUnmanndApp);
+  const pageTitleRaw = usePageDisplayTitle().trim() || 'User Management';
+  const pageTitleDisplay = isUnmanndApp ? pageTitleRaw.toUpperCase() : pageTitleRaw;
+
   const renderManagerEditCell = (user: User) => (
     <div className="relative" ref={editManagerDropdownRef}>
       <div className="flex gap-1">
@@ -780,9 +793,17 @@ export function AddUserView(props: AddUserModel) {
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <div className="flex items-center gap-2">
-          <UserPlus className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">User Management</h3>
+        <div className="flex min-w-0 items-center gap-2">
+          <UserPlus className={cn('h-5 w-5 shrink-0', isUnmanndApp && 'text-[#0B1F4D]')} />
+          <h1
+            className={
+              isUnmanndApp
+                ? 'min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900'
+                : 'truncate text-lg font-semibold'
+            }
+          >
+            {pageTitleDisplay}
+          </h1>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">

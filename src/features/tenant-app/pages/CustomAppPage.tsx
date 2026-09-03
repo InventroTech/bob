@@ -262,9 +262,28 @@ const CustomAppPage: React.FC = () => {
 
   const pageHasInventoryRequestTable =
     Array.isArray(page.config) && page.config.some((comp) => isInventoryTableComponent(comp));
-  // Hide sticky duplicate only on inventory request tables (All Requests, etc.).
+  const pageHasRequestForm =
+    Array.isArray(page.config) &&
+    page.config.some(
+      (comp: { type?: string }) =>
+        comp.type === 'inventoryRequestForm' || comp.type === 'procurementRequestForm',
+    );
+  const pageHasAddUser =
+    Array.isArray(page.config) &&
+    page.config.some((comp: { type?: string }) => comp.type === 'addUser');
+  const pageHasCrmRecordsTable =
+    Array.isArray(page.config) &&
+    page.config.some((comp: { type?: string }) => {
+      const t = String(comp.type || '');
+      return t === 'leadTable' || t === 'oeLeadsTable' || t === 'ticketTable';
+    });
+  // Hide sticky duplicate when the page widget renders its own title
+  // (inventory tables, CRM lead/ticket tables, request form, settings).
   const hidePageHeader =
     pageHasInventoryRequestTable ||
+    pageHasRequestForm ||
+    pageHasAddUser ||
+    pageHasCrmRecordsTable ||
     (Array.isArray(page.config) &&
       page.config.some(
         (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
@@ -273,7 +292,7 @@ const CustomAppPage: React.FC = () => {
       ));
 
   return (
-    <InventoryTablePageProvider pageName={effectivePageName}>
+    <InventoryTablePageProvider pageName={effectivePageName} headerTitle={headerTitle ?? ''}>
     <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'h-full min-h-0 flex flex-col' : ''}`}>
       {/* Fixed Header — compact so request tables start closer to the title */}
       {headerTitle && !hidePageHeader && (

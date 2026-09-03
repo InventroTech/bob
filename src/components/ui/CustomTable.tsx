@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export type CustomTableColumn = {
   header: string;
@@ -46,6 +47,15 @@ export interface CustomTableProps {
    * Tables always render as a normal table with horizontal scroll on small screens.
    */
   stackBelow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | false;
+  /** When set, prepends a checkbox column for multi-row selection. */
+  rowSelection?: {
+    selectedRowIds: ReadonlySet<string>;
+    onToggleRow: (row: any, selected: boolean) => void;
+    onToggleAll: () => void;
+    getRowId?: (row: any) => string | number | null | undefined;
+    /** When false, the row checkbox is disabled (e.g. different status than first selected). */
+    canSelectRow?: (row: any) => boolean;
+  };
 }
 
 /**
@@ -108,7 +118,28 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   comfortable = false,
   fillHeight = false,
   fitViewport = false,
+  rowSelection,
 }) => {
+  const getRowId = rowSelection?.getRowId ?? ((row: any) => row?.id);
+  const normalizeSelectionRowId = (id: unknown): string | null => {
+    if (id == null || id === '') return null;
+    return String(id);
+  };
+  const selectableRows = rowSelection
+    ? data.filter((row) => (rowSelection.canSelectRow ? rowSelection.canSelectRow(row) : true))
+    : [];
+  const visibleSelectableIds = selectableRows
+    .map((row) => normalizeSelectionRowId(getRowId(row)))
+    .filter((id): id is string => id != null);
+  const allVisibleSelected =
+    rowSelection != null &&
+    visibleSelectableIds.length > 0 &&
+    visibleSelectableIds.every((id) => rowSelection.selectedRowIds.has(id));
+  const someVisibleSelected =
+    rowSelection != null &&
+    visibleSelectableIds.some((id) => rowSelection.selectedRowIds.has(id)) &&
+    !allVisibleSelected;
+
   const cellY = comfortable ? (fitViewport ? 'py-3' : 'py-4') : dense ? 'py-1' : 'py-2';
   const cellX = comfortable ? (fitViewport ? 'px-2.5' : 'px-3') : dense ? 'px-2.5' : 'px-4';
   const leftCellX = comfortable
@@ -174,6 +205,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
         >
           {fitViewport ? (
             <colgroup>
+              {rowSelection ? (
+                <col style={{ width: '2.5rem', minWidth: '2.5rem', maxWidth: '2.5rem' }} />
+              ) : null}
               {columns.map((col, idx) => (
                 <col
                   key={idx}
@@ -188,11 +222,28 @@ export const CustomTable: React.FC<CustomTableProps> = ({
           ) : null}
           <thead className={fillHeight ? 'sticky top-0 z-10' : undefined}>
             <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
+              {rowSelection ? (
+                <th
+                  className={cn(
+                    'w-10 min-w-[2.5rem] max-w-[2.5rem] text-sm font-medium',
+                    comfortable ? 'py-3' : cellY,
+                    `${cellX} text-center`
+                  )}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+                    onCheckedChange={() => rowSelection.onToggleAll()}
+                    aria-label="Select all rows on this page"
+                    className="border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0E3777]"
+                  />
+                </th>
+              ) : null}
               {columns.map((col, idx) => {
                 const itemNameCol = isItemNameAccessor(col.accessor);
                 const headerSingleLine = fitViewport && itemNameCol;
                 const headerPadLeft =
-                  fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                  fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
                 return (
                 <th
                   key={idx}
@@ -228,32 +279,66 @@ export const CustomTable: React.FC<CustomTableProps> = ({
           <tbody className="text-gray-600 text-sm bg-white">
             {loading ? (
               <tr>
-                <td colSpan={columns.length} className="text-center py-8 text-sm text-gray-500">
+                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8 text-sm text-gray-500">
                   Loading...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="text-center py-8 text-sm text-gray-500">
+                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8 text-sm text-gray-500">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
-              data.map((row: any, rowIdx: number) => (
+              data.map((row: any, rowIdx: number) => {
+                const rowId = normalizeSelectionRowId(getRowId(row));
+                const isRowSelected = rowId != null && rowSelection?.selectedRowIds.has(rowId);
+                const canSelectRow =
+                  !rowSelection ||
+                  isRowSelected ||
+                  (rowSelection.canSelectRow ? rowSelection.canSelectRow(row) : true);
+                return (
                 <tr
                   key={rowIdx}
                   onClick={() => onRowClick?.(row)}
                   className={cn(
                     'border-b border-gray-200 bg-white',
                     comfortable && 'h-[4.5rem]',
+                    isRowSelected && 'bg-blue-50/60',
                     hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
-                    !hoverable && 'hover:bg-transparent'
+                    !hoverable && 'hover:bg-transparent',
+                    isRowSelected && hoverable && onRowClick && 'hover:bg-blue-50/80'
                   )}
                 >
+                  {rowSelection ? (
+                    <td
+                      className={cn('w-10 min-w-[2.5rem] max-w-[2.5rem] text-center align-middle', cellY, cellX)}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={isRowSelected}
+                        disabled={!canSelectRow}
+                        onCheckedChange={(checked) => {
+                          if (rowId == null || !canSelectRow) return;
+                          rowSelection.onToggleRow(row, checked === true);
+                        }}
+                        aria-label={
+                          canSelectRow
+                            ? 'Select row'
+                            : 'Cannot select — status differs from the first selected request'
+                        }
+                        title={
+                          canSelectRow
+                            ? undefined
+                            : 'Select only requests with the same status as the first selected row'
+                        }
+                      />
+                    </td>
+                  ) : null}
                   {columns.map((col, colIdx) => {
                     const itemNameCol = isItemNameAccessor(col.accessor);
                     const cellPadLeft =
-                      fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                      fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
                     return (
                     <td
                       key={colIdx}
@@ -271,7 +356,8 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     );
                   })}
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

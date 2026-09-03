@@ -304,10 +304,10 @@ const CustomAppLayout: React.FC = () => {
     return requestPages.length >= 2;
   })();
   const activeNavClass = isUnmanndApp
-    ? 'bg-[#1A3673] text-white'
+    ? 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white'
     : 'bg-black text-white';
   const activeNavClassMobile = isUnmanndApp
-    ? 'bg-[#1A3673] text-white shadow-sm'
+    ? 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white shadow-sm'
     : 'bg-black text-white shadow-sm';
   const brandLogoSrc = isUnmanndApp ? '/pyro-ai-logo.png' : '/fire-logo.png';
   const brandLogoAlt = isUnmanndApp ? 'Pyro.ai' : 'Pyro';
@@ -561,8 +561,8 @@ const CustomAppLayout: React.FC = () => {
               onClick={handleLogout}
               disabled={isLoggingOut}
               className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                sidebarCollapsed 
-                  ? 'justify-center' 
+                sidebarCollapsed
+                  ? 'justify-center'
                   : ''
               } ${
                 isLoggingOut
@@ -571,8 +571,8 @@ const CustomAppLayout: React.FC = () => {
               }`}
             >
               <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                isLoggingOut 
-                  ? 'bg-gray-100 text-gray-500' 
+                isLoggingOut
+                  ? 'bg-gray-100 text-gray-500'
                   : 'bg-gray-100 text-gray-500'
               }`}>
                 <LogOut className="h-4 w-4" />
