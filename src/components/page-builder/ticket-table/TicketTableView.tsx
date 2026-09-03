@@ -86,13 +86,13 @@ if (loading) {
 return (
   <>
     <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-      {/* Title + search/filters — same top row, controls slightly below heading */}
+      {/* Title + search/filters — stacked on mobile so the heading stays visible */}
       <div className="relative mb-4 border-b border-gray-200 pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
           <h1 className="!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900">
             {pageTitleDisplay}
           </h1>
-          <div className="mt-1.5 flex items-center gap-2 relative">
+          <div className="flex items-center gap-2 relative sm:mt-1.5">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
