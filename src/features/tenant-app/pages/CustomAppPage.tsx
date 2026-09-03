@@ -262,47 +262,28 @@ const CustomAppPage: React.FC = () => {
 
   const pageHasInventoryRequestTable =
     Array.isArray(page.config) && page.config.some((comp) => isInventoryTableComponent(comp));
-  const pageHasRequestForm =
+  // Sticky Header Title shows on every screen size. Only dispatch widgets can opt out
+  // (mobile-app “hide page header” setting).
+  const hidePageHeader =
     Array.isArray(page.config) &&
     page.config.some(
-      (comp: { type?: string }) =>
-        comp.type === 'inventoryRequestForm' || comp.type === 'procurementRequestForm',
+      (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
+        (comp.type === 'dispatchCardList' || comp.type === 'dispatchDashboard') &&
+        comp.config?.hidePageHeader !== false
     );
-  const pageHasAddUser =
-    Array.isArray(page.config) &&
-    page.config.some((comp: { type?: string }) => comp.type === 'addUser');
-  const pageHasCrmRecordsTable =
-    Array.isArray(page.config) &&
-    page.config.some((comp: { type?: string }) => {
-      const t = String(comp.type || '');
-      return t === 'leadTable' || t === 'oeLeadsTable' || t === 'ticketTable';
-    });
-  // Hide sticky duplicate when the page widget renders its own title
-  // (inventory tables, CRM lead/ticket tables, request form, settings).
-  const hidePageHeader =
-    pageHasInventoryRequestTable ||
-    pageHasRequestForm ||
-    pageHasAddUser ||
-    pageHasCrmRecordsTable ||
-    (Array.isArray(page.config) &&
-      page.config.some(
-        (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
-          (comp.type === 'dispatchCardList' || comp.type === 'dispatchDashboard') &&
-          comp.config?.hidePageHeader !== false
-      ));
 
   return (
     <InventoryTablePageProvider pageName={effectivePageName} headerTitle={headerTitle ?? ''}>
     <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'h-full min-h-0 flex flex-col' : ''}`}>
-      {/* Fixed Header — compact so request tables start closer to the title */}
+      {/* Sticky Header Title — mobile, tablet, and desktop */}
       {headerTitle && !hidePageHeader && (
-        <div className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white max-md:hidden shrink-0">
+        <div className="sticky top-0 z-40 w-full shrink-0 border-b border-gray-200 bg-white">
           <div className={isUnmanndApp ? 'px-4 py-3' : 'px-4 py-1.5'}>
             <h2
               className={
                 isUnmanndApp
-                  ? '!m-0 !text-[20px] !font-bold !leading-[1.15] !tracking-tight !uppercase text-[#0B1F4D]'
-                  : '!m-0 !text-lg !font-semibold !leading-snug text-gray-900'
+                  ? '!m-0 !text-[20px] !font-bold !leading-[1.15] !tracking-tight !uppercase text-[#0B1F4D] max-md:!text-[18px]'
+                  : '!m-0 !text-lg !font-semibold !leading-snug text-gray-900 max-md:!text-base'
               }
               style={
                 isUnmanndApp

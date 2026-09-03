@@ -1,7 +1,6 @@
 /** Presentational JSX for the lead table. */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useOutletContext, useParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X, Loader2 } from 'lucide-react';
@@ -22,19 +21,9 @@ import {
 } from './constants';
 import type { LeadTableModel } from './useLeadTable';
 import {
-  formatInventoryTableToolbarTitle,
-  inferInventoryTableKindFromPageName,
-  resolveInventoryPageTitle,
-  TABLE_COMPONENT_KIND_MAP,
   formatBulkActionLabel,
 } from './utils';
-import { useInventoryTablePageName, usePageDisplayTitle } from './InventoryTablePageContext';
 import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
-
-type CustomAppOutletContext = {
-  pages?: { id: string; name: string }[];
-  isUnmanndApp?: boolean;
-};
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -133,18 +122,7 @@ export function LeadTableView(props: LeadTableModel) {
   const hasPreviousRecord = selectedRecordIndex > 0;
   const hasNextRecord = selectedRecordIndex !== -1 && selectedRecordIndex < filteredData.length - 1;
 
-  const { pageId: routePageId } = useParams<{ pageId?: string }>();
-  const outletContext = useOutletContext<CustomAppOutletContext | undefined>();
-  const contextPageName = useInventoryTablePageName();
-  const pageChromeTitle = usePageDisplayTitle();
-  const sidebarPageName = useMemo(() => {
-    if (contextPageName) return contextPageName;
-    if (!routePageId || !outletContext?.pages?.length) return '';
-    return (outletContext.pages.find((p) => p.id === routePageId)?.name || '').trim();
-  }, [contextPageName, routePageId, outletContext?.pages]);
-
-  // DYNAMIC TITLE LOGIC based on URL path
-  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  // Used for Unmannd procurement table chrome (navy headers). Page title is the sticky header.
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
   const forceEntityType = String(
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
@@ -164,48 +142,6 @@ export function LeadTableView(props: LeadTableModel) {
           )
         )
     );
-  // Prefer Page Builder Header Title (then Page Name) for every custom-app table —
-  // Unmannd inventory pages and CRM lead tables alike.
-  let displayTitle: string | undefined;
-  if (isInventoryLikeForTitle) {
-    const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
-    const pageDisplayName =
-      pageChromeTitle ||
-      sidebarPageName ||
-      (config as { pageDisplayName?: string } | undefined)?.pageDisplayName ||
-      '';
-    const inventoryTableKind =
-      inferInventoryTableKindFromPageName(pageDisplayName) ||
-      TABLE_COMPONENT_KIND_MAP[pageComponentType || ''] ||
-      (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind;
-
-    if (pageChromeTitle) {
-      displayTitle = formatInventoryTableToolbarTitle(pageChromeTitle, inventoryTableKind);
-    } else {
-      const resolved = resolveInventoryPageTitle({
-        configuredTitle: config?.title,
-        pageDisplayName,
-        inventoryTableKind,
-        pageComponentType,
-      });
-      displayTitle = formatInventoryTableToolbarTitle(resolved, inventoryTableKind);
-    }
-  } else {
-    displayTitle =
-      pageChromeTitle.trim() ||
-      (config?.title || '').trim() ||
-      undefined;
-  }
-
-  if (!displayTitle && !isInventoryLikeForTitle) {
-    if (pathname.includes('follow')) {
-      displayTitle = "Follow Up Leads";
-    } else if (pathname.includes('pending')) {
-      displayTitle = "Pending Leads";
-    } else {
-      displayTitle = "All Leads";
-    }
-  }
 
   // Navy header/border for Procurement / My Request / Pending Approval / etc.
   // CRM All Leads and other default tables keep black headers.
@@ -270,13 +206,6 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle = displayTitle;
-
-  const pageTitleText = (displayTitle || tableTitle || '').trim();
-  const pageTitleDisplay = isProcurementStyleTable
-    ? pageTitleText.toUpperCase()
-    : pageTitleText;
-
   return (
     <div
       className={
@@ -285,27 +214,6 @@ export function LeadTableView(props: LeadTableModel) {
           : undefined
       }
     >
-      {/* Mobile Page Title - Dynamically changes based on URL */}
-      {pageTitleDisplay ? (
-        <div
-          className={
-            isProcurementStyleTable
-              ? 'md:hidden w-full shrink-0 pb-2 px-3 pt-2'
-              : 'md:hidden w-full pb-3 px-4 pt-4'
-          }
-        >
-          <h2
-            className={
-              isProcurementStyleTable
-                ? 'text-2xl font-bold uppercase tracking-tight text-gray-900'
-                : 'text-2xl font-bold text-gray-900'
-            }
-          >
-            {pageTitleDisplay}
-          </h2>
-        </div>
-      ) : null}
-
       <div
         className={
           isProcurementStyleTable
@@ -313,24 +221,12 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — title left; search + Filters right (All Requests prototype). flex-nowrap keeps
-            title and search/filters on one line instead of stacking title-top / actions-bottom. */}
+        {/* Toolbar — search + Filters. Page title lives in CustomAppPage sticky header. */}
         <div
-          className={`flex shrink-0 flex-nowrap items-center ${
+          className={`flex shrink-0 flex-nowrap items-center justify-end ${
             isProcurementStyleTable ? 'gap-3 mb-3' : 'gap-3'
-          } ${pageTitleDisplay ? 'justify-between' : 'justify-end'}`}
+          }`}
         >
-          {pageTitleDisplay ? (
-            <h1
-              className={
-                isProcurementStyleTable
-                  ? 'hidden md:block !m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900'
-                  : 'hidden md:block !m-0 min-w-0 truncate !text-sm !font-semibold !leading-none text-gray-900'
-              }
-            >
-              {pageTitleDisplay}
-            </h1>
-          ) : null}
           <div className="flex shrink-0 items-center gap-2">
             <div
               className={`relative flex-1 max-w-sm ${
