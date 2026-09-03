@@ -5,7 +5,13 @@ import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider';
-import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
+import {
+  clearRefreshSuppression,
+  consumeSignedOutReason,
+  markExpectingSignedOut,
+  refreshAccessToken,
+  signOutAndClearSession,
+} from '@/lib/auth/authSessionService';
 import {
   clearLocalAuthCaches,
   forceSignOutRevokedUser,
@@ -54,12 +60,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(async () => {
     try {
       console.log('Starting logout process...');
+      // Suppress refresh before clearing local state so an in-flight refresh cannot restore the session.
+      markExpectingSignedOut('intentional');
       clearLocalAuthCaches();
       clearAccessToken();
       clearSentryUser();
       setSession(null);
       setUser(null);
-      await signOutAndClearSession();
+      await signOutAndClearSession({ reason: 'intentional' });
       toast.success('Logged out successfully');
     } catch (error) {
       console.error('Unexpected logout error:', error);
@@ -75,6 +83,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       .getSession()
       .then(({ data: { session } }) => {
         if (cancelled) return;
+        if (session?.access_token) {
+          clearRefreshSuppression();
+        }
         setSession(session);
         setAccessToken(session?.access_token ?? null);
         const u = session?.user ?? null;
@@ -105,6 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('Supabase auth state changed:', event);
 
         if (event === 'SIGNED_OUT') {
+          const reason = consumeSignedOutReason();
           setSession(null);
           clearAccessToken();
           setUser(null);
@@ -112,7 +124,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           clearLocalAuthCaches();
           setLoading(false);
           const loginUrl = getLoginUrl();
-          toast.error('Your session has expired. Please login again.');
+          // Intentional logout / revoked-user flows already toast their own message.
+          if (reason === 'expired') {
+            toast.error('Your session has expired. Please login again.');
+          }
           navigate(loginUrl, { replace: true });
           return;
         }
@@ -128,6 +143,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           toast.error('Your session has expired. Please login again.');
           navigate(loginUrl, { replace: true });
           return;
+        }
+
+        // Re-enable token refresh after a real sign-in (not a late refresh racing logout).
+        if (event === 'SIGNED_IN' && session?.access_token) {
+          clearRefreshSuppression();
         }
 
         setSession(session);
