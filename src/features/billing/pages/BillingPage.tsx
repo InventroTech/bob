@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import type { BillingMember, BillingReport } from '@/lib/api';
+import type { BillingMember, BillingReport, BillingRole } from '@/lib/api';
 import {
   addLetterheadToPdf,
   downloadPdfBytes,
@@ -19,6 +19,9 @@ import {
   useBillingReport,
   useBillingReportMutation,
 } from '../hooks/useBillingReport';
+
+const DEFAULT_BILLING_ROLE_RATE = '2000';
+const CSE_BILLING_ROLE_RATE = '1800';
 
 const MONTH_OPTIONS = [
   { value: '01', label: 'January' },
@@ -46,6 +49,15 @@ function getBillingYearOptions() {
   return Array.from({ length: 7 }, (_, index) => currentYear - index);
 }
 
+function defaultRateForRole(role: BillingRole) {
+  const key = (role.key || '').trim().toUpperCase();
+  const name = (role.name || '').trim().toUpperCase();
+  if (key === 'CSE' || name === 'CSE') {
+    return CSE_BILLING_ROLE_RATE;
+  }
+  return DEFAULT_BILLING_ROLE_RATE;
+}
+
 function formatMoney(value: string | number) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return '0.00';
@@ -68,6 +80,10 @@ function formatDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return format(parsed, 'MMM d, yyyy');
+}
+
+function formatState(member: BillingMember) {
+  return member.state?.trim() || '—';
 }
 
 const BillingPage = () => {
@@ -130,7 +146,7 @@ const BillingPage = () => {
       const nextRates = { ...currentRates };
       (report.billing_roles || []).forEach((role) => {
         if (nextRates[role.id] == null) {
-          nextRates[role.id] = role.rate || '0.00';
+          nextRates[role.id] = defaultRateForRole(role);
           changed = true;
         }
       });
@@ -260,11 +276,12 @@ const BillingPage = () => {
 
     const tableColumns = {
       name: marginX,
-      email: 37,
-      role: 88,
-      joined: 116,
-      days: 151,
-      rate: 176,
+      email: 34,
+      state: 72,
+      role: 98,
+      joined: 122,
+      days: 152,
+      rate: 174,
       amount: pageWidth - marginX,
     };
 
@@ -283,6 +300,7 @@ const BillingPage = () => {
       doc.setFont('helvetica', 'bold');
       doc.text('Name', tableColumns.name, y);
       doc.text('Email', tableColumns.email, y);
+      doc.text('State', tableColumns.state, y);
       doc.text('Role', tableColumns.role, y);
       doc.text('Joined', tableColumns.joined, y);
       doc.text('Days', tableColumns.days, y, { align: 'right' });
@@ -325,6 +343,7 @@ const BillingPage = () => {
       const row = [
         member.name || 'Unnamed User',
         member.email,
+        formatState(member),
         roleDisplay,
         formatDate(member.joined_date),
         `${member.billable_days}/${member.cycle_days}`,
@@ -333,12 +352,13 @@ const BillingPage = () => {
       ];
 
       doc.text(fitText(row[0], tableColumns.email - tableColumns.name - 2), tableColumns.name, y);
-      doc.text(fitText(row[1], tableColumns.role - tableColumns.email - 2), tableColumns.email, y);
-      doc.text(fitText(row[2], tableColumns.joined - tableColumns.role - 2), tableColumns.role, y);
-      doc.text(row[3], tableColumns.joined, y);
-      doc.text(row[4], tableColumns.days, y, { align: 'right' });
-      doc.text(row[5], tableColumns.rate, y, { align: 'right' });
-      doc.text(row[6], tableColumns.amount, y, { align: 'right' });
+      doc.text(fitText(row[1], tableColumns.state - tableColumns.email - 2), tableColumns.email, y);
+      doc.text(fitText(row[2], tableColumns.role - tableColumns.state - 2), tableColumns.state, y);
+      doc.text(fitText(row[3], tableColumns.joined - tableColumns.role - 2), tableColumns.role, y);
+      doc.text(row[4], tableColumns.joined, y);
+      doc.text(row[5], tableColumns.days, y, { align: 'right' });
+      doc.text(row[6], tableColumns.rate, y, { align: 'right' });
+      doc.text(row[7], tableColumns.amount, y, { align: 'right' });
       y += rowHeight;
     });
 
@@ -426,7 +446,7 @@ const BillingPage = () => {
                         type="number"
                         min="0"
                         step="0.01"
-                        value={roleRates[role.id] ?? role.rate ?? '0.00'}
+                        value={roleRates[role.id] ?? defaultRateForRole(role)}
                         onChange={(event) => handleRoleRateChange(role.id, event.target.value)}
                       />
                     </div>
@@ -439,7 +459,7 @@ const BillingPage = () => {
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span>
                   Role rates: {(report?.billing_roles || [])
-                    .map((role) => `${role.key || role.name} ${formatMoney(roleRates[role.id] ?? role.rate ?? 0)}`)
+                    .map((role) => `${role.key || role.name} ${formatMoney(roleRates[role.id] ?? defaultRateForRole(role))}`)
                     .join(' / ') || 'load report to edit'}
                 </span>
                 <span>
@@ -524,6 +544,7 @@ const BillingPage = () => {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>State</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Joined Date</TableHead>
                     <TableHead className="text-right">Billable Days</TableHead>
@@ -535,13 +556,13 @@ const BillingPage = () => {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                         Loading billing...
                       </TableCell>
                     </TableRow>
                   ) : !report || billingMembers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                         No members found for billing.
                       </TableCell>
                     </TableRow>
@@ -557,6 +578,7 @@ const BillingPage = () => {
                           ) : null}
                         </TableCell>
                         <TableCell>{member.email}</TableCell>
+                        <TableCell>{formatState(member)}</TableCell>
                         <TableCell>
                           {member.role?.name || 'No role'}
                           {member.billing_role_key ? (
@@ -618,6 +640,11 @@ const BillingPage = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">Email</p>
                         <p className="break-all">{member.email}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">State</p>
+                        <p>{formatState(member)}</p>
                       </div>
 
                       <div>
