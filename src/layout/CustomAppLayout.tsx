@@ -117,7 +117,7 @@ const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
   const { user, logout, session } = useAuth();
-  const [pages, setPages] = useState<{ id: string; name: string; icon_name: string }[]>([]);
+  const [pages, setPages] = useState<{ id: string; name: string; icon_name: string; display_order?: number }[]>([]);
   const [customIcons, setCustomIcons] = useState<CustomIconRow[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -245,7 +245,8 @@ const CustomAppLayout: React.FC = () => {
         // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
         try {
           const pagesData = await fetchPagesForRole(tenantId, userRoleId, token);
-          setPages(pagesData || []);
+          const sortedPages = (pagesData || []).sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0));
+          setPages(sortedPages);
         } catch (err) {
           console.error('Pages fetch error (spoof):', err);
           toast.error('Failed to load pages');
