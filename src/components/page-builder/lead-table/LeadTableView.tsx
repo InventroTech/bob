@@ -620,7 +620,7 @@ export function LeadTableView(props: LeadTableModel) {
           leadCardRef.current = null;
         }
       }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0" hideCloseButton>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="sr-only">
             <DialogTitle>
               {selectedLead?.name || (selectedLead as any)?.data?.name || 'Lead Details'}
@@ -629,6 +629,7 @@ export function LeadTableView(props: LeadTableModel) {
               View and manage lead information
             </DialogDescription>
           </DialogHeader>
+
           {selectedLead && (() => {
             const transformLeadForCard = (lead: any) => {
               const originalLead = data.find(l => 
