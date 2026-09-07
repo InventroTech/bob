@@ -10,10 +10,19 @@ let refreshInFlight: Promise<string | null> | null = null;
 let refreshSuppressed = false;
 
 export const markExpectingSignedOut = (reason: SignedOutReason): void => {
+  // Never overwrite intentional with expired — a 401 interceptor can race with user logout
+  // and would otherwise toast "session expired" after an intentional sign-out.
+  if (pendingSignedOutReason === 'intentional' && reason === 'expired') {
+    refreshSuppressed = true;
+    return;
+  }
   pendingSignedOutReason = reason;
   // Stop refreshes immediately so a concurrent refreshSession cannot restore the session.
   refreshSuppressed = true;
 };
+
+/** True while a sign-out is in progress / refresh must no-op. */
+export const isRefreshSuppressed = (): boolean => refreshSuppressed;
 
 /** Read-and-clear. Defaults to `expired` when sign-out was not marked (Supabase auto / unknown). */
 export const consumeSignedOutReason = (): SignedOutReason => {

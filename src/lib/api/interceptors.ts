@@ -5,7 +5,11 @@
 
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { getAccessToken, isUsingSpoofAccessToken } from '@/lib/auth/accessTokenProvider';
-import { refreshAccessToken, signOutAndClearSession } from '@/lib/auth/authSessionService';
+import {
+  isRefreshSuppressed,
+  refreshAccessToken,
+  signOutAndClearSession,
+} from '@/lib/auth/authSessionService';
 import { 
   ApiError, 
   NetworkError, 
@@ -87,6 +91,14 @@ export const setupResponseInterceptor = (instance: any) => {
               const refreshedToken = await refreshAccessToken();
 
               if (!refreshedToken) {
+                // Null can mean sign-out already suppressed refresh — do not sign out again
+                // or overwrite an intentional reason with "expired".
+                if (isRefreshSuppressed()) {
+                  console.warn(
+                    '[Interceptor] Refresh returned null under suppression — skipping sign-out'
+                  );
+                  return Promise.reject(new AuthenticationError(errorMessage, status, data));
+                }
                 console.error('[Interceptor] Session refresh failed — signing out');
                 await signOutAndClearSession({ reason: 'expired' });
                 return Promise.reject(new AuthenticationError(errorMessage, status, data));
