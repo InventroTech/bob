@@ -2023,7 +2023,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         record_id: rowId,
         praja_id: praja,
         lead_name: typeof tableRow?.name === 'string' ? tableRow.name : null,
-        phone_number: tableRow?.phone_number ?? null,
         notification_id: existingStash?.notification_id ?? null,
         notification_item_id: existingStash?.notification_item_id ?? null,
       });

@@ -20,7 +20,6 @@ export function LeadCalledBackNotificationToast({
         record_id: String(payload.record_id),
         praja_id: payload.praja_id,
         lead_name: payload.lead_name,
-        phone_number: payload.phone_number,
         notification_id: payload.notification_id ?? null,
         notification_item_id:
           payload.notification_id != null

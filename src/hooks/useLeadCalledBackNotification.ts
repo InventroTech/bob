@@ -23,7 +23,7 @@ export function useLeadCalledBackNotification(
       const payload = (event as CustomEvent<LeadCalledBackPayload>).detail;
       if (!payload || payload.event !== "lead_called_back") return;
 
-      const dedupeKey = `${payload.record_id}:${payload.phone_number ?? ""}`;
+      const dedupeKey = `${payload.record_id}:${payload.praja_id ?? ""}`;
       if (seenRef.current.has(dedupeKey)) return;
       seenRef.current.add(dedupeKey);
       if (seenRef.current.size > 100) {

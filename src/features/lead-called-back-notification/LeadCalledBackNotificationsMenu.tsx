@@ -48,7 +48,6 @@ function NotificationRow({
         record_id: String(item.payload.record_id),
         praja_id: item.payload.praja_id,
         lead_name: item.payload.lead_name,
-        phone_number: item.payload.phone_number,
         notification_id: item.notificationId,
         notification_item_id: item.id,
       },

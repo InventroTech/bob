@@ -2,7 +2,6 @@ export type OpenLeadRequest = {
   record_id: string;
   praja_id?: string | null;
   lead_name?: string | null;
-  phone_number?: string | null;
   /** in_app_notifications id — highlight clears when this is marked read */
   notification_id?: number | null;
   /** Local inbox item id (e.g. `db-123`) */
@@ -14,18 +13,19 @@ export const PYRO_NAVIGATE_TO_LEAD = "pyro-navigate-to-lead";
 export const PYRO_CLEAR_LEAD_HIGHLIGHT = "pyro-clear-lead-highlight";
 export const PYRO_LEAD_HIGHLIGHT_CHANGED = "pyro-lead-highlight-changed";
 
-const OPEN_LEAD_HIGHLIGHT_KEY = "pyro-open-lead-highlight";
+/** Legacy key — cleared on access so old phone-containing entries are purged. */
+const LEGACY_OPEN_LEAD_HIGHLIGHT_KEY = "pyro-open-lead-highlight";
 
 export type OpenLeadHighlightStash = {
   record_id: string;
   praja_id?: string | null;
   lead_name?: string | null;
-  phone_number?: string | null;
   notification_id?: number | null;
   notification_item_id?: string | null;
 };
 
 let pendingOpenLead: OpenLeadRequest | null = null;
+/** In-memory only — never write PII (e.g. phone) to session/local storage. */
 let activeHighlight: OpenLeadHighlightStash | null = null;
 /** Pathname of the last mounted All Leads table, e.g. `/app/praja/pages/<id>`. */
 let registeredAllLeadsPath: string | null = null;
@@ -33,6 +33,15 @@ let registeredAllLeadsPath: string | null = null;
 function emitHighlightChanged(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(PYRO_LEAD_HIGHLIGHT_CHANGED));
+}
+
+function purgeLegacyHighlightStorage(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(LEGACY_OPEN_LEAD_HIGHLIGHT_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export function registerAllLeadsPath(pathname: string): void {
@@ -54,54 +63,54 @@ export function consumePendingOpenLead(): OpenLeadRequest | null {
   return pending;
 }
 
-function readStashFromSession(): OpenLeadHighlightStash | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(OPEN_LEAD_HIGHLIGHT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as OpenLeadHighlightStash;
-    if (!parsed?.record_id) {
-      window.sessionStorage.removeItem(OPEN_LEAD_HIGHLIGHT_KEY);
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-/** Survives All Leads remount until the notification is marked as read. */
+/**
+ * Keep highlight in memory until the notification is marked as read.
+ * Does not use sessionStorage/localStorage (CodeQL clear-text storage).
+ */
 export function stashOpenLeadHighlight(request: OpenLeadRequest): void {
   if (!request.record_id) return;
-  const existing = getActiveLeadHighlight();
-  const stash: OpenLeadHighlightStash = {
-    record_id: String(request.record_id),
-    praja_id: request.praja_id ?? existing?.praja_id ?? null,
-    lead_name: request.lead_name ?? existing?.lead_name ?? null,
-    phone_number: request.phone_number ?? existing?.phone_number ?? null,
-    notification_id: request.notification_id ?? existing?.notification_id ?? null,
-    notification_item_id:
-      request.notification_item_id ?? existing?.notification_item_id ?? null,
+  purgeLegacyHighlightStorage();
+
+  const existing = activeHighlight;
+  const recordId = String(request.record_id);
+  const prajaId =
+    request.praja_id != null && String(request.praja_id).trim() !== ""
+      ? String(request.praja_id)
+      : existing?.praja_id != null
+        ? String(existing.praja_id)
+        : null;
+  const leadName =
+    request.lead_name != null && String(request.lead_name).trim() !== ""
+      ? String(request.lead_name)
+      : existing?.lead_name != null
+        ? String(existing.lead_name)
+        : null;
+  const notificationId =
+    request.notification_id != null
+      ? Number(request.notification_id)
+      : existing?.notification_id != null
+        ? Number(existing.notification_id)
+        : null;
+  const notificationItemId =
+    request.notification_item_id != null
+      ? String(request.notification_item_id)
+      : existing?.notification_item_id != null
+        ? String(existing.notification_item_id)
+        : null;
+
+  activeHighlight = {
+    record_id: recordId,
+    praja_id: prajaId,
+    lead_name: leadName,
+    notification_id: Number.isFinite(notificationId as number) ? notificationId : null,
+    notification_item_id: notificationItemId,
   };
-  activeHighlight = stash;
-  if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage.setItem(OPEN_LEAD_HIGHLIGHT_KEY, JSON.stringify(stash));
-    } catch {
-      // ignore quota / private mode
-    }
-  }
   emitHighlightChanged();
 }
 
 export function getActiveLeadHighlight(): OpenLeadHighlightStash | null {
-  if (activeHighlight?.record_id) return activeHighlight;
-  const fromSession = readStashFromSession();
-  if (fromSession) {
-    activeHighlight = fromSession;
-    return fromSession;
-  }
-  return null;
+  purgeLegacyHighlightStorage();
+  return activeHighlight?.record_id ? activeHighlight : null;
 }
 
 export function peekOpenLeadHighlight(): OpenLeadHighlightStash | null {
@@ -110,12 +119,7 @@ export function peekOpenLeadHighlight(): OpenLeadHighlightStash | null {
 
 export function clearOpenLeadHighlightStash(): void {
   activeHighlight = null;
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.removeItem(OPEN_LEAD_HIGHLIGHT_KEY);
-  } catch {
-    // ignore
-  }
+  purgeLegacyHighlightStorage();
 }
 
 export function dispatchClearLeadHighlight(): void {
@@ -189,9 +193,7 @@ export function rowMatchesLeadHighlight(
 export function formatOpenLeadIdentity(request: OpenLeadRequest): string {
   const name = request.lead_name?.trim() || "Lead";
   const praja = request.praja_id?.trim();
-  const phone = request.phone_number?.trim();
   if (praja) return `${name} · Praja ID: ${praja}`;
-  if (phone) return `${name} · ${phone}`;
   return `${name} · Record #${request.record_id}`;
 }
 
@@ -213,9 +215,17 @@ export function requestOpenLead(
 ): void {
   if (!request.record_id) return;
 
-  pendingOpenLead = request;
+  const safeRequest: OpenLeadRequest = {
+    record_id: String(request.record_id),
+    praja_id: request.praja_id ?? null,
+    lead_name: request.lead_name ?? null,
+    notification_id: request.notification_id ?? null,
+    notification_item_id: request.notification_item_id ?? null,
+  };
+
+  pendingOpenLead = safeRequest;
   // Set highlight immediately so All Leads can paint the row as soon as it mounts.
-  stashOpenLeadHighlight(request);
+  stashOpenLeadHighlight(safeRequest);
 
   if (typeof window === "undefined") return;
 
@@ -224,12 +234,12 @@ export function requestOpenLead(
 
   if (!targetPath) {
     window.dispatchEvent(
-      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: request }),
+      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: safeRequest }),
     );
     return;
   }
 
-  const search = buildOpenLeadSearch(request);
+  const search = buildOpenLeadSearch(safeRequest);
   const alreadyOnPage = window.location.pathname === targetPath;
 
   window.dispatchEvent(
@@ -248,14 +258,14 @@ export function requestOpenLead(
   // Always poke the table: immediately if already there, else after mount.
   window.setTimeout(() => {
     window.dispatchEvent(
-      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: request }),
+      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: safeRequest }),
     );
   }, alreadyOnPage ? 50 : 500);
 
   // Second poke in case the first landed while the table was still loading.
   window.setTimeout(() => {
     window.dispatchEvent(
-      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: request }),
+      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: safeRequest }),
     );
   }, alreadyOnPage ? 400 : 1200);
 }
