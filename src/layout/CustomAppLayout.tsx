@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
@@ -24,6 +24,8 @@ import { icons } from 'lucide-react';
 import { CustomIcons } from '@/components/page-builder/NewCustomIcons';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon } from '@/components/icons/CustomIcons';
 import { SparkySidebarButton } from '@/components/chatbot/ChatWidget';
+import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-notification/LeadCalledBackNotificationsMenu';
+import { registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -303,6 +305,20 @@ const CustomAppLayout: React.FC = () => {
     );
     return requestPages.length >= 2;
   })();
+  const allLeadsPath = useMemo(() => {
+    if (!tenantSlug || !pages.length) return null;
+    const allLeadsPage =
+      pages.find((page) => String(page.name || '').trim().toLowerCase() === 'all leads') ||
+      pages.find((page) => String(page.name || '').toLowerCase().includes('all leads'));
+    if (!allLeadsPage) return null;
+    return `/app/${tenantSlug}/pages/${allLeadsPage.id}`;
+  }, [tenantSlug, pages]);
+
+  useEffect(() => {
+    if (allLeadsPath) {
+      registerAllLeadsPath(allLeadsPath);
+    }
+  }, [allLeadsPath]);
   const activeNavClass = isUnmanndApp
     ? 'bg-[#1A3673] text-white'
     : 'bg-black text-white';
@@ -421,13 +437,11 @@ const CustomAppLayout: React.FC = () => {
                   placePanelAway
                   onToggle={() => setMobileNavOpen(false)}
                 />
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
-                >
-                  <Bell className="h-4 w-4" />
-                  Notifications
-                </button>
+                <LeadCalledBackNotificationsMenu
+                  variant="sidebar"
+                  allLeadsPath={allLeadsPath}
+                  className="rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
+                />
                 <div className="flex items-center gap-3 rounded-xl px-3 py-2">
                   <img
                     src={profileImage || '/default-avatar.png'}
@@ -531,12 +545,10 @@ const CustomAppLayout: React.FC = () => {
             } ${sidebarCollapsed ? 'px-2' : 'px-3'}`}
           >
             <SparkySidebarButton collapsed={sidebarCollapsed} />
-            <button className={`flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-                <Bell className="h-4 w-4" />
-              </div>
-              {!sidebarCollapsed && <span>Notifications</span>}
-            </button>
+            <LeadCalledBackNotificationsMenu
+              variant={sidebarCollapsed ? "sidebar-collapsed" : "sidebar"}
+              allLeadsPath={allLeadsPath}
+            />
 
             <div className={`border-t space-y-2 ${isUnmanndApp ? 'pt-2.5' : 'pt-4'}`}>
               <div className={`flex items-center rounded-xl px-3 py-2 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>

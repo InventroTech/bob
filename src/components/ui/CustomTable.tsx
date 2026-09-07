@@ -24,6 +24,12 @@ export interface CustomTableProps {
   loading?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: any) => void;
+  /** Extra classes per row (e.g. highlight from notification). */
+  getRowClassName?: (row: any, rowIndex: number) => string | undefined;
+  /** Inline styles per row (preferred for highlight bg so Tailwind can't override). */
+  getRowStyle?: (row: any, rowIndex: number) => React.CSSProperties | undefined;
+  /** Stable row id for DOM targeting / scroll-into-view. */
+  getRowId?: (row: any, rowIndex: number) => string | undefined;
   renderCell?: (row: any, column: CustomTableColumn, columnIndex: number) => React.ReactNode;
   headerBgColor?: string;
   headerTextColor?: string;
@@ -98,6 +104,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   loading = false,
   emptyMessage = 'No data found',
   onRowClick,
+  getRowClassName,
+  getRowStyle,
+  getRowId,
   renderCell,
   headerBgColor = 'bg-black',
   headerTextColor = 'text-white',
@@ -239,15 +248,27 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                 </td>
               </tr>
             ) : (
-              data.map((row: any, rowIdx: number) => (
+              data.map((row: any, rowIdx: number) => {
+                const rowId = getRowId?.(row, rowIdx);
+                const rowClassName = getRowClassName?.(row, rowIdx);
+                const rowStyle = getRowStyle?.(row, rowIdx);
+                const isHighlighted = Boolean(rowStyle?.backgroundColor || rowClassName);
+                return (
                 <tr
-                  key={rowIdx}
+                  key={rowId || rowIdx}
+                  data-row-id={rowId}
+                  data-highlighted={isHighlighted ? 'true' : undefined}
+                  tabIndex={rowId ? -1 : undefined}
                   onClick={() => onRowClick?.(row)}
+                  style={rowStyle}
                   className={cn(
-                    'border-b border-gray-200 bg-white',
+                    'border-b border-gray-200',
+                    !isHighlighted && 'bg-white',
                     comfortable && 'h-[4.5rem]',
-                    hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
-                    !hoverable && 'hover:bg-transparent'
+                    hoverable && onRowClick && !isHighlighted && 'hover:bg-gray-50 cursor-pointer',
+                    hoverable && onRowClick && isHighlighted && 'cursor-pointer',
+                    !hoverable && 'hover:bg-transparent',
+                    rowClassName,
                   )}
                 >
                   {columns.map((col, colIdx) => {
@@ -257,13 +278,24 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     return (
                     <td
                       key={colIdx}
+                      style={
+                        rowStyle?.backgroundColor
+                          ? {
+                              backgroundColor: String(rowStyle.backgroundColor),
+                              color: rowStyle.color,
+                              // Tables often ignore <tr> backgrounds — force cell paint.
+                              boxShadow: 'inset 0 0 0 9999px #BFDBFE',
+                            }
+                          : undefined
+                      }
                       className={cn(
                         'text-sm align-middle',
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
                         fitViewport && 'max-w-0',
                         cellY,
                         col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
-                        col.align === 'right' && `${cellX} text-right`
+                        col.align === 'right' && `${cellX} text-right`,
+                        rowStyle?.backgroundColor && '!bg-[#BFDBFE]',
                       )}
                     >
                       {cellRenderer(row, col, colIdx)}
@@ -271,7 +303,8 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     );
                   })}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
