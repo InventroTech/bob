@@ -309,8 +309,7 @@ const CustomAppLayout: React.FC = () => {
     }
   };
 
-  // Unmannd / procurement apps: navy active nav to match procurement table headers.
-  // CRM tenants (e.g. praja) keep black.
+  // Unmannd / procurement apps: used for page chrome (font, layout) beyond the shared sidebar.
   const isUnmanndApp = (() => {
     const slug = String(tenantSlug || '').toLowerCase();
     if (/unman+d/.test(slug)) return true;
@@ -320,17 +319,15 @@ const CustomAppLayout: React.FC = () => {
     );
     return requestPages.length >= 2;
   })();
-  const activeNavClass = isUnmanndApp
-    ? 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white'
-    : 'bg-black text-white';
-  const activeNavClassMobile = isUnmanndApp
-    ? 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white shadow-sm'
-    : 'bg-black text-white shadow-sm';
-  const brandLogoSrc = isUnmanndApp ? '/pyro-ai-logo.png' : '/fire-logo.png';
-  const brandLogoAlt = isUnmanndApp ? 'Pyro.ai' : 'Pyro';
-  const navItemPad = isUnmanndApp
-    ? { collapsed: 'justify-center px-0 py-1.5', expanded: 'gap-2.5 px-2.5 py-1.5' }
-    : { collapsed: 'justify-center px-0 py-2', expanded: 'gap-3 px-3 py-2' };
+  // Shared sidebar look for all tenants (navy active, Pyro.ai logo, denser spacing).
+  const activeNavClass = 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white';
+  const activeNavClassMobile = 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white shadow-sm';
+  const brandLogoSrc = '/pyro-ai-logo.png';
+  const brandLogoAlt = 'Pyro.ai';
+  const navItemPad = {
+    collapsed: 'justify-center px-0 py-1.5',
+    expanded: 'gap-2.5 px-2.5 py-1.5',
+  };
 
   const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
     <>
@@ -478,9 +475,9 @@ const CustomAppLayout: React.FC = () => {
       >
         <aside className="relative flex h-full flex-col border-r bg-white">
             <div
-              className={`flex items-center flex-shrink-0 w-full ${
+              className={`flex items-center flex-shrink-0 w-full pt-3 pb-2 ${
                 sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'
-              } ${isUnmanndApp ? 'pt-3 pb-2' : 'pt-6 pb-4'}`}
+              }`}
             >
             {sidebarCollapsed ? (
               <button
@@ -496,7 +493,7 @@ const CustomAppLayout: React.FC = () => {
                   <img
                     src={brandLogoSrc}
                     alt={brandLogoAlt}
-                    className={`h-auto w-auto object-contain ${isUnmanndApp ? 'max-h-9' : 'max-h-12'}`}
+                    className="h-auto w-auto max-h-9 object-contain"
                   />
                 </div>
                 <button
@@ -511,7 +508,7 @@ const CustomAppLayout: React.FC = () => {
           </div>
 
           <nav
-            className={`flex-1 overflow-y-auto ${isUnmanndApp ? 'space-y-1 py-1' : 'space-y-2 py-2'} ${
+            className={`flex-1 overflow-y-auto space-y-1 py-1 ${
               sidebarCollapsed ? 'px-2' : 'px-3'
             }`}
           >
@@ -543,9 +540,9 @@ const CustomAppLayout: React.FC = () => {
           </nav>
 
           <div
-            className={`flex-shrink-0 bg-white border-t ${
-              isUnmanndApp ? 'py-2.5 space-y-2' : 'py-4 space-y-3'
-            } ${sidebarCollapsed ? 'px-2' : 'px-3'}`}
+            className={`flex-shrink-0 bg-white border-t py-2.5 space-y-2 ${
+              sidebarCollapsed ? 'px-2' : 'px-3'
+            }`}
           >
             <SparkySidebarButton collapsed={sidebarCollapsed} />
             <button className={`flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
@@ -555,20 +552,20 @@ const CustomAppLayout: React.FC = () => {
               {!sidebarCollapsed && <span>Notifications</span>}
             </button>
 
-            <div className={`border-t space-y-2 ${isUnmanndApp ? 'pt-2.5' : 'pt-4'}`}>
+            <div className="border-t space-y-2 pt-2.5">
               <div className={`flex items-center rounded-xl px-3 py-2 ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
               {sidebarCollapsed ? (
                 <img
                   src={profileImage || '/default-avatar.png'}
                   alt={profileName}
-                  className={`${isUnmanndApp ? 'h-8 w-8' : 'h-10 w-10'} rounded-full object-cover`}
+                  className="h-8 w-8 rounded-full object-cover"
                 />
               ) : (
                 <div className="flex items-center gap-3">
                   <img
                     src={profileImage || '/default-avatar.png'}
                     alt={profileName}
-                    className={`${isUnmanndApp ? 'h-8 w-8' : 'h-10 w-10'} rounded-full object-cover`}
+                    className="h-8 w-8 rounded-full object-cover"
                   />
                   <p className="text-sm font-semibold text-gray-900">{profileName}</p>
                 </div>
