@@ -19,11 +19,6 @@ function parsePrajaId(message: string): string | null {
   return match?.[1] ?? null;
 }
 
-function parsePhone(message: string): string | null {
-  const match = message.match(/\((\d{6,})\)/);
-  return match?.[1] ?? null;
-}
-
 function parseLeadName(message: string): string | null {
   const match = message.match(/^(.+?)\s+called back/i);
   return match?.[1]?.trim() || null;
@@ -38,7 +33,6 @@ export function inAppNotificationToPayload(
     record_id: row.record_id != null ? String(row.record_id) : "",
     entity_type: "lead",
     lead_name: parseLeadName(row.message) || row.title,
-    phone_number: parsePhone(row.message),
     praja_id: parsePrajaId(row.message),
     notification_id: row.id,
   };

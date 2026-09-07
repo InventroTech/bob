@@ -5,19 +5,18 @@ import {
 } from "@/lib/realtime/leadCalledBackBus";
 
 describe("formatLeadCalledBackDetails", () => {
-  it("includes lead name, phone, and praja id (not record id)", () => {
+  it("includes lead name and praja id without phone", () => {
     expect(
       formatLeadCalledBackDetails({
         event: "lead_called_back",
         record_id: "913285",
         entity_type: "lead",
         lead_name: "Sneha Jain",
-        phone_number: "9876543210",
         praja_id: "1793876",
       }),
     ).toEqual({
       leadLabel: "Sneha Jain",
-      phoneLabel: "9876543210",
+      phoneLabel: null,
       metaLabel: "Praja ID: 1793876",
     });
   });
@@ -28,34 +27,33 @@ describe("formatLeadCalledBackDetails", () => {
         event: "lead_called_back",
         record_id: "913285",
         entity_type: "lead",
-        phone_number: "9876543210",
         praja_id: "1793876",
       }),
     ).toEqual({
       leadLabel: "Praja 1793876",
-      phoneLabel: "9876543210",
+      phoneLabel: null,
       metaLabel: "Praja ID: 1793876",
     });
   });
 });
 
 describe("formatLeadCalledBackMessage", () => {
-  it("includes lead name and phone when present", () => {
+  it("includes lead name and praja id when present", () => {
     expect(
       formatLeadCalledBackMessage({
         event: "lead_called_back",
         record_id: "1",
         entity_type: "lead",
         lead_name: "Raj",
-        phone_number: "9876543210",
+        praja_id: "PRAJA123",
       }),
     ).toEqual({
       title: "WhatsApp call back",
-      description: "Raj called back · 9876543210",
+      description: "Raj called back · Praja ID: PRAJA123",
     });
   });
 
-  it("falls back when phone is missing", () => {
+  it("falls back when praja id is missing", () => {
     expect(
       formatLeadCalledBackMessage({
         event: "lead_called_back",

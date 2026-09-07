@@ -15,16 +15,16 @@ export function formatLeadCalledBackDetails(payload: LeadCalledBackPayload): {
   metaLabel: string | null;
 } {
   const name = payload.lead_name?.trim();
-  const phone = payload.phone_number?.trim();
   const prajaId = payload.praja_id?.trim();
 
   // Prefer real lead name; never show internal CRM record id in the UI.
-  const leadLabel = name || (prajaId ? `Praja ${prajaId}` : null) || phone || "Unknown lead";
+  // Phone is intentionally omitted from notification payloads (cleartext storage).
+  const leadLabel = name || (prajaId ? `Praja ${prajaId}` : null) || "Unknown lead";
   const metaLabel = prajaId ? `Praja ID: ${prajaId}` : null;
 
   return {
     leadLabel,
-    phoneLabel: phone || null,
+    phoneLabel: null,
     metaLabel,
   };
 }
@@ -33,11 +33,11 @@ export function formatLeadCalledBackMessage(payload: LeadCalledBackPayload): {
   title: string;
   description: string;
 } {
-  const { leadLabel, phoneLabel } = formatLeadCalledBackDetails(payload);
+  const { leadLabel, metaLabel } = formatLeadCalledBackDetails(payload);
   return {
     title: "WhatsApp call back",
-    description: phoneLabel
-      ? `${leadLabel} called back · ${phoneLabel}`
+    description: metaLabel
+      ? `${leadLabel} called back · ${metaLabel}`
       : `${leadLabel} called back on WhatsApp`,
   };
 }
