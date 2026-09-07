@@ -15,7 +15,6 @@ import {
   X,
   Target,
   Users,
-  RefreshCw,
   Info,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -157,7 +156,6 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
     loading,
     updating,
     fetchingNext,
-    refreshingLead,
     currentLead,
     actionButtonsVisible,
     processingAction,
@@ -196,8 +194,6 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
     handleGetLeads,
     refreshPendingDashboard,
     onCallBackModalChange,
-    setRefreshingLead,
-    fetchFreshLeadForCard,
     onClose,
   } = props;
 
@@ -596,35 +592,6 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3 mt-2 md:mt-0">
-                <CustomButton
-                  type="button"
-                  variant="outline"
-                  icon={
-                    <RefreshCw
-                      className={cn(
-                        "h-4 w-4 text-[#344054]",
-                        refreshingLead && "animate-spin"
-                      )}
-                    />
-                  }
-                  className="rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
-                  onClick={() => {
-                    const leadId = resolveLeadRecordId(currentLead);
-                    if (leadId == null) return;
-                    setRefreshingLead(true);
-                    void fetchFreshLeadForCard(leadId).finally(() => {
-                      setRefreshingLead(false);
-                    });
-                  }}
-                  disabled={
-                    refreshingLead ||
-                    updating ||
-                    fetchingNext ||
-                    resolveLeadRecordId(currentLead) == null
-                  }
-                >
-                  Refresh
-                </CustomButton>
                 <CustomButton
                   type="button"
                   variant="outline"
