@@ -3,6 +3,7 @@ import type { Database } from '../../types/supabase'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 if (!supabaseUrl) {
   throw new Error("VITE_SUPABASE_URL is not defined in .env file");
 }
@@ -18,11 +19,13 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Intercept expired or revoked token states globally
+// Intercept expired or revoked token states globally to prevent unhandled rejection noise in Sentry.
+// We intentionally DO NOT redirect here to avoid duplicating the routing logic 
+// already handled gracefully by the app's top-level AuthProvider or Router.
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-    if (!window.location.pathname.startsWith('/auth') && !window.location.pathname.includes('/login')) {
-      window.location.href = '/auth';
+    if (import.meta.env.DEV) {
+      console.info('[Supabase] Auth state changed to', event, '- delegating redirect to Router.');
     }
   }
 });
