@@ -21,8 +21,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 // Intercept expired or revoked token states globally
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-    if (window.location.pathname !== '/app/praja/login') {
-      window.location.href = '/app/praja/login';
+    if (!window.location.pathname.startsWith('/auth') && !window.location.pathname.includes('/login')) {
+      window.location.href = '/auth';
     }
   }
 });
