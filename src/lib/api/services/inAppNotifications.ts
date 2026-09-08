@@ -39,7 +39,7 @@ export function inAppNotificationToPayload(
 }
 
 export async function fetchUnreadInAppNotifications(): Promise<InAppNotificationDto[]> {
-  const response = await apiClient.get("/lead-notifications/");
+  const response = await apiClient.get("/notifications/");
   const results = response.data?.results;
   return Array.isArray(results) ? (results as InAppNotificationDto[]) : [];
 }
@@ -47,6 +47,6 @@ export async function fetchUnreadInAppNotifications(): Promise<InAppNotification
 export async function markInAppNotificationRead(
   notificationId: number,
 ): Promise<InAppNotificationDto> {
-  const response = await apiClient.post(`/lead-notifications/${notificationId}/read/`);
+  const response = await apiClient.post(`/notifications/${notificationId}/read/`);
   return response.data as InAppNotificationDto;
 }
