@@ -172,6 +172,16 @@ export const applyPlaceholderTemplate = (
 };
 
 // Transform backend record to table row based on optional column config
+export function formatBulkActionLabel(label: string, selectedCount: number): string {
+  const base = String(label || '').trim();
+  if (!base) return base;
+  const hasAll = /\ball\b/i.test(base);
+  if (selectedCount > 1) {
+    return hasAll ? base : `${base} All`;
+  }
+  return hasAll ? base.replace(/\s+all\b/i, '').trim() || base : base;
+}
+
 export const transformLeadData = (lead: any, config?: LeadTableProps['config']) => {
   // If configuration is provided, use it to transform data
   if (config?.columns) {
@@ -368,6 +378,20 @@ export function inferInventoryTableKindFromPageName(pageName: string): Inventory
   return undefined;
 }
 
+/** Resolve inventory page kind for table behavior (bulk actions, columns, titles). */
+export function resolveEffectiveInventoryTableKind(options: {
+  pageDisplayName?: string | null;
+  pageComponentType?: string | null;
+  configuredKind?: string | null;
+}): InventoryTableKind | '' {
+  const pageName = String(options.pageDisplayName || '').trim();
+  const kind =
+    inferInventoryTableKindFromPageName(pageName) ||
+    TABLE_COMPONENT_KIND_MAP[String(options.pageComponentType || '')] ||
+    (String(options.configuredKind || '').trim() as InventoryTableKind);
+  return kind || '';
+}
+
 export function resolveTableComponentInventoryKind(
   componentType: string,
   pageName: string,
@@ -410,6 +434,7 @@ export function enrichInventoryTableConfig(
     ...withoutStaleKind,
     ...(trimmedPageName ? { pageDisplayName: trimmedPageName } : {}),
     pageComponentType: componentType,
+    ...(inventoryTableKind ? { inventoryTableKind } : {}),
     ...(title ? { title } : {}),
   };
 }

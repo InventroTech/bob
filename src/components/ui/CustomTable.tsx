@@ -253,7 +253,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                 const itemNameCol = isItemNameAccessor(col.accessor);
                 const headerSingleLine = fitViewport && itemNameCol;
                 const headerPadLeft =
-                  fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                  fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
                 return (
                 <th
                   key={idx}
@@ -369,7 +369,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   {columns.map((col, colIdx) => {
                     const itemNameCol = isItemNameAccessor(col.accessor);
                     const cellPadLeft =
-                      fitViewport && itemNameCol && col.align === 'left' ? 'pl-2 pr-2.5' : leftCellX;
+                      fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
                     return (
                     <td
                       key={colIdx}
