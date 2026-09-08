@@ -393,12 +393,14 @@ export const membershipService = {
 
       return response.data;
     } catch (error: any) {
-      // Gracefully catch the 400 Tenant not found error to prevent Sentry noise,
+      // Gracefully catch the Tenant not found error (400 or 404) to prevent Sentry noise,
       // allowing the bootstrap process to receive 'null' and handle it accordingly.
+      const status = error?.response?.status || error?.status;
+      const errorMsg = error?.response?.data?.error || error?.message || '';
+      
       const isTenantNotFoundError = 
-        error?.status === 400 || 
-        error?.response?.status === 400 || 
-        error?.message?.includes('Tenant not found');
+        status === 404 || 
+        (status === 400 && String(errorMsg).includes('Tenant not found'));
 
       if (isTenantNotFoundError) {
         if (import.meta.env.DEV) {
