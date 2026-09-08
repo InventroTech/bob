@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { useRecordUpdated } from '@/hooks/useRecordUpdated';
+import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
+import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import { buildActionApiRequest } from '@/lib/utils/actionApiUtils';
 import { convertGMTtoIST } from '@/lib/utils/timeUtils';
 
@@ -49,6 +50,8 @@ const [searchTerm, setSearchTerm] = useState<string>('');
 const [displaySearchTerm, setDisplaySearchTerm] = useState<string>(''); // Separate state for display
 const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 const abortControllerRef = useRef<AbortController | null>(null);
+const listFetchInFlightRef = useRef(false);
+const createdRefreshTimerRef = useRef<number | null>(null);
 const requestSequenceRef = useRef<number>(0);
 /** Base data for client-side search (initial load or filter result). Search runs across all fields on this. */
 const baseDataRef = useRef<any[]>([]);
@@ -67,6 +70,8 @@ const [pagination, setPagination] = useState<{
   nextPageLink: null,
   previousPageLink: null
 });
+const paginationRef = useRef(pagination);
+paginationRef.current = pagination;
 const [assignees, setAssignees] = useState<Array<{
   id: number;
   name: string;
@@ -249,18 +254,26 @@ const stateToParamValue = (state: string | null | undefined): string => {
 };
 
 // Apply filters using analytics endpoint
-const applyFilters = async (requestSequence?: number) => {
+const applyFilters = async (
+  requestSequence?: number,
+  options?: { silent?: boolean; keepPage?: boolean },
+) => {
+  const silent = options?.silent === true;
+  if (silent && listFetchInFlightRef.current) {
+    return;
+  }
+
+  const abortController = new AbortController();
+  listFetchInFlightRef.current = true;
   try {
-    setTableLoading(true); // Use table loading instead of full component loading
-    
-    // Cancel any previous request
-    if (abortControllerRef.current) {
+    if (!silent) setTableLoading(true);
+
+    if (!silent && abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    
-    // Create new AbortController for this request
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    if (!silent) {
+      abortControllerRef.current = abortController;
+    }
     
     // Use provided sequence or increment for non-search calls
     const currentSequence = requestSequence || ++requestSequenceRef.current;
@@ -332,8 +345,11 @@ const applyFilters = async (requestSequence?: number) => {
       }
     }
     
-    // Pagination: always use 50 tickets per page
-    params.append('page', '1');
+    // Pagination: keep the user's current page on silent realtime refresh
+    const page = options?.keepPage
+      ? String(paginationRef.current.currentPage || 1)
+      : '1';
+    params.append('page', page);
     params.append('page_size', '50');
     
     const fullUrl = `${apiUrl}?${params.toString()}`;
@@ -449,7 +465,11 @@ const applyFilters = async (requestSequence?: number) => {
       toast.error('Failed to apply filters');
     }
   } finally {
-    setTableLoading(false); // Use table loading instead of full component loading
+    listFetchInFlightRef.current = false;
+    if (!silent && abortControllerRef.current === abortController) {
+      abortControllerRef.current = null;
+    }
+    if (!silent) setTableLoading(false);
   }
 };
 
@@ -1019,12 +1039,44 @@ const handlePageChange = async (pageNumber: string) => {
   }
 };
 
-const refreshTicketsFromRealtime = useCallback(() => {
-  if (!session?.access_token) return;
-  void applyFilters();
-}, [session?.access_token, applyFilters]);
+useRecordUpdated(
+  (payload: RecordUpdatedPayload) => {
+    if (!session?.access_token) return;
 
-useRecordUpdated(refreshTicketsFromRealtime, { entityType: 'support_ticket' });
+    const recordId = payload.record_id != null ? String(payload.record_id) : '';
+    if (!recordId) return;
+
+    const matches = (row: any) => {
+      const id = row?.id != null ? String(row.id) : '';
+      return id === recordId;
+    };
+
+    let found = false;
+    const patchList = (prev: any[]) => {
+      const idx = prev.findIndex(matches);
+      if (idx < 0) return prev;
+      found = true;
+      const next = prev.slice();
+      next[idx] = {
+        ...prev[idx],
+        ...(payload.assigned_to !== undefined ? { assigned_to: payload.assigned_to } : {}),
+      };
+      return next;
+    };
+    setFilteredData(patchList);
+    setData(patchList);
+
+    if (found || !payload.created) return;
+    if (createdRefreshTimerRef.current != null) {
+      window.clearTimeout(createdRefreshTimerRef.current);
+    }
+    createdRefreshTimerRef.current = window.setTimeout(() => {
+      createdRefreshTimerRef.current = null;
+      void applyFilters(undefined, { silent: true, keepPage: true });
+    }, REALTIME_LIST_DEBOUNCE_MS);
+  },
+  { entityType: 'support_ticket' },
+);
 
 const handleTicketUpdate = (updatedTicket: any) => {
   // Update the local data with the updated ticket
@@ -1214,6 +1266,10 @@ useEffect(() => {
   return () => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
+    }
+    if (createdRefreshTimerRef.current != null) {
+      window.clearTimeout(createdRefreshTimerRef.current);
+      createdRefreshTimerRef.current = null;
     }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();

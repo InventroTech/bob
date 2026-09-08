@@ -30,7 +30,7 @@ import { NotInterestedModal } from "../NotInterestedModal";
 import { CallBackModal } from "../CallBackModal";
 import { WhatsAppTemplateModal } from "../WhatsAppTemplateModal";
 import type { TaskStep } from "./types";
-import { formatRecallAtLabel, formatPhoneForDisplay, getLeadName } from "./utils";
+import { formatRecallAtLabel, formatPhoneForDisplay, getLeadName, resolveLeadRecordId } from "./utils";
 import type { LeadCardCarouselModel } from "./useLeadCardCarousel";
 
 const TaskProgressList: React.FC<{ steps: TaskStep[]; rejectReason?: string }> = ({ steps, rejectReason }) => {
@@ -609,9 +609,8 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                   }
                   className="rounded-xl border-[#D0D5DD] bg-[#F2F4F7] px-4 py-2 text-sm font-semibold text-[#344054] shadow-sm hover:bg-[#E4E7EC]"
                   onClick={() => {
-                    const leadId =
-                      currentLead?.id != null ? Number(currentLead.id) : NaN;
-                    if (Number.isNaN(leadId)) return;
+                    const leadId = resolveLeadRecordId(currentLead);
+                    if (leadId == null) return;
                     setRefreshingLead(true);
                     void fetchFreshLeadForCard(leadId).finally(() => {
                       setRefreshingLead(false);
@@ -621,7 +620,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                     refreshingLead ||
                     updating ||
                     fetchingNext ||
-                    currentLead?.id == null
+                    resolveLeadRecordId(currentLead) == null
                   }
                 >
                   Refresh

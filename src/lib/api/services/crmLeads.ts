@@ -20,6 +20,34 @@ function coerceRecordsListPayload(payload: unknown): any[] {
   return [];
 }
 
+/** Flatten nested lead payloads without letting JSONB `data.id` overwrite the CRM record primary key. */
+function flattenLeadApiPayload(leadData: any): any {
+  if (!leadData || typeof leadData !== 'object') return leadData;
+
+  const recordId = leadData.id;
+  let processedLead = leadData;
+
+  if (leadData.data && typeof leadData.data === 'object') {
+    processedLead = { ...leadData, ...leadData.data };
+    if (leadData.data.name && !processedLead.name) {
+      processedLead.name = leadData.data.name;
+    }
+  }
+  if (leadData.lead && typeof leadData.lead === 'object') {
+    processedLead = { ...processedLead, ...leadData.lead };
+  }
+
+  // Always keep CRM record id for realtime matching / GET-by-id.
+  if (recordId != null) {
+    processedLead = { ...processedLead, id: recordId };
+  }
+  if (leadData.data && typeof leadData.data === 'object') {
+    processedLead.data = leadData.data;
+  }
+
+  return processedLead;
+}
+
 export type RecallPreviewLead = {
   id: number;
   name: string;
@@ -107,19 +135,7 @@ export const crmLeadsApi = {
         return null;
       }
 
-      // Handle nested data structures
-      let processedLead = leadData;
-      if (leadData?.data && typeof leadData.data === 'object') {
-        processedLead = { ...leadData, ...leadData.data };
-        if (leadData.data.name && !processedLead.name) {
-          processedLead.name = leadData.data.name;
-        }
-      }
-      if (leadData?.lead && typeof leadData.lead === 'object') {
-        processedLead = { ...leadData, ...leadData.lead };
-      }
-
-      return processedLead;
+      return flattenLeadApiPayload(leadData);
     } catch (error: unknown) {
       const err = error as { response?: { status?: number } };
       if (err.response?.status === 404) {
@@ -156,19 +172,7 @@ export const crmLeadsApi = {
         return null;
       }
 
-      // Handle nested data structures (same as getCurrentLead)
-      let processedLead = leadData;
-      if (leadData?.data && typeof leadData.data === 'object') {
-        processedLead = { ...leadData, ...leadData.data };
-        if (leadData.data.name && !processedLead.name) {
-          processedLead.name = leadData.data.name;
-        }
-      }
-      if (leadData?.lead && typeof leadData.lead === 'object') {
-        processedLead = { ...leadData, ...leadData.lead };
-      }
-
-      return processedLead;
+      return flattenLeadApiPayload(leadData);
     } catch (error: unknown) {
       const err = error as { response?: { status?: number } };
       if (err.response?.status === 404) {
@@ -224,16 +228,7 @@ export const crmLeadsApi = {
         return null;
       }
 
-      // Handle nested data structures
-      let processedLead = leadData;
-      if (leadData?.data && typeof leadData.data === 'object') {
-        processedLead = { ...leadData, ...leadData.data };
-        if (leadData.data.name && !processedLead.name) {
-          processedLead.name = leadData.data.name;
-        }
-      }
-
-      return processedLead;
+      return flattenLeadApiPayload(leadData);
     } catch (error: unknown) {
       const err = error as { response?: { status?: number } };
       if (err.response?.status === 404) {

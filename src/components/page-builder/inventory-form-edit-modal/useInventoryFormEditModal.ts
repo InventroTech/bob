@@ -79,6 +79,10 @@ export function useInventoryFormEditModal({
   showHistoryButton,
   onDeleted,
   uiVariant = 'default',
+  onNavigate,
+  hasPrevious,
+  hasNext,
+  navigationPosition,
 }: InventoryFormEditModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -102,6 +106,8 @@ export function useInventoryFormEditModal({
   const [flagValues, setFlagValues] = useState<Record<string, boolean>>({});
   const [myRoleName, setMyRoleName] = useState<string>('');
   const [myRoleKey, setMyRoleKey] = useState<string>('');
+  /** False until getMyMembership resolves — avoids Save→Approve footer flash. */
+  const [membershipReady, setMembershipReady] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -153,8 +159,16 @@ export function useInventoryFormEditModal({
   const effectiveShowFinalPrice = showFinalPriceSection !== false && !isRequester;
 
   useEffect(() => {
-    if (!open || !user) return;
+    if (!open) {
+      setMembershipReady(false);
+      return;
+    }
+    if (!user) {
+      setMembershipReady(true);
+      return;
+    }
     let cancelled = false;
+    setMembershipReady(false);
 
     const load = async () => {
       try {
@@ -166,6 +180,8 @@ export function useInventoryFormEditModal({
         setMyMembershipId(typeof mid === 'number' && Number.isFinite(mid) ? mid : mid != null ? Number(mid) : null);
       } catch {
         // Non-fatal: still store comment with name only.
+      } finally {
+        if (!cancelled) setMembershipReady(true);
       }
     };
 
@@ -988,7 +1004,6 @@ export function useInventoryFormEditModal({
           description: `${((btn.targetAttribute || 'status').trim() || 'status')} set to ${btn.statusValue.replace(/_/g, ' ')}.`,
         });
         onRecordUpdated?.(record.id);
-        onOpenChange(false);
       } catch (e: any) {
         toast({
           title: 'Update failed',
@@ -999,7 +1014,7 @@ export function useInventoryFormEditModal({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, isPaymentModal, applyShipmentTrackingOnSave]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, isPaymentModal, applyShipmentTrackingOnSave]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -1095,7 +1110,6 @@ export function useInventoryFormEditModal({
       setTrackingPasteDraft('');
       toast({ title: 'Saved', description: 'All changes saved.' });
       onRecordUpdated?.(record.id);
-      onOpenChange(false);
     } catch (e: any) {
       toast({
         title: 'Update failed',
@@ -1105,7 +1119,7 @@ export function useInventoryFormEditModal({
     } finally {
       setSaving(false);
     }
-  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, onOpenChange, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, applyShipmentTrackingOnSave, isRequester]);
+  }, [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, applyShipmentTrackingOnSave, isRequester]);
 
   const handleDeleteRequest = useCallback(async () => {
     if (!canShowDeleteRequestButton || !record?.id) return;
@@ -1212,7 +1226,7 @@ export function useInventoryFormEditModal({
       : undefined);
 
   const workflowButtons =
-    isInventoryRequest && !isPaymentModal
+    membershipReady && isInventoryRequest && !isPaymentModal
       ? getInventoryWorkflowButtons({
           requestStatus: requestStatusForWorkflow,
           roleNameOrKey: myRoleName,
@@ -1226,13 +1240,15 @@ export function useInventoryFormEditModal({
         })
       : [];
 
-  const configuredActionButtons = paymentButtonsEnabled
-    ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
-    : isInventoryRequest && !isPaymentModal
-      ? filterDuplicateInventoryWorkflowButtons(
-          (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn))
-        )
-      : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
+  const configuredActionButtons = !membershipReady
+    ? []
+    : paymentButtonsEnabled
+      ? [paymentConditionMatches ? paymentButtonConfig.conditionalButton : paymentButtonConfig.defaultButton]
+      : isInventoryRequest && !isPaymentModal
+        ? filterDuplicateInventoryWorkflowButtons(
+            (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn))
+          )
+        : (actionButtons ?? []).filter((btn) => actionButtonConditionMatches(btn));
 
   const effectiveActionButtons = paymentButtonsEnabled
     ? configuredActionButtons
@@ -1250,8 +1266,10 @@ export function useInventoryFormEditModal({
   const hasEditableField = effectiveFormModalFields.some((f) => f.enabled);
   // Default: if showSaveButton is undefined, show Save only when there are no action buttons.
   // Requestors get Save only while pending approval; TL/PM keep Save for tracking/ops edits.
-  const effectiveShowSaveButton =
-    isRequester && !isOpsEditor
+  // Hold footer until membership/role is known so Save does not flash before Approve/Reject.
+  const effectiveShowSaveButton = !membershipReady
+    ? false
+    : isRequester && !isOpsEditor
       ? requesterMayEdit
       : showSaveButton !== undefined
         ? showSaveButton
@@ -1296,6 +1314,10 @@ export function useInventoryFormEditModal({
     showHistoryButton,
     onDeleted,
     uiVariant,
+    onNavigate,
+    hasPrevious,
+    hasNext,
+    navigationPosition,
     _formModalDescription,
     toast,
     user,

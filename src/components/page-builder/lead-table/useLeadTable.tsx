@@ -14,7 +14,8 @@ import ShortProfileCard from '../../ui/ShortProfileCard';
 import { Input } from '@/components/ui/input';
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { useFilters } from '@/hooks/useFilters';
-import { useRecordUpdated } from '@/hooks/useRecordUpdated';
+import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
+import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import { FilterService } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
@@ -22,7 +23,7 @@ import type { CustomTableColumn } from '@/components/ui/CustomTable';
 import { buildActionApiRequest } from '@/lib/utils/actionApiUtils';
 import { getEffectiveToken, useSpoofUserId } from '@/lib/auth/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
-import { formatCalendarDate } from '@/lib/utils/timeUtils';
+import { formatCalendarDate, formatTableDateShort } from '@/lib/utils/timeUtils';
 import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventory/statusStyles';
 import {
@@ -32,6 +33,7 @@ import {
   normalizeInventoryPriorityLevel,
 } from '@/lib/inventory/priority';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import type { Column, LeadTableProps, PlaceholderAdapter } from './types';
 import {
@@ -45,11 +47,81 @@ import {
   getNestedValue,
   applyPlaceholderTemplate,
   transformLeadData,
+  formatBulkActionLabel,
+  resolveEffectiveInventoryTableKind,
 } from './utils';
+import { useInventoryTablePageName } from './InventoryTablePageContext';
 import {
+  applyInventoryCartStatusSideEffects,
   canRequesterEditInventoryRequest,
+  filterDuplicateInventoryWorkflowButtons,
+  getInventoryWorkflowButtons,
+  isInventoryOpsEditorRole,
   isInventoryRequestRowRequester,
 } from '@/lib/inventory/workflow';
+import { advanceShipmentStatusForTracking, excludeInventoryTrackColumn, SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
+
+/** Uniform rounded-rectangle chips for All Requests priority / status / shipment. */
+const INVENTORY_CHIP_SHAPE =
+  '!rounded-[8px] inline-flex h-7 shrink-0 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide overflow-hidden text-ellipsis whitespace-nowrap border';
+
+function bulkActionButtonKey(btn: { statusValue: string; targetAttribute?: string }): string {
+  return `${btn.statusValue}::${(btn.targetAttribute || 'status').trim() || 'status'}`;
+}
+
+function normalizeBulkRowId(id: unknown): string | null {
+  if (id == null || id === '') return null;
+  return String(id);
+}
+
+function getBulkRowStatus(row: any): string {
+  const raw =
+    (row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>).status : undefined) ??
+    row?.status;
+  return String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_');
+}
+
+const INVENTORY_PRIORITY_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[5rem] min-w-[4.5rem]`;
+const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[9.5rem] min-w-[6.5rem]`;
+
+const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
+const OPS_EDIT_BTN =
+  'h-[23px] w-[55px] min-w-[55px] justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#2885FF_0%,#0A5ECD_100%)] px-0 text-xs font-semibold text-white hover:brightness-105 hover:text-white';
+const OPS_SAVE_BTN =
+  'h-[23px] w-[55px] min-w-[55px] justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#11243C_0%,#2E60A2_100%)] px-0 text-xs font-semibold text-white hover:brightness-110 hover:text-white';
+
+/** All Requests: fixed rem widths on data columns; item name absorbs the rest (no gaping chips). */
+function procurementColumnLayout(
+  accessor: string
+): { width?: string; minWidth?: string; maxWidth?: string } | undefined {
+  const key = String(accessor || '').trim().toLowerCase();
+  const chipCol = { width: '11rem', minWidth: '11rem', maxWidth: '11rem' };
+  const priorityCol = { width: '6.5rem', minWidth: '6.5rem', maxWidth: '6.5rem' };
+  const dateCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '6rem' };
+  const costCol = { width: '6.75rem', minWidth: '6.75rem', maxWidth: '7.25rem' };
+  const vendorCol = { width: '5rem', minWidth: '5rem', maxWidth: '5.5rem' };
+  const requesterCol = { width: '7.5rem', minWidth: '7.5rem', maxWidth: '9rem' };
+  const editCol = { width: '4.25rem', minWidth: '4.25rem', maxWidth: '4.25rem' };
+  const layouts: Record<string, { width?: string; minWidth?: string; maxWidth?: string }> = {
+    item_name_freeform: {},
+    item_name: {},
+    requester_name: requesterCol,
+    estimated_cost: costCol,
+    vendor: vendorCol,
+    request_date: dateCol,
+    eta: dateCol,
+    urgency_level: priorityCol,
+    priority: priorityCol,
+    status: chipCol,
+    shipment_status: chipCol,
+    [REQUESTER_EDIT_COLUMN_ACCESSOR]: editCol,
+    edit: editCol,
+  };
+  return layouts[key];
+}
 
 export function useLeadTable({ config, pageId }: LeadTableProps) {
   const { toast } = useToast();
@@ -120,8 +192,19 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [resolvedFilterOptions, setResolvedFilterOptions] = useState<Record<string, FilterOption[]>>({});
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [displaySearchTerm, setDisplaySearchTerm] = useState<string>('');
+  const latestSearchValueRef = useRef<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const listFetchInFlightRef = useRef(false);
+  const createdRefreshTimerRef = useRef<number | null>(null);
+  const fetchFilteredDataRef = useRef<
+    | ((
+        requestSequence?: number,
+        queryParams?: URLSearchParams,
+        options?: { silent?: boolean; keepPage?: boolean },
+      ) => Promise<void>)
+    | null
+  >(null);
   const requestSequenceRef = useRef<number>(0);
   const lastInitialFetchKeyRef = useRef<string>('');
   const initialFetchInFlightKeyRef = useRef<string | null>(null);
@@ -129,6 +212,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const { session, user } = useAuth();
   const spoofUserId = useSpoofUserId();
   const { customRole, membershipLoaded, membershipId } = useTenant();
+  const inventoryTablePageName = useInventoryTablePageName();
   const sessionUser = session?.user ?? null;
   const activeUser = user ?? sessionUser ?? null;
   // Spoof JWT `sub` when active; otherwise Supabase user id (aligns with API `{{current_user}}`).
@@ -527,6 +611,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     nextPageLink: null,
     previousPageLink: null
   });
+  const paginationRef = useRef(pagination);
+  paginationRef.current = pagination;
   const [filterOptions, setFilterOptions] = useState<{
     lead_statuses: string[];
     sources: string[];
@@ -536,6 +622,20 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   });
   const [inlineCellDrafts, setInlineCellDrafts] = useState<Record<string, string>>({});
   const [inlineSavingCell, setInlineSavingCell] = useState<string | null>(null);
+  /** Ops (PM / TL / Admin): inline Shipment column edit — status stays workflow-only in the modal. */
+  const [opsEditingRowId, setOpsEditingRowId] = useState<string | number | null>(null);
+  const [opsShipmentDrafts, setOpsShipmentDrafts] = useState<Record<string, string>>({});
+  const [opsRowSavingId, setOpsRowSavingId] = useState<string | number | null>(null);
+
+  const canOpsInlineEditShipment = useMemo(
+    () =>
+      Boolean(
+        !isInPageBuilder &&
+          isInventoryRequestTable &&
+          isInventoryOpsEditorRole(customRole)
+      ),
+    [isInPageBuilder, isInventoryRequestTable, customRole]
+  );
 
   const canInlineEditRows = useMemo(() => {
     return Boolean(
@@ -663,17 +763,111 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return canRequesterEditInventoryRequest(status);
   }, [isInventoryRequestTable, activeUserId, membershipId]);
 
+  const startOpsShipmentEdit = useCallback((row: any) => {
+    if (row?.id == null) return;
+    const rawShipment = String(row?.shipment_status ?? row?.data?.shipment_status ?? '').trim().toUpperCase();
+    const shipment_status =
+      !rawShipment || rawShipment === 'N/A' || rawShipment === '—' ? 'N/A' : rawShipment;
+    setOpsEditingRowId(row.id);
+    setOpsShipmentDrafts((prev) => ({ ...prev, [String(row.id)]: shipment_status }));
+  }, []);
+
+  const cancelOpsShipmentEdit = useCallback((rowId: string | number) => {
+    setOpsEditingRowId((cur) => (cur === rowId ? null : cur));
+    setOpsShipmentDrafts((prev) => {
+      const next = { ...prev };
+      delete next[String(rowId)];
+      return next;
+    });
+  }, []);
+
+  const saveOpsShipmentEdit = useCallback(
+    async (row: any) => {
+      if (!canOpsInlineEditShipment || !row?.id || !effectiveApiEndpoint) return;
+      const draft = opsShipmentDrafts[String(row.id)];
+      if (!draft) return;
+      try {
+        setOpsRowSavingId(row.id);
+        const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+        const url = `${base}/${row.id}/`;
+        const existingData = (row.data as Record<string, unknown>) || {};
+        const shipmentValue =
+          draft === 'N/A' || draft === '' ? '' : draft;
+        const prevShipment = String(
+          existingData.shipment_status ?? row.shipment_status ?? ''
+        ).trim();
+        const nextData: Record<string, unknown> = {
+          ...existingData,
+          shipment_status: shipmentValue,
+        };
+        if (String(shipmentValue) !== prevShipment) {
+          nextData.tracking_updated_at = new Date().toISOString();
+        }
+        const response = await apiClient.patch(url, { data: nextData });
+        const updated = response.data;
+        const updateRow = (r: any) =>
+          r.id === row.id
+            ? {
+                ...r,
+                ...updated,
+                shipment_status: shipmentValue || 'N/A',
+                data: updated?.data ?? nextData,
+              }
+            : r;
+        setData((prev) => prev.map(updateRow));
+        setFilteredData((prev) => prev.map(updateRow));
+        cancelOpsShipmentEdit(row.id);
+        toast({ title: 'Saved', description: 'Shipment updated.' });
+      } catch (e: any) {
+        toast({
+          title: 'Update failed',
+          description: e?.message || 'Could not save shipment.',
+          variant: 'destructive',
+        });
+      } finally {
+        setOpsRowSavingId((cur) => (cur === row.id ? null : cur));
+      }
+    },
+    [
+      canOpsInlineEditShipment,
+      effectiveApiEndpoint,
+      opsShipmentDrafts,
+      cancelOpsShipmentEdit,
+      toast,
+    ]
+  );
+
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
     if (column.accessor === REQUESTER_EDIT_COLUMN_ACCESSOR) {
-      if (!canRequesterEditRow(row)) {
-        return <span className="text-sm text-gray-400">—</span>;
+      if (canOpsInlineEditShipment) {
+        const isEditing = opsEditingRowId === row.id;
+        const isSaving = opsRowSavingId === row.id;
+        return (
+          <CustomButton
+            variant="default"
+            size="sm"
+            className={isEditing ? OPS_SAVE_BTN : OPS_EDIT_BTN}
+            disabled={isSaving || (opsRowSavingId != null && !isEditing)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isEditing) {
+                void saveOpsShipmentEdit(row);
+              } else {
+                startOpsShipmentEdit(row);
+              }
+            }}
+          >
+            {isSaving ? 'Saving…' : isEditing ? 'Save' : 'Edit'}
+          </CustomButton>
+        );
       }
+      // Status changes use inventory workflow actions in the detail modal (Approve / Reject / Order, etc.).
       return (
         <CustomButton
-          variant="outline"
+          variant="default"
           size="sm"
-          className="h-8 px-3 text-xs font-semibold"
+          className={OPS_EDIT_BTN}
           onClick={(e) => {
             e.stopPropagation();
             if (effectiveDetailMode === 'none') return;
@@ -725,8 +919,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
     }
 
-    // Keep Requirement Date in the same calendar format as Request Date
-    // (e.g. "31 July 2026"), even if the column type is text in Page Builder.
+    // Keep Requirement Date in the same compact format as Request Date (DD/MM/YYYY).
     const calendarDateAccessors = new Set([
       'request_date',
       'requested_date',
@@ -740,7 +933,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       displayValue !== 'N/A' &&
       /^\d{4}-\d{2}-\d{2}/.test(displayValue.trim())
     ) {
-      displayValue = formatCalendarDate(displayValue);
+      displayValue = isInventoryRequestTable
+        ? formatTableDateShort(displayValue)
+        : formatCalendarDate(displayValue);
     }
     
     // Helper function to truncate text based on column width
@@ -898,7 +1093,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         );
       }
 
-      const linkLabel = isTrackingCol ? 'Track' : 'Link';
+      const linkLabel = isTrackingCol ? 'LINK' : 'Link';
       
       // Default link rendering
       return (
@@ -906,11 +1101,15 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
+          className={
+            isTrackingCol
+              ? 'text-sm font-semibold text-[#1A44A1] underline underline-offset-2 hover:text-[#163a8a] transition-colors'
+              : 'inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors'
+          }
           onClick={(e) => e.stopPropagation()}
         >
-          <ExternalLink className="h-4 w-4" />
-            <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
+          {isTrackingCol ? null : <ExternalLink className="h-4 w-4" />}
+          <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
         </a>
       );
     }
@@ -935,7 +1134,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           compact
           wrapName
           useDefaultItemImage
-          className="mx-auto"
+          className="mx-auto w-full min-w-0 max-w-full"
         />
       );
     }
@@ -944,6 +1143,26 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     const isItemsTableFirstColumn = config?.tableType === 'itemsTable' && columnIndex === 0;
     if (isItemsTableFirstColumn) {
       return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
+    }
+
+    const isRequesterNameColumn =
+      accessorLowerForName === 'requester_name' ||
+      accessorLowerForName === 'requested_by' ||
+      headerLower === 'requested by' ||
+      headerLower === 'requester' ||
+      headerLower === 'requester name' ||
+      headerLower === 'requestor' ||
+      headerLower === 'requestor name';
+    if (isRequesterNameColumn) {
+      const requesterName =
+        displayValue && displayValue !== 'N/A'
+          ? displayValue
+          : String(row.requester_name || row.name || '').trim();
+      return (
+        <span className="mx-auto block w-full text-center text-sm" title={requesterName || undefined}>
+          {requesterName || 'N/A'}
+        </span>
+      );
     }
     
     // Special handling for name column - show avatar, name, and email
@@ -957,7 +1176,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     
-    // Priority / urgency: short colored pill (High / Middle / Low).
+    // Priority / urgency: short colored pill (High / Mid / Low) — fixed width.
     const accessorLowerEarly = String(column.accessor || '').toLowerCase();
     const isPriorityColumn =
       accessorLowerEarly === 'urgency_level' || accessorLowerEarly === 'priority';
@@ -966,7 +1185,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       return (
         <Badge
           variant="outline"
-          className={`${inventoryPriorityChipClassName(displayValue)} rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wide hover:opacity-90`}
+          className={`${inventoryPriorityChipClassName(displayValue)} ${INVENTORY_PRIORITY_CHIP_SIZE} hover:opacity-90`}
           title={fullLabel}
         >
           {formatInventoryPriorityShortLabel(displayValue)}
@@ -979,10 +1198,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (column.accessor === 'urgency_level' && (urgencyUpper === 'CRITICAL' || urgencyUpper === 'STANDARD')) {
       return (
         <Badge
-          className={`${getStatusColor(displayValue, config?.statusColors)} text-sm px-2 py-0.5 border font-semibold tracking-wide`}
+          className={`${getStatusColor(displayValue, config?.statusColors)} ${INVENTORY_PRIORITY_CHIP_SIZE} border hover:opacity-90`}
           title={displayValue}
         >
-          {truncateText(displayValue, columnIndex)}
+          {displayValue}
         </Badge>
       );
     }
@@ -991,12 +1210,57 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (column.type === 'chip') {
       const accessorLower = String(column.accessor || '').toLowerCase();
       const useShipmentTone =
-        (config?.entityType === 'inventory_request' || config?.tableType === 'itemsTable') &&
+        (config?.entityType === 'inventory_request' ||
+          config?.entityType === 'unmannd_request' ||
+          config?.tableType === 'itemsTable') &&
         accessorLower === 'shipment_status';
       const useInventoryStatusTone =
-        config?.tableType === 'itemsTable' && accessorLower === 'status';
+        (config?.tableType === 'itemsTable' ||
+          config?.entityType === 'inventory_request' ||
+          config?.entityType === 'unmannd_request') &&
+        accessorLower === 'status';
       const usePriorityTone =
         accessorLower === 'urgency_level' || accessorLower === 'priority';
+
+      // Ops row edit: Shipment becomes a dropdown; Status stays read-only (workflow modal).
+      const isOpsEditingShipment =
+        canOpsInlineEditShipment && opsEditingRowId === row.id && useShipmentTone;
+      if (isOpsEditingShipment) {
+        const current =
+          opsShipmentDrafts[String(row.id)] ??
+          getShipmentStatusLabel(row?.shipment_status ?? row?.data?.shipment_status);
+        const options = [...OPS_SHIPMENT_OPTIONS];
+        const cur = String(current || '').toUpperCase();
+        if (cur && cur !== 'N/A' && !options.includes(cur as typeof options[number])) {
+          options.unshift(cur as typeof options[number]);
+        }
+        return (
+          <div className="min-w-[9.5rem]" onClick={(e) => e.stopPropagation()}>
+            <Select
+              value={String(current || 'N/A')}
+              disabled={opsRowSavingId === row.id}
+              onValueChange={(v) => {
+                setOpsShipmentDrafts((prev) => ({
+                  ...prev,
+                  [String(row.id)]: v,
+                }));
+              }}
+            >
+              <SelectTrigger className="h-8 w-full text-xs font-semibold">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((opt) => (
+                  <SelectItem key={opt} value={opt} className="text-xs">
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+      }
+
       const chipToneClass = useShipmentTone
         ? getShipmentStatusToneClass(displayValue)
         : useInventoryStatusTone
@@ -1011,24 +1275,39 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           : displayValue;
       const chipTitle = usePriorityTone
         ? formatInventoryPriorityLabel(displayValue)
-        : chipLabel;
+        : String(chipLabel);
+      const chipSizeClass = usePriorityTone
+        ? INVENTORY_PRIORITY_CHIP_SIZE
+        : useShipmentTone || useInventoryStatusTone
+          ? INVENTORY_STATUS_CHIP_SIZE
+          : 'rounded-[8px] px-3 py-0.5 text-xs font-semibold uppercase tracking-wide border';
       return (
-        <Badge
-          variant="outline"
-          className={`${chipToneClass} rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wide hover:opacity-90`}
-          title={chipTitle}
-        >
-          {usePriorityTone ? chipLabel : truncateText(chipLabel, columnIndex)}
-        </Badge>
+        <div className="flex justify-center">
+          <Badge
+            variant="outline"
+            className={`${chipToneClass} ${chipSizeClass} hover:opacity-90`}
+            title={chipTitle}
+          >
+            {chipLabel}
+          </Badge>
+        </div>
       );
     }
 
     // Action button column
     if (column.type === 'action') {
+      const isEditAction =
+        String(column.header || '').trim().toLowerCase() === 'edit' ||
+        String(column.accessor || '').trim().toLowerCase() === 'edit';
       return (
         <CustomButton
-          variant="outline"
+          variant={isEditAction && isInventoryRequestTable ? 'default' : 'outline'}
           size="sm"
+          className={
+            isEditAction && isInventoryRequestTable
+              ? 'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-xs font-semibold text-white hover:bg-[#163a8a] hover:text-white'
+              : undefined
+          }
           onClick={(e) => {
             e.stopPropagation();
             handleActionClick(row, column as Column);
@@ -1106,7 +1385,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           );
         }
       }
-      // If no valid phone number, fall through to default text rendering below
     }
     
     // Special handling for columns with configured linkField
@@ -1157,7 +1435,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
@@ -1167,18 +1445,432 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return list;
   }, [config?.tableType, config?.statusButtons]);
 
+  const inventoryTableKind = useMemo(
+    () =>
+      resolveEffectiveInventoryTableKind({
+        pageDisplayName:
+          inventoryTablePageName ||
+          (config as { pageDisplayName?: string } | undefined)?.pageDisplayName,
+        pageComponentType: (config as { pageComponentType?: string } | undefined)?.pageComponentType,
+        configuredKind: (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind,
+      }),
+    [config, inventoryTablePageName]
+  );
+
+  const isMyRequestPage = inventoryTableKind === 'my_request';
+
+  const bulkSelectionEnabled =
+    !isInPageBuilder &&
+    isInventoryRequestTable &&
+    config?.tableType === 'itemsTable' &&
+    !isMyRequestPage;
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  const [bulkApplying, setBulkApplying] = useState<string | null>(null);
+
+  const getRowWorkflowButtons = useCallback(
+    (row: any) => {
+      const data =
+        row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : {};
+      const requesterId = data.requester_id ?? row?.requester_id ?? data.created_by_id;
+      const isRequester = isInventoryRequestRowRequester(requesterId, activeUserId, membershipId);
+      return getInventoryWorkflowButtons({
+        requestStatus: data.status ?? row?.status,
+        roleNameOrKey: customRole,
+        membershipId,
+        userId: activeUserId,
+        teamLeadOnRecord: data.team_lead,
+        managerOnRecord: data.manager,
+        isRequester,
+        workflowMode: config?.inventoryWorkflowMode ?? 'auto',
+      });
+    },
+    [activeUserId, config?.inventoryWorkflowMode, customRole, membershipId]
+  );
+
+  const mergeBulkActionButtons = useCallback(
+    (
+      buttonsList: Array<
+        Array<{ label: string; statusValue: string; targetAttribute?: string; statusText?: string }>
+      >
+    ) => {
+      const map = new Map<
+        string,
+        { label: string; statusValue: string; targetAttribute?: string; statusText?: string }
+      >();
+      for (const list of buttonsList) {
+        for (const btn of list) {
+          if (!(btn?.label ?? '').trim() || !(btn?.statusValue ?? '').trim()) continue;
+          map.set(bulkActionButtonKey(btn), btn);
+        }
+      }
+      return Array.from(map.values());
+    },
+    []
+  );
+
+  const selectedRowCount = selectedRowIds.size;
+
+  const bulkSelectionStatus = useMemo(() => {
+    if (selectedRowIds.size === 0) return null;
+    for (const row of filteredData) {
+      const rowId = normalizeBulkRowId(row?.id);
+      if (rowId != null && selectedRowIds.has(rowId)) {
+        return getBulkRowStatus(row) || null;
+      }
+    }
+    return null;
+  }, [filteredData, selectedRowIds]);
+
+  const canSelectBulkRow = useCallback(
+    (row: any) => {
+      if (!bulkSelectionEnabled) return false;
+      if (normalizeBulkRowId(row?.id) == null) return false;
+      if (bulkSelectionStatus == null) return true;
+      return getBulkRowStatus(row) === bulkSelectionStatus;
+    },
+    [bulkSelectionEnabled, bulkSelectionStatus]
+  );
+
+  const toggleBulkRowSelection = useCallback(
+    (row: any, selected: boolean) => {
+      const rowId = normalizeBulkRowId(row?.id);
+      if (rowId == null) return;
+
+      if (!selected) {
+        setSelectedRowIds((prev) => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
+        return;
+      }
+
+      const rowStatus = getBulkRowStatus(row);
+      setSelectedRowIds((prev) => {
+        if (prev.size > 0) {
+          let anchorStatus: string | null = null;
+          for (const existing of filteredData) {
+            const existingId = normalizeBulkRowId(existing?.id);
+            if (existingId != null && prev.has(existingId)) {
+              anchorStatus = getBulkRowStatus(existing);
+              break;
+            }
+          }
+          if (anchorStatus != null && rowStatus !== anchorStatus) {
+            toast({
+              title: 'Different status',
+              description: 'Bulk select only works for requests with the same status as the first selected row.',
+              variant: 'destructive',
+            });
+            return prev;
+          }
+        }
+        const next = new Set(prev);
+        next.add(rowId);
+        return next;
+      });
+    },
+    [filteredData, toast]
+  );
+
+  const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
+  const [bulkStatusPickerOptions, setBulkStatusPickerOptions] = useState<
+    Array<{ status: string; count: number }>
+  >([]);
+
+  const getPageStatusCounts = useCallback(() => {
+    const counts = new Map<string, number>();
+    for (const row of filteredData) {
+      if (normalizeBulkRowId(row?.id) == null) continue;
+      const status = getBulkRowStatus(row);
+      if (!status) continue;
+      counts.set(status, (counts.get(status) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => a.status.localeCompare(b.status));
+  }, [filteredData]);
+
+  const selectBulkRowsByStatus = useCallback(
+    (status: string) => {
+      const matchingIds = filteredData
+        .filter((row) => getBulkRowStatus(row) === status)
+        .map((row) => normalizeBulkRowId(row?.id))
+        .filter((id): id is string => id != null);
+      setSelectedRowIds(new Set(matchingIds));
+      setBulkStatusPickerOpen(false);
+      setBulkStatusPickerOptions([]);
+    },
+    [filteredData]
+  );
+
+  const toggleBulkSelectAll = useCallback(() => {
+    // If a status is already locked by current selection, toggle that group only.
+    if (selectedRowIds.size > 0) {
+      let anchorStatus: string | null = null;
+      for (const row of filteredData) {
+        const rowId = normalizeBulkRowId(row?.id);
+        if (rowId != null && selectedRowIds.has(rowId)) {
+          anchorStatus = getBulkRowStatus(row);
+          break;
+        }
+      }
+      if (anchorStatus) {
+        const matchingIds = filteredData
+          .filter((row) => getBulkRowStatus(row) === anchorStatus)
+          .map((row) => normalizeBulkRowId(row?.id))
+          .filter((id): id is string => id != null);
+        const allMatchingSelected =
+          matchingIds.length > 0 && matchingIds.every((id) => selectedRowIds.has(id));
+        setSelectedRowIds(allMatchingSelected ? new Set() : new Set(matchingIds));
+        return;
+      }
+    }
+
+    const statusOptions = getPageStatusCounts();
+    if (statusOptions.length === 0) return;
+
+    if (statusOptions.length === 1) {
+      selectBulkRowsByStatus(statusOptions[0].status);
+      return;
+    }
+
+    // Mixed statuses on this page — ask which status to select.
+    setBulkStatusPickerOptions(statusOptions);
+    setBulkStatusPickerOpen(true);
+  }, [filteredData, getPageStatusCounts, selectBulkRowsByStatus, selectedRowIds]);
+
+  const clearBulkSelection = useCallback(() => {
+    setSelectedRowIds(new Set());
+    setBulkStatusPickerOpen(false);
+    setBulkStatusPickerOptions([]);
+  }, []);
+
+  useEffect(() => {
+    setSelectedRowIds(new Set());
+    setBulkStatusPickerOpen(false);
+    setBulkStatusPickerOptions([]);
+  }, [pagination.currentPage, effectiveApiEndpoint]);
+
+  const rowSupportsBulkAction = useCallback(
+    (row: any, button: { statusValue: string; targetAttribute?: string }) => {
+      const key = bulkActionButtonKey(button);
+      const workflowMatch = getRowWorkflowButtons(row).some((btn) => bulkActionButtonKey(btn) === key);
+      if (workflowMatch) return true;
+      return effectiveStatusButtons.some((btn) => bulkActionButtonKey(btn) === key);
+    },
+    [effectiveStatusButtons, getRowWorkflowButtons]
+  );
+
+  const bulkActionButtons = useMemo(() => {
+    if (!bulkSelectionEnabled || selectedRowIds.size === 0) return [];
+
+    const selectedRows = filteredData.filter((row) => {
+      const rowId = normalizeBulkRowId(row?.id);
+      return rowId != null && selectedRowIds.has(rowId);
+    });
+    if (selectedRows.length === 0) return [];
+
+    const perRowButtons = selectedRows.map((row) => getRowWorkflowButtons(row));
+    const configured = filterDuplicateInventoryWorkflowButtons(effectiveStatusButtons);
+    const candidateButtons = mergeBulkActionButtons([...perRowButtons, configured]);
+
+    return candidateButtons.filter((btn) =>
+      selectedRows.some((row) => rowSupportsBulkAction(row, btn))
+    );
+  }, [
+    bulkSelectionEnabled,
+    effectiveStatusButtons,
+    filteredData,
+    getRowWorkflowButtons,
+    mergeBulkActionButtons,
+    rowSupportsBulkAction,
+    selectedRowIds,
+  ]);
+
+  const patchInventoryRowStatus = useCallback(
+    async (
+      row: any,
+      button: { label: string; statusValue: string; targetAttribute?: string; statusText?: string }
+    ) => {
+      if (!effectiveApiEndpoint || !row?.id) return null;
+      const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
+      const url = `${base}/${row.id}/`;
+      const existingData = (row.data as Record<string, unknown>) || {};
+      const targetAttribute = (button.targetAttribute || 'status').trim() || 'status';
+      const dataToSend: Record<string, unknown> = { ...existingData };
+      dataToSend[targetAttribute] = button.statusValue;
+      if (targetAttribute === 'status') {
+        dataToSend.status_text = (button.statusText ?? button.label ?? button.statusValue).trim();
+        applyInventoryCartStatusSideEffects({
+          previousStatus: existingData.status,
+          nextStatus: button.statusValue,
+          data: dataToSend,
+        });
+        if (String(button.statusValue).toUpperCase().replace(/\s+/g, '_') === 'IN_SHIPPING') {
+          dataToSend.shipment_status = advanceShipmentStatusForTracking(
+            dataToSend.shipment_status,
+            true
+          );
+        }
+      }
+      const response = await apiClient.patch(url, { data: dataToSend });
+      return response.data;
+    },
+    [effectiveApiEndpoint]
+  );
+
+  const handleBulkStatusAction = useCallback(
+    async (button: {
+      label: string;
+      statusValue: string;
+      targetAttribute?: string;
+      statusText?: string;
+    }) => {
+      if (!bulkSelectionEnabled || selectedRowIds.size === 0) return;
+      const applyingKey = bulkActionButtonKey(button);
+      const selectedRows = filteredData.filter((row) => {
+        const rowId = normalizeBulkRowId(row?.id);
+        return rowId != null && selectedRowIds.has(rowId);
+      });
+      const eligibleRows = selectedRows.filter((row) => rowSupportsBulkAction(row, button));
+      const skippedCount = selectedRows.length - eligibleRows.length;
+
+      if (eligibleRows.length === 0) {
+        toast({
+          title: 'No eligible rows',
+          description: `None of the selected requests can be updated with "${formatBulkActionLabel(button.label, selectedRows.length)}".`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setBulkApplying(applyingKey);
+      const results = await Promise.allSettled(
+        eligibleRows.map((row) => patchInventoryRowStatus(row, button))
+      );
+
+      let successCount = 0;
+      let failCount = 0;
+      const updatedById = new Map<string, any>();
+
+      results.forEach((result, index) => {
+        const row = eligibleRows[index];
+        const rowId = normalizeBulkRowId(row?.id);
+        if (result.status === 'fulfilled' && result.value && rowId != null) {
+          updatedById.set(rowId, result.value);
+          successCount += 1;
+        } else {
+          failCount += 1;
+        }
+      });
+
+      if (updatedById.size > 0) {
+        const applyUpdate = (r: any) => {
+          const rowId = normalizeBulkRowId(r?.id);
+          if (rowId == null) return r;
+          const updated = updatedById.get(rowId);
+          if (!updated) return r;
+          const targetAttribute = (button.targetAttribute || 'status').trim() || 'status';
+          const existingData = (r.data as Record<string, unknown>) || {};
+          const nextData: Record<string, unknown> = {
+            ...existingData,
+            ...(updated?.data && typeof updated.data === 'object'
+              ? (updated.data as Record<string, unknown>)
+              : { [targetAttribute]: button.statusValue }),
+          };
+          if (nextData[targetAttribute] == null) {
+            nextData[targetAttribute] = button.statusValue;
+          }
+          if (targetAttribute === 'status') {
+            nextData.status_text =
+              nextData.status_text ??
+              (button.statusText ?? button.label ?? button.statusValue).trim();
+          }
+          const merged: Record<string, unknown> = {
+            ...r,
+            ...updated,
+            data: nextData,
+            [targetAttribute]: nextData[targetAttribute],
+          };
+          if (targetAttribute === 'status') {
+            merged.status = nextData.status;
+            merged.status_text = nextData.status_text;
+            if (nextData.shipment_status != null) {
+              merged.shipment_status = nextData.shipment_status;
+            }
+          }
+          return transformLeadData(merged, config);
+        };
+        setData((prev) => prev.map(applyUpdate));
+        setFilteredData((prev) => prev.map(applyUpdate));
+      }
+
+      setBulkApplying(null);
+      const actionLabel = formatBulkActionLabel(button.label, selectedRows.length);
+
+      if (successCount > 0 && failCount === 0 && skippedCount === 0) {
+        toast({
+          title: 'Updated',
+          description: `${successCount} request${successCount === 1 ? '' : 's'} updated with "${actionLabel}".`,
+        });
+        setSelectedRowIds(new Set());
+      } else if (successCount > 0) {
+        const parts: string[] = [`${successCount} updated with "${actionLabel}"`];
+        if (failCount > 0) parts.push(`${failCount} failed`);
+        if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+        toast({
+          title: failCount > 0 ? 'Partially updated' : 'Updated',
+          description: `${parts.join(', ')}.`,
+          variant: failCount > 0 ? 'destructive' : undefined,
+        });
+        if (failCount === 0) setSelectedRowIds(new Set());
+      } else {
+        toast({
+          title: 'Update failed',
+          description: 'Could not update the selected requests.',
+          variant: 'destructive',
+        });
+      }
+
+      if (successCount > 0) {
+        try {
+          await fetchFilteredDataRef.current?.(undefined, undefined, {
+            silent: true,
+            keepPage: true,
+          });
+        } catch (e) {
+          console.error('Error refreshing table after bulk status update', e);
+        }
+      }
+    },
+    [
+      bulkSelectionEnabled,
+      config,
+      filteredData,
+      patchInventoryRowStatus,
+      rowSupportsBulkAction,
+      selectedRowIds,
+      toast,
+    ]
+  );
+
   // Build table columns from config only. No auto-appended Status column.
-  // Status column appears only if you add a column with key "status" in the Columns config (shows data.status).
-  // "Status action buttons" in config are used only in the row-click modal (record detail / form modal), not as a table column.
   const tableColumns: Column[] = useMemo(() => {
     const leftAlignKeys = new Set([
+      'item_name',
+      'item_name_freeform',
       'specifications',
       'comments',
-      'requester_name',
       'department',
       'project_purpose',
     ]);
-    const mapped = (config?.columns ?? [])
+    const isMyRequestTable = isMyRequestPage;
+    const configuredColumns = isMyRequestTable
+      ? excludeInventoryTrackColumn(config?.columns)
+      : config?.columns;
+    const mapped = (configuredColumns ?? [])
       .filter((col) => {
         const key = String(col.key || '').trim();
         return key !== 'tracking_details' && key !== 'tracking_number' && key !== 'courier_name';
@@ -1207,11 +1899,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       actionApiMethod: col.actionApiMethod,
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
-      // Keep date / short columns centered under stacked headers (e.g. ETA).
       align: (leftAlignKeys.has(String(col.key || '')) ? 'left' : 'center') as Column['align'],
+      ...(config?.tableType === 'itemsTable' && isInventoryRequestTable
+        ? procurementColumnLayout(resolvedKey)
+        : {}),
     };
     });
-    // Drop duplicate ETA if both requirement date and eta were in config.
     const deduped: typeof mapped = [];
     const seenKeys = new Set<string>();
     for (const col of mapped) {
@@ -1236,11 +1929,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           accessor: REQUESTER_EDIT_COLUMN_ACCESSOR,
           type: 'action',
           align: 'center',
+          ...procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR),
         });
       }
     }
     return base;
-  }, [config?.columns, config?.tableType, effectiveStatusButtons, isInPageBuilder, isInventoryRequestTable]);
+  }, [config?.columns, config?.tableType, effectiveStatusButtons, inventoryTableKind, isInPageBuilder, isInventoryRequestTable, isMyRequestPage]);
 
   // Get unique values for filters
   const getUniqueLeadStatuses = () => {
@@ -1265,21 +1959,30 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   };
 
   // Apply filters using the records endpoint
-  const fetchFilteredData = async (requestSequence?: number, queryParams?: URLSearchParams) => {
-    try {
-      setTableLoading(true);
+  const fetchFilteredData = async (
+    requestSequence?: number,
+    queryParams?: URLSearchParams,
+    options?: { silent?: boolean; keepPage?: boolean },
+  ) => {
+    const silent = options?.silent === true;
+    if (silent && (listFetchInFlightRef.current || searchTimeoutRef.current)) {
+      return;
+    }
 
-      // Cancel any previous request
-      if (abortControllerRef.current) {
+    const abortController = new AbortController();
+    listFetchInFlightRef.current = true;
+    try {
+      if (!silent) setTableLoading(true);
+
+      if (!silent && abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      if (!silent) {
+        abortControllerRef.current = abortController;
+      }
 
       if (!effectiveApiEndpoint) {
         console.warn('LeadTableComponent: apiEndpoint is not configured.');
-        setTableLoading(false);
         return;
       }
 
@@ -1289,14 +1992,29 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Build query parameters
       let params: URLSearchParams;
 
-      // Use new dynamic filter system if filters are configured
+      // If it's an Unmannd/inventory request table and keepPage is not explicitly provided, 
+      // default to keeping the current page so edits don't bounce the user back to Page 1.
+      const shouldKeepPage = options?.keepPage || isInventoryRequestTable;
+
+      const page = shouldKeepPage
+        ? String(paginationRef.current.currentPage || 1)
+        : '1';
+      const pageSize = String(paginationRef.current.pageSize || 10);
+      const currentSearch = (latestSearchValueRef.current || searchTerm).trim();
+
       if (queryParams) {
         params = queryParams;
       } else if (hasActiveFilters) {
-        params = filterService!.generateQueryParams(filterState.values);
+        const filterValues = { ...filterState.values };
+        if (currentSearch) {
+          filterValues.search = currentSearch;
+        } else {
+          delete filterValues.search;
+        }
+        params = filterService!.generateQueryParams(filterValues);
         // Add pagination parameters for both systems
-        params.append('page', '1');
-        params.append('page_size', '10');
+        params.append('page', page);
+        params.append('page_size', pageSize);
       } else {
         // Fallback to legacy filter system
         params = new URLSearchParams();
@@ -1338,16 +2056,16 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         }
 
         // Include search and search_fields even when dynamic filters are not configured
-        if (searchTerm && searchTerm.trim() !== '') {
-          params.append('search', searchTerm.trim());
+        if (currentSearch) {
+          params.append('search', currentSearch);
           if (config?.searchFields) {
             params.append('search_fields', config.searchFields);
           }
         }
         
         // Add pagination parameters for both systems
-        params.append('page', '1');
-        params.append('page_size', '10');
+        params.append('page', page);
+        params.append('page_size', pageSize);
       }
 
       // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
@@ -1405,9 +2123,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       console.error('Error applying filters:', error);
       toast({ title: 'Error', description: 'Failed to apply filters', variant: 'destructive' });
     } finally {
-      setTableLoading(false);
+      listFetchInFlightRef.current = false;
+      if (!silent && abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+      if (!silent) setTableLoading(false);
     }
   };
+  fetchFilteredDataRef.current = fetchFilteredData;
 
   // Reset filters
   const resetFilters = async () => {
@@ -1509,8 +2232,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
   };
 
-  // Store the latest search value
-  const latestSearchValueRef = useRef<string>('');
   const lastApiCallTimeRef = useRef<number>(0);
   const MIN_TIME_BETWEEN_CALLS = 1000;
 
@@ -1528,6 +2249,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
 
     searchTimeoutRef.current = setTimeout(() => {
+      searchTimeoutRef.current = null;
       const finalSearchValue = latestSearchValueRef.current;
       const now = Date.now();
       const timeSinceLastCall = now - lastApiCallTimeRef.current;
@@ -1595,15 +2317,63 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }, 1000);
   }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
 
-  const refreshLeadsFromRealtime = useCallback(() => {
-    if (!session?.access_token) return;
-    void fetchFilteredData();
-  }, [session?.access_token, fetchFilteredData]);
+  useRecordUpdated(
+    (payload: RecordUpdatedPayload) => {
+      if (!session?.access_token) return;
+      if (searchTimeoutRef.current) return;
 
-  useRecordUpdated(refreshLeadsFromRealtime, {
-    entityType: 'lead',
-    enabled: !config?.entityType || config.entityType === 'lead',
-  });
+      const recordId = payload.record_id != null ? String(payload.record_id) : '';
+      if (!recordId) return;
+
+      const matches = (row: any) => {
+        const id = row?.id != null ? String(row.id) : '';
+        const rid = row?.record_id != null ? String(row.record_id) : '';
+        return id === recordId || rid === recordId;
+      };
+
+      const patchRow = (row: any) => {
+        const stage =
+          payload.lead_stage != null && String(payload.lead_stage).trim()
+            ? String(payload.lead_stage)
+            : undefined;
+        const nextData =
+          payload.data && typeof payload.data === 'object'
+            ? { ...(row.data && typeof row.data === 'object' ? row.data : {}), ...payload.data }
+            : row.data;
+        return {
+          ...row,
+          ...(stage ? { lead_stage: stage, status: stage } : {}),
+          ...(payload.assigned_to !== undefined ? { assigned_to: payload.assigned_to } : {}),
+          ...(nextData !== undefined ? { data: nextData } : {}),
+        };
+      };
+
+      let found = false;
+      const patchList = (prev: any[]) => {
+        const idx = prev.findIndex(matches);
+        if (idx < 0) return prev;
+        found = true;
+        const next = prev.slice();
+        next[idx] = patchRow(prev[idx]);
+        return next;
+      };
+      setFilteredData(patchList);
+      setData(patchList);
+
+      if (found || !payload.created) return;
+      if (createdRefreshTimerRef.current != null) {
+        window.clearTimeout(createdRefreshTimerRef.current);
+      }
+      createdRefreshTimerRef.current = window.setTimeout(() => {
+        createdRefreshTimerRef.current = null;
+        void fetchFilteredData(undefined, undefined, { silent: true, keepPage: true });
+      }, REALTIME_LIST_DEBOUNCE_MS);
+    },
+    {
+      entityType: 'lead',
+      enabled: !config?.entityType || config.entityType === 'lead',
+    },
+  );
 
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
@@ -1759,6 +2529,101 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     effectiveFilters,
     removeAssignedToForGM,
   ]);
+
+  /** Jump to an absolute page number (typed in the pagination input). */
+  const handleGoToPage = useCallback(
+    async (pageNum: number) => {
+      const totalPages = Math.max(
+        1,
+        pagination.numberOfPages ||
+          (pagination.pageSize > 0
+            ? Math.ceil((pagination.totalCount || 0) / pagination.pageSize)
+            : 1)
+      );
+      const target = Math.min(Math.max(1, Math.trunc(pageNum)), totalPages);
+      if (!Number.isFinite(target) || target === pagination.currentPage) {
+        return;
+      }
+
+      try {
+        setTableLoading(true);
+
+        let url: string | null = null;
+        const linkSource = pagination.nextPageLink || pagination.previousPageLink;
+        if (linkSource) {
+          try {
+            const absolute = linkSource.startsWith('http')
+              ? linkSource
+              : `${window.location.origin}${linkSource.startsWith('/') ? '' : '/'}${linkSource}`;
+            const u = new URL(absolute);
+            u.searchParams.set('page', String(target));
+            url = linkSource.startsWith('http')
+              ? u.toString()
+              : `${u.pathname}${u.search}`;
+          } catch {
+            url = null;
+          }
+        }
+
+        if (!url) {
+          const built = buildInitialRecordsParams();
+          if (!built) return;
+          built.params.set('page', String(target));
+          built.params.set('page_size', String(pagination.pageSize || 10));
+          if (searchTerm && searchTerm.trim() !== '') {
+            built.params.set('search', searchTerm.trim());
+            if (config?.searchFields) {
+              built.params.set('search_fields', config.searchFields);
+            }
+          }
+          url = buildUrlWithParams(built.endpoint, built.params);
+          updateURL(built.params);
+        }
+
+        const response = await apiClient.get(url);
+        const responseData = response.data;
+        const leads = responseData.data || responseData.results || [];
+        const pageMeta = responseData.page_meta;
+        const transformedData = leads.map((lead: any) => transformLeadData(lead, config));
+
+        setData(transformedData);
+        setFilteredData(transformedData);
+
+        if (pageMeta) {
+          setPagination({
+            totalCount: pageMeta.total_count || 0,
+            numberOfPages: pageMeta.number_of_pages || 0,
+            currentPage: pageMeta.current_page || target,
+            pageSize: pageMeta.page_size || pagination.pageSize || 10,
+            nextPageLink: pageMeta.next_page_link || null,
+            previousPageLink: pageMeta.previous_page_link || null,
+          });
+        } else {
+          setPagination((prev) => ({ ...prev, currentPage: target }));
+        }
+      } catch (error) {
+        console.error('Error jumping to page:', error);
+        toast({ title: 'Error', description: 'Failed to load that page', variant: 'destructive' });
+      } finally {
+        setTableLoading(false);
+      }
+    },
+    [
+      apiClient,
+      buildInitialRecordsParams,
+      buildUrlWithParams,
+      config,
+      pagination.currentPage,
+      pagination.numberOfPages,
+      pagination.nextPageLink,
+      pagination.pageSize,
+      pagination.previousPageLink,
+      pagination.totalCount,
+      searchTerm,
+      toast,
+      updateURL,
+    ]
+  );
 
   const initialRecordsFetchKey = useMemo(() => {
     if (!session?.access_token || !membershipLoaded || config?.showFallbackOnly) {
@@ -1916,6 +2781,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
+      if (createdRefreshTimerRef.current != null) {
+        window.clearTimeout(createdRefreshTimerRef.current);
+        createdRefreshTimerRef.current = null;
+      }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -1957,6 +2826,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     renderCell,
     handlePreviousPage,
     handleNextPage,
+    handleGoToPage,
     isLeadModalOpen,
     setIsLeadModalOpen,
     setSelectedLead,
@@ -1978,6 +2848,21 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     isCustomModalOpen,
     setIsCustomModalOpen,
     apiClient,
+    bulkSelectionEnabled,
+    selectedRowIds,
+    selectedRowCount,
+    bulkSelectionStatus,
+    bulkActionButtons,
+    bulkApplying,
+    canSelectBulkRow,
+    toggleBulkRowSelection,
+    toggleBulkSelectAll,
+    clearBulkSelection,
+    handleBulkStatusAction,
+    bulkStatusPickerOpen,
+    setBulkStatusPickerOpen,
+    bulkStatusPickerOptions,
+    selectBulkRowsByStatus,
   };
 }
 

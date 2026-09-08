@@ -1,8 +1,9 @@
 /** Presentational JSX for the lead table. */
 
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X } from 'lucide-react';
+import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X, Loader2 } from 'lucide-react';
 import LeadCardCarousel from '../lead-card-carousel';
 import { RecordDetailModal } from '../record-detail-modal';
 import { InventoryFormEditModal } from '../inventory-form-edit-modal';
@@ -19,6 +20,14 @@ import {
   DEFAULT_PAYMENT_MODAL_FIELDS,
 } from './constants';
 import type { LeadTableModel } from './useLeadTable';
+import {
+  formatBulkActionLabel,
+  formatInventoryTableToolbarTitle,
+  inferInventoryTableKindFromPageName,
+  TABLE_COMPONENT_KIND_MAP,
+} from './utils';
+import { usePageDisplayTitle } from './InventoryTablePageContext';
+import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -56,6 +65,7 @@ export function LeadTableView(props: LeadTableModel) {
     renderCell,
     handlePreviousPage,
     handleNextPage,
+    handleGoToPage,
     isLeadModalOpen,
     setIsLeadModalOpen,
     setSelectedLead,
@@ -77,10 +87,46 @@ export function LeadTableView(props: LeadTableModel) {
     isCustomModalOpen,
     setIsCustomModalOpen,
     apiClient,
+    bulkSelectionEnabled,
+    selectedRowIds,
+    selectedRowCount,
+    bulkSelectionStatus,
+    bulkActionButtons,
+    bulkApplying,
+    canSelectBulkRow,
+    toggleBulkRowSelection,
+    toggleBulkSelectAll,
+    clearBulkSelection,
+    handleBulkStatusAction,
+    bulkStatusPickerOpen,
+    setBulkStatusPickerOpen,
+    bulkStatusPickerOptions,
+    selectBulkRowsByStatus,
   } = props;
 
-  // DYNAMIC TITLE LOGIC based on URL path
-  const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  // Row navigation for the detail modals: lets users page through filteredData
+  // without closing the modal, scrolling back to the table, and reopening the next row.
+  const selectedRecordIndex = useMemo(() => {
+    if (selectedRecord?.id == null) return -1;
+    return filteredData.findIndex((r: any) => r.id === selectedRecord.id);
+  }, [filteredData, selectedRecord]);
+
+  const handleNavigateRecord = useCallback(
+    (direction: 'prev' | 'next') => {
+      if (selectedRecordIndex === -1) return;
+      const nextIndex = direction === 'next' ? selectedRecordIndex + 1 : selectedRecordIndex - 1;
+      if (nextIndex < 0 || nextIndex >= filteredData.length) return;
+      setSelectedRecord(filteredData[nextIndex]);
+    },
+    [selectedRecordIndex, filteredData, setSelectedRecord]
+  );
+
+  const navigationPosition =
+    selectedRecordIndex !== -1 ? { index: selectedRecordIndex, total: filteredData.length } : undefined;
+  const hasPreviousRecord = selectedRecordIndex > 0;
+  const hasNextRecord = selectedRecordIndex !== -1 && selectedRecordIndex < filteredData.length - 1;
+
+  // Used for Unmannd procurement table chrome (navy headers).
   const endpointForTitle = String(config?.apiEndpoint || effectiveApiEndpoint || '');
   const forceEntityType = String(
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams
@@ -100,30 +146,27 @@ export function LeadTableView(props: LeadTableModel) {
           )
         )
     );
-  // Unmannd / inventory tables reuse LeadTable; do not show the CRM default "All Leads".
-  const configuredTitle = (config?.title || '').trim();
-  let displayTitle =
-    isInventoryLikeForTitle &&
-    (!configuredTitle || configuredTitle.toLowerCase() === 'all leads')
-      ? undefined
-      : configuredTitle || undefined;
-
-  if (!displayTitle && !isInventoryLikeForTitle) {
-    if (pathname.includes('follow')) {
-      displayTitle = "Follow Up Leads";
-    } else if (pathname.includes('pending')) {
-      displayTitle = "Pending Leads";
-    } else {
-      displayTitle = "All Leads";
-    }
-  }
 
   // Navy header/border for Procurement / My Request / Pending Approval / etc.
   // CRM All Leads and other default tables keep black headers.
+  // Dashboard/main pages use #0E3777 (popup chrome uses #1A44A1).
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
-  const procurementHeaderBg = 'bg-[#1A3673]';
-  const procurementTableFrame = 'overflow-hidden rounded-lg border border-[#1A3673]';
+  const procurementHeaderBg = 'bg-[#0E3777]';
+  const procurementTableFrame = 'overflow-hidden mb-3';
+  const pageChromeTitle = usePageDisplayTitle().trim();
+  const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
+  const inventoryTableKindForTitle =
+    inferInventoryTableKindFromPageName(pageChromeTitle) ||
+    TABLE_COMPONENT_KIND_MAP[pageComponentType || ''] ||
+    (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind;
+  const pageTitleText =
+    (isProcurementStyleTable
+      ? formatInventoryTableToolbarTitle(pageChromeTitle, inventoryTableKindForTitle)
+      : pageChromeTitle || (config?.title || '').trim()) || pageChromeTitle;
+  const pageTitleDisplay = isProcurementStyleTable
+    ? pageTitleText.toUpperCase()
+    : pageTitleText;
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
@@ -134,6 +177,31 @@ export function LeadTableView(props: LeadTableModel) {
     isUnmanndEntity &&
     effectiveDetailMode !== 'receive_shipments' &&
     effectiveDetailMode !== 'inventory_payment_modal';
+
+  const totalPages = Math.max(
+    1,
+    pagination.numberOfPages ||
+      (pagination.pageSize > 0
+        ? Math.ceil((pagination.totalCount || 0) / pagination.pageSize)
+        : 1)
+  );
+  const [pageInput, setPageInput] = useState(
+    String(pagination.currentPage).padStart(2, '0')
+  );
+
+  useEffect(() => {
+    setPageInput(String(pagination.currentPage).padStart(2, '0'));
+  }, [pagination.currentPage]);
+
+  const commitPageInput = () => {
+    const parsed = Number.parseInt(pageInput.replace(/\D/g, ''), 10);
+    if (!Number.isFinite(parsed)) {
+      setPageInput(String(pagination.currentPage).padStart(2, '0'));
+      return;
+    }
+    void handleGoToPage(parsed);
+    setPageInput(String(Math.min(Math.max(1, parsed), totalPages)).padStart(2, '0'));
+  };
 
   if (loading) {
     return (
@@ -155,69 +223,66 @@ export function LeadTableView(props: LeadTableModel) {
     );
   }
 
-  const tableTitle =
-    isInventoryLikeForTitle && configuredTitle.toLowerCase() === 'all leads'
-      ? ''
-      : configuredTitle;
-
   return (
-    <>
-      {/* Mobile Page Title - Dynamically changes based on URL */}
-      {displayTitle ? (
-        <div
-          className={
-            isProcurementStyleTable
-              ? 'md:hidden w-full pb-1.5 px-3 pt-2'
-              : 'md:hidden w-full pb-3 px-4 pt-4'
-          }
-        >
-          <h2
-            className={
-              isProcurementStyleTable
-                ? 'text-2xl font-bold uppercase tracking-tight text-[#0B1F4D]'
-                : 'text-2xl font-bold text-gray-900'
-            }
-          >
-            {displayTitle}
-          </h2>
-        </div>
-      ) : null}
-
+    <div
+      className={
+        isProcurementStyleTable
+          ? 'flex h-full min-h-0 w-full flex-col'
+          : undefined
+      }
+    >
       <div
         className={
           isProcurementStyleTable
-            ? 'w-full max-w-full min-w-0 border border-[#1A3673] rounded-lg bg-white px-1.5 py-1'
+            ? 'flex min-h-0 w-full max-w-full flex-1 flex-col bg-white px-1 py-1 sm:px-2'
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — tight under page header so All Requests fits with less scroll */}
+        {/* Toolbar — title left; search + Filters right.
+            On mobile, title takes its own row so it isn't squeezed away by flex-nowrap + min-width search. */}
         <div
-          className={`flex items-center flex-wrap ${
-            isProcurementStyleTable ? 'gap-2' : 'gap-3'
-          } ${tableTitle || displayTitle ? 'justify-between' : 'justify-end'}`}
+          className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3 ${
+            pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
+          }`}
         >
-          {(displayTitle || tableTitle) ? (
-            <h5 className="hidden md:block !m-0 !text-sm !font-semibold !leading-none text-gray-900">
-              {displayTitle || tableTitle}
-            </h5>
+          {pageTitleDisplay ? (
+            <h1
+              className={
+                isProcurementStyleTable
+                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900 max-sm:text-2xl'
+                  : '!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900'
+              }
+            >
+              {pageTitleDisplay}
+            </h1>
           ) : null}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 sm:mt-1.5">
             <div
               className={`relative flex-1 max-w-sm ${
-                isProcurementStyleTable ? 'min-w-[160px]' : 'min-w-[200px]'
+                isProcurementStyleTable ? 'min-w-[180px]' : 'min-w-[200px]'
               }`}
             >
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search
+                className={
+                  isProcurementStyleTable
+                    ? 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#1A44A1]'
+                    : 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400'
+                }
+              />
               <Input
                 type="text"
                 placeholder="Search..."
                 value={displaySearchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className={isProcurementStyleTable ? 'pl-9 h-7 text-sm' : 'pl-9 h-8'}
+                className={
+                  isProcurementStyleTable
+                    ? 'h-9 rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm'
+                    : 'pl-9 h-8 rounded-md'
+                }
               />
             </div>
             <CustomButton
-              variant="outline"
+              variant={isProcurementStyleTable ? 'default' : 'outline'}
               size="sm"
               icon={<Filter className="h-4 w-4" />}
               onClick={(e) => {
@@ -225,22 +290,78 @@ export function LeadTableView(props: LeadTableModel) {
                 setShowFilters(!showFilters);
               }}
               className={
-                isProcurementStyleTable && showFilters
-                  ? 'border-[#1A3673] bg-[#1A3673] text-white hover:bg-[#152c5e] hover:text-white'
+                isProcurementStyleTable
+                  ? showFilters
+                    ? 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[#0E3777] px-3 text-white shadow-[0_4px_10px_rgba(10,94,205,0.35)] hover:bg-[#0b2d61] hover:text-white'
+                    : 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-3 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white hover:shadow-[0_4px_10px_rgba(10,94,205,0.28)]'
                   : undefined
               }
             >
-              {showFilters ? 'Hide Filters' : 'Show Filters'}
+              {isProcurementStyleTable
+                ? 'Filters'
+                : showFilters
+                  ? 'Hide Filters'
+                  : 'Show Filters'}
             </CustomButton>
           </div>
         </div>
 
+        {bulkSelectionEnabled && selectedRowCount > 0 && bulkActionButtons.length > 0 ? (
+          <div
+            className={
+              isProcurementStyleTable
+                ? 'mb-2 flex shrink-0 flex-wrap items-center gap-3 rounded-md border border-[#0E3777]/20 bg-[#F4F8FF] px-3 py-2'
+                : 'mb-2 flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2'
+            }
+          >
+            <span className="text-sm font-medium text-gray-800">
+              {selectedRowCount} selected
+              {bulkSelectionStatus ? (
+                <span className="ml-1 font-normal text-gray-500">
+                  ({bulkSelectionStatus.replace(/_/g, ' ')})
+                </span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              className="text-sm text-[#1A44A1] underline-offset-2 hover:underline"
+              onClick={clearBulkSelection}
+            >
+              Clear
+            </button>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {bulkActionButtons.map((btn) => {
+                const applyingKey = `${btn.statusValue}::${(btn.targetAttribute || 'status').trim() || 'status'}`;
+                const applyingThis = bulkApplying === applyingKey;
+                const bulkLabel = formatBulkActionLabel(btn.label, selectedRowCount);
+                return (
+                  <Button
+                    key={`${btn.label}-${btn.statusValue}-${btn.targetAttribute || 'status'}`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-9 gap-1.5 rounded-md px-4 font-semibold',
+                      urgencyToneButtonClassName(btn.statusValue, applyingThis)
+                    )}
+                    disabled={bulkApplying != null}
+                    onClick={() => void handleBulkStatusAction(btn)}
+                  >
+                    {applyingThis ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                    {applyingThis ? 'Updating…' : bulkLabel}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         {showFilters && (
-          <div className={isProcurementStyleTable ? 'mt-1.5 mb-1' : 'mt-2 mb-1.5'}>
+          <div className={isProcurementStyleTable ? 'mt-1.5 mb-2 shrink-0' : 'mt-2 mb-1.5'}>
             <div
               className={
                 isProcurementStyleTable
-                  ? 'rounded-lg border border-[#1A3673] bg-[#1A3673] p-3 text-white'
+                  ? 'rounded-lg border border-[#0E3777] bg-[#0E3777] p-3 text-white'
                   : 'rounded-lg border bg-gray-50 p-2.5'
               }
             >
@@ -290,9 +411,9 @@ export function LeadTableView(props: LeadTableModel) {
                             '[&>div.grid_button]:!bg-white [&>div.grid_button]:!text-gray-900',
                             '[&>div.grid_button_span]:!text-gray-900',
                             // Apply Filters — white on navy (was nearly invisible as dark-on-navy)
-                            '[&>div.flex>button:first-child]:!bg-white [&>div.flex>button:first-child]:!text-[#1A3673]',
+                            '[&>div.flex>button:first-child]:!bg-white [&>div.flex>button:first-child]:!text-[#0E3777]',
                             '[&>div.flex>button:first-child]:hover:!bg-white/90',
-                            '[&>div.flex>button:first-child]:disabled:!bg-white/50 [&>div.flex>button:first-child]:disabled:!text-[#1A3673]/60',
+                            '[&>div.flex>button:first-child]:disabled:!bg-white/50 [&>div.flex>button:first-child]:disabled:!text-[#0E3777]/60',
                             // Clear All — light outline on navy
                             '[&>div.flex>button:not(:first-child)]:!border-white/70 [&>div.flex>button:not(:first-child)]:!bg-transparent',
                             '[&>div.flex>button:not(:first-child)]:!text-white [&>div.flex>button:not(:first-child)]:hover:!bg-white/10',
@@ -331,70 +452,72 @@ export function LeadTableView(props: LeadTableModel) {
           </div>
         )}
 
-        {/* Mobile Card View */}
-        <div className="md:hidden space-y-4 mt-1.5">
-          {filteredData.map((item, index) => {
-            const lead = item;
+        {/* Mobile Card View - Only for Praja CRM */}
+        {!isProcurementStyleTable && (
+          <div className="md:hidden space-y-4 mt-1.5">
+            {filteredData.map((item, index) => {
+              const lead = item;
 
-            return (
-              <div
-                key={lead.id || index}
-                className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
-                onClick={() => {
-                  if (!isInPageBuilder && effectiveDetailMode !== 'none') {
-                    handleRowClick(item);
-                  }
-                }}
-              >
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <div>
-                    <p className="text-xs text-gray-500">Name</p>
-                    <p className="font-semibold">{lead.name}</p>
-                  </div>
+              return (
+                <div
+                  key={lead.id || index}
+                  className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    if (!isInPageBuilder && effectiveDetailMode !== 'none') {
+                      handleRowClick(item);
+                    }
+                  }}
+                >
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Name</p>
+                      <p className="font-semibold">{lead.name}</p>
+                    </div>
 
-                  <div>
-                    <p className="text-xs text-gray-500">Praja ID</p>
-                    <p>{lead.praja_id}</p>
-                  </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Praja ID</p>
+                      <p>{lead.praja_id}</p>
+                    </div>
 
-                  <div>
-                    <p className="text-xs text-gray-500">Phone Number</p>
-                    <p>{lead.phone_number}</p>
-                  </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Phone Number</p>
+                      <p>{lead.phone_number}</p>
+                    </div>
 
-                  <div>
-                    <p className="text-xs text-gray-500">Party</p>
-                    <p>{lead.affiliated_party}</p>
-                  </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Party</p>
+                      <p>{lead.affiliated_party}</p>
+                    </div>
 
-                  <div className="col-span-2">
-                    <p className="text-xs text-gray-500">Lead Score</p>
-                    <p>{lead.lead_score}</p>
-                  </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Lead Score</p>
+                      <p>{lead.lead_score}</p>
+                    </div>
 
-                  <div className="col-span-2">
-                    <Button
-                      className="w-full mt-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedLead(item);
-                        setIsLeadModalOpen(true);
-                      }}
-                    >
-                      View Profile
-                    </Button>
+                    <div className="col-span-2">
+                      <Button
+                        className="w-full mt-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedLead(item);
+                          setIsLeadModalOpen(true);
+                        }}
+                      >
+                        View Profile
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
-        {/* Desktop Table */}
+        {/* Desktop / Responsive Table */}
         <div
           className={
             isProcurementStyleTable
-              ? 'hidden md:block w-full max-w-full min-w-0 relative mt-1'
+              ? 'relative mt-1 block min-h-0 w-full max-w-full flex-1 md:flex md:flex-col'
               : 'hidden md:block w-full max-w-full min-w-0 relative mt-1.5'
           }
         >
@@ -420,6 +543,9 @@ export function LeadTableView(props: LeadTableModel) {
               actionApiHeaders: col.actionApiHeaders,
               actionApiPayload: col.actionApiPayload,
               align: col.align,
+              width: col.width,
+              minWidth: col.minWidth,
+              maxWidth: col.maxWidth,
             })) as CustomTableColumn[]}
             data={filteredData}
             loading={tableLoading}
@@ -429,23 +555,63 @@ export function LeadTableView(props: LeadTableModel) {
             // Navy theme for Unmannd / procurement request tables only. All Leads & CRM stay black.
             headerBgColor={isProcurementStyleTable ? procurementHeaderBg : 'bg-black'}
             headerTextColor="text-white"
-            dense={isProcurementStyleTable}
+            dense={false}
+            comfortable={isProcurementStyleTable}
+            fillHeight={isProcurementStyleTable}
+            fitViewport={isProcurementStyleTable}
             className={isProcurementStyleTable ? procurementTableFrame : undefined}
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
+            rowSelection={
+              bulkSelectionEnabled
+                ? {
+                    selectedRowIds,
+                    onToggleRow: (row, selected) => toggleBulkRowSelection(row, selected),
+                    onToggleAll: toggleBulkSelectAll,
+                    canSelectRow: canSelectBulkRow,
+                  }
+                : undefined
+            }
           />
         </div>
 
-        {/* Server-side pagination — Previous/Next only (no page jump dropdown) */}
+        {/* Server-side pagination — editable page + Previous/Next */}
         {filteredData.length > 0 &&
-          (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1) && (
+          (pagination.nextPageLink || pagination.previousPageLink || pagination.currentPage > 1 || totalPages > 1) && (
             <div
               className={
                 isProcurementStyleTable
-                  ? 'flex justify-between items-center mt-1 pt-1 border-t border-gray-200'
+                  ? 'mt-auto -mx-1 flex shrink-0 items-center justify-end gap-4 border-t border-gray-300 px-1 pt-4 pb-1 sm:-mx-2 sm:px-2'
                   : 'flex justify-between items-center mt-2 pt-2 border-t border-gray-200'
               }
             >
-              <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
+              {isProcurementStyleTable ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    aria-label="Go to page"
+                    value={pageInput}
+                    disabled={tableLoading}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^\d]/g, '').slice(0, 4);
+                      setPageInput(raw);
+                    }}
+                    onBlur={commitPageInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitPageInput();
+                      }
+                    }}
+                    className="h-9 w-12 rounded-lg border-gray-200 bg-white px-1 text-center text-sm font-medium tabular-nums text-gray-900 shadow-none"
+                  />
+                  <span className="text-sm text-gray-500 tabular-nums">
+                    of {String(totalPages).padStart(2, '0')}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-sm text-gray-600">Page {pagination.currentPage}</span>
+              )}
 
               <div className="flex items-center gap-2">
                 <CustomButton
@@ -453,7 +619,11 @@ export function LeadTableView(props: LeadTableModel) {
                   size="sm"
                   onClick={handlePreviousPage}
                   disabled={!pagination.previousPageLink || tableLoading}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={
+                    isProcurementStyleTable
+                      ? 'h-9 rounded-full border-0 bg-gray-100 px-5 font-semibold text-gray-500 hover:bg-gray-200 hover:text-gray-600 disabled:opacity-60 disabled:cursor-not-allowed'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed'
+                  }
                 >
                   Previous
                 </CustomButton>
@@ -463,7 +633,11 @@ export function LeadTableView(props: LeadTableModel) {
                   size="sm"
                   onClick={handleNextPage}
                   disabled={!pagination.nextPageLink || tableLoading}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={
+                    isProcurementStyleTable
+                      ? 'h-9 rounded-full border-0 bg-gray-200 px-5 font-bold text-gray-900 hover:bg-gray-300 disabled:opacity-60 disabled:cursor-not-allowed'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 rounded-md px-4 py-1.5 h-auto disabled:opacity-50 disabled:cursor-not-allowed'
+                  }
                 >
                   Next
                 </CustomButton>
@@ -471,6 +645,33 @@ export function LeadTableView(props: LeadTableModel) {
             </div>
           )}
       </div>
+
+      <Dialog open={bulkStatusPickerOpen} onOpenChange={setBulkStatusPickerOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Select by status</DialogTitle>
+            <DialogDescription>
+              This page has requests with different statuses. Choose which status to select.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-2">
+            {bulkStatusPickerOptions.map((opt) => (
+              <Button
+                key={opt.status}
+                type="button"
+                variant="outline"
+                className="h-10 justify-between rounded-md px-4"
+                onClick={() => selectBulkRowsByStatus(opt.status)}
+              >
+                <span className="font-semibold uppercase tracking-wide">
+                  {opt.status.replace(/_/g, ' ')}
+                </span>
+                <span className="text-muted-foreground">{opt.count}</span>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Lead Modal with LeadCard */}
       <Dialog open={isLeadModalOpen} onOpenChange={(open) => {
@@ -483,7 +684,7 @@ export function LeadTableView(props: LeadTableModel) {
           leadCardRef.current = null;
         }
       }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0" hideCloseButton>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="sr-only">
             <DialogTitle>
               {selectedLead?.name || (selectedLead as any)?.data?.name || 'Lead Details'}
@@ -492,6 +693,7 @@ export function LeadTableView(props: LeadTableModel) {
               View and manage lead information
             </DialogDescription>
           </DialogHeader>
+
           {selectedLead && (() => {
             const transformLeadForCard = (lead: any) => {
               const originalLead = data.find(l => 
@@ -760,6 +962,10 @@ export function LeadTableView(props: LeadTableModel) {
               console.error('Error refreshing table after delete:', e);
             }
           }}
+          onNavigate={handleNavigateRecord}
+          hasPrevious={hasPreviousRecord}
+          hasNext={hasNextRecord}
+          navigationPosition={navigationPosition}
         />
       )}
 
@@ -852,6 +1058,10 @@ export function LeadTableView(props: LeadTableModel) {
               console.error('Error refreshing table after delete:', e);
             }
           }}
+          onNavigate={handleNavigateRecord}
+          hasPrevious={hasPreviousRecord}
+          hasNext={hasNextRecord}
+          navigationPosition={navigationPosition}
         />
       )}
 
@@ -981,6 +1191,6 @@ export function LeadTableView(props: LeadTableModel) {
           }}
         />
       )}
-    </>
+    </div>
   );
 }

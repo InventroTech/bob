@@ -21,6 +21,7 @@ import {
   type UserManagementCustomField,
 } from './userManagementConfig';
 import { ZohoMailConnectCard } from '@/features/integrations/components/ZohoMailConnectCard';
+import { cn } from '@/lib/utils';
 
 function SupportDailyDualDisplay({
   selfTrial,
@@ -245,6 +246,7 @@ export function AddUserView(props: AddUserModel) {
     showStateForm ||
     showDistrictForm ||
     showPartyForm;
+
   const renderManagerEditCell = (user: User) => (
     <div className="relative" ref={editManagerDropdownRef}>
       <div className="flex gap-1">

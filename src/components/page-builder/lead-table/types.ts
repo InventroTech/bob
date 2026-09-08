@@ -15,6 +15,9 @@ export interface Column {
   actionApiHeaders?: string;
   actionApiPayload?: string;
   align?: 'left' | 'center' | 'right';
+  width?: string;
+  minWidth?: string;
+  maxWidth?: string;
   /** For type status_buttons: buttons that set record data[targetAttribute] (default status). */
   statusButtons?: Array<{
     label: string;

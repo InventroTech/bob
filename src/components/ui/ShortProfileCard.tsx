@@ -52,9 +52,9 @@ const ShortProfileCard = ({
       className={cn(
         'flex min-w-0 flex-row',
         wrapName
-          ? 'max-w-[16rem] items-center sm:max-w-[20rem]'
+          ? 'w-full max-w-full min-w-0 items-center'
           : 'max-w-[14rem] items-center sm:max-w-[18rem]',
-        wrapName ? 'gap-2' : compact ? 'gap-2' : 'gap-3',
+        wrapName ? 'gap-3' : compact ? 'gap-2' : 'gap-3',
         className
       )}
     >
@@ -63,7 +63,7 @@ const ShortProfileCard = ({
           'relative shrink-0 overflow-hidden bg-gray-200 text-gray-600',
           'flex items-center justify-center',
           wrapName || useDefaultItemImage ? 'rounded-md' : 'rounded-full',
-          wrapName ? 'h-8 w-8' : compact ? 'h-9 w-9' : 'h-10 w-10'
+          wrapName ? 'h-11 w-11' : compact ? 'h-9 w-9' : 'h-10 w-10'
         )}
       >
         {showImage ? (
@@ -83,10 +83,10 @@ const ShortProfileCard = ({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden font-body text-left">
         <span
           className={cn(
-            'font-bold text-gray-900',
+            'text-gray-900',
             wrapName
-              ? 'text-sm leading-snug whitespace-normal break-words [overflow-wrap:anywhere] line-clamp-3'
-              : 'block truncate text-sm'
+              ? 'font-[Inter,sans-serif] text-[14px] font-medium leading-[20px] tracking-normal whitespace-normal break-words [overflow-wrap:anywhere] line-clamp-3'
+              : 'block truncate text-sm font-bold'
           )}
           title={nameTitle || name || undefined}
         >

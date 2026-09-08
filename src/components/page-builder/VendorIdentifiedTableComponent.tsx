@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { resolvePriorityFromRow } from '@/lib/inventory/priority';
+import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 export type VendorIdentifiedTableColumn = {
   key: string;
@@ -138,7 +139,13 @@ export const VendorIdentifiedTableComponent: React.FC<VendorIdentifiedTableProps
 
     return {
       ...(config || {}),
-      title: '',
+      inventoryTableKind: 'vendor_identified',
+      title:
+        resolveInventoryTableDisplayTitle({
+          configuredTitle: config?.title,
+          inventoryTableKind: 'vendor_identified',
+          pageDisplayName: config?.pageDisplayName,
+        }) || 'Vendor Identified',
       columns,
       entityType,
       tableType: config?.tableType === 'default' ? 'default' : 'itemsTable',

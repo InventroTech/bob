@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { useRecordUpdated } from "@/hooks/useRecordUpdated";
+import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from "@/hooks/useRecordUpdated";
 import { apiClient } from "@/lib/api";
 import {
   formatTicketSaveErrorMessage,
@@ -42,6 +42,7 @@ export function useTicketCarousel({
   const { user, session } = useAuth();
 
   const isInitialized = React.useRef(false);
+  const ticketStatsRefreshTimerRef = React.useRef<number | null>(null);
   const PERSIST_MAX_AGE_MS = 4 * 60 * 60 * 1000;
 
   //getting the persisted state from the session storage
@@ -536,7 +537,13 @@ export function useTicketCarousel({
     const interval = setInterval(() => {
       fetchTicketStats();
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (ticketStatsRefreshTimerRef.current != null) {
+        window.clearTimeout(ticketStatsRefreshTimerRef.current);
+        ticketStatsRefreshTimerRef.current = null;
+      }
+    };
   }, [showPendingCard, fetchTicketStats]);
 
   const fetchCurrentTicket = async () => {
@@ -600,7 +607,13 @@ export function useTicketCarousel({
         return;
       }
       if (showPendingCard) {
-        void fetchTicketStats();
+        if (ticketStatsRefreshTimerRef.current != null) {
+          window.clearTimeout(ticketStatsRefreshTimerRef.current);
+        }
+        ticketStatsRefreshTimerRef.current = window.setTimeout(() => {
+          ticketStatsRefreshTimerRef.current = null;
+          void fetchTicketStats();
+        }, REALTIME_LIST_DEBOUNCE_MS);
       }
     },
     [

@@ -437,6 +437,51 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                 </Button>
 
                 <div className="space-y-3">
+                  {/* 1st Position: Item Link (Optional) */}
+                  <div className="space-y-1.5">
+                    <Label className={itemFieldLabelClass}>
+                      Item link
+                    </Label>
+                    {wrapShake(
+                      itemKey(item.id, 'product_link'),
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Input
+                          type="url"
+                          placeholder="https://… (Amazon, Robu, vendor page, etc.)"
+                          value={item.product_link}
+                          onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
+                          className={cn('h-9 flex-1', inputBorderClass)}
+                          disabled={!!linkFetchLoadingByItemId[item.id]}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className={cn('h-9 shrink-0 gap-1.5', navyOutline)}
+                          disabled={
+                            !!linkFetchLoadingByItemId[item.id] ||
+                            !looksLikeProductUrl(item.product_link)
+                          }
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() =>
+                            void fetchDetailsFromProductLink(item.id, item.product_link, { force: true })
+                          }
+                        >
+                          {linkFetchLoadingByItemId[item.id] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                          Fetch details
+                        </Button>
+                      </div>
+                    )}
+                    <p className={helpTextClass}>
+                      Paste the product URL from the vendor site.
+                    </p>
+                  </div>
+
+                  {/* 2nd Position: Item Name (Mandatory) */}
                   <div className="space-y-1.5">
                     <Label className={itemFieldLabelClass}>
                       Item name <span className="text-destructive">*</span>
@@ -536,49 +581,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label className={itemFieldLabelClass}>
-                      Item link <span className="text-destructive">*</span>
-                    </Label>
-                    {wrapShake(
-                      itemKey(item.id, 'product_link'),
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Input
-                          type="url"
-                          placeholder="https://… (Amazon, Robu, vendor page, etc.)"
-                          value={item.product_link}
-                          onChange={(e) => updateItem(item.id, 'product_link', e.target.value)}
-                          className={cn('h-9 flex-1', inputBorderClass)}
-                          disabled={!!linkFetchLoadingByItemId[item.id]}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className={cn('h-9 shrink-0 gap-1.5', navyOutline)}
-                          disabled={
-                            !!linkFetchLoadingByItemId[item.id] ||
-                            !looksLikeProductUrl(item.product_link)
-                          }
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() =>
-                            void fetchDetailsFromProductLink(item.id, item.product_link, { force: true })
-                          }
-                        >
-                          {linkFetchLoadingByItemId[item.id] ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                          Fetch details
-                        </Button>
-                      </div>
-                    )}
-                    <p className={helpTextClass}>
-                      Paste the product URL from the vendor site.
-                    </p>
-                  </div>
-
+                  {/* Specifications (Restored as Mandatory with *) */}
                   <div className="space-y-1.5">
                     <Label className={itemFieldLabelClass}>
                       Specifications <span className="text-destructive">*</span>

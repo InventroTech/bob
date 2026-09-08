@@ -498,13 +498,26 @@ export const INVENTORY_REQUEST_TRACKING_COLUMNS = [
   { key: 'tracking_link', label: 'Track', type: 'link' as const },
 ] as const;
 
+/** Remove Track / tracking_link from a table column list (e.g. All Requests). */
+export function excludeInventoryTrackColumn<T extends { key: string; label?: string }>(
+  columns: T[] | undefined | null
+): T[] {
+  if (!Array.isArray(columns)) return [];
+  return columns.filter((c) => {
+    const key = String(c.key || '').trim().toLowerCase();
+    const label = String(c.label || '').trim().toLowerCase();
+    return key !== 'tracking_link' && key !== 'tracking_link_url' && label !== 'track';
+  });
+}
+
 /**
  * Merge tracking columns into an inventory_request table column list
  * without duplicating keys already configured.
  * Requirement Date is replaced by ETA (shown in that slot); ETA / Tracking No / Courier are not appended at the end.
  */
 export function mergeInventoryTrackingColumns<T extends { key: string; label?: string; type?: string }>(
-  columns: T[] | undefined | null
+  columns: T[] | undefined | null,
+  options?: { includeTrack?: boolean }
 ): Array<T | (typeof INVENTORY_REQUEST_TRACKING_COLUMNS)[number]> {
   const existing = Array.isArray(columns) ? [...columns] : [];
   const remapped = existing
@@ -542,7 +555,10 @@ export function mergeInventoryTrackingColumns<T extends { key: string; label?: s
   });
 
   const keys = new Set(cleaned.map((c) => String(c.key || '').trim()).filter(Boolean));
-  const extras = INVENTORY_REQUEST_TRACKING_COLUMNS.filter((c) => !keys.has(c.key));
+  const extras = INVENTORY_REQUEST_TRACKING_COLUMNS.filter((c) => {
+    if (options?.includeTrack === false && c.key === 'tracking_link') return false;
+    return !keys.has(c.key);
+  });
   return [...cleaned, ...extras];
 }
 

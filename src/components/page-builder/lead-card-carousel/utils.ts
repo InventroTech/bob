@@ -16,11 +16,32 @@ export const parseTags = (tags: string[] | string) => {
   return [];
 };
 
+/** Resolve CRM record primary key for GET-by-id and realtime matching. */
+export function resolveLeadRecordId(
+  lead: { id?: unknown; record_id?: unknown } | null | undefined,
+): number | null {
+  if (!lead) return null;
+  for (const candidate of [lead.record_id, lead.id]) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+export function tasksSignature(tasks: unknown): string {
+  try {
+    return JSON.stringify(tasks ?? null);
+  } catch {
+    return String(tasks);
+  }
+}
+
 /** Normalize API lead response to LeadData shape (for fresh fetch when card opened from table) */
 export const normalizeApiLeadToLeadData = (apiLead: any): LeadData => {
   const d = apiLead?.data || {};
+  const recordId = resolveLeadRecordId(apiLead) ?? apiLead?.id;
   return {
-    id: apiLead.id,
+    id: recordId,
     created_at: apiLead.created_at ?? '',
     name: apiLead.name ?? d.name ?? 'N/A',
     email: apiLead.email ?? d.email ?? '',
@@ -58,6 +79,7 @@ export const normalizeApiLeadToLeadData = (apiLead: any): LeadData => {
       phone_number: d.phone_number ?? apiLead.phone_number ?? '',
       lead_stage: d.lead_stage ?? apiLead.lead_stage ?? 'New',
       praja_id: d.praja_id ?? apiLead.praja_id ?? '',
+      tasks: apiLead.tasks ?? d.tasks,
     },
   };
 };
