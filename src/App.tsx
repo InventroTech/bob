@@ -12,6 +12,7 @@ import NotFound from "@/features/dashboard/pages/NotFound";
 import PageBuilder from "@/features/page-builder/pages/PageBuilder";
 import TaskTemplate from "@/features/page-builder/pages/TaskTemplate";
 import ProfileSettings from "@/features/dashboard/pages/ProfileSettings";
+import IntegrationsSettingsPage from "@/features/integrations/pages/IntegrationsSettingsPage";
 import Dashboard from "@/features/dashboard/pages/Dashboard";
 import AuthPage from "@/features/auth/pages/AuthPage";
 import SignupPage from "@/features/auth/pages/SignupPage";
@@ -72,6 +73,7 @@ const App = () => (
                 <Route path="/builder/:pageId" element={<PageBuilder />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/settings" element={<ProfileSettings />} />
+                <Route path="/settings/integrations" element={<IntegrationsSettingsPage />} />
                 <Route path="/task-template" element={<TaskTemplate />} />
                 <Route path="/profile-settings" element={<ProfileSettings />} />
                 <Route
