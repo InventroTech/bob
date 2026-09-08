@@ -356,24 +356,16 @@ export const membershipService = {
    * @returns Promise with membership info (tenant_id, role_id, role_key, etc.) or null if not found
    */
   async getMyMembership(tenantSlug?: string): Promise<MyMembershipResponse | null> {
-    // Fallback to localStorage if tenantSlug is not explicitly passed (useful for E2E tests and components)
-    const activeSlug = tenantSlug || (typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_slug') || undefined : undefined);
-
-    // Guard clause: Prevent request if activeSlug is missing/empty to avoid 400 Tenant not found errors
-    if (!activeSlug) {
-      if (import.meta.env.DEV) {
-        console.warn('[membershipService] getMyMembership: skipped, tenantSlug is missing');
-      }
-      return null;
-    }
-
     try {
       if (import.meta.env.DEV) {
         console.log('[membershipService] getMyMembership: GET /membership/me/role/');
       }
 
+      // Conditionally append the header if tenantSlug is provided
       const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/', {
-        headers: { 'X-Tenant-Slug': activeSlug } as Record<string, string>,
+        ...(tenantSlug
+          ? { headers: { 'X-Tenant-Slug': tenantSlug } as Record<string, string> }
+          : {}),
       });
 
       if (import.meta.env.DEV) {
@@ -400,7 +392,21 @@ export const membershipService = {
       }
 
       return response.data;
-    } catch (error: unknown) {
+    } catch (error: any) {
+      // Gracefully catch the 400 Tenant not found error to prevent Sentry noise,
+      // allowing the bootstrap process to receive 'null' and handle it accordingly.
+      const isTenantNotFoundError = 
+        error?.status === 400 || 
+        error?.response?.status === 400 || 
+        error?.message?.includes('Tenant not found');
+
+      if (isTenantNotFoundError) {
+        if (import.meta.env.DEV) {
+          console.warn('[membershipService] getMyMembership: Tenant not found, returning null.');
+        }
+        return null;
+      }
+
       if (isExpectedAuthWall(error)) {
         // Stale session / no tenant permission — expected; do not console.error (Sentry captureConsoleIntegration)
         console.warn(
