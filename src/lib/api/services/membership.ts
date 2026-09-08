@@ -361,6 +361,7 @@ export const membershipService = {
         console.log('[membershipService] getMyMembership: GET /membership/me/role/');
       }
 
+      // Conditionally append the header if tenantSlug is provided
       const response = await apiClient.get<MyMembershipResponse>('/membership/me/role/', {
         ...(tenantSlug
           ? { headers: { 'X-Tenant-Slug': tenantSlug } as Record<string, string> }
@@ -391,7 +392,23 @@ export const membershipService = {
       }
 
       return response.data;
-    } catch (error: unknown) {
+    } catch (error: any) {
+      // Gracefully catch the Tenant not found error (400 or 404) to prevent Sentry noise,
+      // allowing the bootstrap process to receive 'null' and handle it accordingly.
+      const status = error?.response?.status || error?.status;
+      const errorMsg = error?.response?.data?.error || error?.message || '';
+      
+      const isTenantNotFoundError = 
+        status === 404 || 
+        (status === 400 && String(errorMsg).includes('Tenant not found'));
+
+      if (isTenantNotFoundError) {
+        if (import.meta.env.DEV) {
+          console.warn('[membershipService] getMyMembership: Tenant not found, returning null.');
+        }
+        return null;
+      }
+
       if (isExpectedAuthWall(error)) {
         // Stale session / no tenant permission — expected; do not console.error (Sentry captureConsoleIntegration)
         console.warn(
@@ -422,4 +439,3 @@ export const membershipService = {
     return response.data;
   },
 };
-
