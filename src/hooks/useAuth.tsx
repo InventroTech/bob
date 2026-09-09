@@ -8,6 +8,7 @@ import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider
 import {
   clearRefreshSuppression,
   consumeSignedOutReason,
+  isRefreshSuppressed,
   markExpectingSignedOut,
   refreshAccessToken,
   signOutAndClearSession,
@@ -142,6 +143,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const loginUrl = getLoginUrl();
           toast.error('Your session has expired. Please login again.');
           navigate(loginUrl, { replace: true });
+          return;
+        }
+
+        // Logout won the race: a late TOKEN_REFRESHED (or similar) must not put the session back.
+        // SIGNED_IN while suppressed is the post-logout re-login path — allow that through.
+        if (isRefreshSuppressed() && event !== 'SIGNED_IN') {
+          console.warn(`[useAuth] Ignoring ${event} while refresh is suppressed`);
           return;
         }
 
