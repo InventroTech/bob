@@ -18,8 +18,6 @@ import { format } from 'date-fns';
 
 import type { TicketTableModel } from './useTicketTable';
 import { getStatusColor } from './utils';
-// Hook temporarily removed due to missing file in main branch
-// import { usePageDisplayTitle } from '@/components/page-builder/lead-table/InventoryTablePageContext';
 
 export function TicketTableView(props: TicketTableModel) {
   const {
@@ -73,7 +71,6 @@ export function TicketTableView(props: TicketTableModel) {
     resetFilters();
   };
 
-  // Temporarily falling back to config.title since the hook file is missing
   const pageTitleDisplay = (config?.title || '').trim() || 'Support Tickets';
 
   return (
