@@ -469,7 +469,7 @@ export function ApplicantTableView(props: ApplicantTableModel) {
             <DialogHeader>
               <div className="flex items-center justify-between">
                 <DialogTitle className="text-3xl font-bold text-gray-900">
-                  {selectedApplication?.applicantName}
+                  {selectedApplication?.applicantName || 'Applicant Details'}
                 </DialogTitle>
                 {selectedApplication && (
                   <div className="flex items-center gap-3">
