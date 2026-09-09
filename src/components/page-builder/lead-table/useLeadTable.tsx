@@ -22,7 +22,6 @@ import {
   PYRO_CLEAR_LEAD_HIGHLIGHT,
   PYRO_LEAD_HIGHLIGHT_CHANGED,
   PYRO_OPEN_LEAD,
-  registerAllLeadsPath,
   rowMatchesLeadHighlight,
   stashOpenLeadHighlight,
   type OpenLeadRequest,
@@ -2416,8 +2415,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (entityType !== 'lead') return;
     // Wait for the first list load so we can resolve the lead row.
     if (loading) return;
-
-    registerAllLeadsPath(location.pathname);
 
     const rowPrajaId = (row: any): string | null => {
       const value = row?.praja_id ?? row?.data?.praja_id ?? row?.data?.user_id;
