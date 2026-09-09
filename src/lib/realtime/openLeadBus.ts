@@ -89,29 +89,40 @@ export function stashOpenLeadHighlight(request: OpenLeadRequest): void {
   purgeLegacyHighlightStorage();
 
   const existing = activeHighlight;
+  const requestRecordId = normalizeOpenLeadId(request.record_id);
+  const requestPrajaId = normalizeOpenLeadId(request.praja_id);
+  // Only fill missing fields from the previous stash when it is the same lead.
+  // Otherwise a praja-only open would inherit another lead's record_id.
+  const sameLead =
+    existing != null &&
+    ((requestRecordId !== "" &&
+      normalizeOpenLeadId(existing.record_id) === requestRecordId) ||
+      (requestPrajaId !== "" &&
+        normalizeOpenLeadId(existing.praja_id) === requestPrajaId));
+
   const recordId =
-    normalizeOpenLeadId(request.record_id) ||
-    normalizeOpenLeadId(existing?.record_id);
+    requestRecordId ||
+    (sameLead ? normalizeOpenLeadId(existing?.record_id) : "");
   const prajaId =
-    normalizeOpenLeadId(request.praja_id) ||
-    normalizeOpenLeadId(existing?.praja_id) ||
+    requestPrajaId ||
+    (sameLead ? normalizeOpenLeadId(existing?.praja_id) : "") ||
     null;
   const leadName =
     request.lead_name != null && String(request.lead_name).trim() !== ""
       ? String(request.lead_name)
-      : existing?.lead_name != null
+      : sameLead && existing?.lead_name != null
         ? String(existing.lead_name)
         : null;
   const notificationId =
     request.notification_id != null
       ? Number(request.notification_id)
-      : existing?.notification_id != null
+      : sameLead && existing?.notification_id != null
         ? Number(existing.notification_id)
         : null;
   const notificationItemId =
     request.notification_item_id != null
       ? String(request.notification_item_id)
-      : existing?.notification_item_id != null
+      : sameLead && existing?.notification_item_id != null
         ? String(existing.notification_item_id)
         : null;
 
