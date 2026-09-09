@@ -64,6 +64,16 @@ export function consumePendingOpenLead(): OpenLeadRequest | null {
 }
 
 /**
+ * Coerce CRM / Praja ids without turning null/undefined into "null" / "undefined".
+ */
+export function normalizeOpenLeadId(value: unknown): string {
+  if (value == null) return "";
+  const s = String(value).trim();
+  if (!s || s === "null" || s === "undefined") return "";
+  return s;
+}
+
+/**
  * Keep highlight in memory until the notification is marked as read.
  * Does not use sessionStorage/localStorage (CodeQL clear-text storage).
  */
@@ -71,9 +81,7 @@ function hasOpenLeadIdentity(request: {
   record_id?: string | null;
   praja_id?: string | null;
 }): boolean {
-  const recordId = request.record_id != null ? String(request.record_id).trim() : "";
-  const prajaId = request.praja_id != null ? String(request.praja_id).trim() : "";
-  return Boolean(recordId || prajaId);
+  return Boolean(normalizeOpenLeadId(request.record_id) || normalizeOpenLeadId(request.praja_id));
 }
 
 export function stashOpenLeadHighlight(request: OpenLeadRequest): void {
@@ -82,17 +90,12 @@ export function stashOpenLeadHighlight(request: OpenLeadRequest): void {
 
   const existing = activeHighlight;
   const recordId =
-    request.record_id != null && String(request.record_id).trim() !== ""
-      ? String(request.record_id)
-      : existing?.record_id != null && String(existing.record_id).trim() !== ""
-        ? String(existing.record_id)
-        : "";
+    normalizeOpenLeadId(request.record_id) ||
+    normalizeOpenLeadId(existing?.record_id);
   const prajaId =
-    request.praja_id != null && String(request.praja_id).trim() !== ""
-      ? String(request.praja_id)
-      : existing?.praja_id != null
-        ? String(existing.praja_id)
-        : null;
+    normalizeOpenLeadId(request.praja_id) ||
+    normalizeOpenLeadId(existing?.praja_id) ||
+    null;
   const leadName =
     request.lead_name != null && String(request.lead_name).trim() !== ""
       ? String(request.lead_name)
@@ -216,9 +219,10 @@ export function formatOpenLeadIdentity(request: OpenLeadRequest): string {
 
 function buildOpenLeadSearch(request: OpenLeadRequest): string {
   const params = new URLSearchParams();
-  const recordId = request.record_id != null ? String(request.record_id).trim() : "";
+  const recordId = normalizeOpenLeadId(request.record_id);
+  const prajaId = normalizeOpenLeadId(request.praja_id);
   if (recordId) params.set("open_lead", recordId);
-  if (request.praja_id) params.set("praja_id", String(request.praja_id));
+  if (prajaId) params.set("praja_id", prajaId);
   if (request.lead_name) params.set("lead_name", String(request.lead_name));
   const qs = params.toString();
   return qs ? `?${qs}` : "";
@@ -236,11 +240,8 @@ export function requestOpenLead(
   if (!hasOpenLeadIdentity(request)) return;
 
   const safeRequest: OpenLeadRequest = {
-    record_id:
-      request.record_id != null && String(request.record_id).trim() !== ""
-        ? String(request.record_id)
-        : "",
-    praja_id: request.praja_id ?? null,
+    record_id: normalizeOpenLeadId(request.record_id),
+    praja_id: normalizeOpenLeadId(request.praja_id) || null,
     lead_name: request.lead_name ?? null,
     notification_id: request.notification_id ?? null,
     notification_item_id: request.notification_item_id ?? null,

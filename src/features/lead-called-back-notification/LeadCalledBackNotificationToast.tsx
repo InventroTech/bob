@@ -1,7 +1,11 @@
 import { PhoneCall, X } from "lucide-react";
 import type { LeadCalledBackPayload } from "@/lib/realtime/types";
 import { formatLeadCalledBackDetails } from "@/lib/realtime/leadCalledBackBus";
-import { getRegisteredAllLeadsPath, requestOpenLead } from "@/lib/realtime/openLeadBus";
+import {
+  getRegisteredAllLeadsPath,
+  normalizeOpenLeadId,
+  requestOpenLead,
+} from "@/lib/realtime/openLeadBus";
 
 type LeadCalledBackNotificationToastProps = {
   payload: LeadCalledBackPayload;
@@ -17,8 +21,8 @@ export function LeadCalledBackNotificationToast({
   const openLead = () => {
     requestOpenLead(
       {
-        record_id: String(payload.record_id),
-        praja_id: payload.praja_id,
+        record_id: normalizeOpenLeadId(payload.record_id),
+        praja_id: normalizeOpenLeadId(payload.praja_id) || null,
         lead_name: payload.lead_name,
         notification_id: payload.notification_id ?? null,
         notification_item_id:

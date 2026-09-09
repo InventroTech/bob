@@ -15,7 +15,7 @@ import {
   type LeadCalledBackNotificationItem,
 } from "./leadCalledBackNotificationStore";
 import { formatLeadCalledBackDetails } from "@/lib/realtime/leadCalledBackBus";
-import { requestOpenLead } from "@/lib/realtime/openLeadBus";
+import { normalizeOpenLeadId, requestOpenLead } from "@/lib/realtime/openLeadBus";
 
 type LeadCalledBackNotificationsMenuProps = {
   variant?: "navbar" | "sidebar" | "sidebar-collapsed";
@@ -45,8 +45,8 @@ function NotificationRow({
   const openLead = () => {
     requestOpenLead(
       {
-        record_id: String(item.payload.record_id),
-        praja_id: item.payload.praja_id,
+        record_id: normalizeOpenLeadId(item.payload.record_id),
+        praja_id: normalizeOpenLeadId(item.payload.praja_id) || null,
         lead_name: item.payload.lead_name,
         notification_id: item.notificationId,
         notification_item_id: item.id,
