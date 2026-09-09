@@ -130,6 +130,16 @@ export function useAddUser({ config }: AddUserComponentProps) {
       });
 
       if (!response.ok) {
+        // Gracefully handle 403 Forbidden without throwing an error to Sentry
+        if (response.status === 403) {
+          console.warn('[useAddUser] fetchUsers: 403 Forbidden. User does not have permission to view users.');
+          setUsers([]);
+          if (!options?.silent) {
+             toast.error('You do not have permission to view the users list.');
+          }
+          return; // Exit early, skipping the catch block entirely
+        }
+
         const errorData = await response.json().catch(() => ({}));
         console.error('Error response:', errorData);
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
@@ -164,7 +174,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
 
       setUsers(transformedUsers);
       // Show message if no users found
-      if (transformedUsers.length === 0) {
+      if (transformedUsers.length === 0 && !options?.silent) {
         toast.info('No users found. The list is empty.');
       }
     } catch (error: any) {
@@ -903,7 +913,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
       if (editingRow.district.trim()) payload.district = Number(editingRow.district);
       if (editingRow.party.trim()) payload.party = Number(editingRow.party);
       if (!isCseRole(editedRole)) {
-        if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
+        if (editingRow.dailyTarget !== '') payload.dailyTarget = Number(editingRow.dailyTarget);
         if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
       }
 
