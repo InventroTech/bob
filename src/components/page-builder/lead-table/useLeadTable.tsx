@@ -19,6 +19,7 @@ import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import {
   consumePendingOpenLead,
   getActiveLeadHighlight,
+  normalizeOpenLeadId,
   PYRO_CLEAR_LEAD_HIGHLIGHT,
   PYRO_LEAD_HIGHLIGHT_CHANGED,
   PYRO_OPEN_LEAD,
@@ -1188,7 +1189,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     // Special handling for name column - show avatar, name, and email
     if (column.accessor === 'name' || headerLower.includes('name')) {
       const rowId = row?.id != null ? String(row.id) : row?.record_id != null ? String(row.record_id) : '';
-      const rowPraja = row?.praja_id ?? row?.data?.praja_id ?? row?.data?.user_id;
+      const rowPraja = row?.praja_id ?? row?.data?.praja_id;
       const showCalledBackBadge = Boolean(
         (highlightedLeadId && rowId && rowId === highlightedLeadId) ||
           (highlightedPrajaId && rowPraja != null && String(rowPraja) === highlightedPrajaId),
@@ -2417,27 +2418,45 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (loading) return;
 
     const rowPrajaId = (row: any): string | null => {
-      const value = row?.praja_id ?? row?.data?.praja_id ?? row?.data?.user_id;
-      if (value == null || value === '' || value === 'N/A') return null;
-      return String(value);
+      // Only real Praja ID fields — never user_id (can collide / open the wrong lead).
+      const value = row?.praja_id ?? row?.data?.praja_id;
+      return normalizeOpenLeadId(value) || null;
     };
 
     const findInLists = (recordId: string, prajaId?: string | null) => {
-      const matches = (row: any) => {
-        const id = row?.id != null ? String(row.id) : '';
-        const rid = row?.record_id != null ? String(row.record_id) : '';
-        if (recordId && (id === recordId || rid === recordId)) return true;
-        if (prajaId) {
-          const rowPraja = rowPrajaId(row);
-          if (rowPraja != null && rowPraja === String(prajaId)) return true;
+      const seen = new Set<string>();
+      const pool: any[] = [];
+      for (const row of [...filteredDataRef.current, ...dataRef.current]) {
+        const key =
+          row?.id != null
+            ? `id:${row.id}`
+            : row?.record_id != null
+              ? `rid:${row.record_id}`
+              : '';
+        if (key) {
+          if (seen.has(key)) continue;
+          seen.add(key);
         }
-        return false;
-      };
-      return (
-        filteredDataRef.current.find(matches) ||
-        dataRef.current.find(matches) ||
-        null
-      );
+        pool.push(row);
+      }
+
+      const normalizedRecordId = normalizeOpenLeadId(recordId);
+      if (normalizedRecordId) {
+        // When CRM id is known, match only by id — never OR with praja (wrong row risk).
+        return (
+          pool.find((row) => {
+            const id = row?.id != null ? String(row.id) : '';
+            const rid = row?.record_id != null ? String(row.record_id) : '';
+            return id === normalizedRecordId || rid === normalizedRecordId;
+          }) || null
+        );
+      }
+
+      const normalizedPraja = normalizeOpenLeadId(prajaId);
+      if (!normalizedPraja) return null;
+      const hits = pool.filter((row) => rowPrajaId(row) === normalizedPraja);
+      // Ambiguous Praja match → do not open a random first hit.
+      return hits.length === 1 ? hits[0] : null;
     };
 
     const clearOpenLeadParams = () => {
@@ -2519,18 +2538,23 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     };
 
     const openLead = async (request: OpenLeadRequest) => {
-      const recordId = request.record_id != null ? String(request.record_id) : '';
-      if (!recordId && !request.praja_id) return;
+      const recordId = normalizeOpenLeadId(request.record_id);
+      const prajaId = normalizeOpenLeadId(request.praja_id) || null;
+      if (!recordId && !prajaId) return;
 
-      stashOpenLeadHighlight(request);
+      stashOpenLeadHighlight({
+        ...request,
+        record_id: recordId,
+        praja_id: prajaId,
+      });
 
-      const openKey = `${recordId}|${request.praja_id || ''}`;
+      const openKey = `${recordId}|${prajaId || ''}`;
       const now = Date.now();
       const recentlyOpened =
         lastOpenedLeadKeyRef.current === openKey &&
         now - lastOpenedLeadAtRef.current < 2500;
 
-      let row = findInLists(recordId, request.praja_id);
+      let row = findInLists(recordId, prajaId);
       if (!row && recordId) {
         const numericId = Number(recordId);
         if (Number.isFinite(numericId)) {
@@ -2542,23 +2566,29 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         }
       }
 
-      // Fallback: search current lists / API by praja_id when record id fetch fails
-      if (!row && request.praja_id) {
-        row = findInLists('', request.praja_id);
+      // Praja-only path: never use as fallback when a CRM record_id was provided
+      // (that can open a different lead than the notification intended).
+      if (!row && !recordId && prajaId) {
+        row = findInLists('', prajaId);
       }
-      if (!row && request.praja_id && effectiveApiEndpoint) {
+      if (!row && !recordId && prajaId && effectiveApiEndpoint) {
         try {
           const params = new URLSearchParams();
           params.set('entity_type', 'lead');
-          params.set('praja_id', String(request.praja_id));
-          params.set('page_size', '1');
+          params.set('praja_id', prajaId);
+          params.set('page_size', '5');
           const response = await apiClient.get(
             `${String(effectiveApiEndpoint).split('?')[0]}?${params.toString()}`,
           );
           const results =
             response.data?.results || response.data?.data || response.data || [];
-          if (Array.isArray(results) && results.length > 0) {
-            row = results[0];
+          if (Array.isArray(results)) {
+            const hits = results.filter(
+              (r) => rowPrajaId(r) === prajaId,
+            );
+            if (hits.length === 1) {
+              row = hits[0];
+            }
           }
         } catch {
           row = null;
@@ -2573,7 +2603,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       lastOpenedLeadKeyRef.current = openKey;
       lastOpenedLeadAtRef.current = Date.now();
       consumePendingOpenLead();
-      const { tableRow } = applyHighlight(row, recordId, request.praja_id);
+      const { tableRow } = applyHighlight(row, recordId, prajaId);
 
       if (recentlyOpened) {
         clearOpenLeadParams();
@@ -2792,7 +2822,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       if (rowMatchesLeadHighlight(row)) return true;
       // State fallback: Praja ID first, then record id (never phone — shared across leads).
       if (highlightedPrajaId) {
-        const praja = row?.praja_id ?? row?.data?.praja_id ?? row?.data?.user_id;
+        const praja = row?.praja_id ?? row?.data?.praja_id;
         if (praja != null && String(praja) !== 'N/A' && String(praja) === highlightedPrajaId) {
           return true;
         }

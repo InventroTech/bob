@@ -187,7 +187,7 @@ export function rowMatchesLeadHighlight(
   if (!stash || !row) return false;
 
   // Prefer Praja ID — phone can be shared across test leads.
-  const praja = row?.praja_id ?? row?.data?.praja_id ?? row?.data?.user_id;
+  const praja = row?.praja_id ?? row?.data?.praja_id;
   if (
     stash.praja_id != null &&
     String(stash.praja_id).trim() !== "" &&
