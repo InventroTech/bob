@@ -18,6 +18,8 @@ import { format } from 'date-fns';
 
 import type { TicketTableModel } from './useTicketTable';
 import { getStatusColor } from './utils';
+// Hook temporarily removed due to missing file in main branch
+// import { usePageDisplayTitle } from '@/components/page-builder/lead-table/InventoryTablePageContext';
 
 export function TicketTableView(props: TicketTableModel) {
   const {
@@ -71,11 +73,14 @@ export function TicketTableView(props: TicketTableModel) {
     resetFilters();
   };
 
+  // Temporarily falling back to config.title since the hook file is missing
+  const pageTitleDisplay = (config?.title || '').trim() || 'Support Tickets';
+
   return (
     <>
       <div className="md:hidden w-full pb-3 px-4 pt-4">
         <h2 className="text-2xl font-bold text-gray-950">
-          {config?.title || "Support Tickets"}
+          {pageTitleDisplay}
         </h2>
       </div>
 
@@ -84,7 +89,7 @@ export function TicketTableView(props: TicketTableModel) {
         <div className="mb-4 relative">
           <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
             <h5 className="hidden md:block">
-              {config?.title || "Support Tickets"}
+              {pageTitleDisplay}
             </h5>
             <div className="flex items-center gap-2 relative">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
