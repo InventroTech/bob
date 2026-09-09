@@ -17,7 +17,11 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 
 import type { TicketTableModel } from './useTicketTable';
-import { getStatusColor } from './utils';
+import { 
+  getStatusColor,
+  SUPPORT_TICKET_STATE_FILTER_OPTIONS,
+  SUPPORT_TICKET_CALL_ATTEMPT_FILTER_OPTIONS,
+} from './utils';
 
 export function TicketTableView(props: TicketTableModel) {
   const {
@@ -52,7 +56,6 @@ export function TicketTableView(props: TicketTableModel) {
 
   const [selectSearchTerms, setSelectSearchTerms] = useState<Record<string, string>>({});
 
-  // Purely dynamic filters driven from Page Builder config schema
   const configuredFilters = config?.filters || [];
 
   const handleFilterChange = (key: string, value: any) => {
@@ -82,7 +85,6 @@ export function TicketTableView(props: TicketTableModel) {
       </div>
 
       <div className="font-body overflow-x-auto border-2 border-gray-200 rounded-lg bg-white p-4">
-        {/* Header & Search Bar */}
         <div className="mb-4 relative">
           <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
             <h5 className="hidden md:block">
@@ -112,7 +114,6 @@ export function TicketTableView(props: TicketTableModel) {
           </div>
         </div>
 
-        {/* Dynamic Filters Section */}
         {showFilters && configuredFilters.length > 0 && (
           <div className="bg-gray-50 p-4 rounded-lg border mb-4 space-y-4">
             <div className="flex justify-between items-center">
@@ -307,7 +308,6 @@ export function TicketTableView(props: TicketTableModel) {
               })}
             </div>
 
-            {/* Action Buttons */}
             <div className="flex items-center gap-2 pt-2 border-t">
               <CustomButton
                 variant="outline"
@@ -329,7 +329,6 @@ export function TicketTableView(props: TicketTableModel) {
           </div>
         )}
 
-        {/* Table Section */}
         <div className="w-full relative">
           {(loading || tableLoading || searchLoading) && (
             <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10 rounded-lg min-h-[200px]">
@@ -342,7 +341,6 @@ export function TicketTableView(props: TicketTableModel) {
             </div>
           )}
 
-          {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto w-full max-w-full min-w-0">
             <table className="min-w-full bg-white">
               <thead>
@@ -423,7 +421,6 @@ export function TicketTableView(props: TicketTableModel) {
           </div>
         </div>
 
-        {/* Pagination Controls */}
         {pagination.totalCount > 0 && filteredData.length > 0 && (
           <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
             <div className="flex items-center gap-2">
@@ -458,7 +455,6 @@ export function TicketTableView(props: TicketTableModel) {
                 Previous
               </CustomButton>
 
-<span>
               <CustomButton
                 variant="outline"
                 size="sm"
@@ -468,13 +464,11 @@ export function TicketTableView(props: TicketTableModel) {
               >
                 Next
               </CustomButton>
-</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Ticket Modal */}
       <Dialog
         open={isTicketModalOpen}
         onOpenChange={(open) => {
