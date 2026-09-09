@@ -67,12 +67,26 @@ export function consumePendingOpenLead(): OpenLeadRequest | null {
  * Keep highlight in memory until the notification is marked as read.
  * Does not use sessionStorage/localStorage (CodeQL clear-text storage).
  */
+function hasOpenLeadIdentity(request: {
+  record_id?: string | null;
+  praja_id?: string | null;
+}): boolean {
+  const recordId = request.record_id != null ? String(request.record_id).trim() : "";
+  const prajaId = request.praja_id != null ? String(request.praja_id).trim() : "";
+  return Boolean(recordId || prajaId);
+}
+
 export function stashOpenLeadHighlight(request: OpenLeadRequest): void {
-  if (!request.record_id) return;
+  if (!hasOpenLeadIdentity(request)) return;
   purgeLegacyHighlightStorage();
 
   const existing = activeHighlight;
-  const recordId = String(request.record_id);
+  const recordId =
+    request.record_id != null && String(request.record_id).trim() !== ""
+      ? String(request.record_id)
+      : existing?.record_id != null && String(existing.record_id).trim() !== ""
+        ? String(existing.record_id)
+        : "";
   const prajaId =
     request.praja_id != null && String(request.praja_id).trim() !== ""
       ? String(request.praja_id)
@@ -110,7 +124,8 @@ export function stashOpenLeadHighlight(request: OpenLeadRequest): void {
 
 export function getActiveLeadHighlight(): OpenLeadHighlightStash | null {
   purgeLegacyHighlightStorage();
-  return activeHighlight?.record_id ? activeHighlight : null;
+  if (!activeHighlight) return null;
+  return hasOpenLeadIdentity(activeHighlight) ? activeHighlight : null;
 }
 
 export function peekOpenLeadHighlight(): OpenLeadHighlightStash | null {
@@ -194,29 +209,37 @@ export function formatOpenLeadIdentity(request: OpenLeadRequest): string {
   const name = request.lead_name?.trim() || "Lead";
   const praja = request.praja_id?.trim();
   if (praja) return `${name} · Praja ID: ${praja}`;
-  return `${name} · Record #${request.record_id}`;
+  const recordId = request.record_id?.trim();
+  if (recordId) return `${name} · Record #${recordId}`;
+  return name;
 }
 
 function buildOpenLeadSearch(request: OpenLeadRequest): string {
   const params = new URLSearchParams();
-  params.set("open_lead", String(request.record_id));
+  const recordId = request.record_id != null ? String(request.record_id).trim() : "";
+  if (recordId) params.set("open_lead", recordId);
   if (request.praja_id) params.set("praja_id", String(request.praja_id));
   if (request.lead_name) params.set("lead_name", String(request.lead_name));
-  return `?${params.toString()}`;
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 /**
  * Open a lead from a WhatsApp call-back notification.
  * Highlight stays until the notification is marked as read.
+ * Requires record_id and/or praja_id (praja-only is allowed when CRM id is missing).
  */
 export function requestOpenLead(
   request: OpenLeadRequest,
   options?: { allLeadsPath?: string | null },
 ): void {
-  if (!request.record_id) return;
+  if (!hasOpenLeadIdentity(request)) return;
 
   const safeRequest: OpenLeadRequest = {
-    record_id: String(request.record_id),
+    record_id:
+      request.record_id != null && String(request.record_id).trim() !== ""
+        ? String(request.record_id)
+        : "",
     praja_id: request.praja_id ?? null,
     lead_name: request.lead_name ?? null,
     notification_id: request.notification_id ?? null,

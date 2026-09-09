@@ -2595,12 +2595,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
     const params = new URLSearchParams(location.search);
     const openLeadId = params.get('open_lead');
-    if (openLeadId) {
+    const openPrajaId = params.get('praja_id');
+    // open_lead and/or praja_id — notifications may lack CRM record_id.
+    if (openLeadId || openPrajaId) {
       // Prefer URL request; drop any stale pending so we don't reopen after clear.
       consumePendingOpenLead();
       void openLead({
-        record_id: openLeadId,
-        praja_id: params.get('praja_id'),
+        record_id: openLeadId || '',
+        praja_id: openPrajaId,
         lead_name: params.get('lead_name'),
       });
     } else {
