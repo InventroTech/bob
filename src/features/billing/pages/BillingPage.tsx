@@ -264,36 +264,31 @@ const BillingPage = () => {
     const marginX = 12;
     const topMarginY = PDF_LETTERHEAD_TOP_MARGIN_MM;
     const bottomMarginY = PDF_LETTERHEAD_BOTTOM_MARGIN_MM;
-    const rowHeight = 6.5;
+    const lineHeight = 3.6;
+    const minRowHeight = 6.5;
     let y = topMarginY;
 
-    const addPageIfNeeded = () => {
-      if (y <= pageHeight - bottomMarginY) return;
-      doc.addPage();
-      y = topMarginY;
-      drawTableHeader();
-    };
-
+    // Wider name/email columns so full values can wrap instead of truncating with "...".
     const tableColumns = {
       name: marginX,
-      email: 34,
-      state: 72,
-      role: 98,
-      joined: 122,
+      email: 42,
+      state: 95,
+      role: 112,
+      joined: 132,
       days: 152,
       rate: 174,
       amount: pageWidth - marginX,
     };
 
-    const fitText = (value: string, maxWidth: number) => {
-      if (doc.getTextWidth(value) <= maxWidth) return value;
-
-      let fitted = value;
-      while (fitted.length > 0 && doc.getTextWidth(`${fitted}...`) > maxWidth) {
-        fitted = fitted.slice(0, -1);
-      }
-      return fitted ? `${fitted}...` : '';
+    const columnWidths = {
+      name: tableColumns.email - tableColumns.name - 2,
+      email: tableColumns.state - tableColumns.email - 2,
+      state: tableColumns.role - tableColumns.state - 2,
+      role: tableColumns.joined - tableColumns.role - 2,
     };
+
+    const wrapText = (value: string, maxWidth: number) =>
+      doc.splitTextToSize(value || '', maxWidth) as string[];
 
     const drawTableHeader = () => {
       doc.setFontSize(8);
@@ -310,6 +305,13 @@ const BillingPage = () => {
       y += 4;
       doc.line(marginX, y, pageWidth - marginX, y);
       y += 5;
+    };
+
+    const addPageIfNeeded = (neededHeight: number) => {
+      if (y + neededHeight <= pageHeight - bottomMarginY) return;
+      doc.addPage();
+      y = topMarginY;
+      drawTableHeader();
     };
 
     doc.setFontSize(15);
@@ -336,30 +338,27 @@ const BillingPage = () => {
     drawTableHeader();
 
     billingMembers.forEach((member) => {
-      addPageIfNeeded();
       doc.setFontSize(8);
       const roleLabel = member.billing_role_key || member.role?.name || 'Unbilled';
       const roleDisplay = member.is_deleted ? `${roleLabel} (Deleted)` : roleLabel;
-      const row = [
-        member.name || 'Unnamed User',
-        member.email,
-        formatState(member),
-        roleDisplay,
-        formatDate(member.joined_date),
-        `${member.billable_days}/${member.cycle_days}`,
-        formatPdfMoney(member.monthly_amount),
-        formatPdfMoney(member.billing_amount),
-      ];
+      const nameLines = wrapText(member.name || 'Unnamed User', columnWidths.name);
+      const emailLines = wrapText(member.email, columnWidths.email);
+      const stateLines = wrapText(formatState(member), columnWidths.state);
+      const roleLines = wrapText(roleDisplay, columnWidths.role);
+      const maxLines = Math.max(nameLines.length, emailLines.length, stateLines.length, roleLines.length, 1);
+      const currentRowHeight = Math.max(minRowHeight, maxLines * lineHeight + 1.5);
 
-      doc.text(fitText(row[0], tableColumns.email - tableColumns.name - 2), tableColumns.name, y);
-      doc.text(fitText(row[1], tableColumns.state - tableColumns.email - 2), tableColumns.email, y);
-      doc.text(fitText(row[2], tableColumns.role - tableColumns.state - 2), tableColumns.state, y);
-      doc.text(fitText(row[3], tableColumns.joined - tableColumns.role - 2), tableColumns.role, y);
-      doc.text(row[4], tableColumns.joined, y);
-      doc.text(row[5], tableColumns.days, y, { align: 'right' });
-      doc.text(row[6], tableColumns.rate, y, { align: 'right' });
-      doc.text(row[7], tableColumns.amount, y, { align: 'right' });
-      y += rowHeight;
+      addPageIfNeeded(currentRowHeight);
+
+      doc.text(nameLines, tableColumns.name, y);
+      doc.text(emailLines, tableColumns.email, y);
+      doc.text(stateLines, tableColumns.state, y);
+      doc.text(roleLines, tableColumns.role, y);
+      doc.text(formatDate(member.joined_date), tableColumns.joined, y);
+      doc.text(`${member.billable_days}/${member.cycle_days}`, tableColumns.days, y, { align: 'right' });
+      doc.text(formatPdfMoney(member.monthly_amount), tableColumns.rate, y, { align: 'right' });
+      doc.text(formatPdfMoney(member.billing_amount), tableColumns.amount, y, { align: 'right' });
+      y += currentRowHeight;
     });
 
     try {
