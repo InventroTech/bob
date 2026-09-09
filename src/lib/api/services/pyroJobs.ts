@@ -34,7 +34,7 @@ const PYRO_JOB_PAYLOAD_TEMPLATES: Record<string, Record<string, unknown>> = {
   purge_old_log_tables: {
     days: 30,
     chunk_size: 1000,
-    max_chunks_per_table: 20,
+    max_runtime_seconds: 300,
   },
   snoozed_to_not_connected_midnight: {},
 };

@@ -93,6 +93,12 @@ export { entityTypesApi } from './services/entityTypes';
 export type { TenantEntityType } from './services/entityTypes';
 export { teamAnalyticsApi } from './services/teamAnalytics';
 export { cseAnalyticsApi } from './services/cseAnalytics';
+export { zohoMailService } from './services/zohoMail';
+export type {
+  ZohoMailConnectResponse,
+  ZohoMailStatusResponse,
+  ZohoMailSyncResult,
+} from './services/zohoMail';
 export type {
   CseOverviewData,
   CseMemberData,

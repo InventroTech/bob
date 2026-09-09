@@ -264,16 +264,11 @@ const BillingPage = () => {
     const marginX = 12;
     const topMarginY = PDF_LETTERHEAD_TOP_MARGIN_MM;
     const bottomMarginY = PDF_LETTERHEAD_BOTTOM_MARGIN_MM;
-    const rowHeight = 6.5;
+    const lineHeight = 3.6;
+    const minRowHeight = 6.5;
     let y = topMarginY;
 
-    const addPageIfNeeded = () => {
-      if (y <= pageHeight - bottomMarginY) return;
-      doc.addPage();
-      y = topMarginY;
-      drawTableHeader();
-    };
-
+    // Wider name/email columns so full values can wrap instead of truncating with "...".
     const tableColumns = {
       name: marginX,
       email: 34,
@@ -285,15 +280,15 @@ const BillingPage = () => {
       amount: pageWidth - marginX,
     };
 
-    const fitText = (value: string, maxWidth: number) => {
-      if (doc.getTextWidth(value) <= maxWidth) return value;
-
-      let fitted = value;
-      while (fitted.length > 0 && doc.getTextWidth(`${fitted}...`) > maxWidth) {
-        fitted = fitted.slice(0, -1);
-      }
-      return fitted ? `${fitted}...` : '';
+    const columnWidths = {
+      name: tableColumns.email - tableColumns.name - 2,
+      email: tableColumns.state - tableColumns.email - 2,
+      state: tableColumns.role - tableColumns.state - 2,
+      role: tableColumns.joined - tableColumns.role - 2,
     };
+
+    const wrapText = (value: string, maxWidth: number) =>
+      doc.splitTextToSize(value || '', maxWidth) as string[];
 
     const drawTableHeader = () => {
       doc.setFontSize(8);
@@ -310,6 +305,13 @@ const BillingPage = () => {
       y += 4;
       doc.line(marginX, y, pageWidth - marginX, y);
       y += 5;
+    };
+
+    const addPageIfNeeded = (neededHeight: number) => {
+      if (y + neededHeight <= pageHeight - bottomMarginY) return;
+      doc.addPage();
+      y = topMarginY;
+      drawTableHeader();
     };
 
     doc.setFontSize(15);
@@ -336,7 +338,6 @@ const BillingPage = () => {
     drawTableHeader();
 
     billingMembers.forEach((member) => {
-      addPageIfNeeded();
       doc.setFontSize(8);
       const roleLabel = member.billing_role_key || member.role?.name || 'Unbilled';
       const roleDisplay = member.is_deleted ? `${roleLabel} (Deleted)` : roleLabel;
