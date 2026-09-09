@@ -192,6 +192,22 @@ export async function mockBackendApis(page: Page) {
       return;
     }
 
+    if (path.includes('/support-tickets') || path.includes('/support-ticket')) {
+      if (method === 'GET') {
+        await fulfillJson(route, {
+          results: [],
+          pagination: {
+            totalCount: 0,
+            currentPage: 1,
+            numberOfPages: 1,
+            nextPageLink: null,
+            previousPageLink: null,
+          },
+        });
+        return;
+      }
+    }
+
     if (path.endsWith('/crm-records/entity-types')) {
       await fulfillJson(route, []);
       return;
@@ -254,10 +270,6 @@ export async function mockBackendApis(page: Page) {
   });
 }
 
-/**
- * Makes supabase-js treat the browser as already signed in, without knowing
- * the project-ref storage key.
- */
 export async function seedBrowserSession(page: Page) {
   const session = fakeSession();
   await page.addInitScript((sessionJson) => {
