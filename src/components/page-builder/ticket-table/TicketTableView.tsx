@@ -458,6 +458,7 @@ export function TicketTableView(props: TicketTableModel) {
                 Previous
               </CustomButton>
 
+<span>
               <CustomButton
                 variant="outline"
                 size="sm"
@@ -467,6 +468,7 @@ export function TicketTableView(props: TicketTableModel) {
               >
                 Next
               </CustomButton>
+</span>
             </div>
           </div>
         )}
