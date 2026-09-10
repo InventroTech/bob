@@ -49,6 +49,10 @@ export function registerAllLeadsPath(pathname: string): void {
   registeredAllLeadsPath = pathname.split("?")[0];
 }
 
+export function clearRegisteredAllLeadsPath(): void {
+  registeredAllLeadsPath = null;
+}
+
 export function getRegisteredAllLeadsPath(): string | null {
   return registeredAllLeadsPath;
 }

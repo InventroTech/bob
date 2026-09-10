@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearOpenLeadHighlightStash,
+  clearRegisteredAllLeadsPath,
   consumePendingOpenLead,
   getActiveLeadHighlight,
   getPendingOpenLead,
+  getRegisteredAllLeadsPath,
   normalizeOpenLeadId,
+  registerAllLeadsPath,
   requestOpenLead,
   rowMatchesLeadHighlight,
   stashOpenLeadHighlight,
@@ -184,5 +187,19 @@ describe("rowMatchesLeadHighlight", () => {
     expect(rowMatchesLeadHighlight({ id: "913285" })).toBe(true);
     expect(rowMatchesLeadHighlight({ record_id: "913285" })).toBe(true);
     expect(rowMatchesLeadHighlight({ id: "1" })).toBe(false);
+  });
+});
+
+describe("registered All Leads path", () => {
+  afterEach(() => {
+    clearRegisteredAllLeadsPath();
+  });
+
+  it("registers and clears the path", () => {
+    registerAllLeadsPath("/app/praja/pages/42?x=1");
+    expect(getRegisteredAllLeadsPath()).toBe("/app/praja/pages/42");
+
+    clearRegisteredAllLeadsPath();
+    expect(getRegisteredAllLeadsPath()).toBeNull();
   });
 });

@@ -25,7 +25,7 @@ import { CustomIcons } from '@/components/page-builder/NewCustomIcons';
 import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, AnalyticsIcon } from '@/components/icons/CustomIcons';
 import { SparkySidebarButton } from '@/components/chatbot/ChatWidget';
 import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-notification/LeadCalledBackNotificationsMenu';
-import { registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
+import { clearRegisteredAllLeadsPath, registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -334,6 +334,9 @@ const CustomAppLayout: React.FC = () => {
   useEffect(() => {
     if (allLeadsPath) {
       registerAllLeadsPath(allLeadsPath);
+    } else {
+      // Tenant switch / no All Leads page — don't keep a stale path.
+      clearRegisteredAllLeadsPath();
     }
   }, [allLeadsPath]);
   const activeNavClass = isUnmanndApp
