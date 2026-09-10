@@ -40,6 +40,7 @@ import PyroJobsPage from "@/features/jobs/pages/PyroJobsPage";
 import CustomAppDashboard from "@/features/tenant-app/pages/CustomAppDashboard";
 import CustomAppPage from "@/features/tenant-app/pages/CustomAppPage";
 import CustomAppProfilePage from "@/features/tenant-app/pages/CustomAppProfilePage";
+import { LeadCalledBackNotificationProvider } from "@/features/lead-called-back-notification";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,9 +57,10 @@ const App = () => (
     <Router>
       <AuthProvider>
         <RealtimeProvider>
-          <TooltipProvider>
+          <LeadCalledBackNotificationProvider>
+            <TooltipProvider>
             <Toaster />
-            <Sonner />
+            <Sonner position="top-right" richColors closeButton />
             <Routes>
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
@@ -120,6 +122,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </TooltipProvider>
+          </LeadCalledBackNotificationProvider>
         </RealtimeProvider>
       </AuthProvider>
     </Router>

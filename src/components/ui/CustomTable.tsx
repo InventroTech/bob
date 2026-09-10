@@ -25,6 +25,12 @@ export interface CustomTableProps {
   loading?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: any) => void;
+  /** Extra classes per row (e.g. highlight from notification). */
+  getRowClassName?: (row: any, rowIndex: number) => string | undefined;
+  /** Inline styles per row (preferred for highlight bg so Tailwind can't override). */
+  getRowStyle?: (row: any, rowIndex: number) => React.CSSProperties | undefined;
+  /** Stable row id for DOM targeting / scroll-into-view. */
+  getRowId?: (row: any, rowIndex: number) => string | undefined;
   renderCell?: (row: any, column: CustomTableColumn, columnIndex: number) => React.ReactNode;
   headerBgColor?: string;
   headerTextColor?: string;
@@ -108,6 +114,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   loading = false,
   emptyMessage = 'No data found',
   onRowClick,
+  getRowClassName,
+  getRowStyle,
+  getRowId,
   renderCell,
   headerBgColor = 'bg-black',
   headerTextColor = 'text-white',
@@ -120,7 +129,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   fitViewport = false,
   rowSelection,
 }) => {
-  const getRowId = rowSelection?.getRowId ?? ((row: any) => row?.id);
+  const getSelectionRowId = rowSelection?.getRowId ?? ((row: any) => row?.id);
   const normalizeSelectionRowId = (id: unknown): string | null => {
     if (id == null || id === '') return null;
     return String(id);
@@ -129,7 +138,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
     ? data.filter((row) => (rowSelection.canSelectRow ? rowSelection.canSelectRow(row) : true))
     : [];
   const visibleSelectableIds = selectableRows
-    .map((row) => normalizeSelectionRowId(getRowId(row)))
+    .map((row) => normalizeSelectionRowId(getSelectionRowId(row)))
     .filter((id): id is string => id != null);
   const allVisibleSelected =
     rowSelection != null &&
@@ -180,6 +189,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   };
 
   const cellRenderer = renderCell || defaultRenderCell;
+  const colSpan = columns.length + (rowSelection ? 1 : 0);
 
   return (
     <div
@@ -279,47 +289,68 @@ export const CustomTable: React.FC<CustomTableProps> = ({
           <tbody className="text-gray-600 text-sm bg-white">
             {loading ? (
               <tr>
-                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8 text-sm text-gray-500">
+                <td colSpan={colSpan} className="text-center py-8 text-sm text-gray-500">
                   Loading...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8 text-sm text-gray-500">
+                <td colSpan={colSpan} className="text-center py-8 text-sm text-gray-500">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
               data.map((row: any, rowIdx: number) => {
-                const rowId = normalizeSelectionRowId(getRowId(row));
-                const isRowSelected = rowId != null && rowSelection?.selectedRowIds.has(rowId);
+                const selectionRowId = normalizeSelectionRowId(getSelectionRowId(row));
+                const rowId = getRowId?.(row, rowIdx) ?? selectionRowId ?? undefined;
+                const rowClassName = getRowClassName?.(row, rowIdx);
+                const rowStyle = getRowStyle?.(row, rowIdx);
+                const isHighlighted = Boolean(rowStyle?.backgroundColor || rowClassName);
+                const isRowSelected =
+                  selectionRowId != null && rowSelection?.selectedRowIds.has(selectionRowId);
                 const canSelectRow =
                   !rowSelection ||
                   isRowSelected ||
                   (rowSelection.canSelectRow ? rowSelection.canSelectRow(row) : true);
                 return (
                 <tr
-                  key={rowIdx}
+                  key={rowId || rowIdx}
+                  data-row-id={rowId}
+                  data-highlighted={isHighlighted ? 'true' : undefined}
+                  tabIndex={rowId ? -1 : undefined}
                   onClick={() => onRowClick?.(row)}
+                  style={rowStyle}
                   className={cn(
-                    'border-b border-gray-200 bg-white',
+                    'border-b border-gray-200',
+                    !isHighlighted && !isRowSelected && 'bg-white',
+                    !isHighlighted && isRowSelected && 'bg-blue-50/60',
                     comfortable && 'h-[4.5rem]',
-                    isRowSelected && 'bg-blue-50/60',
-                    hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
+                    hoverable && onRowClick && !isHighlighted && 'hover:bg-gray-50 cursor-pointer',
+                    hoverable && onRowClick && isHighlighted && 'cursor-pointer',
+                    !isHighlighted && isRowSelected && hoverable && onRowClick && 'hover:bg-blue-50/80',
                     !hoverable && 'hover:bg-transparent',
-                    isRowSelected && hoverable && onRowClick && 'hover:bg-blue-50/80'
+                    rowClassName,
                   )}
                 >
                   {rowSelection ? (
                     <td
                       className={cn('w-10 min-w-[2.5rem] max-w-[2.5rem] text-center align-middle', cellY, cellX)}
+                      style={
+                        rowStyle?.backgroundColor
+                          ? {
+                              backgroundColor: String(rowStyle.backgroundColor),
+                              color: rowStyle.color,
+                              boxShadow: 'inset 0 0 0 9999px #BFDBFE',
+                            }
+                          : undefined
+                      }
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Checkbox
                         checked={isRowSelected}
                         disabled={!canSelectRow}
                         onCheckedChange={(checked) => {
-                          if (rowId == null || !canSelectRow) return;
+                          if (selectionRowId == null || !canSelectRow) return;
                           rowSelection.onToggleRow(row, checked === true);
                         }}
                         aria-label={
@@ -342,13 +373,24 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     return (
                     <td
                       key={colIdx}
+                      style={
+                        rowStyle?.backgroundColor
+                          ? {
+                              backgroundColor: String(rowStyle.backgroundColor),
+                              color: rowStyle.color,
+                              // Tables often ignore <tr> backgrounds — force cell paint.
+                              boxShadow: 'inset 0 0 0 9999px #BFDBFE',
+                            }
+                          : undefined
+                      }
                       className={cn(
                         'text-sm align-middle',
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
                         fitViewport && 'max-w-0',
                         cellY,
                         col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
-                        col.align === 'right' && `${cellX} text-right`
+                        col.align === 'right' && `${cellX} text-right`,
+                        rowStyle?.backgroundColor && '!bg-[#BFDBFE]',
                       )}
                     >
                       {cellRenderer(row, col, colIdx)}
@@ -356,7 +398,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     );
                   })}
                 </tr>
-              );
+                );
               })
             )}
           </tbody>
