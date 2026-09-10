@@ -9,7 +9,7 @@
 
 import { toast } from 'sonner';
 import { authService, membershipService } from '@/lib/api';
-import { signOutAndClearSession } from '@/lib/auth/authSessionService';
+import { markExpectingSignedOut, signOutAndClearSession } from '@/lib/auth/authSessionService';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { clearAllInventoryRequestFormDrafts } from '@/components/page-builder/inventory-request-form/draftStorage';
@@ -143,13 +143,15 @@ export async function forceSignOutRevokedUser(
   loginPath?: string
 ): Promise<void> {
   clearLocalAuthCaches();
+  // Mark intentional so useAuth does not also toast "session has expired".
+  markExpectingSignedOut('intentional');
   try {
     // Use 'local' scope: for genuine deletions the backend already revoked sessions
     // globally via revoke_supabase_sessions_globally(). Using 'global' here races
     // with any active OAuth callback in another tab and causes AuthCallBackPage failures.
     await supabase.auth.signOut({ scope: 'local' });
   } catch {
-    await signOutAndClearSession();
+    await signOutAndClearSession({ reason: 'intentional' });
   }
   toast.error(reason);
   const target =
