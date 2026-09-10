@@ -184,11 +184,14 @@ export function clearLeadHighlightForNotification(item: {
     (stash.notification_item_id != null &&
       stash.notification_item_id === item.id);
 
+  const stashRecordId = normalizeOpenLeadId(stash.record_id);
+  const itemRecordId = normalizeOpenLeadId(item.payload.record_id);
+  const stashPrajaId = normalizeOpenLeadId(stash.praja_id);
+  const itemPrajaId = normalizeOpenLeadId(item.payload.praja_id);
+  // Require non-empty ids — empty record_id === empty record_id must not clear.
   const sameLead =
-    String(stash.record_id) === String(item.payload.record_id) ||
-    (stash.praja_id != null &&
-      item.payload.praja_id != null &&
-      String(stash.praja_id) === String(item.payload.praja_id));
+    (stashRecordId !== "" && stashRecordId === itemRecordId) ||
+    (stashPrajaId !== "" && stashPrajaId === itemPrajaId);
 
   if (sameNotification || sameLead) {
     dispatchClearLeadHighlight();

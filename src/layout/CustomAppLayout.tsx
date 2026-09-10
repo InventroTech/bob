@@ -338,6 +338,10 @@ const CustomAppLayout: React.FC = () => {
       // Tenant switch / no All Leads page — don't keep a stale path.
       clearRegisteredAllLeadsPath();
     }
+    return () => {
+      // Leaving the tenant app layout must not leave a stale path registered.
+      clearRegisteredAllLeadsPath();
+    };
   }, [allLeadsPath]);
   const activeNavClass = isUnmanndApp
     ? 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white'

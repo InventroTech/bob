@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearLeadHighlightForNotification,
   clearOpenLeadHighlightStash,
   clearRegisteredAllLeadsPath,
   consumePendingOpenLead,
@@ -201,5 +202,66 @@ describe("registered All Leads path", () => {
 
     clearRegisteredAllLeadsPath();
     expect(getRegisteredAllLeadsPath()).toBeNull();
+  });
+});
+
+describe("clearLeadHighlightForNotification", () => {
+  beforeEach(() => {
+    clearOpenLeadHighlightStash();
+  });
+
+  afterEach(() => {
+    clearOpenLeadHighlightStash();
+  });
+
+  it("does not treat two empty record_ids as the same lead", () => {
+    stashOpenLeadHighlight({
+      record_id: "",
+      praja_id: "PRAJA-A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+
+    clearLeadHighlightForNotification({
+      id: "db-2",
+      notificationId: 2,
+      payload: { record_id: "", praja_id: "PRAJA-B" },
+    });
+
+    expect(getActiveLeadHighlight()?.praja_id).toBe("PRAJA-A");
+  });
+
+  it("clears when praja ids match even if record_id is empty", () => {
+    stashOpenLeadHighlight({
+      record_id: "",
+      praja_id: "PRAJA-A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+
+    clearLeadHighlightForNotification({
+      id: "db-2",
+      notificationId: 2,
+      payload: { record_id: "", praja_id: "PRAJA-A" },
+    });
+
+    expect(getActiveLeadHighlight()).toBeNull();
+  });
+
+  it("clears when notification item id matches", () => {
+    stashOpenLeadHighlight({
+      record_id: "",
+      praja_id: "PRAJA-A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+
+    clearLeadHighlightForNotification({
+      id: "db-1",
+      notificationId: 1,
+      payload: { record_id: "", praja_id: "PRAJA-OTHER" },
+    });
+
+    expect(getActiveLeadHighlight()).toBeNull();
   });
 });

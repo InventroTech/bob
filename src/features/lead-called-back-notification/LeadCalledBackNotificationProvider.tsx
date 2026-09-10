@@ -3,7 +3,14 @@ import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLeadCalledBackNotification } from "@/hooks/useLeadCalledBackNotification";
 import { useOpenLeadNavigation } from "@/hooks/useOpenLeadNavigation";
-import { hydrateLeadCalledBackNotifications } from "@/features/lead-called-back-notification/leadCalledBackNotificationStore";
+import {
+  clearLeadCalledBackNotifications,
+  hydrateLeadCalledBackNotifications,
+} from "@/features/lead-called-back-notification/leadCalledBackNotificationStore";
+import {
+  clearOpenLeadHighlightStash,
+  clearRegisteredAllLeadsPath,
+} from "@/lib/realtime/openLeadBus";
 
 type LeadCalledBackNotificationProviderProps = {
   children: ReactNode;
@@ -20,7 +27,12 @@ export function LeadCalledBackNotificationProvider({
   useOpenLeadNavigation();
 
   useEffect(() => {
-    if (!session?.access_token) return;
+    if (!session?.access_token) {
+      clearLeadCalledBackNotifications();
+      clearOpenLeadHighlightStash();
+      clearRegisteredAllLeadsPath();
+      return;
+    }
     void hydrateLeadCalledBackNotifications();
   }, [session?.access_token]);
 

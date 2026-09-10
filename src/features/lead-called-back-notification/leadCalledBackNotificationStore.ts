@@ -19,6 +19,8 @@ const MAX_ITEMS = 50;
 let items: LeadCalledBackNotificationItem[] = [];
 const listeners = new Set<() => void>();
 let hydratePromise: Promise<void> | null = null;
+/** Bumps on clear so an in-flight hydrate cannot repopulate after logout. */
+let hydrateGeneration = 0;
 
 function notifyListeners(): void {
   listeners.forEach((listener) => listener());
@@ -79,10 +81,13 @@ export function pushLeadCalledBackNotification(payload: LeadCalledBackPayload): 
 export async function hydrateLeadCalledBackNotifications(): Promise<void> {
   if (hydratePromise) return hydratePromise;
 
+  const generation = hydrateGeneration;
   hydratePromise = (async () => {
     try {
       const rows = await fetchUnreadInAppNotifications();
+      if (generation !== hydrateGeneration) return;
       for (const row of rows) {
+        if (generation !== hydrateGeneration) return;
         if (row.notification_type !== "lead_called_back") continue;
         const payload = inAppNotificationToPayload(row);
         upsertItem({
@@ -96,7 +101,9 @@ export async function hydrateLeadCalledBackNotifications(): Promise<void> {
     } catch (error) {
       console.warn("[lead-called-back] Failed to hydrate notifications", error);
     } finally {
-      hydratePromise = null;
+      if (generation === hydrateGeneration) {
+        hydratePromise = null;
+      }
     }
   })();
 
@@ -128,4 +135,12 @@ export async function markLeadCalledBackNotificationRead(
 export function subscribeLeadCalledBackNotifications(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** Drop in-memory inbox (logout / session end). */
+export function clearLeadCalledBackNotifications(): void {
+  items = [];
+  hydratePromise = null;
+  hydrateGeneration += 1;
+  notifyListeners();
 }
