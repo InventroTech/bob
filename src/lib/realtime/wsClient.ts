@@ -1,6 +1,11 @@
 import { buildNotificationsWsUrl } from "./buildWsUrl";
+import { dispatchLeadCalledBack } from "./leadCalledBackBus";
 import { dispatchRecordUpdated } from "./recordUpdatedBus";
-import type { RealtimePayload, RecordUpdatedPayload } from "./types";
+import type {
+  LeadCalledBackPayload,
+  RealtimePayload,
+  RecordUpdatedPayload,
+} from "./types";
 
 type MessageHandler = (payload: RealtimePayload) => void;
 type StatusHandler = (status: "connecting" | "connected" | "disconnected" | "error") => void;
@@ -111,8 +116,13 @@ export class NotificationsWsClient {
   }
 
   private handlePayload(payload: RealtimePayload): void {
-    if (payload.event !== "record_updated") return;
-    dispatchRecordUpdated(slimRecordUpdated(payload as RecordUpdatedPayload));
+    if (payload.event === "record_updated") {
+      dispatchRecordUpdated(slimRecordUpdated(payload as RecordUpdatedPayload));
+      return;
+    }
+    if (payload.event === "lead_called_back") {
+      dispatchLeadCalledBack(payload as LeadCalledBackPayload);
+    }
   }
 
   private connect(): void {
