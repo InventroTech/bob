@@ -345,7 +345,8 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                       className={cn(
                         'text-sm align-middle',
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
-                        fitViewport && 'max-w-0',
+                        // Clip overflowing cell text in fixed layout so adjacent columns stay spaced.
+                        fitViewport && 'max-w-0 overflow-hidden',
                         cellY,
                         col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
                         col.align === 'right' && `${cellX} text-right`
