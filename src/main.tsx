@@ -10,6 +10,7 @@ import './index.css';
 import './utils/apiDebugger.tsx'; // Load API debugger for console testing
 import { initSentry } from './lib/sentry';
 import { getSentryConfig } from './lib/sentry/config';
+import { initFaro, getFaroConfig } from './lib/faro';
 import { SentryErrorBoundary } from './components/ErrorBoundary';
 
 // Global error handler to catch and suppress AbortErrors
@@ -89,6 +90,16 @@ if (sentryConfig) {
   } catch (error) {
     // Log initialization error but don't block app startup
     console.error('[Sentry] Failed to initialize:', error);
+  }
+}
+
+// Initialize Grafana Faro (Frontend Observability) when collector URL is configured
+const faroConfig = getFaroConfig();
+if (faroConfig) {
+  try {
+    initFaro(faroConfig);
+  } catch (error) {
+    console.error('[Faro] Failed to initialize:', error);
   }
 }
 
