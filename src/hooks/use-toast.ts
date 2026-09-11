@@ -9,7 +9,7 @@ const TOAST_LIMIT = 1
 // Time to keep a toast mounted after it is closed (for exit animation)
 const TOAST_REMOVE_DELAY = 1000
 // Default auto-dismiss duration for toasts (ms). Use 0/Infinity to make persistent.
-const DEFAULT_TOAST_DURATION_MS = 1700
+const DEFAULT_TOAST_DURATION_MS = 1000
 
 type ToasterToast = ToastProps & {
   id: string

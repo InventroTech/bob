@@ -102,7 +102,8 @@ function procurementColumnLayout(
   const priorityCol = { width: '6.5rem', minWidth: '6.5rem', maxWidth: '6.5rem' };
   const dateCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '6rem' };
   const costCol = { width: '6.75rem', minWidth: '6.75rem', maxWidth: '7.25rem' };
-  const vendorCol = { width: '5rem', minWidth: '5rem', maxWidth: '5.5rem' };
+  // Room for multi-word vendors; wraps instead of truncating so full name stays visible.
+  const vendorCol = { width: '10rem', minWidth: '9rem', maxWidth: '12rem' };
   const requesterCol = { width: '7.5rem', minWidth: '7.5rem', maxWidth: '9rem' };
   const editCol = { width: '4.25rem', minWidth: '4.25rem', maxWidth: '4.25rem' };
   const layouts: Record<string, { width?: string; minWidth?: string; maxWidth?: string }> = {
@@ -111,6 +112,7 @@ function procurementColumnLayout(
     requester_name: requesterCol,
     estimated_cost: costCol,
     vendor: vendorCol,
+    vendor_name: vendorCol,
     request_date: dateCol,
     eta: dateCol,
     urgency_level: priorityCol,
@@ -1430,6 +1432,17 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     if (calendarDateAccessors.has(String(column.accessor || ''))) {
       return (
         <span className="inline-block text-sm whitespace-nowrap uppercase text-center" title={displayValue}>
+          {displayValue}
+        </span>
+      );
+    }
+    // Vendor: wrap inside the column (no ellipsis) so long names stay fully readable and don't collide with Request Date.
+    if (column.accessor === 'vendor' || column.accessor === 'vendor_name') {
+      return (
+        <span
+          className="block min-w-0 max-w-full whitespace-normal break-words text-sm uppercase leading-snug"
+          title={displayValue}
+        >
           {displayValue}
         </span>
       );
