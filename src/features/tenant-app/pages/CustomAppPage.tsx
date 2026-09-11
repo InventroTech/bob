@@ -244,24 +244,31 @@ const CustomAppPage: React.FC = () => {
   };
 
   const headerTitle = getHeaderTitle();
+  const isRequestFormComponent = (type: string) =>
+    type === 'inventoryRequestForm' || type === 'procurementRequestForm';
+
   const isInventoryTableComponent = (comp: { type?: string; config?: Record<string, unknown> }) => {
+    const type = String(comp.type || '');
+    // Request forms store inventory/unmannd entityType in config, but they are not tables.
+    if (isRequestFormComponent(type)) return false;
     if (!isUnmanndApp) {
       return (
-        Boolean(TABLE_COMPONENT_KIND_MAP[String(comp.type || '')]) ||
-        (String(comp.type || '') === 'leadTable' && isInventoryLikeTableConfig(comp.config))
+        Boolean(TABLE_COMPONENT_KIND_MAP[type]) ||
+        (type === 'leadTable' && isInventoryLikeTableConfig(comp.config))
       );
     }
-    const type = String(comp.type || '');
     return (
       Boolean(TABLE_COMPONENT_KIND_MAP[type]) ||
       type === 'leadTable' ||
-      type === 'inventoryTable' ||
-      isInventoryLikeTableConfig(comp.config)
+      type === 'inventoryTable'
     );
   };
 
   const pageHasInventoryRequestTable =
     Array.isArray(page.config) && page.config.some((comp) => isInventoryTableComponent(comp));
+  const pageHasRequestForm =
+    Array.isArray(page.config) &&
+    page.config.some((comp: { type?: string }) => isRequestFormComponent(String(comp.type || '')));
   const pageHasRecordsTable =
     Array.isArray(page.config) &&
     page.config.some((comp: { type?: string }) => {
@@ -274,11 +281,12 @@ const CustomAppPage: React.FC = () => {
         Boolean(TABLE_COMPONENT_KIND_MAP[t])
       );
     });
-  // Tables render title + search in one toolbar row — hide sticky duplicate.
+  // Tables and the request form render their own title — hide sticky duplicate.
   // Dispatch widgets can also opt out (mobile-app setting).
   const hidePageHeader =
     pageHasInventoryRequestTable ||
     pageHasRecordsTable ||
+    pageHasRequestForm ||
     (Array.isArray(page.config) &&
       page.config.some(
         (comp: { type?: string; config?: { hidePageHeader?: boolean } }) =>
