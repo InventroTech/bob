@@ -19,6 +19,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@grafana/faro-web-sdk": "^2.11.0",
+    "@grafana/faro-web-tracing": "^2.11.0",
     "@hookform/resolvers": "^3.9.0",
     "@material-tailwind/react": "^2.1.10",
     "@mui/x-charts": "^8.3.0",
@@ -95,8 +97,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0",
     "@eslint/js": "^9.9.0",
+    "@playwright/test": "^1.55.0",
     "@tailwindcss/typography": "^0.5.15",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
