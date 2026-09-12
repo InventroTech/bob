@@ -232,7 +232,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (status === 'pending') {
         consecutivePending += 1;
-        // First-time login: link-user-uid may still be in progress
+        // First-time login: link-user-uid may still be in progress.
+        // Threshold * SESSION_CHECK_MS = ~2min grace window; keep in sync when SESSION_CHECK_MS changes.
         if (consecutivePending < 4) return;
         await forceSignOutRevokedUser(
           'Your access to this organization was removed. Please log in again.'
