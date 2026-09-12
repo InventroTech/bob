@@ -15,7 +15,7 @@ import type { User } from '@supabase/supabase-js';
 import { clearAllInventoryRequestFormDrafts } from '@/components/page-builder/inventory-request-form/draftStorage';
 
 const ACCESS_CACHE_KEY = 'pyro_access_check';
-const SESSION_CHECK_MS = 15_000;
+const SESSION_CHECK_MS = 30_000;
 /** Allow login + link-user-uid + JWT refresh to finish before watchdog runs. */
 export const SESSION_WATCHDOG_INITIAL_DELAY_MS = 8_000;
 
@@ -81,7 +81,7 @@ async function linkMembershipIfNeeded(user: User, tenantSlug?: string | null): P
  * Catches: deleted auth user, revoked refresh tokens, removed tenant membership.
  *
  * attemptLink=true is only for the initial page-load check (ProtectedAppRoute).
- * The recurring watchdog passes false to avoid spamming link-user-uid every 15s.
+ * The recurring watchdog passes false to avoid spamming link-user-uid every 30s.
  */
 export async function validateServerSession(
   tenantSlug?: string | null,
@@ -116,7 +116,7 @@ export async function validateServerSession(
 
   // First-time login path: link uid to admin-created membership, then re-check.
   // Only do this on the initial page-load check — NOT on the recurring watchdog
-  // (which would spam link-user-uid every 15s for every user with a missing membership).
+  // (which would spam link-user-uid every 30s for every user with a missing membership).
   if (attemptLink) {
     await linkMembershipIfNeeded(userData.user, slug);
     membership = await fetchMembership(slug ?? undefined);
