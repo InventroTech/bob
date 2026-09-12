@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { setSentryUser, clearSentryUser } from '@/lib/sentry';
+import { setFaroUser, clearFaroUser } from '@/lib/faro';
 import { clearAccessToken, setAccessToken } from '@/lib/auth/accessTokenProvider';
 import {
   clearRefreshSuppression,
@@ -66,6 +67,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearLocalAuthCaches();
       clearAccessToken();
       clearSentryUser();
+      clearFaroUser();
       setSession(null);
       setUser(null);
       await signOutAndClearSession({ reason: 'intentional' });
@@ -92,13 +94,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const u = session?.user ?? null;
         setUser(u);
         if (u) {
-          setSentryUser({
+          const userCtx = {
             id: u.id,
             email: u.email,
             username: u.user_metadata?.username || u.email?.split('@')[0],
-          });
+          };
+          setSentryUser(userCtx);
+          setFaroUser(userCtx);
         } else {
           clearSentryUser();
+          clearFaroUser();
         }
       })
       .catch((err: unknown) => {
@@ -122,6 +127,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           clearAccessToken();
           setUser(null);
           clearSentryUser();
+          clearFaroUser();
           clearLocalAuthCaches();
           setLoading(false);
           const loginUrl = getLoginUrl();
@@ -138,6 +144,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           clearAccessToken();
           setUser(null);
           clearSentryUser();
+          clearFaroUser();
           clearLocalAuthCaches();
           setLoading(false);
           const loginUrl = getLoginUrl();
@@ -163,9 +170,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const u = session?.user ?? null;
         setUser(u);
         if (u) {
-          setSentryUser({ id: u.id, email: u.email, username: u.user_metadata?.username || u.email?.split('@')[0] });
+          const userCtx = {
+            id: u.id,
+            email: u.email,
+            username: u.user_metadata?.username || u.email?.split('@')[0],
+          };
+          setSentryUser(userCtx);
+          setFaroUser(userCtx);
         } else {
           clearSentryUser();
+          clearFaroUser();
         }
         setLoading(false);
       }
