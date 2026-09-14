@@ -141,4 +141,4 @@ Example: `@/components/page-builder/lead-table`.
 
 ## License
 
-Private.
+GPL-3.0. See [LICENSE](./LICENSE).
