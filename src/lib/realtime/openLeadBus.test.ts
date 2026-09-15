@@ -7,6 +7,7 @@ import {
   getActiveLeadHighlight,
   getPendingOpenLead,
   getRegisteredAllLeadsPath,
+  isActiveOpenLeadRequest,
   normalizeOpenLeadId,
   parsePositiveCrmRecordId,
   PYRO_OPEN_LEAD,
@@ -201,6 +202,50 @@ describe("requestOpenLead", () => {
     expect(opened.every((item) => item.record_id === "222")).toBe(true);
     expect(opened.some((item) => item.record_id === "111")).toBe(false);
     expect(getActiveLeadHighlight()?.record_id).toBe("222");
+  });
+});
+
+describe("isActiveOpenLeadRequest", () => {
+  beforeEach(() => {
+    clearOpenLeadHighlightStash();
+  });
+
+  afterEach(() => {
+    clearOpenLeadHighlightStash();
+  });
+
+  it("returns false for a stale lead A after stash moved to lead B", () => {
+    stashOpenLeadHighlight({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+    });
+    expect(
+      isActiveOpenLeadRequest({ record_id: "111", praja_id: "PRAJA-A" }),
+    ).toBe(true);
+
+    stashOpenLeadHighlight({
+      record_id: "222",
+      praja_id: "PRAJA-B",
+    });
+    expect(
+      isActiveOpenLeadRequest({ record_id: "111", praja_id: "PRAJA-A" }),
+    ).toBe(false);
+    expect(
+      isActiveOpenLeadRequest({ record_id: "222", praja_id: "PRAJA-B" }),
+    ).toBe(true);
+  });
+
+  it("matches praja-only stash against the same praja", () => {
+    stashOpenLeadHighlight({
+      record_id: "",
+      praja_id: "PRAJA-A",
+    });
+    expect(
+      isActiveOpenLeadRequest({ record_id: "", praja_id: "PRAJA-A" }),
+    ).toBe(true);
+    expect(
+      isActiveOpenLeadRequest({ record_id: "", praja_id: "PRAJA-B" }),
+    ).toBe(false);
   });
 });
 

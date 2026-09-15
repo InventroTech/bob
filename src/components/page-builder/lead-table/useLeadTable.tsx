@@ -19,6 +19,7 @@ import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import {
   consumePendingOpenLead,
   getActiveLeadHighlight,
+  isActiveOpenLeadRequest,
   normalizeOpenLeadId,
   parsePositiveCrmRecordId,
   PYRO_CLEAR_LEAD_HIGHLIGHT,
@@ -157,6 +158,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const leadCardRef = useRef<LeadCardCarouselHandle | null>(null);
   const lastOpenedLeadKeyRef = useRef<string | null>(null);
   const lastOpenedLeadAtRef = useRef(0);
+  const openLeadModalTimerRef = useRef<number | null>(null);
   const dataRef = useRef(data);
   const filteredDataRef = useRef(filteredData);
   dataRef.current = data;
@@ -2543,6 +2545,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       const prajaId = normalizeOpenLeadId(request.praja_id) || null;
       if (!recordId && !prajaId) return;
 
+      // Newer click wins — cancel a previous delayed modal open.
+      if (openLeadModalTimerRef.current != null) {
+        window.clearTimeout(openLeadModalTimerRef.current);
+        openLeadModalTimerRef.current = null;
+      }
+
       stashOpenLeadHighlight({
         ...request,
         record_id: recordId,
@@ -2555,6 +2563,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         lastOpenedLeadKeyRef.current === openKey &&
         now - lastOpenedLeadAtRef.current < 2500;
 
+      const stillThisOpen = () => isActiveOpenLeadRequest({ record_id: recordId, praja_id: prajaId });
+
       let row = findInLists(recordId, prajaId);
       if (!row && recordId) {
         const numericId = parsePositiveCrmRecordId(recordId);
@@ -2564,6 +2574,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           } catch {
             row = null;
           }
+          // Click B while A was fetching — drop stale A.
+          if (!stillThisOpen()) return;
         }
       }
 
@@ -2581,6 +2593,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           const response = await apiClient.get(
             `${String(effectiveApiEndpoint).split('?')[0]}?${params.toString()}`,
           );
+          if (!stillThisOpen()) return;
           const results =
             response.data?.results || response.data?.data || response.data || [];
           if (Array.isArray(results)) {
@@ -2594,7 +2607,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         } catch {
           row = null;
         }
+        if (!stillThisOpen()) return;
       }
+
+      if (!stillThisOpen()) return;
 
       if (!row) {
         // Do not consume pending / lock dedupe — allow a later retry when data arrives.
@@ -2614,7 +2630,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Let the user see the highlighted row first, then open the lead profile.
       if (effectiveDetailMode === 'lead_card') {
         setSelectedLead(tableRow);
-        window.setTimeout(() => {
+        openLeadModalTimerRef.current = window.setTimeout(() => {
+          openLeadModalTimerRef.current = null;
+          // Another notification may have been clicked during the delay.
+          if (!stillThisOpen()) return;
           setIsLeadModalOpen(true);
         }, 450);
       }
@@ -2648,6 +2667,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     window.addEventListener(PYRO_OPEN_LEAD, listener);
     return () => {
       window.removeEventListener(PYRO_OPEN_LEAD, listener);
+      if (openLeadModalTimerRef.current != null) {
+        window.clearTimeout(openLeadModalTimerRef.current);
+        openLeadModalTimerRef.current = null;
+      }
     };
   }, [
     isInPageBuilder,

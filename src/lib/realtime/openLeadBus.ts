@@ -187,6 +187,34 @@ export function getActiveLeadHighlight(): OpenLeadHighlightStash | null {
   return hasOpenLeadIdentity(activeHighlight) ? activeHighlight : null;
 }
 
+/**
+ * True when the active stash still refers to this open request.
+ * Used after awaits so a late lead-A fetch cannot overwrite lead B.
+ */
+export function isActiveOpenLeadRequest(request: {
+  record_id?: string | null;
+  praja_id?: string | null;
+}): boolean {
+  const stash = getActiveLeadHighlight();
+  if (!stash) return false;
+
+  const reqRecord = normalizeOpenLeadId(request.record_id);
+  const reqPraja = normalizeOpenLeadId(request.praja_id);
+  const stashRecord = normalizeOpenLeadId(stash.record_id);
+  const stashPraja = normalizeOpenLeadId(stash.praja_id);
+
+  if (reqRecord && stashRecord) {
+    return reqRecord === stashRecord;
+  }
+  if (reqPraja && stashPraja) {
+    // Praja-only (or stash still praja-only): must match praja.
+    // If stash already has a different CRM id, this request is stale.
+    if (stashRecord && reqRecord && stashRecord !== reqRecord) return false;
+    return reqPraja === stashPraja;
+  }
+  return false;
+}
+
 export function peekOpenLeadHighlight(): OpenLeadHighlightStash | null {
   return getActiveLeadHighlight();
 }
