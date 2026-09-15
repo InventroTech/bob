@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leadCalledBackDedupeKey } from "./useLeadCalledBackNotification";
+import { leadCalledBackDedupeKey } from "@/lib/realtime/leadCalledBackDedupe";
 import type { LeadCalledBackPayload } from "@/lib/realtime/types";
 
 function payload(
