@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  beginOpenLeadAction,
   clearLeadHighlightForNotification,
   clearOpenLeadHighlightStash,
   clearRegisteredAllLeadsPath,
@@ -8,6 +9,7 @@ import {
   getPendingOpenLead,
   getRegisteredAllLeadsPath,
   isActiveOpenLeadRequest,
+  isOpenLeadActionCurrent,
   normalizeOpenLeadId,
   parsePositiveCrmRecordId,
   PYRO_OPEN_LEAD,
@@ -246,6 +248,30 @@ describe("isActiveOpenLeadRequest", () => {
     expect(
       isActiveOpenLeadRequest({ record_id: "", praja_id: "PRAJA-B" }),
     ).toBe(false);
+  });
+});
+
+describe("openLeadActionGeneration", () => {
+  it("invalidates a prior generation when a newer open begins (A then B race)", () => {
+    const genA = beginOpenLeadAction();
+    expect(isOpenLeadActionCurrent(genA)).toBe(true);
+
+    // Simulates click B (requestOpenLead / openLead) while getLeadById(A) is in flight.
+    const genB = beginOpenLeadAction();
+    expect(isOpenLeadActionCurrent(genA)).toBe(false);
+    expect(isOpenLeadActionCurrent(genB)).toBe(true);
+  });
+
+  it("requestOpenLead bumps generation so a late A await must bail", () => {
+    const genA = beginOpenLeadAction();
+    registerAllLeadsPath("/app/praja/pages/1");
+    requestOpenLead({
+      record_id: "222",
+      praja_id: "PRAJA-B",
+      lead_name: "Lead B",
+    });
+    expect(isOpenLeadActionCurrent(genA)).toBe(false);
+    expect(getActiveLeadHighlight()?.record_id).toBe("222");
   });
 });
 

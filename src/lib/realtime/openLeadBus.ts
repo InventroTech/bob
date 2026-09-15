@@ -32,6 +32,21 @@ let registeredAllLeadsPath: string | null = null;
 /** Cancels delayed PYRO_OPEN_LEAD pokes when a newer open supersedes them. */
 let openLeadPokeGeneration = 0;
 const openLeadPokeTimerIds: number[] = [];
+/**
+ * Shared generation for in-flight openLead work (getLeadById awaits + modal timeout).
+ * Bump on each new open so a late lead-A fetch cannot finish after lead B was clicked.
+ */
+let openLeadActionGeneration = 0;
+
+/** Call at the start of every new open (requestOpenLead / openLead). */
+export function beginOpenLeadAction(): number {
+  openLeadActionGeneration += 1;
+  return openLeadActionGeneration;
+}
+
+export function isOpenLeadActionCurrent(generation: number): boolean {
+  return generation === openLeadActionGeneration;
+}
 
 function clearOpenLeadPokeTimers(): void {
   if (typeof window === "undefined") return;
@@ -325,6 +340,9 @@ export function requestOpenLead(
   options?: { allLeadsPath?: string | null },
 ): void {
   if (!hasOpenLeadIdentity(request)) return;
+
+  // Invalidate any in-flight openLead (await getLeadById / modal timeout) from a prior click.
+  beginOpenLeadAction();
 
   const safeRequest: OpenLeadRequest = {
     record_id: normalizeOpenLeadId(request.record_id),

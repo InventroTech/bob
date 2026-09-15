@@ -17,9 +17,11 @@ import { useFilters } from '@/hooks/useFilters';
 import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
 import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import {
+  beginOpenLeadAction,
   consumePendingOpenLead,
   getActiveLeadHighlight,
   isActiveOpenLeadRequest,
+  isOpenLeadActionCurrent,
   normalizeOpenLeadId,
   parsePositiveCrmRecordId,
   PYRO_CLEAR_LEAD_HIGHLIGHT,
@@ -2551,6 +2553,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         openLeadModalTimerRef.current = null;
       }
 
+      // Generation + stash: poke timers are cancelled separately; awaits are not abortable,
+      // so after every await / before the 450ms modal we bail if a newer open superseded us.
+      const generation = beginOpenLeadAction();
+
       stashOpenLeadHighlight({
         ...request,
         record_id: recordId,
@@ -2563,7 +2569,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         lastOpenedLeadKeyRef.current === openKey &&
         now - lastOpenedLeadAtRef.current < 2500;
 
-      const stillThisOpen = () => isActiveOpenLeadRequest({ record_id: recordId, praja_id: prajaId });
+      const stillThisOpen = () =>
+        isOpenLeadActionCurrent(generation) &&
+        isActiveOpenLeadRequest({ record_id: recordId, praja_id: prajaId });
 
       let row = findInLists(recordId, prajaId);
       if (!row && recordId) {
@@ -2574,7 +2582,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           } catch {
             row = null;
           }
-          // Click B while A was fetching — drop stale A.
+          // Click B while A was fetching — drop stale A (do not consume B's pending / stash A).
           if (!stillThisOpen()) return;
         }
       }
@@ -2775,11 +2783,20 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       void crmLeadsApi
         .getLeadById(numericId)
         .then((row) => {
-          if (cancelled || !row || !getActiveLeadHighlight()) return;
-          // Only prepend if the fetched row is the stashed lead (never a random /records/N hit).
-          if (!rowMatchesLeadHighlight(row, stash)) return;
+          if (cancelled || !row) return;
+          // Stash may have moved to another lead while this fetch was in flight.
+          const current = getActiveLeadHighlight();
+          if (!current || !rowMatchesLeadHighlight(row, current)) return;
+          if (
+            !isActiveOpenLeadRequest({
+              record_id: stashRecordId,
+              praja_id: stash.praja_id,
+            })
+          ) {
+            return;
+          }
           const tableRow = transformLeadData(row, config);
-          const sameRow = (r: any) => rowMatchesLeadHighlight(r, stash);
+          const sameRow = (r: any) => rowMatchesLeadHighlight(r, current);
           setFilteredData((prev) => {
             if (prev.some(sameRow)) return prev;
             return [tableRow, ...prev];
@@ -2791,7 +2808,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           const rowId =
             tableRow?.id != null
               ? String(tableRow.id)
-              : stashRecordId || null;
+              : normalizeOpenLeadId(current.record_id) || null;
           setHighlightedLeadId(rowId);
           if (rowId) {
             window.setTimeout(() => {
