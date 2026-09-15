@@ -29,6 +29,35 @@ let pendingOpenLead: OpenLeadRequest | null = null;
 let activeHighlight: OpenLeadHighlightStash | null = null;
 /** Pathname of the last mounted All Leads table, e.g. `/app/praja/pages/<id>`. */
 let registeredAllLeadsPath: string | null = null;
+/** Cancels delayed PYRO_OPEN_LEAD pokes when a newer open supersedes them. */
+let openLeadPokeGeneration = 0;
+const openLeadPokeTimerIds: number[] = [];
+
+function clearOpenLeadPokeTimers(): void {
+  if (typeof window === "undefined") return;
+  while (openLeadPokeTimerIds.length > 0) {
+    const id = openLeadPokeTimerIds.pop();
+    if (id != null) window.clearTimeout(id);
+  }
+}
+
+function scheduleOpenLeadPoke(
+  request: OpenLeadRequest,
+  delayMs: number,
+  generation: number,
+): void {
+  if (typeof window === "undefined") return;
+  const timerId = window.setTimeout(() => {
+    const idx = openLeadPokeTimerIds.indexOf(timerId);
+    if (idx >= 0) openLeadPokeTimerIds.splice(idx, 1);
+    // Stale poke from an earlier click (lead A after lead B) — drop it.
+    if (generation !== openLeadPokeGeneration) return;
+    window.dispatchEvent(
+      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: request }),
+    );
+  }, delayMs);
+  openLeadPokeTimerIds.push(timerId);
+}
 
 function emitHighlightChanged(): void {
   if (typeof window === "undefined") return;
@@ -75,6 +104,18 @@ export function normalizeOpenLeadId(value: unknown): string {
   const s = String(value).trim();
   if (!s || s === "null" || s === "undefined") return "";
   return s;
+}
+
+/**
+ * Positive integer CRM record id for getLeadById.
+ * Number("") === 0 and Number.isFinite(0) — never treat empty / zero as fetchable.
+ */
+export function parsePositiveCrmRecordId(value: unknown): number | null {
+  const s = normalizeOpenLeadId(value);
+  if (!s || !/^\d+$/.test(s)) return null;
+  const n = Number(s);
+  if (!Number.isSafeInteger(n) || n <= 0) return null;
+  return n;
 }
 
 /**
@@ -297,17 +338,13 @@ export function requestOpenLead(
     ),
   );
 
-  // Always poke the table: immediately if already there, else after mount.
-  window.setTimeout(() => {
-    window.dispatchEvent(
-      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: safeRequest }),
-    );
-  }, alreadyOnPage ? 50 : 500);
+  // Cancel any in-flight pokes from a previous click (lead A → lead B race).
+  clearOpenLeadPokeTimers();
+  openLeadPokeGeneration += 1;
+  const generation = openLeadPokeGeneration;
 
+  // Always poke the table: immediately if already there, else after mount.
+  scheduleOpenLeadPoke(safeRequest, alreadyOnPage ? 50 : 500, generation);
   // Second poke in case the first landed while the table was still loading.
-  window.setTimeout(() => {
-    window.dispatchEvent(
-      new CustomEvent<OpenLeadRequest>(PYRO_OPEN_LEAD, { detail: safeRequest }),
-    );
-  }, alreadyOnPage ? 400 : 1200);
+  scheduleOpenLeadPoke(safeRequest, alreadyOnPage ? 400 : 1200, generation);
 }

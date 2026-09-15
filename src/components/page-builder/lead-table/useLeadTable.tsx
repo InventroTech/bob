@@ -20,6 +20,7 @@ import {
   consumePendingOpenLead,
   getActiveLeadHighlight,
   normalizeOpenLeadId,
+  parsePositiveCrmRecordId,
   PYRO_CLEAR_LEAD_HIGHLIGHT,
   PYRO_LEAD_HIGHLIGHT_CHANGED,
   PYRO_OPEN_LEAD,
@@ -2556,8 +2557,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
       let row = findInLists(recordId, prajaId);
       if (!row && recordId) {
-        const numericId = Number(recordId);
-        if (Number.isFinite(numericId)) {
+        const numericId = parsePositiveCrmRecordId(recordId);
+        if (numericId != null) {
           try {
             row = await crmLeadsApi.getLeadById(numericId);
           } catch {
@@ -2676,24 +2677,28 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   // Keep React highlight state in sync with the persistent stash (set on notification click).
   // This is the reliable path — does not depend on detailMode / openLead succeeding.
+  // fetchStartedForRef survives effect re-runs (filteredData changes) so we don't hammer /records/0/.
+  const highlightFetchStartedRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (isInPageBuilder) return;
     const entityType = String(config?.entityType || 'lead').toLowerCase();
     if (entityType !== 'lead') return;
 
     let cancelled = false;
-    let fetchStartedFor: string | null = null;
 
     const syncFromStash = () => {
       if (cancelled) return;
       const stash = getActiveLeadHighlight();
       if (!stash) {
+        highlightFetchStartedRef.current = null;
         setHighlightedLeadId(null);
         setHighlightedPrajaId(null);
         setHighlightedLeadLabel(null);
         return;
       }
 
+      const stashRecordId = normalizeOpenLeadId(stash.record_id);
       const label =
         stash.lead_name?.trim() ||
         (stash.praja_id ? `Praja ${stash.praja_id}` : null) ||
@@ -2702,7 +2707,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       setHighlightedPrajaId(stash.praja_id ? String(stash.praja_id) : null);
 
       if (loading) {
-        setHighlightedLeadId(String(stash.record_id));
+        setHighlightedLeadId(stashRecordId || null);
         return;
       }
 
@@ -2717,7 +2722,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             ? String(existing.id)
             : existing?.record_id != null
               ? String(existing.record_id)
-              : String(stash.record_id);
+              : stashRecordId || null;
         setHighlightedLeadId(rowId);
         const sameRow = (r: any) => rowMatchesLeadHighlight(r, stash);
         setFilteredData((prev) => {
@@ -2726,26 +2731,30 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           const row = prev[idx];
           return [row, ...prev.filter((_, i) => i !== idx)];
         });
-        window.setTimeout(() => {
-          const el = document.querySelector(
-            `[data-row-id="${CSS.escape(rowId)}"]`,
-          ) as HTMLElement | null;
-          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 200);
+        if (rowId) {
+          window.setTimeout(() => {
+            const el = document.querySelector(
+              `[data-row-id="${CSS.escape(rowId)}"]`,
+            ) as HTMLElement | null;
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 200);
+        }
         return;
       }
 
-      setHighlightedLeadId(String(stash.record_id));
+      setHighlightedLeadId(stashRecordId || null);
 
-      // Not on current page — fetch and prepend so the blue row is visible.
-      const numericId = Number(stash.record_id);
-      const fetchKey = `${stash.record_id}|${stash.praja_id || ''}`;
-      if (!Number.isFinite(numericId) || fetchStartedFor === fetchKey) return;
-      fetchStartedFor = fetchKey;
+      // Not on current page — fetch only with a real positive CRM id (never Number("") → 0).
+      const numericId = parsePositiveCrmRecordId(stash.record_id);
+      const fetchKey = `${stashRecordId}|${normalizeOpenLeadId(stash.praja_id) || ''}`;
+      if (numericId == null || highlightFetchStartedRef.current === fetchKey) return;
+      highlightFetchStartedRef.current = fetchKey;
       void crmLeadsApi
         .getLeadById(numericId)
         .then((row) => {
           if (cancelled || !row || !getActiveLeadHighlight()) return;
+          // Only prepend if the fetched row is the stashed lead (never a random /records/N hit).
+          if (!rowMatchesLeadHighlight(row, stash)) return;
           const tableRow = transformLeadData(row, config);
           const sameRow = (r: any) => rowMatchesLeadHighlight(r, stash);
           setFilteredData((prev) => {
@@ -2757,17 +2766,24 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             return [tableRow, ...prev];
           });
           const rowId =
-            tableRow?.id != null ? String(tableRow.id) : String(stash.record_id);
+            tableRow?.id != null
+              ? String(tableRow.id)
+              : stashRecordId || null;
           setHighlightedLeadId(rowId);
-          window.setTimeout(() => {
-            const el = document.querySelector(
-              `[data-row-id="${CSS.escape(rowId)}"]`,
-            ) as HTMLElement | null;
-            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 200);
+          if (rowId) {
+            window.setTimeout(() => {
+              const el = document.querySelector(
+                `[data-row-id="${CSS.escape(rowId)}"]`,
+              ) as HTMLElement | null;
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 200);
+          }
         })
         .catch(() => {
-          /* ignore — stash still drives matching if the row appears later */
+          // Allow a later retry if this fetch failed (e.g. transient 404).
+          if (highlightFetchStartedRef.current === fetchKey) {
+            highlightFetchStartedRef.current = null;
+          }
         });
     };
 

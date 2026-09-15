@@ -8,6 +8,8 @@ import {
   getPendingOpenLead,
   getRegisteredAllLeadsPath,
   normalizeOpenLeadId,
+  parsePositiveCrmRecordId,
+  PYRO_OPEN_LEAD,
   registerAllLeadsPath,
   requestOpenLead,
   rowMatchesLeadHighlight,
@@ -29,6 +31,25 @@ describe("normalizeOpenLeadId", () => {
   it("trims and keeps real ids", () => {
     expect(normalizeOpenLeadId(" 913285 ")).toBe("913285");
     expect(normalizeOpenLeadId(913285)).toBe("913285");
+  });
+});
+
+describe("parsePositiveCrmRecordId", () => {
+  it("rejects empty / zero / non-numeric so Number(\"\") cannot become 0", () => {
+    expect(parsePositiveCrmRecordId("")).toBeNull();
+    expect(parsePositiveCrmRecordId("   ")).toBeNull();
+    expect(parsePositiveCrmRecordId(null)).toBeNull();
+    expect(parsePositiveCrmRecordId(undefined)).toBeNull();
+    expect(parsePositiveCrmRecordId("0")).toBeNull();
+    expect(parsePositiveCrmRecordId(0)).toBeNull();
+    expect(parsePositiveCrmRecordId("null")).toBeNull();
+    expect(parsePositiveCrmRecordId("12.5")).toBeNull();
+    expect(parsePositiveCrmRecordId("-3")).toBeNull();
+  });
+
+  it("accepts positive integer ids", () => {
+    expect(parsePositiveCrmRecordId("913285")).toBe(913285);
+    expect(parsePositiveCrmRecordId(42)).toBe(42);
   });
 });
 
@@ -109,19 +130,16 @@ describe("requestOpenLead", () => {
   beforeEach(() => {
     clearOpenLeadHighlightStash();
     consumePendingOpenLead();
-    vi.stubGlobal("window", {
-      ...window,
-      dispatchEvent: vi.fn(),
-      setTimeout: vi.fn(),
-      location: { pathname: "/app/praja/pages/1" },
-      sessionStorage: { removeItem: vi.fn() },
-    });
+    clearRegisteredAllLeadsPath();
+    registerAllLeadsPath("/app/praja/pages/1");
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
     clearOpenLeadHighlightStash();
     consumePendingOpenLead();
-    vi.unstubAllGlobals();
+    clearRegisteredAllLeadsPath();
+    vi.useRealTimers();
   });
 
   it("allows praja-only opens when record_id is missing", () => {
@@ -146,6 +164,43 @@ describe("requestOpenLead", () => {
 
     expect(getPendingOpenLead()).toBeNull();
     expect(getActiveLeadHighlight()).toBeNull();
+  });
+
+  it("cancels lead A delayed pokes when lead B is opened", () => {
+    const opened: Array<{ record_id: string; praja_id?: string | null }> = [];
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ record_id: string; praja_id?: string | null }>)
+        .detail;
+      opened.push({
+        record_id: detail.record_id,
+        praja_id: detail.praja_id,
+      });
+    };
+    window.addEventListener(PYRO_OPEN_LEAD, onOpen);
+
+    // Pretend we are already on All Leads so short delays apply.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/app/praja/pages/1" },
+    });
+
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Lead A",
+    });
+    requestOpenLead({
+      record_id: "222",
+      praja_id: "PRAJA-B",
+      lead_name: "Lead B",
+    });
+
+    vi.advanceTimersByTime(1500);
+    window.removeEventListener(PYRO_OPEN_LEAD, onOpen);
+
+    expect(opened.every((item) => item.record_id === "222")).toBe(true);
+    expect(opened.some((item) => item.record_id === "111")).toBe(false);
+    expect(getActiveLeadHighlight()?.record_id).toBe("222");
   });
 });
 
