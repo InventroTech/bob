@@ -267,6 +267,19 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
       lead.data?.product_image ||
       transformedLead.product_image ||
       null;
+    // Product URL for the Link column on All Request / procurement tables
+    transformedLead.product_link =
+      lead.product_link ||
+      lead.data?.product_link ||
+      transformedLead.product_link ||
+      null;
+    // Keep workflow fields on the row so stage tabs / filters can read them reliably.
+    transformedLead.status = lead.data?.status ?? lead.status ?? transformedLead.status ?? null;
+    transformedLead.shipment_status =
+      lead.data?.shipment_status ?? lead.shipment_status ?? transformedLead.shipment_status ?? null;
+    if (lead.data?.invoiced != null || lead.invoiced != null) {
+      transformedLead.invoiced = lead.data?.invoiced ?? lead.invoiced;
+    }
     if (!transformedLead.vendor) {
       transformedLead.vendor = lead.data?.vendor || lead.vendor || null;
     }
@@ -287,6 +300,9 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
     poster: lead.data?.poster || lead.poster || null, // Add poster field from records JSONB data
     display_pic_url: lead.display_pic_url || lead.data?.display_pic_url || null,
     product_image: lead.product_image || lead.data?.product_image || null,
+    product_link: lead.product_link || lead.data?.product_link || null,
+    status: lead.data?.status ?? lead.status ?? null,
+    shipment_status: lead.data?.shipment_status ?? lead.shipment_status ?? null,
   };
 };
 

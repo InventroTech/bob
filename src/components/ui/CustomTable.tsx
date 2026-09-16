@@ -192,13 +192,14 @@ export const CustomTable: React.FC<CustomTableProps> = ({
       <div
         className={cn(
           'w-full max-w-full min-w-0',
-          fitViewport ? 'overflow-x-hidden' : 'overflow-x-auto',
-          fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-hidden'
+          // Allow horizontal scroll when columns exceed the viewport; keep vertical scroll for tall tables.
+          'overflow-x-auto',
+          fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-visible'
         )}
       >
         <table
           className={cn(
-            fitViewport ? 'table-fixed w-full' : 'min-w-max w-full',
+            fitViewport ? 'w-full min-w-[72rem] table-fixed' : 'min-w-max w-full',
             'bg-white',
             tableClassName
           )}
@@ -241,6 +242,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
               ) : null}
               {columns.map((col, idx) => {
                 const itemNameCol = isItemNameAccessor(col.accessor);
+                const isFixedCol = Boolean(col.width || col.maxWidth);
                 const headerSingleLine = fitViewport && itemNameCol;
                 const headerPadLeft =
                   fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
@@ -249,7 +251,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   key={idx}
                   className={cn(
                     'text-sm font-medium',
-                    fitViewport && 'overflow-hidden',
+                    fitViewport && !itemNameCol && !isFixedCol && 'overflow-hidden',
+                    itemNameCol && fitViewport && 'min-w-[14rem] overflow-visible',
+                    isFixedCol && fitViewport && 'overflow-visible',
                     headerSingleLine && 'whitespace-nowrap',
                     headerUppercase && 'uppercase tracking-wide font-semibold',
                     comfortable ? 'py-3' : cellY,
@@ -337,6 +341,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   ) : null}
                   {columns.map((col, colIdx) => {
                     const itemNameCol = isItemNameAccessor(col.accessor);
+                    const isFixedCol = Boolean(col.width || col.maxWidth);
                     const cellPadLeft =
                       fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
                     return (
@@ -345,8 +350,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                       className={cn(
                         'text-sm align-middle',
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
-                        // Clip overflowing cell text in fixed layout so adjacent columns stay spaced.
-                        fitViewport && 'max-w-0 overflow-hidden',
+                        // Only clip flexible text columns — fixed cols (Edit, chips, etc.) must stay visible.
+                        fitViewport && !isFixedCol && 'max-w-0 overflow-hidden',
+                        fitViewport && isFixedCol && 'overflow-visible',
                         cellY,
                         col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
                         col.align === 'right' && `${cellX} text-right`

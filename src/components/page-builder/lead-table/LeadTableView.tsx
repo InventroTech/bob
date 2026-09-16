@@ -28,6 +28,11 @@ import {
 } from './utils';
 import { usePageDisplayTitle } from './InventoryTablePageContext';
 import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
+import {
+  REQUEST_STAGE_TABS,
+  formatStageCount,
+  type RequestStageTabId,
+} from '@/lib/inventory/requestStageTabs';
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -102,6 +107,10 @@ export function LeadTableView(props: LeadTableModel) {
     setBulkStatusPickerOpen,
     bulkStatusPickerOptions,
     selectBulkRowsByStatus,
+    showRequestStageTabs,
+    requestStageTab,
+    setRequestStageTab,
+    requestStageCounts,
   } = props;
 
   // Row navigation for the detail modals: lets users page through filteredData
@@ -153,7 +162,7 @@ export function LeadTableView(props: LeadTableModel) {
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
   const procurementHeaderBg = 'bg-[#0E3777]';
-  const procurementTableFrame = 'overflow-hidden mb-3';
+  const procurementTableFrame = 'mb-3 min-h-0';
   const pageChromeTitle = usePageDisplayTitle().trim();
   const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
   const inventoryTableKindForTitle =
@@ -238,12 +247,15 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — title left; search + Filters right.
-            On mobile, title takes its own row so it isn't squeezed away by flex-nowrap + min-width search. */}
+        {/* Toolbar — All Request: title → numbered stage strip → Bulk Edit / search / Filters.
+            Other tables: title left, search + Filters right. */}
         <div
-          className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3 ${
-            pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
-          }`}
+          className={cn(
+            'mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3',
+            !showRequestStageTabs &&
+              'sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3',
+            !showRequestStageTabs && (pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end')
+          )}
         >
           {pageTitleDisplay ? (
             <h1
@@ -256,16 +268,120 @@ export function LeadTableView(props: LeadTableModel) {
               {pageTitleDisplay}
             </h1>
           ) : null}
-          <div className="flex shrink-0 items-center gap-2 sm:mt-1.5">
+
+          {showRequestStageTabs ? (
+            <div className="w-full overflow-x-auto rounded-[10px] border border-gray-200 bg-white px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+              <div className="flex min-w-max items-center justify-between gap-6">
+                {REQUEST_STAGE_TABS.map((tab) => {
+                  const active = requestStageTab === tab.id;
+                  const count = requestStageCounts[tab.id] ?? 0;
+                  const isClosedTab = Boolean(tab.completeSuffix);
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setRequestStageTab(tab.id as RequestStageTabId)}
+                      className={cn(
+                        'inline-flex shrink-0 items-center gap-2.5 border-0 bg-transparent p-0 text-left transition-colors',
+                        active ? 'text-[#3B66D1]' : 'text-[#1F2937] hover:text-gray-900'
+                      )}
+                    >
+                      {/* Squircle stage icon — pale outer ring + solid blue inner (active) */}
+                      <span
+                        className={cn(
+                          'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] p-[3px]',
+                          active ? 'bg-[#D9E4FF]' : 'bg-transparent'
+                        )}
+                        aria-hidden
+                      >
+                        <span
+                          className={cn(
+                            'inline-flex h-full w-full items-center justify-center rounded-[10px] text-[14px] font-bold leading-none',
+                            active
+                              ? 'bg-[#3B66D1] text-white'
+                              : 'bg-[#E8F0FF] text-[#374151]'
+                          )}
+                        >
+                          {tab.step}
+                        </span>
+                      </span>
+                      {isClosedTab ? (
+                        <span className="flex flex-col items-start justify-center leading-[1.15] whitespace-nowrap">
+                          <span
+                            className={cn(
+                              'text-[13px] font-bold',
+                              active ? 'text-[#3B66D1]' : 'text-[#111827]'
+                            )}
+                          >
+                            {tab.label}
+                          </span>
+                          <span className="mt-0.5 text-[11px] font-medium text-gray-400">
+                            {formatStageCount(count)} {tab.completeSuffix}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <span
+                            className={cn(
+                              'text-[13px] font-bold leading-[1.15]',
+                              active ? 'text-[#3B66D1]' : 'text-[#111827]'
+                            )}
+                          >
+                            {(tab.labelLines ?? [tab.label]).map((line) => (
+                              <span key={line} className="block">
+                                {line}
+                              </span>
+                            ))}
+                          </span>
+                          <span className="inline-flex h-5 min-w-[1.75rem] items-center justify-center rounded-full bg-[#ECEFF3] px-2 text-[11px] font-semibold text-[#4B5563]">
+                            {formatStageCount(count)}
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <div
+            className={cn(
+              'flex w-full shrink-0 flex-wrap items-center gap-2',
+              showRequestStageTabs
+                ? 'justify-end'
+                : pageTitleDisplay
+                  ? 'sm:mt-1.5 sm:justify-end'
+                  : 'sm:justify-end'
+            )}
+          >
+            {bulkSelectionEnabled ? (
+              <CustomButton
+                variant="default"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleBulkSelectAll();
+                }}
+                className="h-[38px] shrink-0 justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-4 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white"
+              >
+                Bulk Edit
+              </CustomButton>
+            ) : null}
             <div
-              className={`relative flex-1 max-w-sm ${
-                isProcurementStyleTable ? 'min-w-[180px]' : 'min-w-[200px]'
-              }`}
+              className={cn(
+                'relative',
+                showRequestStageTabs
+                  ? 'w-full max-w-[280px] min-w-[200px] sm:w-[280px]'
+                  : isProcurementStyleTable
+                    ? 'min-w-[180px] max-w-sm flex-1'
+                    : 'min-w-[200px] max-w-sm flex-1'
+              )}
             >
               <Search
                 className={
                   isProcurementStyleTable
-                    ? 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#1A44A1]'
+                    ? 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400'
                     : 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400'
                 }
               />
@@ -276,7 +392,7 @@ export function LeadTableView(props: LeadTableModel) {
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className={
                   isProcurementStyleTable
-                    ? 'h-9 rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm'
+                    ? 'h-9 w-full rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm'
                     : 'pl-9 h-8 rounded-md'
                 }
               />
@@ -292,8 +408,8 @@ export function LeadTableView(props: LeadTableModel) {
               className={
                 isProcurementStyleTable
                   ? showFilters
-                    ? 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[#0E3777] px-3 text-white shadow-[0_4px_10px_rgba(10,94,205,0.35)] hover:bg-[#0b2d61] hover:text-white'
-                    : 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-3 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white hover:shadow-[0_4px_10px_rgba(10,94,205,0.28)]'
+                    ? 'h-[38px] w-[108px] shrink-0 justify-center rounded-[6px] border-0 bg-[#0E3777] px-3 text-white shadow-[0_4px_10px_rgba(10,94,205,0.35)] hover:bg-[#0b2d61] hover:text-white'
+                    : 'h-[38px] w-[108px] shrink-0 justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-3 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white hover:shadow-[0_4px_10px_rgba(10,94,205,0.28)]'
                   : undefined
               }
             >
@@ -517,7 +633,7 @@ export function LeadTableView(props: LeadTableModel) {
         <div
           className={
             isProcurementStyleTable
-              ? 'relative mt-1 block min-h-0 w-full max-w-full flex-1 md:flex md:flex-col'
+              ? 'relative mt-1 flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden'
               : 'hidden md:block w-full max-w-full min-w-0 relative mt-1.5'
           }
         >

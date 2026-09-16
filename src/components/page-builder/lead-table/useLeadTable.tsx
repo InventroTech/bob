@@ -25,13 +25,26 @@ import { getEffectiveToken, useSpoofUserId } from '@/lib/auth/spoof';
 import { formatCurrencyDisplay, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
 import { formatCalendarDate, formatTableDateShort } from '@/lib/utils/timeUtils';
 import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
-import { getInventoryStatusToneClass, getShipmentStatusLabel, getShipmentStatusToneClass } from '@/lib/inventory/statusStyles';
+import {
+  getInventoryStatusChipLabel,
+  getInventoryStatusToneClass,
+  getShipmentStatusLabel,
+  getShipmentStatusToneClass,
+} from '@/lib/inventory/statusStyles';
 import {
   formatInventoryPriorityLabel,
   formatInventoryPriorityShortLabel,
   inventoryPriorityChipClassName,
   normalizeInventoryPriorityLevel,
 } from '@/lib/inventory/priority';
+import {
+  REQUEST_STAGE_TABS,
+  applyRequestStageFiltersToParams,
+  buildRequestStageListUrl,
+  emptyRequestStageCounts,
+  parseListTotalCount,
+  type RequestStageTabId,
+} from '@/lib/inventory/requestStageTabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -61,9 +74,9 @@ import {
 } from '@/lib/inventory/workflow';
 import { advanceShipmentStatusForTracking, excludeInventoryTrackColumn, SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
 
-/** Uniform rounded-rectangle chips for All Requests priority / status / shipment. */
+/** Pill chips for All Requests priority / status / shipment (match design mock). */
 const INVENTORY_CHIP_SHAPE =
-  '!rounded-[8px] inline-flex h-7 shrink-0 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide overflow-hidden text-ellipsis whitespace-nowrap border';
+  '!rounded-full inline-flex h-7 shrink-0 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide overflow-hidden text-ellipsis whitespace-nowrap border';
 
 function bulkActionButtonKey(btn: { statusValue: string; targetAttribute?: string }): string {
   return `${btn.statusValue}::${(btn.targetAttribute || 'status').trim() || 'status'}`;
@@ -91,24 +104,27 @@ const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
   'h-[23px] w-[55px] min-w-[55px] justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#2885FF_0%,#0A5ECD_100%)] px-0 text-xs font-semibold text-white hover:brightness-105 hover:text-white';
 const OPS_SAVE_BTN =
-  'h-[23px] w-[55px] min-w-[55px] justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#11243C_0%,#2E60A2_100%)] px-0 text-xs font-semibold text-white hover:brightness-110 hover:text-white';
+  'h-[23px] min-w-[55px] w-auto justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#11243C_0%,#2E60A2_100%)] px-2 text-xs font-semibold text-white hover:brightness-110 hover:text-white';
 
 /** All Requests: fixed rem widths on data columns; item name absorbs the rest (no gaping chips). */
 function procurementColumnLayout(
   accessor: string
 ): { width?: string; minWidth?: string; maxWidth?: string } | undefined {
   const key = String(accessor || '').trim().toLowerCase();
-  const chipCol = { width: '11rem', minWidth: '11rem', maxWidth: '11rem' };
-  const priorityCol = { width: '6.5rem', minWidth: '6.5rem', maxWidth: '6.5rem' };
-  const dateCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '6rem' };
-  const costCol = { width: '6.75rem', minWidth: '6.75rem', maxWidth: '7.25rem' };
-  // Room for multi-word vendors; wraps instead of truncating so full name stays visible.
-  const vendorCol = { width: '10rem', minWidth: '9rem', maxWidth: '12rem' };
-  const requesterCol = { width: '7.5rem', minWidth: '7.5rem', maxWidth: '9rem' };
-  const editCol = { width: '4.25rem', minWidth: '4.25rem', maxWidth: '4.25rem' };
+  // Keep chip cols near the chip width so Item Name isn't crushed in table-fixed layout.
+  const chipCol = { width: '10rem', minWidth: '10rem', maxWidth: '10rem' };
+  const priorityCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '5.75rem' };
+  const dateCol = { width: '5.5rem', minWidth: '5.5rem', maxWidth: '5.5rem' };
+  const costCol = { width: '6.25rem', minWidth: '6.25rem', maxWidth: '6.5rem' };
+  const vendorCol = { width: '8rem', minWidth: '7.5rem', maxWidth: '9rem' };
+  const requesterCol = { width: '7rem', minWidth: '7rem', maxWidth: '8rem' };
+  const linkCol = { width: '4.5rem', minWidth: '4.5rem', maxWidth: '4.5rem' };
+  const editCol = { width: '5.5rem', minWidth: '5.5rem', maxWidth: '5.5rem' };
+  // Flexible column — must keep enough room for "ITEM NAME" header + thumbnail row.
+  const itemNameCol = { minWidth: '14rem' };
   const layouts: Record<string, { width?: string; minWidth?: string; maxWidth?: string }> = {
-    item_name_freeform: {},
-    item_name: {},
+    item_name_freeform: itemNameCol,
+    item_name: itemNameCol,
     requester_name: requesterCol,
     estimated_cost: costCol,
     vendor: vendorCol,
@@ -119,6 +135,9 @@ function procurementColumnLayout(
     priority: priorityCol,
     status: chipCol,
     shipment_status: chipCol,
+    product_link: linkCol,
+    additional_link: linkCol,
+    link: linkCol,
     [REQUESTER_EDIT_COLUMN_ACCESSOR]: editCol,
     edit: editCol,
   };
@@ -1044,10 +1063,22 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         String(column.header || '').toLowerCase() === 'track' ||
         String(column.header || '').toLowerCase().includes('tracking');
 
-      const href = displayValue;
+      const nestedData =
+        row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : null;
+      const rawHref =
+        displayValue && displayValue !== 'N/A' && displayValue !== '#'
+          ? displayValue
+          : String(
+              row?.[accessor] ||
+                nestedData?.[accessor] ||
+                row?.product_link ||
+                nestedData?.product_link ||
+                ''
+            ).trim();
+      const href = rawHref && rawHref !== 'N/A' && rawHref !== '#' ? rawHref : '';
       if (
         isTrackingCol &&
-        (!href || href === '#' || href === 'N/A') &&
+        !href &&
         row.tracking_number &&
         row.tracking_number !== 'N/A'
       ) {
@@ -1059,7 +1090,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         );
       }
 
-      if (!href || href === '#' || href === 'N/A') {
+      if (!href) {
         return <span className="text-gray-400 text-sm">-</span>;
       }
 
@@ -1096,7 +1127,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
 
       const linkLabel = isTrackingCol ? 'LINK' : 'Link';
-      
+      const isProcurementLink =
+        config?.tableType === 'itemsTable' ||
+        config?.entityType === 'inventory_request' ||
+        config?.entityType === 'unmannd_request';
+
       // Default link rendering
       return (
         <a
@@ -1104,13 +1139,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           target="_blank"
           rel="noopener noreferrer"
           className={
-            isTrackingCol
+            isTrackingCol || isProcurementLink
               ? 'text-sm font-semibold text-[#1A44A1] underline underline-offset-2 hover:text-[#163a8a] transition-colors'
               : 'inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors'
           }
           onClick={(e) => e.stopPropagation()}
         >
-          {isTrackingCol ? null : <ExternalLink className="h-4 w-4" />}
+          {isTrackingCol || isProcurementLink ? null : <ExternalLink className="h-4 w-4" />}
           <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
         </a>
       );
@@ -1272,9 +1307,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             : getStatusColor(displayValue, config?.statusColors);
       const chipLabel = useShipmentTone
         ? getShipmentStatusLabel(displayValue)
-        : usePriorityTone
-          ? formatInventoryPriorityShortLabel(displayValue)
-          : displayValue;
+        : useInventoryStatusTone
+          ? getInventoryStatusChipLabel(displayValue)
+          : usePriorityTone
+            ? formatInventoryPriorityShortLabel(displayValue)
+            : displayValue;
       const chipTitle = usePriorityTone
         ? formatInventoryPriorityLabel(displayValue)
         : String(chipLabel);
@@ -1471,15 +1508,93 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   );
 
   const isMyRequestPage = inventoryTableKind === 'my_request';
+  const showRequestStageTabs =
+    !isInPageBuilder &&
+    isInventoryRequestTable &&
+    config?.tableType === 'itemsTable' &&
+    inventoryTableKind === 'procurement';
+
+  const [requestStageTab, setRequestStageTabState] = useState<RequestStageTabId>('all');
+  const requestStageTabRef = useRef<RequestStageTabId>('all');
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  const [bulkApplying, setBulkApplying] = useState<string | null>(null);
+  const [requestStageCounts, setRequestStageCounts] = useState<
+    Record<RequestStageTabId, number>
+  >(() => emptyRequestStageCounts());
+  const [stageCountsTick, setStageCountsTick] = useState(0);
+
+  useEffect(() => {
+    requestStageTabRef.current = requestStageTab;
+  }, [requestStageTab]);
+
+  useEffect(() => {
+    if (!showRequestStageTabs && requestStageTab !== 'all') {
+      setRequestStageTabState('all');
+      requestStageTabRef.current = 'all';
+    }
+  }, [showRequestStageTabs, requestStageTab]);
+
+  // Server-side totals per stage (page_size=1 + include_count) — matches dedicated pages.
+  useEffect(() => {
+    if (!showRequestStageTabs || !effectiveApiEndpoint) {
+      setRequestStageCounts(emptyRequestStageCounts());
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const forceParams = (config as { forceQueryParams?: Record<string, string> } | undefined)
+      ?.forceQueryParams;
+
+    const run = async () => {
+      try {
+        const results = await Promise.all(
+          REQUEST_STAGE_TABS.map(async (tab) => {
+            const url = buildRequestStageListUrl(effectiveApiEndpoint, {
+              stage: tab.id,
+              entityType: config?.entityType,
+              forceQueryParams: forceParams,
+              page: 1,
+              pageSize: 1,
+              includeCount: true,
+            });
+            const response = await apiClient.get(url, { signal: controller.signal });
+            return [tab.id, parseListTotalCount(response?.data)] as const;
+          })
+        );
+        if (cancelled) return;
+        const next = emptyRequestStageCounts();
+        for (const [id, total] of results) {
+          next[id] = total;
+        }
+        setRequestStageCounts(next);
+      } catch (err) {
+        if (cancelled || (err as { name?: string })?.name === 'CanceledError') return;
+        if ((err as { code?: string })?.code === 'ERR_CANCELED') return;
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    showRequestStageTabs,
+    effectiveApiEndpoint,
+    config?.entityType,
+    (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams,
+    stageCountsTick,
+  ]);
+
+  // List is filtered on the server when a stage tab is active.
+  const stageFilteredData = filteredData;
 
   const bulkSelectionEnabled =
     !isInPageBuilder &&
     isInventoryRequestTable &&
     config?.tableType === 'itemsTable' &&
     !isMyRequestPage;
-
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
-  const [bulkApplying, setBulkApplying] = useState<string | null>(null);
 
   const getRowWorkflowButtons = useCallback(
     (row: any) => {
@@ -1526,14 +1641,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   const bulkSelectionStatus = useMemo(() => {
     if (selectedRowIds.size === 0) return null;
-    for (const row of filteredData) {
+    for (const row of stageFilteredData) {
       const rowId = normalizeBulkRowId(row?.id);
       if (rowId != null && selectedRowIds.has(rowId)) {
         return getBulkRowStatus(row) || null;
       }
     }
     return null;
-  }, [filteredData, selectedRowIds]);
+  }, [stageFilteredData, selectedRowIds]);
 
   const canSelectBulkRow = useCallback(
     (row: any) => {
@@ -1563,7 +1678,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       setSelectedRowIds((prev) => {
         if (prev.size > 0) {
           let anchorStatus: string | null = null;
-          for (const existing of filteredData) {
+          for (const existing of stageFilteredData) {
             const existingId = normalizeBulkRowId(existing?.id);
             if (existingId != null && prev.has(existingId)) {
               anchorStatus = getBulkRowStatus(existing);
@@ -1584,7 +1699,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         return next;
       });
     },
-    [filteredData, toast]
+    [stageFilteredData, toast]
   );
 
   const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
@@ -1594,7 +1709,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   const getPageStatusCounts = useCallback(() => {
     const counts = new Map<string, number>();
-    for (const row of filteredData) {
+    for (const row of stageFilteredData) {
       if (normalizeBulkRowId(row?.id) == null) continue;
       const status = getBulkRowStatus(row);
       if (!status) continue;
@@ -1603,11 +1718,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return Array.from(counts.entries())
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => a.status.localeCompare(b.status));
-  }, [filteredData]);
+  }, [stageFilteredData]);
 
   const selectBulkRowsByStatus = useCallback(
     (status: string) => {
-      const matchingIds = filteredData
+      const matchingIds = stageFilteredData
         .filter((row) => getBulkRowStatus(row) === status)
         .map((row) => normalizeBulkRowId(row?.id))
         .filter((id): id is string => id != null);
@@ -1615,14 +1730,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       setBulkStatusPickerOpen(false);
       setBulkStatusPickerOptions([]);
     },
-    [filteredData]
+    [stageFilteredData]
   );
 
   const toggleBulkSelectAll = useCallback(() => {
     // If a status is already locked by current selection, toggle that group only.
     if (selectedRowIds.size > 0) {
       let anchorStatus: string | null = null;
-      for (const row of filteredData) {
+      for (const row of stageFilteredData) {
         const rowId = normalizeBulkRowId(row?.id);
         if (rowId != null && selectedRowIds.has(rowId)) {
           anchorStatus = getBulkRowStatus(row);
@@ -1630,7 +1745,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         }
       }
       if (anchorStatus) {
-        const matchingIds = filteredData
+        const matchingIds = stageFilteredData
           .filter((row) => getBulkRowStatus(row) === anchorStatus)
           .map((row) => normalizeBulkRowId(row?.id))
           .filter((id): id is string => id != null);
@@ -1652,7 +1767,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     // Mixed statuses on this page — ask which status to select.
     setBulkStatusPickerOptions(statusOptions);
     setBulkStatusPickerOpen(true);
-  }, [filteredData, getPageStatusCounts, selectBulkRowsByStatus, selectedRowIds]);
+  }, [stageFilteredData, getPageStatusCounts, selectBulkRowsByStatus, selectedRowIds]);
 
   const clearBulkSelection = useCallback(() => {
     setSelectedRowIds(new Set());
@@ -1664,7 +1779,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     setSelectedRowIds(new Set());
     setBulkStatusPickerOpen(false);
     setBulkStatusPickerOptions([]);
-  }, [pagination.currentPage, effectiveApiEndpoint]);
+  }, [pagination.currentPage, effectiveApiEndpoint, requestStageTab]);
 
   const rowSupportsBulkAction = useCallback(
     (row: any, button: { statusValue: string; targetAttribute?: string }) => {
@@ -1679,7 +1794,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const bulkActionButtons = useMemo(() => {
     if (!bulkSelectionEnabled || selectedRowIds.size === 0) return [];
 
-    const selectedRows = filteredData.filter((row) => {
+    const selectedRows = stageFilteredData.filter((row) => {
       const rowId = normalizeBulkRowId(row?.id);
       return rowId != null && selectedRowIds.has(rowId);
     });
@@ -1695,7 +1810,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [
     bulkSelectionEnabled,
     effectiveStatusButtons,
-    filteredData,
+    stageFilteredData,
     getRowWorkflowButtons,
     mergeBulkActionButtons,
     rowSupportsBulkAction,
@@ -1743,7 +1858,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }) => {
       if (!bulkSelectionEnabled || selectedRowIds.size === 0) return;
       const applyingKey = bulkActionButtonKey(button);
-      const selectedRows = filteredData.filter((row) => {
+      const selectedRows = stageFilteredData.filter((row) => {
         const rowId = normalizeBulkRowId(row?.id);
         return rowId != null && selectedRowIds.has(rowId);
       });
@@ -1853,6 +1968,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             silent: true,
             keepPage: true,
           });
+          setStageCountsTick((n) => n + 1);
         } catch (e) {
           console.error('Error refreshing table after bulk status update', e);
         }
@@ -1861,7 +1977,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     [
       bulkSelectionEnabled,
       config,
-      filteredData,
+      stageFilteredData,
       patchInventoryRowStatus,
       rowSupportsBulkAction,
       selectedRowIds,
@@ -1926,24 +2042,68 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       deduped.push(col);
     }
     const base: Column[] = [...(deduped.length > 0 ? deduped : defaultColumns)] as Column[];
+
+    // All Request / ops tables: show product Link instead of Edit.
+    // My Request keeps the Edit action for the requester.
     if (!isInPageBuilder && isInventoryRequestTable) {
-      const hasEditColumn = base.some((col) => {
-        const accessor = String(col.accessor || '').trim().toLowerCase();
-        const header = String(col.header || '').trim().toLowerCase();
-        return (
-          accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
-          accessor === 'edit' ||
-          header === 'edit'
-        );
-      });
-      if (!hasEditColumn) {
-        base.push({
-          header: 'Edit',
-          accessor: REQUESTER_EDIT_COLUMN_ACCESSOR,
-          type: 'action',
-          align: 'center',
-          ...procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR),
+      if (isMyRequestPage) {
+        const hasEditColumn = base.some((col) => {
+          const accessor = String(col.accessor || '').trim().toLowerCase();
+          const header = String(col.header || '').trim().toLowerCase();
+          return (
+            accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
+            accessor === 'edit' ||
+            header === 'edit'
+          );
         });
+        if (!hasEditColumn) {
+          base.push({
+            header: 'Edit',
+            accessor: REQUESTER_EDIT_COLUMN_ACCESSOR,
+            type: 'action',
+            align: 'center',
+            ...procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR),
+          });
+        }
+      } else {
+        // Drop any Edit columns that may exist in saved page config.
+        for (let i = base.length - 1; i >= 0; i -= 1) {
+          const accessor = String(base[i].accessor || '').trim().toLowerCase();
+          const header = String(base[i].header || '').trim().toLowerCase();
+          if (
+            accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
+            accessor === 'edit' ||
+            header === 'edit'
+          ) {
+            base.splice(i, 1);
+          }
+        }
+
+        const hasProductLink = base.some((col) => {
+          const accessor = String(col.accessor || '').trim().toLowerCase();
+          return accessor === 'product_link' || accessor === 'additional_link';
+        });
+        if (!hasProductLink) {
+          base.push({
+            header: 'Link',
+            accessor: 'product_link',
+            type: 'link',
+            linkField: 'product_link',
+            align: 'center',
+            ...procurementColumnLayout('product_link'),
+          });
+        } else {
+          // Normalize label to "Link" to match All Request mock.
+          for (const col of base) {
+            const accessor = String(col.accessor || '').trim().toLowerCase();
+            if (accessor === 'product_link' || accessor === 'additional_link') {
+              col.header = 'Link';
+              col.type = 'link';
+              col.linkField = col.linkField || accessor;
+              Object.assign(col, procurementColumnLayout(accessor));
+            }
+          }
+        }
       }
     }
     return base;
@@ -2084,7 +2244,21 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Remove assigned_to for GM users only when not explicitly set by "Assigned to" filter
       removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
 
-      const url = buildUrlWithParams(endpoint, params);
+      // All Request stage strip: filter on the server so counts match the table.
+      if (showRequestStageTabs) {
+        applyRequestStageFiltersToParams(params, requestStageTabRef.current);
+      }
+
+      let url = buildUrlWithParams(endpoint, params);
+      if (showRequestStageTabs) {
+        // Re-apply after forceQueryParams merge so stage filters always win.
+        const q = url.indexOf('?');
+        const path = q >= 0 ? url.slice(0, q) : url;
+        const merged = new URLSearchParams(q >= 0 ? url.slice(q + 1) : '');
+        applyRequestStageFiltersToParams(merged, requestStageTabRef.current);
+        const qs = merged.toString();
+        url = qs ? `${path}?${qs}` : path;
+      }
 
       const response = await apiClient.get(url, {
         signal: abortController.signal
@@ -2144,6 +2318,19 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
   };
   fetchFilteredDataRef.current = fetchFilteredData;
+
+  const setRequestStageTab = useCallback((stage: RequestStageTabId) => {
+    if (stage === requestStageTabRef.current) return;
+    requestStageTabRef.current = stage;
+    setRequestStageTabState(stage);
+    setPagination((prev) => {
+      const next = { ...prev, currentPage: 1 };
+      paginationRef.current = next;
+      return next;
+    });
+    const sequence = ++requestSequenceRef.current;
+    void fetchFilteredDataRef.current?.(sequence, undefined, { keepPage: true });
+  }, []);
 
   // Reset filters
   const resetFilters = async () => {
@@ -2827,7 +3014,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     updateURL,
     requestSequenceRef,
     fetchFilteredData,
-    filteredData,
+    filteredData: stageFilteredData,
     pagination,
     filtersApplied,
     filterService,
@@ -2876,6 +3063,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     setBulkStatusPickerOpen,
     bulkStatusPickerOptions,
     selectBulkRowsByStatus,
+    showRequestStageTabs,
+    requestStageTab,
+    setRequestStageTab,
+    requestStageCounts,
   };
 }
 
