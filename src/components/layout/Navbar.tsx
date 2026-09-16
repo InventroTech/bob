@@ -1,5 +1,7 @@
 import React, { useState } from "react";
-import { Bell, LogOut, Settings, User, Menu } from "lucide-react";
+import { LogOut, Menu, Settings, User } from "lucide-react";
+import { LeadCalledBackNotificationsMenu } from "@/features/lead-called-back-notification/LeadCalledBackNotificationsMenu";
+import { getRegisteredAllLeadsPath } from "@/lib/realtime/openLeadBus";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,10 +73,10 @@ const Navbar = ({ user }: NavbarProps) => {
         </div>
         <div className="flex items-center gap-4">
           <SparkyHeaderButton />
-          <Button variant="outline" size="icon">
-            <Bell className="h-5 w-5" />
-            <span className="sr-only">Notifications</span>
-          </Button>
+          <LeadCalledBackNotificationsMenu
+            variant="navbar"
+            allLeadsPath={getRegisteredAllLeadsPath()}
+          />
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
