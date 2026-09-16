@@ -63,10 +63,12 @@ function findMergeIndex(next: LeadCalledBackNotificationItem): number {
   const byId = items.findIndex((item) => item.id === next.id);
   if (byId >= 0) return byId;
 
-  // WS may arrive without notification_id (`${record}-${Date.now()}`) before hydrate
-  // inserts `db-${id}` — merge unread rows for the same lead so the inbox stays unique.
+  // WS without notification_id uses an ephemeral id (`${record}-${Date.now()}` or
+  // lead:record:praja). Hydrate then inserts `db-${id}` — upsert on record/praja
+  // only when at least one side is missing a DB id (do not collapse two real DB rows).
   return items.findIndex((item) => {
     if (item.read) return false;
+    if (item.notificationId != null && next.notificationId != null) return false;
     return sameLeadIdentity(item, next);
   });
 }
@@ -86,7 +88,13 @@ function upsertItem(next: LeadCalledBackNotificationItem): void {
         ? `db-${notificationId}`
         : existing.id.startsWith("db-")
           ? existing.id
-          : next.id;
+          : next.id.startsWith("db-")
+            ? next.id
+            : next.id.startsWith("lead:")
+              ? next.id
+              : existing.id.startsWith("lead:")
+                ? existing.id
+                : next.id;
     const copy = items.slice();
     copy[idx] = {
       ...existing,
@@ -96,10 +104,15 @@ function upsertItem(next: LeadCalledBackNotificationItem): void {
       payload: {
         ...existing.payload,
         ...next.payload,
+        record_id:
+          normalizeOpenLeadId(next.payload.record_id) ||
+          normalizeOpenLeadId(existing.payload.record_id),
         notification_id: notificationId,
         lead_name: next.payload.lead_name ?? existing.payload.lead_name,
         praja_id: next.payload.praja_id ?? existing.payload.praja_id,
       },
+      // Prefer the earlier receivedAt so the inbox order stays stable.
+      receivedAt: existing.receivedAt || next.receivedAt,
       read: existing.read || next.read,
     };
     items = copy;
@@ -110,18 +123,26 @@ function upsertItem(next: LeadCalledBackNotificationItem): void {
 }
 
 export function pushLeadCalledBackNotification(payload: LeadCalledBackPayload): void {
+  const rawNid = payload.notification_id;
   const notificationId =
-    payload.notification_id != null ? Number(payload.notification_id) : null;
+    rawNid != null && Number.isFinite(Number(rawNid)) && Number(rawNid) > 0
+      ? Number(rawNid)
+      : null;
+  const recordId = normalizeOpenLeadId(payload.record_id);
+  const prajaId = normalizeOpenLeadId(payload.praja_id);
+  // Stable key when DB id is missing so repeat WS frames upsert; hydrate merges via identity.
   const id =
-    notificationId != null && Number.isFinite(notificationId)
+    notificationId != null
       ? `db-${notificationId}`
-      : `${payload.record_id}-${Date.now()}`;
+      : `lead:${recordId}:${prajaId}`;
 
   upsertItem({
     id,
-    notificationId: Number.isFinite(notificationId as number) ? notificationId : null,
+    notificationId,
     payload: {
       ...payload,
+      record_id: recordId,
+      praja_id: prajaId || null,
       notification_id: notificationId,
     },
     receivedAt: new Date().toISOString(),
