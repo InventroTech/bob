@@ -389,6 +389,72 @@ describe("openLeadActionGeneration", () => {
     expect(isOpenLeadActionCurrent(genA)).toBe(false);
     expect(getActiveLeadHighlight()?.record_id).toBe("222");
   });
+
+  it("same lead twice while 450ms modal pending: generation must not bump", () => {
+    clearOpenLeadHighlightStash();
+    registerAllLeadsPath("/app/praja/pages/1");
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/app/praja/pages/1" },
+    });
+
+    // Toast click — schedules openLead / 450ms card under firstGen.
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Lead A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+    const firstGen = getOpenLeadActionGeneration();
+    expect(isActiveOpenLeadRequest({ record_id: "111", praja_id: "PRAJA-A" })).toBe(
+      true,
+    );
+
+    // openLead would ignore a same-lead poke while the modal timer is pending.
+    expect(
+      shouldSupersedeOpenLead({
+        isSameLead: true,
+        modalTimerPending: true,
+        modalAlreadyOpen: false,
+      }),
+    ).toEqual({ action: "ignore" });
+
+    // Inbox click on that same lead before the 450ms timer fires.
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Lead A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+
+    // Must keep firstGen current — otherwise the pending timeout's stillThisOpen
+    // fails and ignore never schedules a replacement card.
+    expect(getOpenLeadActionGeneration()).toBe(firstGen);
+    expect(isOpenLeadActionCurrent(firstGen)).toBe(true);
+    expect(getActiveLeadHighlight()?.record_id).toBe("111");
+  });
+
+  it("still bumps generation when switching to a different lead", () => {
+    clearOpenLeadHighlightStash();
+    registerAllLeadsPath("/app/praja/pages/1");
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Lead A",
+    });
+    const genA = getOpenLeadActionGeneration();
+
+    requestOpenLead({
+      record_id: "222",
+      praja_id: "PRAJA-B",
+      lead_name: "Lead B",
+    });
+
+    expect(isOpenLeadActionCurrent(genA)).toBe(false);
+    expect(getActiveLeadHighlight()?.record_id).toBe("222");
+  });
 });
 
 describe("rowMatchesLeadHighlight", () => {

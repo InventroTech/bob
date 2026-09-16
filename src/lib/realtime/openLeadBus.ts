@@ -397,9 +397,6 @@ export function requestOpenLead(
 ): void {
   if (!hasOpenLeadIdentity(request)) return;
 
-  // Invalidate any in-flight openLead (await getLeadById / modal timeout) from a prior click.
-  beginOpenLeadAction();
-
   const safeRequest: OpenLeadRequest = {
     record_id: normalizeOpenLeadId(request.record_id),
     praja_id: normalizeOpenLeadId(request.praja_id) || null,
@@ -407,6 +404,18 @@ export function requestOpenLead(
     notification_id: request.notification_id ?? null,
     notification_item_id: request.notification_item_id ?? null,
   };
+
+  // Toast then inbox (same lead): do not bump generation — that invalidates the
+  // in-flight 450ms modal timer (stillThisOpen fails) while openLead ignores
+  // the second click because the timer is still pending → card never opens.
+  if (
+    !isActiveOpenLeadRequest({
+      record_id: safeRequest.record_id,
+      praja_id: safeRequest.praja_id,
+    })
+  ) {
+    beginOpenLeadAction();
+  }
 
   pendingOpenLead = safeRequest;
   // Set highlight immediately so All Leads can paint the row as soon as it mounts.
