@@ -62,6 +62,10 @@ export function LeadTableView(props: LeadTableModel) {
     isInPageBuilder,
     effectiveDetailMode,
     handleRowClick,
+    getLeadRowId,
+    getLeadRowClassName,
+    getLeadRowStyle,
+    highlightedLeadId,
     renderCell,
     handlePreviousPage,
     handleNextPage,
@@ -457,17 +461,34 @@ export function LeadTableView(props: LeadTableModel) {
           <div className="md:hidden space-y-4 mt-1.5">
             {filteredData.map((item, index) => {
               const lead = item;
+              const rowId = getLeadRowId?.(lead);
+              const isHighlighted = Boolean(
+                (highlightedLeadId && rowId && highlightedLeadId === rowId) ||
+                  getLeadRowStyle?.(lead)?.backgroundColor,
+              );
 
               return (
                 <div
                   key={lead.id || index}
-                  className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                  data-row-id={rowId}
+                  data-highlighted={isHighlighted ? 'true' : undefined}
+                  style={getLeadRowStyle?.(lead)}
+                  className={`rounded-xl border p-4 shadow-sm cursor-pointer transition-colors ${
+                    isHighlighted
+                      ? 'border-blue-300 text-blue-900 ring-2 ring-blue-400 animate-pulse'
+                      : 'border bg-white hover:bg-gray-50'
+                  }`}
                   onClick={() => {
                     if (!isInPageBuilder && effectiveDetailMode !== 'none') {
                       handleRowClick(item);
                     }
                   }}
                 >
+                  {isHighlighted ? (
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                      Called back
+                    </p>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                     <div>
                       <p className="text-xs text-gray-500">Name</p>
@@ -551,6 +572,9 @@ export function LeadTableView(props: LeadTableModel) {
             loading={tableLoading}
             emptyMessage={config?.emptyMessage || 'No data found'}
             onRowClick={!isInPageBuilder && effectiveDetailMode !== 'none' ? handleRowClick : undefined}
+            getRowId={getLeadRowId}
+            getRowClassName={getLeadRowClassName}
+            getRowStyle={getLeadRowStyle}
             renderCell={renderCell}
             // Navy theme for Unmannd / procurement request tables only. All Leads & CRM stay black.
             headerBgColor={isProcurementStyleTable ? procurementHeaderBg : 'bg-black'}
@@ -699,7 +723,7 @@ export function LeadTableView(props: LeadTableModel) {
               const originalLead = data.find(l => 
                 l.id === lead.id || 
                 l.id === lead.user_id ||
-                (lead.praja_id && (l.data?.praja_id === lead.praja_id || l.data?.user_id === lead.praja_id))
+                (lead.praja_id && l.data?.praja_id === lead.praja_id)
               ) || lead;
               const leadData = originalLead.data || {};
               return {
@@ -724,7 +748,8 @@ export function LeadTableView(props: LeadTableModel) {
                 website: lead.website || leadData.website || '',
                 next_follow_up: lead.next_follow_up || leadData.next_follow_up || leadData.next_call_at || '',
                 lead_stage: lead.lead_stage || leadData.lead_stage || leadData.lead_status || 'New',
-                praja_id: lead.praja_id || leadData.praja_id || leadData.user_id || '',
+                // Never fall back to user_id — can collide with open/highlight-by-praja.
+                praja_id: lead.praja_id || leadData.praja_id || '',
                 affiliated_party: lead.affiliated_party || leadData.affiliated_party || '',
                 rm_dashboard: lead.rm_dashboard || leadData.rm_dashboard || '',
                 user_profile_link: lead.user_profile_link || leadData.user_profile_link || '',

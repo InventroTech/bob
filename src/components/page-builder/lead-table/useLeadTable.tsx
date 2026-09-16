@@ -16,6 +16,26 @@ import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConf
 import { useFilters } from '@/hooks/useFilters';
 import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
 import type { RecordUpdatedPayload } from '@/lib/realtime/types';
+import {
+  beginOpenLeadAction,
+  cancelPendingOpenLeadPokes,
+  consumePendingOpenLead,
+  getActiveLeadHighlight,
+  getLeadRowPrajaId,
+  getOpenLeadActionGeneration,
+  isActiveOpenLeadRequest,
+  isOpenLeadActionCurrent,
+  normalizeOpenLeadId,
+  parsePositiveCrmRecordId,
+  PYRO_CLEAR_LEAD_HIGHLIGHT,
+  PYRO_LEAD_HIGHLIGHT_CHANGED,
+  PYRO_OPEN_LEAD,
+  rowMatchesLeadHighlight,
+  shouldSupersedeOpenLead,
+  stashOpenLeadHighlight,
+  type OpenLeadRequest,
+} from '@/lib/realtime/openLeadBus';
+import { crmLeadsApi } from '@/lib/api/services/crmLeads';
 import { FilterService } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
@@ -135,12 +155,24 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [tableLoading, setTableLoading] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const isLeadModalOpenRef = useRef(false);
+  isLeadModalOpenRef.current = isLeadModalOpen;
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [isRecordDetailModalOpen, setIsRecordDetailModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [isCallBackModalOpen, setIsCallBackModalOpen] = useState(false);
+  const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(null);
+  const [highlightedPrajaId, setHighlightedPrajaId] = useState<string | null>(null);
+  const [highlightedLeadLabel, setHighlightedLeadLabel] = useState<string | null>(null);
   const leadCardRef = useRef<LeadCardCarouselHandle | null>(null);
+  const lastOpenedLeadKeyRef = useRef<string | null>(null);
+  const lastOpenedLeadAtRef = useRef(0);
+  const openLeadModalTimerRef = useRef<number | null>(null);
+  const dataRef = useRef(data);
+  const filteredDataRef = useRef(filteredData);
+  dataRef.current = data;
+  filteredDataRef.current = filteredData;
 
   // Effective detail mode: explicit config or infer from entityType (inventory_* → record detail, else lead card)
   const effectiveDetailMode = useMemo(() => {
@@ -1169,12 +1201,25 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     
     // Special handling for name column - show avatar, name, and email
     if (column.accessor === 'name' || headerLower.includes('name')) {
+      const rowId = row?.id != null ? String(row.id) : row?.record_id != null ? String(row.record_id) : '';
+      const rowPraja = getLeadRowPrajaId(row);
+      const showCalledBackBadge = Boolean(
+        (highlightedLeadId && rowId && rowId === highlightedLeadId) ||
+          (highlightedPrajaId && rowPraja != null && String(rowPraja) === highlightedPrajaId),
+      );
       return (
-        <ShortProfileCard
-          image={row.display_pic_url || row.image}
-          name={row.name || displayValue}
-          address={row.email_id || row.email || row.address || ''}
-        />
+        <div className="flex min-w-0 items-center gap-2">
+          <ShortProfileCard
+            image={row.display_pic_url || row.image}
+            name={row.name || displayValue}
+            address={row.email_id || row.email || row.address || ''}
+          />
+          {showCalledBackBadge ? (
+            <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              Called back
+            </span>
+          ) : null}
+        </div>
       );
     }
     
@@ -1448,7 +1493,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit, highlightedLeadId, highlightedPrajaId]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
@@ -2388,6 +2433,466 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     },
   );
 
+  // Open a specific lead from WhatsApp call-back toast / notification menu.
+  useEffect(() => {
+    if (isInPageBuilder) return;
+    const entityType = String(config?.entityType || 'lead').toLowerCase();
+    if (entityType !== 'lead') return;
+    // Wait for the first list load so we can resolve the lead row.
+    if (loading) return;
+
+    const rowPrajaId = (row: any): string | null => getLeadRowPrajaId(row);
+
+    const findInLists = (recordId: string, prajaId?: string | null) => {
+      const seen = new Set<string>();
+      const pool: any[] = [];
+      for (const row of [...filteredDataRef.current, ...dataRef.current]) {
+        const key =
+          row?.id != null
+            ? `id:${row.id}`
+            : row?.record_id != null
+              ? `rid:${row.record_id}`
+              : '';
+        if (key) {
+          if (seen.has(key)) continue;
+          seen.add(key);
+        }
+        pool.push(row);
+      }
+
+      const normalizedRecordId = normalizeOpenLeadId(recordId);
+      if (normalizedRecordId) {
+        // When CRM id is known, match only by id — never OR with praja (wrong row risk).
+        return (
+          pool.find((row) => {
+            const id = row?.id != null ? String(row.id) : '';
+            const rid = row?.record_id != null ? String(row.record_id) : '';
+            return id === normalizedRecordId || rid === normalizedRecordId;
+          }) || null
+        );
+      }
+
+      const normalizedPraja = normalizeOpenLeadId(prajaId);
+      if (!normalizedPraja) return null;
+      const hits = pool.filter((row) => rowPrajaId(row) === normalizedPraja);
+      // Ambiguous Praja match → do not open a random first hit.
+      return hits.length === 1 ? hits[0] : null;
+    };
+
+    const clearOpenLeadParams = () => {
+      const params = new URLSearchParams(location.search);
+      if (!params.has('open_lead') && !params.has('praja_id') && !params.has('lead_name')) {
+        return;
+      }
+      params.delete('open_lead');
+      params.delete('praja_id');
+      params.delete('lead_name');
+      const nextSearch = params.toString();
+      navigate(
+        { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' },
+        { replace: true },
+      );
+    };
+
+    const applyHighlight = (row: any, fallbackRecordId: string, prajaId?: string | null) => {
+      const rowId =
+        row?.id != null
+          ? String(row.id)
+          : row?.record_id != null
+            ? String(row.record_id)
+            : fallbackRecordId;
+      const praja = rowPrajaId(row) || (prajaId ? String(prajaId) : null);
+
+      // Ensure the lead is visible in the current table so highlight/scroll works.
+      const sameRow = (r: any) => {
+        const id = r?.id != null ? String(r.id) : '';
+        const rid = r?.record_id != null ? String(r.record_id) : '';
+        const p = rowPrajaId(r);
+        return (
+          (rowId && (id === rowId || rid === rowId)) ||
+          (praja != null && p != null && p === praja)
+        );
+      };
+      const tableRow = transformLeadData(row, config);
+      setFilteredData((prev) => [tableRow, ...prev.filter((r) => !sameRow(r))]);
+      setData((prev) => [tableRow, ...prev.filter((r) => !sameRow(r))]);
+
+      setHighlightedLeadId(rowId);
+      setHighlightedPrajaId(praja);
+      const label =
+        (typeof tableRow?.name === 'string' && tableRow.name !== 'N/A' && tableRow.name.trim()) ||
+        (praja ? `Praja ${praja}` : null) ||
+        'This lead';
+      setHighlightedLeadLabel(label);
+
+      // Persist until the matching notification is marked as read.
+      const existingStash = getActiveLeadHighlight();
+      stashOpenLeadHighlight({
+        record_id: rowId,
+        praja_id: praja,
+        lead_name: typeof tableRow?.name === 'string' ? tableRow.name : null,
+        notification_id: existingStash?.notification_id ?? null,
+        notification_item_id: existingStash?.notification_item_id ?? null,
+      });
+
+      const scrollToLeadRow = () => {
+        const el =
+          (document.querySelector(
+            `[data-row-id="${CSS.escape(rowId)}"]`,
+          ) as HTMLElement | null) ||
+          (document.querySelector(
+            '[data-row-id][data-highlighted="true"]',
+          ) as HTMLElement | null);
+        if (!el) return false;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus({ preventScroll: true });
+        return true;
+      };
+      window.setTimeout(() => {
+        if (!scrollToLeadRow()) {
+          window.setTimeout(scrollToLeadRow, 350);
+        }
+      }, 250);
+
+      return { rowId, tableRow };
+    };
+
+    const openLead = async (request: OpenLeadRequest) => {
+      const recordId = normalizeOpenLeadId(request.record_id);
+      const prajaId = normalizeOpenLeadId(request.praja_id) || null;
+      if (!recordId && !prajaId) return;
+
+      const openKey = `${recordId}|${prajaId || ''}`;
+      const isSameLead = isActiveOpenLeadRequest({
+        record_id: recordId,
+        praja_id: prajaId,
+      });
+      const { action } = shouldSupersedeOpenLead({
+        isSameLead,
+        modalTimerPending: openLeadModalTimerRef.current != null,
+        modalAlreadyOpen: isLeadModalOpenRef.current,
+      });
+
+      // Same-lead retry while the card is already opening/open: keep the timer.
+      // Only a *different* lead bumps generation / clears the 450ms timer.
+      // Do not use recentlyOpened here — that skipped the card after the first
+      // poke marked success even when the modal timer had been cleared.
+      if (action === 'ignore') {
+        cancelPendingOpenLeadPokes();
+        stashOpenLeadHighlight({
+          ...request,
+          record_id: recordId,
+          praja_id: prajaId,
+        });
+        return;
+      }
+
+      let generation: number;
+      if (action === 'supersede') {
+        if (openLeadModalTimerRef.current != null) {
+          window.clearTimeout(openLeadModalTimerRef.current);
+          openLeadModalTimerRef.current = null;
+        }
+        generation = beginOpenLeadAction();
+      } else {
+        // Same lead — join current generation; do not clear an in-flight modal timer.
+        generation = getOpenLeadActionGeneration();
+      }
+
+      stashOpenLeadHighlight({
+        ...request,
+        record_id: recordId,
+        praja_id: prajaId,
+      });
+
+      const stillThisOpen = () =>
+        isOpenLeadActionCurrent(generation) &&
+        isActiveOpenLeadRequest({ record_id: recordId, praja_id: prajaId });
+
+      let row = findInLists(recordId, prajaId);
+      if (!row && recordId) {
+        const numericId = parsePositiveCrmRecordId(recordId);
+        if (numericId != null) {
+          try {
+            row = await crmLeadsApi.getLeadById(numericId);
+          } catch {
+            row = null;
+          }
+          // Click B while A was fetching — drop stale A (do not consume B's pending / stash A).
+          if (!stillThisOpen()) return;
+        }
+      }
+
+      // Praja-only path: never use as fallback when a CRM record_id was provided
+      // (that can open a different lead than the notification intended).
+      if (!row && !recordId && prajaId) {
+        row = findInLists('', prajaId);
+      }
+      if (!row && !recordId && prajaId && effectiveApiEndpoint) {
+        try {
+          const params = new URLSearchParams();
+          params.set('entity_type', 'lead');
+          params.set('praja_id', prajaId);
+          params.set('page_size', '5');
+          const response = await apiClient.get(
+            `${String(effectiveApiEndpoint).split('?')[0]}?${params.toString()}`,
+          );
+          if (!stillThisOpen()) return;
+          const results =
+            response.data?.results || response.data?.data || response.data || [];
+          if (Array.isArray(results)) {
+            const hits = results.filter(
+              (r) => rowPrajaId(r) === prajaId,
+            );
+            if (hits.length === 1) {
+              row = hits[0];
+            }
+          }
+        } catch {
+          row = null;
+        }
+        if (!stillThisOpen()) return;
+      }
+
+      if (!stillThisOpen()) return;
+
+      if (!row) {
+        // Do not consume pending / lock dedupe — allow a later retry when data arrives.
+        return;
+      }
+
+      // Open succeeded — drop the extra retry poke from requestOpenLead.
+      cancelPendingOpenLeadPokes();
+      lastOpenedLeadKeyRef.current = openKey;
+      lastOpenedLeadAtRef.current = Date.now();
+      consumePendingOpenLead();
+      const { tableRow } = applyHighlight(row, recordId, prajaId);
+
+      // Card already opening/open for this lead — don't restart the 450ms timer.
+      if (openLeadModalTimerRef.current != null || isLeadModalOpenRef.current) {
+        clearOpenLeadParams();
+        return;
+      }
+
+      // Let the user see the highlighted row first, then open the lead profile.
+      if (effectiveDetailMode === 'lead_card') {
+        setSelectedLead(tableRow);
+        openLeadModalTimerRef.current = window.setTimeout(() => {
+          openLeadModalTimerRef.current = null;
+          // Another notification may have been clicked during the delay.
+          if (!stillThisOpen()) return;
+          setIsLeadModalOpen(true);
+          clearOpenLeadParams();
+        }, 450);
+        // Defer URL clear until the modal opens — clearing search re-runs this
+        // effect; we must not cancel the timer on that re-run (see cleanup).
+        return;
+      }
+      clearOpenLeadParams();
+    };
+
+    const params = new URLSearchParams(location.search);
+    const openLeadId = params.get('open_lead');
+    const openPrajaId = params.get('praja_id');
+    // open_lead and/or praja_id — notifications may lack CRM record_id.
+    if (openLeadId || openPrajaId) {
+      // Prefer URL request; drop any stale pending so we don't reopen after clear.
+      consumePendingOpenLead();
+      void openLead({
+        record_id: openLeadId || '',
+        praja_id: openPrajaId,
+        // lead_name intentionally omitted from URL (history/logs); stash may still have it.
+      });
+    } else {
+      const pending = consumePendingOpenLead();
+      if (pending) {
+        void openLead(pending);
+      }
+    }
+
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<OpenLeadRequest>).detail;
+      if (!detail) return;
+      void openLead(detail);
+    };
+    window.addEventListener(PYRO_OPEN_LEAD, listener);
+    return () => {
+      // Only detach the listener. Do NOT clear openLeadModalTimerRef here —
+      // this effect re-runs when location.search changes, and clearing the
+      // timer is what made the profile card never appear.
+      window.removeEventListener(PYRO_OPEN_LEAD, listener);
+    };
+  }, [
+    isInPageBuilder,
+    effectiveDetailMode,
+    config?.entityType,
+    config,
+    loading,
+    location.pathname,
+    location.search,
+    navigate,
+    effectiveApiEndpoint,
+    toast,
+  ]);
+
+  // Clear the deferred modal timer only when the table unmounts.
+  useEffect(() => {
+    return () => {
+      if (openLeadModalTimerRef.current != null) {
+        window.clearTimeout(openLeadModalTimerRef.current);
+        openLeadModalTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Highlight stays until Mark as read — listen for that clear signal.
+  useEffect(() => {
+    const clearHighlight = () => {
+      setHighlightedLeadId(null);
+      setHighlightedPrajaId(null);
+      setHighlightedLeadLabel(null);
+    };
+    window.addEventListener(PYRO_CLEAR_LEAD_HIGHLIGHT, clearHighlight);
+    return () => {
+      window.removeEventListener(PYRO_CLEAR_LEAD_HIGHLIGHT, clearHighlight);
+    };
+  }, []);
+
+  // Keep React highlight state in sync with the persistent stash (set on notification click).
+  // This is the reliable path — does not depend on detailMode / openLead succeeding.
+  // fetchStartedForRef survives effect re-runs (filteredData changes) so we don't hammer /records/0/.
+  const highlightFetchStartedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isInPageBuilder) return;
+    const entityType = String(config?.entityType || 'lead').toLowerCase();
+    if (entityType !== 'lead') return;
+
+    let cancelled = false;
+
+    const syncFromStash = () => {
+      if (cancelled) return;
+      const stash = getActiveLeadHighlight();
+      if (!stash) {
+        highlightFetchStartedRef.current = null;
+        setHighlightedLeadId(null);
+        setHighlightedPrajaId(null);
+        setHighlightedLeadLabel(null);
+        return;
+      }
+
+      const stashRecordId = normalizeOpenLeadId(stash.record_id);
+      const label =
+        stash.lead_name?.trim() ||
+        (stash.praja_id ? `Praja ${stash.praja_id}` : null) ||
+        'This lead';
+      setHighlightedLeadLabel(label);
+      setHighlightedPrajaId(stash.praja_id ? String(stash.praja_id) : null);
+
+      if (loading) {
+        setHighlightedLeadId(stashRecordId || null);
+        return;
+      }
+
+      const existing =
+        filteredDataRef.current.find((row) => rowMatchesLeadHighlight(row, stash)) ||
+        dataRef.current.find((row) => rowMatchesLeadHighlight(row, stash)) ||
+        null;
+
+      if (existing) {
+        const rowId =
+          existing?.id != null
+            ? String(existing.id)
+            : existing?.record_id != null
+              ? String(existing.record_id)
+              : stashRecordId || null;
+        setHighlightedLeadId(rowId);
+        const sameRow = (r: any) => rowMatchesLeadHighlight(r, stash);
+        setFilteredData((prev) => {
+          const idx = prev.findIndex(sameRow);
+          if (idx <= 0) return prev; // already top or missing
+          const row = prev[idx];
+          return [row, ...prev.filter((_, i) => i !== idx)];
+        });
+        if (rowId) {
+          window.setTimeout(() => {
+            const el = document.querySelector(
+              `[data-row-id="${CSS.escape(rowId)}"]`,
+            ) as HTMLElement | null;
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 200);
+        }
+        return;
+      }
+
+      setHighlightedLeadId(stashRecordId || null);
+
+      // Not on current page — fetch only with a real positive CRM id (never Number("") → 0).
+      const numericId = parsePositiveCrmRecordId(stash.record_id);
+      const fetchKey = `${stashRecordId}|${normalizeOpenLeadId(stash.praja_id) || ''}`;
+      if (numericId == null || highlightFetchStartedRef.current === fetchKey) return;
+      highlightFetchStartedRef.current = fetchKey;
+      void crmLeadsApi
+        .getLeadById(numericId)
+        .then((row) => {
+          if (cancelled || !row) return;
+          // Stash may have moved to another lead while this fetch was in flight.
+          const current = getActiveLeadHighlight();
+          if (!current || !rowMatchesLeadHighlight(row, current)) return;
+          if (
+            !isActiveOpenLeadRequest({
+              record_id: stashRecordId,
+              praja_id: stash.praja_id,
+            })
+          ) {
+            return;
+          }
+          const tableRow = transformLeadData(row, config);
+          const sameRow = (r: any) => rowMatchesLeadHighlight(r, current);
+          setFilteredData((prev) => {
+            if (prev.some(sameRow)) return prev;
+            return [tableRow, ...prev];
+          });
+          setData((prev) => {
+            if (prev.some(sameRow)) return prev;
+            return [tableRow, ...prev];
+          });
+          const rowId =
+            tableRow?.id != null
+              ? String(tableRow.id)
+              : normalizeOpenLeadId(current.record_id) || null;
+          setHighlightedLeadId(rowId);
+          if (rowId) {
+            window.setTimeout(() => {
+              const el = document.querySelector(
+                `[data-row-id="${CSS.escape(rowId)}"]`,
+              ) as HTMLElement | null;
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 200);
+          }
+        })
+        .catch(() => {
+          // Allow a later retry if this fetch failed (e.g. transient 404).
+          if (highlightFetchStartedRef.current === fetchKey) {
+            highlightFetchStartedRef.current = null;
+          }
+        });
+    };
+
+    syncFromStash();
+    window.addEventListener(PYRO_LEAD_HIGHLIGHT_CHANGED, syncFromStash);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PYRO_LEAD_HIGHLIGHT_CHANGED, syncFromStash);
+    };
+  }, [
+    isInPageBuilder,
+    config,
+    config?.entityType,
+    loading,
+    filteredData,
+  ]);
+
   // Handle search input change
   const handleSearchChange = useCallback((value: string) => {
     debouncedSearch(value);
@@ -2395,6 +2900,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
 
   // Row click: behavior depends on detailMode (lead card vs record detail vs none)
+  // Keep call-back highlight until the notification is marked as read.
   const handleRowClick = useCallback((row: any) => {
     if (effectiveDetailMode === 'none') return;
     if (effectiveDetailMode === 'lead_card') {
@@ -2411,6 +2917,48 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     setSelectedRecord(row);
     setIsRecordDetailModalOpen(true);
   }, [effectiveDetailMode]);
+
+  const getLeadRowId = useCallback((row: any) => {
+    if (row?.id != null) return String(row.id);
+    if (row?.record_id != null) return String(row.record_id);
+    return undefined;
+  }, []);
+
+  const isLeadRowHighlighted = useCallback(
+    (row: any) => {
+      // Prefer persistent stash so the blue row shows even before React state catches up.
+      if (rowMatchesLeadHighlight(row)) return true;
+      // State fallback: Praja ID first, then record id (never phone — shared across leads).
+      if (highlightedPrajaId) {
+        const praja = getLeadRowPrajaId(row);
+        if (praja != null && String(praja) === highlightedPrajaId) {
+          return true;
+        }
+        return false;
+      }
+      if (!highlightedLeadId) return false;
+      const rowId = getLeadRowId(row);
+      return Boolean(rowId && rowId === highlightedLeadId);
+    },
+    [getLeadRowId, highlightedLeadId, highlightedPrajaId, highlightedLeadLabel],
+  );
+
+  const getLeadRowClassName = useCallback(
+    (row: any) => {
+      if (!isLeadRowHighlighted(row)) return undefined;
+      return 'ring-2 ring-inset ring-blue-400 animate-pulse';
+    },
+    [isLeadRowHighlighted],
+  );
+
+  const getLeadRowStyle = useCallback(
+    (row: any): React.CSSProperties | undefined => {
+      if (!isLeadRowHighlighted(row)) return undefined;
+      // Light blue on each cell (CustomTable applies this to <td>).
+      return { backgroundColor: '#BFDBFE', color: '#1E3A8A' };
+    },
+    [isLeadRowHighlighted],
+  );
 
   // Handle pagination navigation
   const handleNextPage = async () => {
@@ -2836,6 +3384,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     isInPageBuilder,
     effectiveDetailMode,
     handleRowClick,
+    getLeadRowId,
+    getLeadRowClassName,
+    getLeadRowStyle,
+    highlightedLeadId,
+    highlightedLeadLabel,
     renderCell,
     handlePreviousPage,
     handleNextPage,
