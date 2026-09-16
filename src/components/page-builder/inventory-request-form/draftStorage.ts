@@ -1,6 +1,5 @@
 /** Persist New Request form values across in-app tab switches and remounts. */
 
-import { DEFAULT_DELIVERY_ADDRESS, DEFAULT_DELIVERY_PINCODE } from './constants';
 import type { FormItem, RequestCategory } from './types';
 import { newEmptyItem } from './utils';
 
@@ -53,20 +52,30 @@ function itemHasDraftContent(item: FormItem): boolean {
     (item.estimated_cost ?? '') !== '' ||
     (item.comments ?? '').trim() !== '' ||
     (item.product_link ?? '').trim() !== '' ||
-    (item.product_image ?? '').trim() !== ''
+    (item.product_image ?? '').trim() !== '' ||
+    (item.project_purpose ?? '').trim() !== '' ||
+    Boolean(item.request_category)
   );
 }
 
-export function isMeaningfulDraft(draft: Pick<
-  InventoryRequestFormDraft,
-  'projectPurpose' | 'requestCategory' | 'deliveryPincode' | 'deliveryAddress' | 'items'
->): boolean {
+export type DeliveryDefaults = {
+  deliveryAddress: string;
+  deliveryPincode: string;
+};
+
+export function isMeaningfulDraft(
+  draft: Pick<
+    InventoryRequestFormDraft,
+    'projectPurpose' | 'requestCategory' | 'deliveryPincode' | 'deliveryAddress' | 'items'
+  >,
+  defaults: DeliveryDefaults = { deliveryAddress: '', deliveryPincode: '' }
+): boolean {
   if (draft.projectPurpose.trim()) return true;
   if (draft.requestCategory) return true;
-  if (draft.deliveryPincode.trim() && draft.deliveryPincode.trim() !== DEFAULT_DELIVERY_PINCODE) {
+  if (draft.deliveryPincode.trim() && draft.deliveryPincode.trim() !== defaults.deliveryPincode) {
     return true;
   }
-  if (draft.deliveryAddress.trim() && draft.deliveryAddress.trim() !== DEFAULT_DELIVERY_ADDRESS) {
+  if (draft.deliveryAddress.trim() && draft.deliveryAddress.trim() !== defaults.deliveryAddress) {
     return true;
   }
   return draft.items.some(itemHasDraftContent);
@@ -82,10 +91,25 @@ function sanitizeQuantity(value: unknown): number | '' {
   return Number.isFinite(n) ? n : '';
 }
 
-function sanitizeFormItem(raw: unknown): FormItem | null {
+function sanitizeRequestCategory(value: unknown): RequestCategory {
+  return value === 'Domestic' || value === 'International' ? value : '';
+}
+
+function sanitizeFormItem(
+  raw: unknown,
+  fallback?: { projectPurpose: string; requestCategory: RequestCategory }
+): FormItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   const base = newEmptyItem();
+  const projectPurpose =
+    'project_purpose' in o
+      ? asString(o.project_purpose)
+      : fallback?.projectPurpose ?? '';
+  const requestCategory =
+    'request_category' in o
+      ? sanitizeRequestCategory(o.request_category)
+      : fallback?.requestCategory ?? '';
   return {
     ...base,
     id: asString(o.id) || base.id,
@@ -99,6 +123,8 @@ function sanitizeFormItem(raw: unknown): FormItem | null {
     estimated_cost: sanitizeQuantity(o.estimated_cost),
     price_currency: o.price_currency === 'USD' ? 'USD' : 'INR',
     urgency_level: asString(o.urgency_level),
+    project_purpose: projectPurpose,
+    request_category: requestCategory,
     comments: asString(o.comments),
     price_quotes: Array.isArray(o.price_quotes) ? (o.price_quotes as FormItem['price_quotes']) : [],
   };
@@ -119,20 +145,22 @@ export function sanitizeDraft(raw: unknown): InventoryRequestFormDraft | null {
   const persistedAt = typeof o.persistedAt === 'number' ? o.persistedAt : 0;
   if (persistedAt > 0 && Date.now() - persistedAt > DRAFT_MAX_AGE_MS) return null;
 
-  const category = o.requestCategory;
-  const requestCategory: RequestCategory =
-    category === 'Domestic' || category === 'International' ? category : '';
-
+  const requestCategory = sanitizeRequestCategory(o.requestCategory);
+  const projectPurpose = asString(o.projectPurpose);
   const items = Array.isArray(o.items)
-    ? o.items.map(sanitizeFormItem).filter((item): item is FormItem => item != null)
+    ? o.items
+        .map((raw) =>
+          sanitizeFormItem(raw, { projectPurpose, requestCategory })
+        )
+        .filter((item): item is FormItem => item != null)
     : [];
 
   return {
     userId: typeof o.userId === 'string' && o.userId ? o.userId : null,
     projectPurpose: asString(o.projectPurpose),
     requestCategory,
-    deliveryPincode: asString(o.deliveryPincode) || DEFAULT_DELIVERY_PINCODE,
-    deliveryAddress: asString(o.deliveryAddress) || DEFAULT_DELIVERY_ADDRESS,
+    deliveryPincode: asString(o.deliveryPincode),
+    deliveryAddress: asString(o.deliveryAddress),
     items: items.length > 0 ? items : [newEmptyItem()],
     priceDraftByItemId: sanitizePriceDrafts(o.priceDraftByItemId),
     persistedAt,

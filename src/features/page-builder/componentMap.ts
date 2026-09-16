@@ -141,6 +141,9 @@ export interface ComponentConfig {
   initialStatusText?: string;
   defaultStatus?: string;
   urgencyOptions?: Array<{ label: string; value: string }>;
+  redirectAfterSubmitPageName?: string;
+  defaultDeliveryAddress?: string;
+  defaultDeliveryPincode?: string;
 }
 
 // Update CanvasComponentData to include config

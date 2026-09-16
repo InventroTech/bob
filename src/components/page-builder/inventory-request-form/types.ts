@@ -69,10 +69,14 @@ export interface InventoryRequestFormConfig {
   /** Options shown in the Priority / Urgency picker. Saved as `urgency_level`. */
   urgencyOptions?: Array<{ value: string; label: string }>;
   /**
-   * After successful create, navigate to the role page whose name matches this
-   * (default: "My Request" / "My Requests").
+   * After successful create, navigate to the role page whose sidebar name or
+   * Header Title matches this. Empty = stay on the form (no hardcoded fallback).
    */
   redirectAfterSubmitPageName?: string;
+  /** Tenant ship-to address prefilled on New Request. Empty = no default for this tenant. */
+  defaultDeliveryAddress?: string;
+  /** Tenant PIN prefilled on New Request. Empty = no default for this tenant. */
+  defaultDeliveryPincode?: string;
 }
 
 export interface VendorOption {
@@ -100,6 +104,10 @@ export interface FormItem {
   estimated_cost: string | number | '';
   price_currency: 'INR' | 'USD';
   urgency_level: string;
+  /** Project this line item is for (stored per record as `project_purpose`). */
+  project_purpose: string;
+  /** Domestic / International shipment for this line item (stored as `category`). */
+  request_category: RequestCategory;
   comments: string;
   /** Manual quotes from Amazon / Robu / other sites for side-by-side comparison. */
   price_quotes: PriceQuote[];
