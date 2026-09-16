@@ -116,7 +116,13 @@ export async function fetchPagesForRole(
   tenantId: string,
   roleId: string,
   token: string
-): Promise<{ id: string; name: string; display_order: number; icon_name: string }[]> {
+): Promise<{
+  id: string;
+  name: string;
+  display_order: number;
+  icon_name: string;
+  header_title?: string;
+}[]> {
   // First try the backend Pages API (preferred path).
   try {
     const pages = await pageService.getPagesForRole(tenantId, roleId);
@@ -132,7 +138,7 @@ export async function fetchPagesForRole(
     tenant_id: `eq.${tenantId}`,
     role: `eq.${roleId}`,
     is_deleted: 'eq.false',
-    select: 'id,name,display_order,icon_name',
+    select: 'id,name,display_order,icon_name,header_title',
     order: 'display_order.asc',
   });
   const res = await fetch(`${url}/rest/v1/pages?${params}`, {

@@ -131,6 +131,9 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     initialStatusText?: string;
     defaultStatus?: string;
     urgencyOptions?: Array<{ label: string; value: string }>;
+    redirectAfterSubmitPageName?: string;
+    defaultDeliveryAddress?: string;
+    defaultDeliveryPincode?: string;
     // Records / procurement tables (leadTable / inventoryTable / procurementTable): items table mode
     tableType?: 'default' | 'itemsTable';
     statusButtons?: Array<{
@@ -230,6 +233,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     defaultStatus: (initialConfig as any).defaultStatus ?? '',
     urgencyOptions: (initialConfig as any).urgencyOptions ?? undefined,
     redirectAfterSubmitPageName: (initialConfig as any).redirectAfterSubmitPageName ?? '',
+    defaultDeliveryAddress: (initialConfig as any).defaultDeliveryAddress ?? '',
+    defaultDeliveryPincode: (initialConfig as any).defaultDeliveryPincode ?? '',
     // Records table: items table + status buttons
     tableType: (initialConfig as any).tableType || 'default',
     statusButtons: (initialConfig as any).statusButtons ?? [],
@@ -889,7 +894,39 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
                 placeholder="My Requests"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                After Create Request, go to this sidebar page. Defaults to “My Request” / “My Requests”.
+                After Create Request, go to this page. Use the sidebar page name or Header Title
+                (e.g. All Request). Leave blank to stay on this form.
+              </p>
+            </div>
+
+            <div>
+              <Label>Default delivery address</Label>
+              <Input
+                value={localConfig.defaultDeliveryAddress ?? ''}
+                onChange={(e) => handleInputChange('defaultDeliveryAddress', e.target.value)}
+                placeholder="Company name, street, city"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Prefills New Request for this tenant only. Leave empty so users type their own.
+              </p>
+            </div>
+
+            <div>
+              <Label>Default delivery PIN code</Label>
+              <Input
+                inputMode="numeric"
+                maxLength={6}
+                value={localConfig.defaultDeliveryPincode ?? ''}
+                onChange={(e) =>
+                  handleInputChange(
+                    'defaultDeliveryPincode',
+                    e.target.value.replace(/\D/g, '').slice(0, 6)
+                  )
+                }
+                placeholder="e.g. 560001"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                6-digit PIN for this company. Other tenants never see this value.
               </p>
             </div>
 

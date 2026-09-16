@@ -47,10 +47,6 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     useNavyTheme,
     requestDate,
     department,
-    projectPurpose,
-    setProjectPurpose,
-    requestCategory,
-    setRequestCategory,
     deliveryPincode,
     setDeliveryPincode,
     deliveryAddress,
@@ -81,6 +77,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     projectSuggestionsOpen,
     setProjectSuggestionsOpen,
     projectSuggestionsLoading,
+    focusedProjectItemId,
+    setFocusedProjectItemId,
     focusedVendorId,
     setFocusedVendorId,
     vendorQuery,
@@ -176,54 +174,61 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     </Dialog>
   );
 
-  const renderProjectField = (opts: { id: string; compact?: boolean }) => (
+  const renderProjectField = (item: { id: string; project_purpose: string }) => {
+    const suggestions = filteredProjectSuggestions(item.project_purpose);
+    return (
     <div className={fieldStackClass}>
-      <Label htmlFor={opts.id} className={opts.compact ? itemFieldLabelClass : fieldLabelClass}>
+      <Label htmlFor={`project-purpose-${item.id}`} className={itemFieldLabelClass}>
         Project <span className="text-destructive">*</span>
       </Label>
       {wrapShake(
-        'projectPurpose',
+        itemKey(item.id, 'project_purpose'),
         <div className="relative w-full">
           <Input
-            id={opts.id}
+            id={`project-purpose-${item.id}`}
             placeholder={
               projectSuggestions.length > 0
                 ? 'Select a previous project or type a new one'
                 : 'Project name'
             }
-            value={projectPurpose}
+            value={item.project_purpose}
             onFocus={() => {
+              setFocusedProjectItemId(item.id);
               if (projectSuggestions.length > 0 || projectSuggestionsLoading) {
                 setProjectSuggestionsOpen(true);
               }
             }}
             onBlur={() => {
-              window.setTimeout(() => setProjectSuggestionsOpen(false), 150);
+              window.setTimeout(() => {
+                setFocusedProjectItemId((prev) => (prev === item.id ? null : prev));
+                setProjectSuggestionsOpen(false);
+              }, 150);
             }}
             onChange={(e) => {
-              setProjectPurpose(e.target.value);
-              clearFieldShake('projectPurpose');
+              updateItem(item.id, 'project_purpose', e.target.value);
+              setFocusedProjectItemId(item.id);
               setProjectSuggestionsOpen(true);
             }}
             className={cn('h-9 w-full', inputBorderClass)}
             autoComplete="off"
           />
-          {projectSuggestionsOpen &&
-            (projectSuggestionsLoading || filteredProjectSuggestions.length > 0) && (
+          {focusedProjectItemId === item.id &&
+            projectSuggestionsOpen &&
+            (projectSuggestionsLoading || suggestions.length > 0) && (
               <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-background shadow-md">
                 {projectSuggestionsLoading && projectSuggestions.length === 0 ? (
                   <div className="px-3 py-2 text-sm text-muted-foreground">Loading projects…</div>
                 ) : (
-                  filteredProjectSuggestions.map((suggestion) => (
+                  suggestions.map((suggestion) => (
                     <button
                       key={suggestion}
                       type="button"
                       className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-muted"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
-                        setProjectPurpose(suggestion);
-                        clearFieldShake('projectPurpose');
+                        updateItem(item.id, 'project_purpose', suggestion);
                         setProjectSuggestionsOpen(false);
+                        setFocusedProjectItemId(null);
                       }}
                     >
                       {suggestion}
@@ -236,24 +241,24 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
         'w-full'
       )}
     </div>
-  );
+    );
+  };
 
-  const renderShipmentTypeField = (opts: { id: string; compact?: boolean }) => (
+  const renderShipmentTypeField = (item: { id: string; request_category: string }) => (
     <div className={fieldStackClass}>
-      <Label htmlFor={opts.id} className={opts.compact ? itemFieldLabelClass : fieldLabelClass}>
+      <Label htmlFor={`request-category-${item.id}`} className={itemFieldLabelClass}>
         Shipment Type <span className="text-destructive">*</span>
       </Label>
       {wrapShake(
-        'requestCategory',
+        itemKey(item.id, 'request_category'),
         <Select
-          value={requestCategory || undefined}
+          value={item.request_category || undefined}
           onValueChange={(v) => {
-            setRequestCategory(v === 'International' ? 'International' : 'Domestic');
-            clearFieldShake('requestCategory');
+            updateItem(item.id, 'request_category', v === 'International' ? 'International' : 'Domestic');
           }}
         >
           <SelectTrigger
-            id={opts.id}
+            id={`request-category-${item.id}`}
             className={cn('h-9 w-full', useNavyTheme && 'border-[#D0D7E5]')}
           >
             <SelectValue placeholder="Select shipment type" />
@@ -268,8 +273,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
         </Select>,
         'w-full'
       )}
-      </div>
-    );
+    </div>
+  );
 
   const navyBtn = useNavyTheme
     ? '!bg-[#1A3673] !text-white hover:!bg-[#152c5e] focus-visible:!ring-[#1A3673]'
@@ -779,8 +784,8 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                         'w-full'
                       )}
                     </div>
-                    {renderProjectField({ id: `project-purpose-${item.id}`, compact: true })}
-                    {renderShipmentTypeField({ id: `request-category-${item.id}`, compact: true })}
+                    {renderProjectField(item)}
+                    {renderShipmentTypeField(item)}
                     <div className={fieldStackClass}>
                       <Label className={itemFieldLabelClass}>Priority *</Label>
                       {wrapShake(
