@@ -467,15 +467,22 @@ describe("openLeadActionGeneration", () => {
     expect(getActiveLeadHighlight()?.record_id).toBe("222");
   });
 
-  it("same lead twice while 450ms modal pending: generation must not bump", () => {
+  /**
+   * Review case: toast schedules 450ms card (gen N); inbox click on that same lead
+   * must NOT bump to N+1 — otherwise stillThisOpen fails on the pending timeout while
+   * shouldSupersedeOpenLead returns ignore → card never opens.
+   */
+  it("requestOpenLead twice for same lead while 450ms modal pending — generation must not bump, isOpenLeadActionCurrent(firstGen) stays true", () => {
     clearOpenLeadHighlightStash();
+    consumePendingOpenLead();
+    clearRegisteredAllLeadsPath();
     registerAllLeadsPath("/app/praja/pages/1");
     Object.defineProperty(window, "location", {
       configurable: true,
       value: { pathname: "/app/praja/pages/1" },
     });
 
-    // Toast click — schedules openLead / 450ms card under firstGen.
+    // 1) Toast click → openLead would schedule setTimeout(..., 450) under this gen.
     requestOpenLead({
       record_id: "111",
       praja_id: "PRAJA-A",
@@ -484,11 +491,13 @@ describe("openLeadActionGeneration", () => {
       notification_item_id: "db-1",
     });
     const firstGen = getOpenLeadActionGeneration();
-    expect(isActiveOpenLeadRequest({ record_id: "111", praja_id: "PRAJA-A" })).toBe(
-      true,
-    );
+    expect(firstGen).toBeGreaterThan(0);
+    expect(isOpenLeadActionCurrent(firstGen)).toBe(true);
+    expect(
+      isActiveOpenLeadRequest({ record_id: "111", praja_id: "PRAJA-A" }),
+    ).toBe(true);
 
-    // openLead would ignore a same-lead poke while the modal timer is pending.
+    // 2) Modal timer still pending → openLead ignores same-lead retries (no new schedule).
     expect(
       shouldSupersedeOpenLead({
         isSameLead: true,
@@ -497,7 +506,7 @@ describe("openLeadActionGeneration", () => {
       }),
     ).toEqual({ action: "ignore" });
 
-    // Inbox click on that same lead before the 450ms timer fires.
+    // 3) Inbox / second click on the SAME lead before 450ms fires.
     requestOpenLead({
       record_id: "111",
       praja_id: "PRAJA-A",
@@ -506,8 +515,46 @@ describe("openLeadActionGeneration", () => {
       notification_item_id: "db-1",
     });
 
-    // Must keep firstGen current — otherwise the pending timeout's stillThisOpen
-    // fails and ignore never schedules a replacement card.
+    // 4) Generation must not bump — pending timeout's stillThisOpen(firstGen) must pass.
+    expect(getOpenLeadActionGeneration()).toBe(firstGen);
+    expect(isOpenLeadActionCurrent(firstGen)).toBe(true);
+    expect(getActiveLeadHighlight()?.record_id).toBe("111");
+    expect(getActiveLeadHighlight()?.praja_id).toBe("PRAJA-A");
+  });
+
+  it("same lead twice while 450ms modal pending: generation must not bump", () => {
+    clearOpenLeadHighlightStash();
+    registerAllLeadsPath("/app/praja/pages/1");
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/app/praja/pages/1" },
+    });
+
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Lead A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+    const firstGen = getOpenLeadActionGeneration();
+
+    expect(
+      shouldSupersedeOpenLead({
+        isSameLead: true,
+        modalTimerPending: true,
+        modalAlreadyOpen: false,
+      }),
+    ).toEqual({ action: "ignore" });
+
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Lead A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+
     expect(getOpenLeadActionGeneration()).toBe(firstGen);
     expect(isOpenLeadActionCurrent(firstGen)).toBe(true);
     expect(getActiveLeadHighlight()?.record_id).toBe("111");
