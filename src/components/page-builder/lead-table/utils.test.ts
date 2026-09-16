@@ -93,4 +93,44 @@ describe("getLeadRowPrajaId", () => {
       }),
     ).toBeNull();
   });
+
+  it("trims data.praja_id", () => {
+    expect(
+      getLeadRowPrajaId({
+        data: { praja_id: "  1793876  " },
+      }),
+    ).toBe("1793876");
+  });
+
+  it("rejects poisoned string praja values", () => {
+    expect(
+      getLeadRowPrajaId({
+        data: { praja_id: "null" },
+      }),
+    ).toBeNull();
+    expect(
+      getLeadRowPrajaId({
+        data: { praja_id: "undefined" },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("transformLeadData praja_id — extra edges", () => {
+  it("does not use CRM id as praja when data.praja_id missing", () => {
+    const row = transformLeadData({
+      id: 555,
+      data: { name: "X" },
+    });
+    expect(row.praja_id).toBe("N/A");
+  });
+
+  it("ignores blank data.praja_id", () => {
+    const row = transformLeadData({
+      id: 1,
+      praja_id: "KEEP-ME-NOT",
+      data: { praja_id: "   ", user_id: "U1" },
+    });
+    expect(row.praja_id).toBe("N/A");
+  });
 });

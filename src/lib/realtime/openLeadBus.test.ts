@@ -7,6 +7,7 @@ import {
   clearRegisteredAllLeadsPath,
   consumePendingOpenLead,
   getActiveLeadHighlight,
+  getLeadRowPrajaId,
   getOpenLeadActionGeneration,
   getPendingOpenLead,
   getRegisteredAllLeadsPath,
@@ -14,6 +15,7 @@ import {
   isOpenLeadActionCurrent,
   normalizeOpenLeadId,
   parsePositiveCrmRecordId,
+  formatOpenLeadIdentity,
   PYRO_OPEN_LEAD,
   registerAllLeadsPath,
   requestOpenLead,
@@ -270,6 +272,81 @@ describe("requestOpenLead", () => {
     expect(navigations[0]?.search).toContain("open_lead=111");
     expect(navigations[0]?.search).toContain("praja_id=PRAJA-A");
     expect(navigations[0]?.search).not.toContain("lead_name");
+  });
+
+  it("dispatches PYRO_OPEN_LEAD immediately when no All Leads path is registered", () => {
+    clearRegisteredAllLeadsPath();
+    const opened: string[] = [];
+    const onOpen = (event: Event) => {
+      opened.push((event as CustomEvent<{ record_id: string }>).detail.record_id);
+    };
+    window.addEventListener(PYRO_OPEN_LEAD, onOpen);
+
+    requestOpenLead({
+      record_id: "555",
+      praja_id: "P555",
+      lead_name: "No Path",
+    });
+
+    window.removeEventListener(PYRO_OPEN_LEAD, onOpen);
+    expect(opened).toEqual(["555"]);
+  });
+
+  it("praja-only open puts only praja_id in the query string", () => {
+    const navigations: Array<{ search: string }> = [];
+    const onNav = (event: Event) => {
+      navigations.push((event as CustomEvent<{ search: string }>).detail);
+    };
+    window.addEventListener("pyro-navigate-to-lead", onNav);
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/elsewhere" },
+    });
+
+    requestOpenLead({
+      record_id: "",
+      praja_id: "1793876",
+      lead_name: "Sneha",
+    });
+
+    window.removeEventListener("pyro-navigate-to-lead", onNav);
+    expect(navigations[0]?.search).toBe("?praja_id=1793876");
+    expect(navigations[0]?.search).not.toContain("open_lead");
+  });
+
+  it("schedules longer poke delays when navigating from another page", () => {
+    const opened: number[] = [];
+    const onOpen = () => opened.push(Date.now());
+    window.addEventListener(PYRO_OPEN_LEAD, onOpen);
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/elsewhere" },
+    });
+
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+    });
+
+    vi.advanceTimersByTime(499);
+    expect(opened).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect(opened).toHaveLength(1);
+    vi.advanceTimersByTime(700);
+    expect(opened).toHaveLength(2);
+    window.removeEventListener(PYRO_OPEN_LEAD, onOpen);
+  });
+
+  it("normalizes poisoned string ids on request", () => {
+    requestOpenLead({
+      record_id: "  null  ",
+      praja_id: " 1793876 ",
+      lead_name: "Sneha",
+    });
+    expect(getPendingOpenLead()).toMatchObject({
+      record_id: "",
+      praja_id: "1793876",
+    });
   });
 });
 
@@ -581,5 +658,108 @@ describe("clearLeadHighlightForNotification", () => {
     });
 
     expect(getActiveLeadHighlight()).toBeNull();
+  });
+
+  it("clears when notification_id matches even if praja differs", () => {
+    stashOpenLeadHighlight({
+      record_id: "1",
+      praja_id: "PRAJA-A",
+      notification_id: 99,
+      notification_item_id: "db-99",
+    });
+
+    clearLeadHighlightForNotification({
+      id: "db-99",
+      notificationId: 99,
+      payload: { record_id: "1", praja_id: "OTHER" },
+    });
+
+    expect(getActiveLeadHighlight()).toBeNull();
+  });
+
+  it("clears when record ids match", () => {
+    stashOpenLeadHighlight({
+      record_id: "913285",
+      praja_id: "P1",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+
+    clearLeadHighlightForNotification({
+      id: "db-9",
+      notificationId: 9,
+      payload: { record_id: "913285", praja_id: "OTHER" },
+    });
+
+    expect(getActiveLeadHighlight()).toBeNull();
+  });
+
+  it("does not clear when neither notification nor lead identity matches", () => {
+    stashOpenLeadHighlight({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      notification_id: 1,
+      notification_item_id: "db-1",
+    });
+
+    clearLeadHighlightForNotification({
+      id: "db-2",
+      notificationId: 2,
+      payload: { record_id: "222", praja_id: "PRAJA-B" },
+    });
+
+    expect(getActiveLeadHighlight()?.record_id).toBe("111");
+  });
+});
+
+describe("getLeadRowPrajaId (openLeadBus)", () => {
+  it("accepts top-level praja when it does not equal user_id", () => {
+    expect(
+      getLeadRowPrajaId({
+        praja_id: "1793876",
+        data: { user_id: "USER-1" },
+      }),
+    ).toBe("1793876");
+  });
+
+  it("returns null for N/A top-level praja", () => {
+    expect(getLeadRowPrajaId({ praja_id: "N/A", data: {} })).toBeNull();
+  });
+
+  it("returns null for null/undefined row", () => {
+    expect(getLeadRowPrajaId(null)).toBeNull();
+    expect(getLeadRowPrajaId(undefined)).toBeNull();
+  });
+});
+
+describe("formatOpenLeadIdentity", () => {
+  it("includes name and praja", () => {
+    expect(
+      formatOpenLeadIdentity({
+        record_id: "1",
+        praja_id: "1793876",
+        lead_name: "Sneha",
+      }),
+    ).toBe("Sneha · Praja ID: 1793876");
+  });
+
+  it("falls back to record id when praja missing", () => {
+    expect(
+      formatOpenLeadIdentity({
+        record_id: "913285",
+        praja_id: null,
+        lead_name: "Sneha",
+      }),
+    ).toBe("Sneha · Record #913285");
+  });
+
+  it("falls back to Lead when name missing", () => {
+    expect(
+      formatOpenLeadIdentity({
+        record_id: "",
+        praja_id: "P1",
+        lead_name: null,
+      }),
+    ).toBe("Lead · Praja ID: P1");
   });
 });
