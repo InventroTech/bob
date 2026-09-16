@@ -81,6 +81,8 @@ export const newEmptyItem = (): FormItem => ({
   estimated_cost: '',
   price_currency: 'INR',
   urgency_level: '',
+  project_purpose: '',
+  request_category: '',
   comments: '',
   price_quotes: [],
 });
