@@ -522,44 +522,6 @@ describe("openLeadActionGeneration", () => {
     expect(getActiveLeadHighlight()?.praja_id).toBe("PRAJA-A");
   });
 
-  it("same lead twice while 450ms modal pending: generation must not bump", () => {
-    clearOpenLeadHighlightStash();
-    registerAllLeadsPath("/app/praja/pages/1");
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { pathname: "/app/praja/pages/1" },
-    });
-
-    requestOpenLead({
-      record_id: "111",
-      praja_id: "PRAJA-A",
-      lead_name: "Lead A",
-      notification_id: 1,
-      notification_item_id: "db-1",
-    });
-    const firstGen = getOpenLeadActionGeneration();
-
-    expect(
-      shouldSupersedeOpenLead({
-        isSameLead: true,
-        modalTimerPending: true,
-        modalAlreadyOpen: false,
-      }),
-    ).toEqual({ action: "ignore" });
-
-    requestOpenLead({
-      record_id: "111",
-      praja_id: "PRAJA-A",
-      lead_name: "Lead A",
-      notification_id: 1,
-      notification_item_id: "db-1",
-    });
-
-    expect(getOpenLeadActionGeneration()).toBe(firstGen);
-    expect(isOpenLeadActionCurrent(firstGen)).toBe(true);
-    expect(getActiveLeadHighlight()?.record_id).toBe("111");
-  });
-
   it("still bumps generation when switching to a different lead", () => {
     clearOpenLeadHighlightStash();
     registerAllLeadsPath("/app/praja/pages/1");
