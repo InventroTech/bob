@@ -1,6 +1,6 @@
 /** State, effects, and handlers for the inventory request form. */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
@@ -9,9 +9,6 @@ import { toast } from 'sonner';
 import { emptyShipmentTrackingFields } from '@/lib/inventory/shipmentTracking';
 import { fetchProductFromLink, looksLikeProductUrl } from '@/lib/inventory/productLinkExtract';
 import { formatInventoryPriorityLabel } from '@/lib/inventory/priority';
-import {
-  isInventoryTeamLeadRole,
-} from '@/lib/inventory/workflow';
 import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
 import { supabase } from '@/lib/supabase';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
@@ -19,17 +16,19 @@ import { getEffectiveToken, fetchPagesForRole, useSpoofUserId } from '@/lib/auth
 
 import {
   RECORDS_URL,
-  DEFAULT_DELIVERY_PINCODE,
-  DEFAULT_DELIVERY_ADDRESS,
   PRIORITY_OPTIONS,
   REQUIRED_ITEM_FIELDS,
+  UNMANND_DELIVERY_ADDRESS,
+  UNMANND_DELIVERY_PINCODE,
+  pickDeliveryAddress,
+  pickDeliveryPincode,
+  resolveDefaultDelivery,
 } from './constants';
 import type {
   FormItem,
   InventoryItemSuggestion,
   InventoryRequestFormProps,
   PriceQuote,
-  RequestCategory,
   VendorOption,
 } from './types';
 import type { InventoryRequestFormDraft } from './draftStorage';
@@ -48,96 +47,7 @@ import {
   makeDraftKey,
   saveDraft,
 } from './draftStorage';
-
-const normalizePageName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
-
-function isApproverLikeRole(roleName: string | null | undefined): boolean {
-  if (isInventoryTeamLeadRole(roleName)) return true;
-  const r = String(roleName ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_');
-  // Procurement Manager (and similar) — not generic "manager".
-  return r.includes('procurement');
-}
-
-function pickPageIdByNames(
-  pages: Array<{ id: string; name: string }>,
-  exactNames: string[],
-  fuzzyIncludes: string[]
-): string | null {
-  for (const exact of exactNames) {
-    const hit = pages.find((p) => normalizePageName(p.name) === exact);
-    if (hit) return hit.id;
-  }
-  for (const fuzzy of fuzzyIncludes) {
-    const hit = pages.find((p) => normalizePageName(p.name).includes(fuzzy));
-    if (hit) return hit.id;
-  }
-  return null;
-}
-
-/**
- * After create:
- * - Prefer Page Builder override `redirectAfterSubmitPageName` when set
- * - Prefer My Request(s) for all roles (including TL / Procurement Manager)
- * - Approver roles fall back to All Request(s) if My Request page is missing
- * - Final fallbacks: any request list page (not New/Create), else first available page
- */
-function pickPostCreatePageId(
-  pages: Array<{ id: string; name: string }>,
-  preferredName: string | undefined,
-  roleName: string | null | undefined,
-  currentPageId?: string | null
-): string | null {
-  if (!pages.length) return null;
-  const preferred = preferredName ? normalizePageName(preferredName) : '';
-  if (preferred) {
-    const exactPreferred = pages.find((p) => normalizePageName(p.name) === preferred);
-    if (exactPreferred) return exactPreferred.id;
-    const fuzzyPreferred = pages.find((p) => normalizePageName(p.name).includes(preferred));
-    if (fuzzyPreferred) return fuzzyPreferred.id;
-  }
-
-  const myRequest = pickPageIdByNames(
-    pages,
-    ['my requests', 'my request'],
-    ['my request']
-  );
-  if (myRequest) return myRequest;
-
-  if (isApproverLikeRole(roleName)) {
-    const allRequests = pickPageIdByNames(
-      pages,
-      ['all requests', 'all request'],
-      ['all request']
-    );
-    if (allRequests) return allRequests;
-  }
-
-  const isNewRequestPage = (name: string) => {
-    const n = normalizePageName(name);
-    return n.includes('new request') || n.includes('create request') || n === 'new';
-  };
-
-  // Unmannd / inventory: land on any request list (not the create form).
-  const requestList = pages.find((p) => {
-    if (currentPageId && p.id === currentPageId) return false;
-    if (isNewRequestPage(p.name)) return false;
-    const n = normalizePageName(p.name);
-    return (
-      n.includes('my request') ||
-      n.includes('all request') ||
-      n.includes('pending approval') ||
-      n === 'requests' ||
-      (n.includes('request') && !n.includes('form'))
-    );
-  });
-  if (requestList) return requestList.id;
-
-  const other = pages.find((p) => !currentPageId || p.id !== currentPageId);
-  return other?.id ?? pages[0]?.id ?? null;
-}
+import { pickPostCreatePageId } from './postCreateRedirect';
 
 export function useInventoryRequestForm({
   config,
@@ -170,14 +80,29 @@ export function useInventoryRequestForm({
     /unman+d/i.test(String(tenantSlug || ''));
   const initialStatus = config?.initialStatus ?? config?.defaultStatus ?? 'NEW_REQUEST';
   const initialStatusText = (config?.initialStatusText ?? initialStatus).trim();
-  const redirectPageName = config?.redirectAfterSubmitPageName;
+  const redirectPageName = String(config?.redirectAfterSubmitPageName || '').trim() || undefined;
+
+  const defaultDelivery = useMemo(
+    () =>
+      resolveDefaultDelivery({
+        configAddress: config?.defaultDeliveryAddress,
+        configPincode: config?.defaultDeliveryPincode,
+        tenantSlug,
+      }),
+    [config?.defaultDeliveryAddress, config?.defaultDeliveryPincode, tenantSlug]
+  );
+  const deliveryDefaults = useMemo(
+    () => ({
+      deliveryAddress: defaultDelivery.address,
+      deliveryPincode: defaultDelivery.pincode,
+    }),
+    [defaultDelivery.address, defaultDelivery.pincode]
+  );
 
   const [requestDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [department, setDepartment] = useState('');
-  const [projectPurpose, setProjectPurpose] = useState('');
-  const [requestCategory, setRequestCategory] = useState<RequestCategory>('');
-  const [deliveryPincode, setDeliveryPincode] = useState(DEFAULT_DELIVERY_PINCODE);
-  const [deliveryAddress, setDeliveryAddress] = useState(DEFAULT_DELIVERY_ADDRESS);
+  const [deliveryPincode, setDeliveryPincode] = useState(defaultDelivery.pincode);
+  const [deliveryAddress, setDeliveryAddress] = useState(defaultDelivery.address);
   const [myRoleName, setMyRoleName] = useState<string>('');
   const [requesterNameFromMembership, setRequesterNameFromMembership] = useState<string>('');
   // team_lead / manager store authz_tenantmembership.id
@@ -207,6 +132,7 @@ export function useInventoryRequestForm({
   const [projectSuggestions, setProjectSuggestions] = useState<string[]>([]);
   const [projectSuggestionsOpen, setProjectSuggestionsOpen] = useState(false);
   const [projectSuggestionsLoading, setProjectSuggestionsLoading] = useState(false);
+  const [focusedProjectItemId, setFocusedProjectItemId] = useState<string | null>(null);
   const [focusedVendorId, setFocusedVendorId] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState<string>('');
   const [vendorSuggestionsOpen, setVendorSuggestionsOpen] = useState(false);
@@ -268,24 +194,43 @@ export function useInventoryRequestForm({
   }, [loadProjectSuggestions]);
 
   const applyEmptyForm = useCallback(() => {
-    setProjectPurpose('');
-    setRequestCategory('');
-    setDeliveryPincode(DEFAULT_DELIVERY_PINCODE);
-    setDeliveryAddress(DEFAULT_DELIVERY_ADDRESS);
+    setDeliveryPincode(defaultDelivery.pincode);
+    setDeliveryAddress(defaultDelivery.address);
     setItems([newEmptyItem()]);
     setPriceDraftByItemId({});
     setFieldShakeNonce({});
-  }, []);
+  }, [defaultDelivery.address, defaultDelivery.pincode]);
 
   const applyDraftToForm = useCallback((draft: InventoryRequestFormDraft) => {
-    setProjectPurpose(draft.projectPurpose);
-    setRequestCategory(draft.requestCategory);
-    setDeliveryPincode(draft.deliveryPincode || DEFAULT_DELIVERY_PINCODE);
-    setDeliveryAddress(draft.deliveryAddress || DEFAULT_DELIVERY_ADDRESS);
+    setDeliveryPincode(pickDeliveryPincode(draft.deliveryPincode, defaultDelivery.pincode));
+    setDeliveryAddress(pickDeliveryAddress(draft.deliveryAddress, defaultDelivery.address));
     setItems(draft.items.length > 0 ? draft.items : [newEmptyItem()]);
     setPriceDraftByItemId(draft.priceDraftByItemId ?? {});
     setFieldShakeNonce({});
-  }, []);
+  }, [defaultDelivery.address, defaultDelivery.pincode]);
+
+  const prevDeliveryRef = useRef(defaultDelivery);
+  useEffect(() => {
+    const prev = prevDeliveryRef.current;
+    if (prev.address === defaultDelivery.address && prev.pincode === defaultDelivery.pincode) {
+      return;
+    }
+    setDeliveryAddress((current) => {
+      const value = current.trim();
+      if (!value || value === prev.address || value === UNMANND_DELIVERY_ADDRESS) {
+        return defaultDelivery.address;
+      }
+      return current;
+    });
+    setDeliveryPincode((current) => {
+      const value = current.replace(/\D/g, '').slice(0, 6);
+      if (!value || value === prev.pincode || value === UNMANND_DELIVERY_PINCODE) {
+        return defaultDelivery.pincode;
+      }
+      return current;
+    });
+    prevDeliveryRef.current = defaultDelivery;
+  }, [defaultDelivery]);
 
   // Only record a snapshot once this owner's fields are on screen, so we never
   // write requestor A's values into team lead / manager / another requestor's slot.
@@ -293,8 +238,8 @@ export function useInventoryRequestForm({
     snapshotRef.current = {
       key: draftKey,
       userId: draftOwnerId,
-      projectPurpose,
-      requestCategory,
+      projectPurpose: items.find((item) => item.project_purpose.trim())?.project_purpose ?? '',
+      requestCategory: items.find((item) => item.request_category)?.request_category ?? '',
       deliveryPincode,
       deliveryAddress,
       items,
@@ -309,7 +254,7 @@ export function useInventoryRequestForm({
     const prev = snapshotRef.current;
     if (prev?.userId && prev.key && draftOwnerId && prev.userId !== draftOwnerId) {
       const { key: prevKey, ...prevDraft } = prev;
-      if (isMeaningfulDraft(prevDraft)) {
+      if (isMeaningfulDraft(prevDraft, deliveryDefaults)) {
         saveDraft(prevKey, { ...prevDraft, persistedAt: Date.now() });
       } else {
         clearDraft(prevKey);
@@ -346,7 +291,7 @@ export function useInventoryRequestForm({
       if (!snap?.key || !snap.userId) return;
       if (snap.userId !== userIdRef.current) return;
       const { key, ...draft } = snap;
-      if (!isMeaningfulDraft(draft)) {
+      if (!isMeaningfulDraft(draft, deliveryDefaults)) {
         clearDraft(key);
         return;
       }
@@ -367,8 +312,7 @@ export function useInventoryRequestForm({
     draftHydrated,
     draftKey,
     draftOwnerId,
-    projectPurpose,
-    requestCategory,
+    deliveryDefaults,
     deliveryPincode,
     deliveryAddress,
     items,
@@ -396,13 +340,13 @@ export function useInventoryRequestForm({
     });
   }, []);
 
-  const filteredProjectSuggestions = (() => {
-    const q = projectPurpose.trim().toLowerCase();
+  const filteredProjectSuggestions = (query: string) => {
+    const q = query.trim().toLowerCase();
     const list = !q
       ? projectSuggestions
       : projectSuggestions.filter((p) => p.toLowerCase().includes(q));
     return list.slice(0, 12);
-  })();
+  };
 
   const fetchItemSuggestions = useCallback(async (query: string) => {
     const q = query.trim();
@@ -643,7 +587,15 @@ export function useInventoryRequestForm({
   }, [user]);
 
   const addItem = useCallback(() => {
-    setItems((prev) => [...prev, newEmptyItem()]);
+    setItems((prev) => {
+      const last = prev[prev.length - 1];
+      const next = newEmptyItem();
+      if (last) {
+        next.project_purpose = last.project_purpose;
+        next.request_category = last.request_category;
+      }
+      return [...prev, next];
+    });
   }, []);
 
   const removeItem = useCallback((id: string) => {
@@ -906,19 +858,13 @@ export function useInventoryRequestForm({
       (item.estimated_cost ?? '') !== '' ||
       (item.product_link ?? '').trim() !== '' ||
       (item.specifications ?? '').trim() !== '' ||
-      (item.comments ?? '').trim() !== '';
+      (item.comments ?? '').trim() !== '' ||
+      (item.project_purpose ?? '').trim() !== '' ||
+      Boolean(item.request_category);
 
     const missingKeys: string[] = [];
     const missingLabels: string[] = [];
 
-    if (!requestCategory) {
-      missingKeys.push('requestCategory');
-      missingLabels.push('Shipment Type');
-    }
-    if (!projectPurpose.trim()) {
-      missingKeys.push('projectPurpose');
-      missingLabels.push('Project');
-    }
     if (!normalizeIndianPincode(deliveryPincode)) {
       missingKeys.push('deliveryPincode');
       missingLabels.push('Delivery PIN code');
@@ -990,8 +936,8 @@ export function useInventoryRequestForm({
           requester_id: requesterId,
           requester_name: requesterDisplay ?? '',
           department: department || '',
-          project_purpose: projectPurpose.trim() || '',
-          category: requestCategory,
+          project_purpose: (item.project_purpose ?? '').trim() || '',
+          category: item.request_category,
           delivery_pincode: normalizeIndianPincode(deliveryPincode) || '',
           delivery_address: deliveryAddress.trim() || '',
           urgency_level: urgency || '',
@@ -1035,18 +981,25 @@ export function useInventoryRequestForm({
           count === 1 ? 'Inventory request created.' : `${count} inventory requests created.`
         );
       }
-      rememberProjectSuggestion(projectPurpose);
+      for (const item of validItems) {
+        rememberProjectSuggestion(item.project_purpose);
+      }
       discardDraft();
 
       const navigateAfterCreate = async () => {
-        // After create: prefer My Requests for all roles (TL / PM included); All Requests as fallback for approvers.
+        // After create: only the Page Builder redirect page. No hardcoded My Request.
         let redirected = false;
         if (tenantSlug) {
           try {
             const token = await getEffectiveToken(session?.access_token ?? null);
             const tenantId = token ? getTenantIdFromJWT(token) : null;
             const roleId = token ? getRoleIdFromJWT(token) : null;
-            let pages: Array<{ id: string; name: string }> = [];
+            let pages: Array<{
+              id: string;
+              name: string;
+              header_title?: string | null;
+              icon_name?: string | null;
+            }> = [];
             if (token && tenantId && roleId) {
               // Prefer the same Pages API path as the sidebar (works for spoof + normal JWT).
               try {
@@ -1057,7 +1010,7 @@ export function useInventoryRequestForm({
               if (!pages.length) {
                 const { data } = await supabase
                   .from('pages')
-                  .select('id, name')
+                  .select('id, name, header_title, icon_name')
                   .eq('tenant_id', tenantId)
                   .eq('role', roleId)
                   .eq('is_deleted', false)
@@ -1065,23 +1018,17 @@ export function useInventoryRequestForm({
                 pages = data ?? [];
               }
             }
-            const pageId = pickPostCreatePageId(
-              pages,
-              redirectPageName,
-              myRoleName,
-              currentPageId
-            );
+            const pageId = pickPostCreatePageId(pages, redirectPageName, currentPageId);
             if (pageId) {
               navigate(`/app/${tenantSlug}/pages/${pageId}`);
               redirected = true;
-            } else {
-              console.warn('No post-create page found', {
+            } else if (redirectPageName) {
+              console.warn('Configured redirect page was not found', {
                 pageCount: pages.length,
-                pageNames: pages.map((p) => p.name),
+                pageNames: pages.map((p) => ({ name: p.name, header_title: p.header_title })),
                 redirectPageName,
-                myRoleName,
               });
-              toast.message('Request created, but no list page was found to open.');
+              toast.message('Request created, but that redirect page was not found.');
             }
           } catch (navErr) {
             console.warn('Could not navigate after request create', navErr);
@@ -1137,7 +1084,9 @@ export function useInventoryRequestForm({
       (i.vendor ?? '').trim() !== '' ||
       (i.estimated_cost ?? '') !== '' ||
       (i.comments ?? '').trim() !== '' ||
-      (i.product_link ?? '').trim() !== ''
+      (i.product_link ?? '').trim() !== '' ||
+      (i.project_purpose ?? '').trim() !== '' ||
+      Boolean(i.request_category)
   );
   const isFormEmpty = !hasAnyItemContent;
 
@@ -1147,10 +1096,6 @@ export function useInventoryRequestForm({
     useNavyTheme,
     requestDate,
     department,
-    projectPurpose,
-    setProjectPurpose,
-    requestCategory,
-    setRequestCategory,
     deliveryPincode,
     setDeliveryPincode,
     deliveryAddress,
@@ -1182,6 +1127,8 @@ export function useInventoryRequestForm({
     projectSuggestionsOpen,
     setProjectSuggestionsOpen,
     projectSuggestionsLoading,
+    focusedProjectItemId,
+    setFocusedProjectItemId,
     focusedVendorId,
     setFocusedVendorId,
     vendorQuery,
