@@ -18,8 +18,11 @@ import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUp
 import type { RecordUpdatedPayload } from '@/lib/realtime/types';
 import {
   beginOpenLeadAction,
+  cancelPendingOpenLeadPokes,
   consumePendingOpenLead,
   getActiveLeadHighlight,
+  getLeadRowPrajaId,
+  getOpenLeadActionGeneration,
   isActiveOpenLeadRequest,
   isOpenLeadActionCurrent,
   normalizeOpenLeadId,
@@ -28,6 +31,7 @@ import {
   PYRO_LEAD_HIGHLIGHT_CHANGED,
   PYRO_OPEN_LEAD,
   rowMatchesLeadHighlight,
+  shouldSupersedeOpenLead,
   stashOpenLeadHighlight,
   type OpenLeadRequest,
 } from '@/lib/realtime/openLeadBus';
@@ -149,6 +153,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [tableLoading, setTableLoading] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const isLeadModalOpenRef = useRef(false);
+  isLeadModalOpenRef.current = isLeadModalOpen;
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [isRecordDetailModalOpen, setIsRecordDetailModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
@@ -1194,7 +1200,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     // Special handling for name column - show avatar, name, and email
     if (column.accessor === 'name' || headerLower.includes('name')) {
       const rowId = row?.id != null ? String(row.id) : row?.record_id != null ? String(row.record_id) : '';
-      const rowPraja = row?.praja_id ?? row?.data?.praja_id;
+      const rowPraja = getLeadRowPrajaId(row);
       const showCalledBackBadge = Boolean(
         (highlightedLeadId && rowId && rowId === highlightedLeadId) ||
           (highlightedPrajaId && rowPraja != null && String(rowPraja) === highlightedPrajaId),
@@ -2422,11 +2428,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     // Wait for the first list load so we can resolve the lead row.
     if (loading) return;
 
-    const rowPrajaId = (row: any): string | null => {
-      // Only real Praja ID fields — never user_id (can collide / open the wrong lead).
-      const value = row?.praja_id ?? row?.data?.praja_id;
-      return normalizeOpenLeadId(value) || null;
-    };
+    const rowPrajaId = (row: any): string | null => getLeadRowPrajaId(row);
 
     const findInLists = (recordId: string, prajaId?: string | null) => {
       const seen = new Set<string>();
@@ -2547,27 +2549,48 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       const prajaId = normalizeOpenLeadId(request.praja_id) || null;
       if (!recordId && !prajaId) return;
 
-      // Newer click wins — cancel a previous delayed modal open.
-      if (openLeadModalTimerRef.current != null) {
-        window.clearTimeout(openLeadModalTimerRef.current);
-        openLeadModalTimerRef.current = null;
+      const openKey = `${recordId}|${prajaId || ''}`;
+      const isSameLead = isActiveOpenLeadRequest({
+        record_id: recordId,
+        praja_id: prajaId,
+      });
+      const { action } = shouldSupersedeOpenLead({
+        isSameLead,
+        modalTimerPending: openLeadModalTimerRef.current != null,
+        modalAlreadyOpen: isLeadModalOpenRef.current,
+      });
+
+      // Same-lead retry while the card is already opening/open: keep the timer.
+      // Only a *different* lead bumps generation / clears the 450ms timer.
+      // Do not use recentlyOpened here — that skipped the card after the first
+      // poke marked success even when the modal timer had been cleared.
+      if (action === 'ignore') {
+        cancelPendingOpenLeadPokes();
+        stashOpenLeadHighlight({
+          ...request,
+          record_id: recordId,
+          praja_id: prajaId,
+        });
+        return;
       }
 
-      // Generation + stash: poke timers are cancelled separately; awaits are not abortable,
-      // so after every await / before the 450ms modal we bail if a newer open superseded us.
-      const generation = beginOpenLeadAction();
+      let generation: number;
+      if (action === 'supersede') {
+        if (openLeadModalTimerRef.current != null) {
+          window.clearTimeout(openLeadModalTimerRef.current);
+          openLeadModalTimerRef.current = null;
+        }
+        generation = beginOpenLeadAction();
+      } else {
+        // Same lead — join current generation; do not clear an in-flight modal timer.
+        generation = getOpenLeadActionGeneration();
+      }
 
       stashOpenLeadHighlight({
         ...request,
         record_id: recordId,
         praja_id: prajaId,
       });
-
-      const openKey = `${recordId}|${prajaId || ''}`;
-      const now = Date.now();
-      const recentlyOpened =
-        lastOpenedLeadKeyRef.current === openKey &&
-        now - lastOpenedLeadAtRef.current < 2500;
 
       const stillThisOpen = () =>
         isOpenLeadActionCurrent(generation) &&
@@ -2625,12 +2648,15 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         return;
       }
 
+      // Open succeeded — drop the extra retry poke from requestOpenLead.
+      cancelPendingOpenLeadPokes();
       lastOpenedLeadKeyRef.current = openKey;
       lastOpenedLeadAtRef.current = Date.now();
       consumePendingOpenLead();
       const { tableRow } = applyHighlight(row, recordId, prajaId);
 
-      if (recentlyOpened) {
+      // Card already opening/open for this lead — don't restart the 450ms timer.
+      if (openLeadModalTimerRef.current != null || isLeadModalOpenRef.current) {
         clearOpenLeadParams();
         return;
       }
@@ -2643,7 +2669,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           // Another notification may have been clicked during the delay.
           if (!stillThisOpen()) return;
           setIsLeadModalOpen(true);
+          clearOpenLeadParams();
         }, 450);
+        // Defer URL clear until the modal opens — clearing search re-runs this
+        // effect; we must not cancel the timer on that re-run (see cleanup).
+        return;
       }
       clearOpenLeadParams();
     };
@@ -2658,7 +2688,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       void openLead({
         record_id: openLeadId || '',
         praja_id: openPrajaId,
-        lead_name: params.get('lead_name'),
+        // lead_name intentionally omitted from URL (history/logs); stash may still have it.
       });
     } else {
       const pending = consumePendingOpenLead();
@@ -2674,11 +2704,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     };
     window.addEventListener(PYRO_OPEN_LEAD, listener);
     return () => {
+      // Only detach the listener. Do NOT clear openLeadModalTimerRef here —
+      // this effect re-runs when location.search changes, and clearing the
+      // timer is what made the profile card never appear.
       window.removeEventListener(PYRO_OPEN_LEAD, listener);
-      if (openLeadModalTimerRef.current != null) {
-        window.clearTimeout(openLeadModalTimerRef.current);
-        openLeadModalTimerRef.current = null;
-      }
     };
   }, [
     isInPageBuilder,
@@ -2692,6 +2721,16 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     effectiveApiEndpoint,
     toast,
   ]);
+
+  // Clear the deferred modal timer only when the table unmounts.
+  useEffect(() => {
+    return () => {
+      if (openLeadModalTimerRef.current != null) {
+        window.clearTimeout(openLeadModalTimerRef.current);
+        openLeadModalTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Highlight stays until Mark as read — listen for that clear signal.
   useEffect(() => {
@@ -2878,8 +2917,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       if (rowMatchesLeadHighlight(row)) return true;
       // State fallback: Praja ID first, then record id (never phone — shared across leads).
       if (highlightedPrajaId) {
-        const praja = row?.praja_id ?? row?.data?.praja_id;
-        if (praja != null && String(praja) !== 'N/A' && String(praja) === highlightedPrajaId) {
+        const praja = getLeadRowPrajaId(row);
+        if (praja != null && String(praja) === highlightedPrajaId) {
           return true;
         }
         return false;

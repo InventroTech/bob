@@ -4,7 +4,10 @@ import {
   inAppNotificationToPayload,
   markInAppNotificationRead,
 } from "@/lib/api/services/inAppNotifications";
-import { clearLeadHighlightForNotification } from "@/lib/realtime/openLeadBus";
+import {
+  clearLeadHighlightForNotification,
+  normalizeOpenLeadId,
+} from "@/lib/realtime/openLeadBus";
 
 export type LeadCalledBackNotificationItem = {
   id: string;
@@ -34,13 +37,42 @@ export function getUnreadLeadCalledBackCount(): number {
   return items.filter((item) => !item.read).length;
 }
 
-function upsertItem(next: LeadCalledBackNotificationItem): void {
-  const byNotification =
-    next.notificationId != null
-      ? items.findIndex((item) => item.notificationId === next.notificationId)
-      : -1;
+function sameLeadIdentity(
+  a: LeadCalledBackNotificationItem,
+  b: LeadCalledBackNotificationItem,
+): boolean {
+  const aRecord = normalizeOpenLeadId(a.payload.record_id);
+  const bRecord = normalizeOpenLeadId(b.payload.record_id);
+  if (aRecord && bRecord && aRecord === bRecord) return true;
+
+  const aPraja = normalizeOpenLeadId(a.payload.praja_id);
+  const bPraja = normalizeOpenLeadId(b.payload.praja_id);
+  if (aPraja && bPraja && aPraja === bPraja) return true;
+
+  return false;
+}
+
+function findMergeIndex(next: LeadCalledBackNotificationItem): number {
+  if (next.notificationId != null) {
+    const byNotification = items.findIndex(
+      (item) => item.notificationId === next.notificationId,
+    );
+    if (byNotification >= 0) return byNotification;
+  }
+
   const byId = items.findIndex((item) => item.id === next.id);
-  const idx = byNotification >= 0 ? byNotification : byId;
+  if (byId >= 0) return byId;
+
+  // WS may arrive without notification_id (`${record}-${Date.now()}`) before hydrate
+  // inserts `db-${id}` — merge unread rows for the same lead so the inbox stays unique.
+  return items.findIndex((item) => {
+    if (item.read) return false;
+    return sameLeadIdentity(item, next);
+  });
+}
+
+function upsertItem(next: LeadCalledBackNotificationItem): void {
+  const idx = findMergeIndex(next);
 
   if (idx >= 0) {
     const existing = items[idx];
@@ -48,8 +80,28 @@ function upsertItem(next: LeadCalledBackNotificationItem): void {
     if (existing.read && next.read === false) {
       return;
     }
+    const notificationId = next.notificationId ?? existing.notificationId;
+    const preferredId =
+      notificationId != null
+        ? `db-${notificationId}`
+        : existing.id.startsWith("db-")
+          ? existing.id
+          : next.id;
     const copy = items.slice();
-    copy[idx] = { ...existing, ...next, read: existing.read || next.read };
+    copy[idx] = {
+      ...existing,
+      ...next,
+      id: preferredId,
+      notificationId,
+      payload: {
+        ...existing.payload,
+        ...next.payload,
+        notification_id: notificationId,
+        lead_name: next.payload.lead_name ?? existing.payload.lead_name,
+        praja_id: next.payload.praja_id ?? existing.payload.praja_id,
+      },
+      read: existing.read || next.read,
+    };
     items = copy;
   } else {
     items = [next, ...items].slice(0, MAX_ITEMS);
@@ -61,7 +113,7 @@ export function pushLeadCalledBackNotification(payload: LeadCalledBackPayload): 
   const notificationId =
     payload.notification_id != null ? Number(payload.notification_id) : null;
   const id =
-    notificationId != null
+    notificationId != null && Number.isFinite(notificationId)
       ? `db-${notificationId}`
       : `${payload.record_id}-${Date.now()}`;
 
@@ -95,7 +147,7 @@ export async function hydrateLeadCalledBackNotifications(): Promise<void> {
           notificationId: row.id,
           payload,
           receivedAt: row.created_at,
-          read: Boolean(row.read_at),
+          read: Boolean(row.read_at) || row.is_read === true,
         });
       }
     } catch (error) {
@@ -137,7 +189,7 @@ export function subscribeLeadCalledBackNotifications(listener: () => void): () =
   return () => listeners.delete(listener);
 }
 
-/** Drop in-memory inbox (logout / session end). */
+/** Drop in-memory inbox (logout / session end / spoof switch). */
 export function clearLeadCalledBackNotifications(): void {
   items = [];
   hydratePromise = null;

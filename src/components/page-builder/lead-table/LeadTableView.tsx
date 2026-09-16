@@ -723,7 +723,7 @@ export function LeadTableView(props: LeadTableModel) {
               const originalLead = data.find(l => 
                 l.id === lead.id || 
                 l.id === lead.user_id ||
-                (lead.praja_id && (l.data?.praja_id === lead.praja_id || l.data?.user_id === lead.praja_id))
+                (lead.praja_id && l.data?.praja_id === lead.praja_id)
               ) || lead;
               const leadData = originalLead.data || {};
               return {
@@ -748,7 +748,8 @@ export function LeadTableView(props: LeadTableModel) {
                 website: lead.website || leadData.website || '',
                 next_follow_up: lead.next_follow_up || leadData.next_follow_up || leadData.next_call_at || '',
                 lead_stage: lead.lead_stage || leadData.lead_stage || leadData.lead_status || 'New',
-                praja_id: lead.praja_id || leadData.praja_id || leadData.user_id || '',
+                // Never fall back to user_id — can collide with open/highlight-by-praja.
+                praja_id: lead.praja_id || leadData.praja_id || '',
                 affiliated_party: lead.affiliated_party || leadData.affiliated_party || '',
                 rm_dashboard: lead.rm_dashboard || leadData.rm_dashboard || '',
                 user_profile_link: lead.user_profile_link || leadData.user_profile_link || '',

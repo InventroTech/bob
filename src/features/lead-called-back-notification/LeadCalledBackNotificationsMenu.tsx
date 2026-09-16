@@ -15,7 +15,11 @@ import {
   type LeadCalledBackNotificationItem,
 } from "./leadCalledBackNotificationStore";
 import { formatLeadCalledBackDetails } from "@/lib/realtime/leadCalledBackBus";
-import { normalizeOpenLeadId, requestOpenLead } from "@/lib/realtime/openLeadBus";
+import {
+  getRegisteredAllLeadsPath,
+  normalizeOpenLeadId,
+  requestOpenLead,
+} from "@/lib/realtime/openLeadBus";
 
 type LeadCalledBackNotificationsMenuProps = {
   variant?: "navbar" | "sidebar" | "sidebar-collapsed";
@@ -51,7 +55,7 @@ function NotificationRow({
         notification_id: item.notificationId,
         notification_item_id: item.id,
       },
-      { allLeadsPath },
+      { allLeadsPath: allLeadsPath || getRegisteredAllLeadsPath() },
     );
     onOpenLead();
   };

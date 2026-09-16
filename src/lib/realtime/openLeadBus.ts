@@ -44,6 +44,10 @@ export function beginOpenLeadAction(): number {
   return openLeadActionGeneration;
 }
 
+export function getOpenLeadActionGeneration(): number {
+  return openLeadActionGeneration;
+}
+
 export function isOpenLeadActionCurrent(generation: number): boolean {
   return generation === openLeadActionGeneration;
 }
@@ -54,6 +58,13 @@ function clearOpenLeadPokeTimers(): void {
     const id = openLeadPokeTimerIds.pop();
     if (id != null) window.clearTimeout(id);
   }
+}
+
+/** Drop remaining retry pokes once openLead has already succeeded for this click. */
+export function cancelPendingOpenLeadPokes(): void {
+  clearOpenLeadPokeTimers();
+  // Invalidate any poke already mid-callback that hasn't dispatched yet.
+  openLeadPokeGeneration += 1;
 }
 
 function scheduleOpenLeadPoke(
@@ -282,6 +293,31 @@ export function clearLeadHighlightForNotification(item: {
   }
 }
 
+/**
+ * Canonical Praja ID from a lead row.
+ * Prefer data.praja_id only — filteredData is transformLeadData'd and top-level
+ * row.praja_id may historically (or via column mapping) equal data.user_id.
+ * Never treat user_id as praja.
+ */
+export function getLeadRowPrajaId(row: unknown): string | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+  const data =
+    r.data && typeof r.data === "object"
+      ? (r.data as Record<string, unknown>)
+      : null;
+
+  const fromData = normalizeOpenLeadId(data?.praja_id);
+  if (fromData) return fromData;
+
+  // No nested praja — allow top-level only when it is not the user_id poison.
+  const top = normalizeOpenLeadId(r.praja_id);
+  if (!top || top === "N/A") return null;
+  const userId = normalizeOpenLeadId(data?.user_id ?? r.user_id);
+  if (userId && top === userId) return null;
+  return top;
+}
+
 export function rowMatchesLeadHighlight(
   row: any,
   stash: OpenLeadHighlightStash | null = getActiveLeadHighlight(),
@@ -289,12 +325,11 @@ export function rowMatchesLeadHighlight(
   if (!stash || !row) return false;
 
   // Prefer Praja ID — phone can be shared across test leads.
-  const praja = row?.praja_id ?? row?.data?.praja_id;
+  const praja = getLeadRowPrajaId(row);
   if (
     stash.praja_id != null &&
     String(stash.praja_id).trim() !== "" &&
     praja != null &&
-    String(praja) !== "N/A" &&
     String(praja) === String(stash.praja_id)
   ) {
     return true;
@@ -325,9 +360,30 @@ function buildOpenLeadSearch(request: OpenLeadRequest): string {
   const prajaId = normalizeOpenLeadId(request.praja_id);
   if (recordId) params.set("open_lead", recordId);
   if (prajaId) params.set("praja_id", prajaId);
-  if (request.lead_name) params.set("lead_name", String(request.lead_name));
+  // Intentionally omit lead_name — ids are enough; names leak into history/logs.
   const qs = params.toString();
   return qs ? `?${qs}` : "";
+}
+
+/**
+ * Decide how openLead should treat this request relative to an in-flight open.
+ * Same-lead retry pokes must not bump generation or clear the 450ms modal timer.
+ * Do NOT key off "recentlyOpened" — that skips scheduling the card after the
+ * first poke marked success even when the modal timer was cleared.
+ */
+export function shouldSupersedeOpenLead(options: {
+  isSameLead: boolean;
+  modalTimerPending: boolean;
+  modalAlreadyOpen: boolean;
+}): { action: "ignore" | "join" | "supersede" } {
+  if (options.isSameLead) {
+    if (options.modalTimerPending || options.modalAlreadyOpen) {
+      return { action: "ignore" };
+    }
+    // Same lead, card not pending/open yet — join (retry ok if first poke missed).
+    return { action: "join" };
+  }
+  return { action: "supersede" };
 }
 
 /**
@@ -392,5 +448,6 @@ export function requestOpenLead(
   // Always poke the table: immediately if already there, else after mount.
   scheduleOpenLeadPoke(safeRequest, alreadyOnPage ? 50 : 500, generation);
   // Second poke in case the first landed while the table was still loading.
+  // openLead cancels this via cancelPendingOpenLeadPokes() once an open succeeds.
   scheduleOpenLeadPoke(safeRequest, alreadyOnPage ? 400 : 1200, generation);
 }

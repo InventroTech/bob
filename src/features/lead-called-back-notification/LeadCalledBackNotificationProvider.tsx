@@ -11,6 +11,7 @@ import {
   clearOpenLeadHighlightStash,
   clearRegisteredAllLeadsPath,
 } from "@/lib/realtime/openLeadBus";
+import { SPOOF_CHANGED_EVENT } from "@/lib/auth/spoof";
 
 type LeadCalledBackNotificationProviderProps = {
   children: ReactNode;
@@ -34,6 +35,23 @@ export function LeadCalledBackNotificationProvider({
       return;
     }
     void hydrateLeadCalledBackNotifications();
+  }, [session?.access_token]);
+
+  // Spoof swaps the effective JWT without changing session.access_token — clear + rehydrate
+  // so admin and spoofed-user notifications do not mix in the inbox.
+  useEffect(() => {
+    if (!session?.access_token) return;
+
+    const onSpoofChanged = () => {
+      clearLeadCalledBackNotifications();
+      clearOpenLeadHighlightStash();
+      void hydrateLeadCalledBackNotifications();
+    };
+
+    window.addEventListener(SPOOF_CHANGED_EVENT, onSpoofChanged);
+    return () => {
+      window.removeEventListener(SPOOF_CHANGED_EVENT, onSpoofChanged);
+    };
   }, [session?.access_token]);
 
   return children;

@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   beginOpenLeadAction,
+  cancelPendingOpenLeadPokes,
   clearLeadHighlightForNotification,
   clearOpenLeadHighlightStash,
   clearRegisteredAllLeadsPath,
   consumePendingOpenLead,
   getActiveLeadHighlight,
+  getOpenLeadActionGeneration,
   getPendingOpenLead,
   getRegisteredAllLeadsPath,
   isActiveOpenLeadRequest,
@@ -16,6 +18,7 @@ import {
   registerAllLeadsPath,
   requestOpenLead,
   rowMatchesLeadHighlight,
+  shouldSupersedeOpenLead,
   stashOpenLeadHighlight,
 } from "@/lib/realtime/openLeadBus";
 
@@ -205,6 +208,119 @@ describe("requestOpenLead", () => {
     expect(opened.some((item) => item.record_id === "111")).toBe(false);
     expect(getActiveLeadHighlight()?.record_id).toBe("222");
   });
+
+  it("drops the retry poke once an open has already succeeded", () => {
+    const opened: string[] = [];
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ record_id: string }>).detail;
+      opened.push(detail.record_id);
+    };
+    window.addEventListener(PYRO_OPEN_LEAD, onOpen);
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/app/praja/pages/1" },
+    });
+
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Lead A",
+    });
+
+    vi.advanceTimersByTime(50);
+    expect(opened).toEqual(["111"]);
+
+    // Simulate openLead succeeding and dropping the extra poke.
+    expect(
+      shouldSupersedeOpenLead({
+        isSameLead: true,
+        modalTimerPending: true,
+        modalAlreadyOpen: false,
+      }),
+    ).toEqual({ action: "ignore" });
+    cancelPendingOpenLeadPokes();
+
+    vi.advanceTimersByTime(400);
+    window.removeEventListener(PYRO_OPEN_LEAD, onOpen);
+
+    // Second poke must not fire after success.
+    expect(opened).toEqual(["111"]);
+  });
+
+  it("does not put lead_name into the navigation query string", () => {
+    const navigations: Array<{ search: string }> = [];
+    const onNav = (event: Event) => {
+      navigations.push(
+        (event as CustomEvent<{ search: string }>).detail,
+      );
+    };
+    window.addEventListener("pyro-navigate-to-lead", onNav);
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { pathname: "/elsewhere" },
+    });
+
+    requestOpenLead({
+      record_id: "111",
+      praja_id: "PRAJA-A",
+      lead_name: "Secret Name",
+    });
+
+    window.removeEventListener("pyro-navigate-to-lead", onNav);
+    expect(navigations[0]?.search).toContain("open_lead=111");
+    expect(navigations[0]?.search).toContain("praja_id=PRAJA-A");
+    expect(navigations[0]?.search).not.toContain("lead_name");
+  });
+});
+
+describe("shouldSupersedeOpenLead", () => {
+  it("ignores same-lead retry when modal timer is pending", () => {
+    expect(
+      shouldSupersedeOpenLead({
+        isSameLead: true,
+        modalTimerPending: true,
+        modalAlreadyOpen: false,
+      }),
+    ).toEqual({ action: "ignore" });
+  });
+
+  it("ignores same-lead retry when modal is already open", () => {
+    expect(
+      shouldSupersedeOpenLead({
+        isSameLead: true,
+        modalTimerPending: false,
+        modalAlreadyOpen: true,
+      }),
+    ).toEqual({ action: "ignore" });
+  });
+
+  it("joins same-lead when card is not pending (retry may still open)", () => {
+    expect(
+      shouldSupersedeOpenLead({
+        isSameLead: true,
+        modalTimerPending: false,
+        modalAlreadyOpen: false,
+      }),
+    ).toEqual({ action: "join" });
+  });
+
+  it("supersedes when the request is a different lead", () => {
+    expect(
+      shouldSupersedeOpenLead({
+        isSameLead: false,
+        modalTimerPending: true,
+        modalAlreadyOpen: false,
+      }),
+    ).toEqual({ action: "supersede" });
+  });
+});
+
+describe("getOpenLeadActionGeneration", () => {
+  it("returns the current generation without bumping", () => {
+    const gen = beginOpenLeadAction();
+    expect(getOpenLeadActionGeneration()).toBe(gen);
+    expect(getOpenLeadActionGeneration()).toBe(gen);
+  });
 });
 
 describe("isActiveOpenLeadRequest", () => {
@@ -293,13 +409,23 @@ describe("rowMatchesLeadHighlight", () => {
     expect(
       rowMatchesLeadHighlight({
         id: "999",
-        praja_id: "1793876",
+        data: { praja_id: "1793876" },
       }),
     ).toBe(true);
 
     expect(
       rowMatchesLeadHighlight({
         id: "913285",
+        praja_id: "1793876",
+        data: { user_id: "1793876" },
+      }),
+    ).toBe(false);
+
+    // Transformed top-level poison must not match when data.praja_id is absent.
+    expect(
+      rowMatchesLeadHighlight({
+        id: "1",
+        praja_id: "1793876",
         data: { user_id: "1793876" },
       }),
     ).toBe(false);

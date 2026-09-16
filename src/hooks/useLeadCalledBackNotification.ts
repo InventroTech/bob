@@ -36,9 +36,10 @@ export function useLeadCalledBackNotification(
       if (dedupeKey.startsWith("nid:")) {
         if (seenNotificationIdsRef.current.has(dedupeKey)) return;
         seenNotificationIdsRef.current.add(dedupeKey);
+        // FIFO eviction — never wipe the whole set (that re-toasts older DB rows).
         if (seenNotificationIdsRef.current.size > 100) {
-          seenNotificationIdsRef.current.clear();
-          seenNotificationIdsRef.current.add(dedupeKey);
+          const oldest = seenNotificationIdsRef.current.values().next().value;
+          if (oldest != null) seenNotificationIdsRef.current.delete(oldest);
         }
       } else {
         const lastSeen = recentLeadKeysRef.current.get(dedupeKey);

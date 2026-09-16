@@ -324,9 +324,11 @@ const CustomAppLayout: React.FC = () => {
   })();
   const allLeadsPath = useMemo(() => {
     if (!tenantSlug || !pages.length) return null;
-    const allLeadsPage =
-      pages.find((page) => String(page.name || '').trim().toLowerCase() === 'all leads') ||
-      pages.find((page) => String(page.name || '').toLowerCase().includes('all leads'));
+    // Exact name only — `includes("all leads")` can bind the wrong page
+    // (e.g. "Assigned all leads overview").
+    const allLeadsPage = pages.find(
+      (page) => String(page.name || '').trim().toLowerCase() === 'all leads',
+    );
     if (!allLeadsPage) return null;
     return `/app/${tenantSlug}/pages/${allLeadsPage.id}`;
   }, [tenantSlug, pages]);
@@ -338,10 +340,8 @@ const CustomAppLayout: React.FC = () => {
       // Tenant switch / no All Leads page — don't keep a stale path.
       clearRegisteredAllLeadsPath();
     }
-    return () => {
-      // Leaving the tenant app layout must not leave a stale path registered.
-      clearRegisteredAllLeadsPath();
-    };
+    // Do not clear on unmount: Dashboard Navbar still needs the registered path
+    // after leaving CustomAppLayout. Logout clears via the notification provider.
   }, [allLeadsPath]);
   const activeNavClass = isUnmanndApp
     ? 'bg-[linear-gradient(0deg,#1A44A1,#1A44A1)] text-white'
