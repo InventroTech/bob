@@ -1,4 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Avoid loading apiClient → supabase (CI has no VITE_SUPABASE_URL).
+vi.mock("@/lib/api/services/inAppNotifications", () => ({
+  fetchUnreadInAppNotifications: vi.fn(),
+  markInAppNotificationRead: vi.fn(),
+  inAppNotificationToPayload: (row: {
+    id: number;
+    record_id: number | null;
+    lead_name?: string | null;
+    praja_id?: string | null;
+    message?: string;
+    title?: string;
+  }) => ({
+    event: "lead_called_back" as const,
+    record_id: row.record_id != null ? String(row.record_id) : "",
+    entity_type: "lead",
+    lead_name: row.lead_name ?? row.title ?? null,
+    praja_id: row.praja_id ?? null,
+    notification_id: row.id,
+  }),
+}));
+
 import {
   clearLeadCalledBackNotifications,
   getLeadCalledBackNotifications,
@@ -6,18 +28,6 @@ import {
   pushLeadCalledBackNotification,
 } from "./leadCalledBackNotificationStore";
 import type { InAppNotificationDto } from "@/lib/api/services/inAppNotifications";
-
-vi.mock("@/lib/api/services/inAppNotifications", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/lib/api/services/inAppNotifications")
-  >("@/lib/api/services/inAppNotifications");
-  return {
-    ...actual,
-    fetchUnreadInAppNotifications: vi.fn(),
-    markInAppNotificationRead: vi.fn(),
-  };
-});
-
 import { fetchUnreadInAppNotifications } from "@/lib/api/services/inAppNotifications";
 
 const fetchUnreadMock = vi.mocked(fetchUnreadInAppNotifications);

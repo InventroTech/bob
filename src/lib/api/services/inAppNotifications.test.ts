@@ -1,4 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// inAppNotifications imports apiClient → auth → supabase; CI has no VITE_SUPABASE_URL.
+vi.mock("@/lib/api", () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+}));
+
 import { inAppNotificationToPayload } from "./inAppNotifications";
 
 describe("inAppNotificationToPayload", () => {
