@@ -891,11 +891,12 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
               <Input
                 value={(localConfig as { redirectAfterSubmitPageName?: string }).redirectAfterSubmitPageName ?? ''}
                 onChange={(e) => handleInputChange('redirectAfterSubmitPageName', e.target.value)}
-                placeholder="My Requests"
+                placeholder="Settings"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                After Create Request, go to this page. Use the sidebar page name or Header Title
-                (e.g. All Request). Leave blank to stay on this form.
+                After Create Request, go to this sidebar page. Type the label you see in the
+                sidebar (e.g. Settings), or Header Title. “Settings page” also matches Settings.
+                Leave blank to stay on this form.
               </p>
             </div>
 

@@ -47,66 +47,7 @@ import {
   makeDraftKey,
   saveDraft,
 } from './draftStorage';
-
-const normalizePageName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
-
-type PostCreatePage = { id: string; name: string; header_title?: string | null };
-
-function pageMatchKeys(page: PostCreatePage): string[] {
-  return [page.name, page.header_title]
-    .map((v) => normalizePageName(String(v || '')))
-    .filter(Boolean);
-}
-
-function isNewRequestPageName(name: string): boolean {
-  const n = normalizePageName(name);
-  return n.includes('new request') || n.includes('create request') || n === 'new';
-}
-
-function pageMatchesQuery(page: PostCreatePage, query: string): boolean {
-  if (!query) return false;
-  const keys = pageMatchKeys(page);
-  for (const key of keys) {
-    if (key === query) return true;
-    if (key.includes(query)) return true;
-    // "All Requests" config vs sidebar "All Request", or Header Title vs page name.
-    if (query.length >= 8 && key.length >= 8 && query.includes(key)) return true;
-  }
-  return false;
-}
-
-function pickPreferredPageId(
-  pages: PostCreatePage[],
-  preferredName: string | undefined,
-  currentPageId?: string | null
-): string | null {
-  const preferred = preferredName ? normalizePageName(preferredName) : '';
-  if (!preferred) return null;
-
-  const matches = pages.filter((p) => pageMatchesQuery(p, preferred));
-  if (!matches.length) return null;
-
-  const notForm = matches.find(
-    (p) => p.id !== currentPageId && !isNewRequestPageName(p.name)
-  );
-  if (notForm) return notForm.id;
-
-  const notCurrent = matches.find((p) => p.id !== currentPageId);
-  return notCurrent?.id ?? matches[0].id;
-}
-
-/**
- * After create: only the Page Builder `redirectAfterSubmitPageName` is used.
- * Matches sidebar page name or Header Title. No hardcoded My Request / All Request.
- */
-export function pickPostCreatePageId(
-  pages: PostCreatePage[],
-  preferredName: string | undefined,
-  currentPageId?: string | null
-): string | null {
-  if (!pages.length) return null;
-  return pickPreferredPageId(pages, preferredName, currentPageId);
-}
+import { pickPostCreatePageId } from './postCreateRedirect';
 
 export function useInventoryRequestForm({
   config,
@@ -1053,7 +994,12 @@ export function useInventoryRequestForm({
             const token = await getEffectiveToken(session?.access_token ?? null);
             const tenantId = token ? getTenantIdFromJWT(token) : null;
             const roleId = token ? getRoleIdFromJWT(token) : null;
-            let pages: Array<{ id: string; name: string; header_title?: string | null }> = [];
+            let pages: Array<{
+              id: string;
+              name: string;
+              header_title?: string | null;
+              icon_name?: string | null;
+            }> = [];
             if (token && tenantId && roleId) {
               // Prefer the same Pages API path as the sidebar (works for spoof + normal JWT).
               try {
@@ -1064,7 +1010,7 @@ export function useInventoryRequestForm({
               if (!pages.length) {
                 const { data } = await supabase
                   .from('pages')
-                  .select('id, name, header_title')
+                  .select('id, name, header_title, icon_name')
                   .eq('tenant_id', tenantId)
                   .eq('role', roleId)
                   .eq('is_deleted', false)

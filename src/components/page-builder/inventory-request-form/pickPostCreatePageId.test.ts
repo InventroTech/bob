@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { pickPostCreatePageId } from './useInventoryRequestForm';
+import { pickPostCreatePageId } from './postCreateRedirect';
 
 const pages = [
-  { id: 'new', name: 'New Request', header_title: 'Create Request' },
-  { id: 'mine', name: 'My Request', header_title: 'My Requests' },
-  { id: 'all', name: 'All Request', header_title: 'All Requests' },
-  { id: 'pending', name: 'Pending Approval', header_title: '' },
+  { id: 'new', name: 'New Request', header_title: 'Create Request', icon_name: 'Plus' },
+  { id: 'mine', name: 'My Request', header_title: 'My Requests', icon_name: 'List' },
+  { id: 'all', name: 'All Request', header_title: 'All Requests', icon_name: 'Layers' },
+  { id: 'pending', name: 'Pending Approval', header_title: '', icon_name: 'Clock' },
+  { id: 'settings', name: 'Settings', header_title: 'User Management', icon_name: 'settings' },
 ];
 
 describe('pickPostCreatePageId', () => {
@@ -20,6 +21,12 @@ describe('pickPostCreatePageId', () => {
   it('matches All Request(s) even when the config spelling differs', () => {
     expect(pickPostCreatePageId(pages, 'All Requests', 'new')).toBe('all');
     expect(pickPostCreatePageId(pages, 'all request', 'new')).toBe('all');
+  });
+
+  it('matches Settings when the config is "settings page"', () => {
+    expect(pickPostCreatePageId(pages, 'settings page', 'new')).toBe('settings');
+    expect(pickPostCreatePageId(pages, 'Settings', 'new')).toBe('settings');
+    expect(pickPostCreatePageId(pages, 'User Management', 'new')).toBe('settings');
   });
 
   it('does not fall back to a hardcoded My Request page', () => {
