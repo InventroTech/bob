@@ -36,7 +36,6 @@ import {
   type OpenLeadRequest,
 } from '@/lib/realtime/openLeadBus';
 import { crmLeadsApi } from '@/lib/api/services/crmLeads';
-import { FilterService } from '@/services/filterService';
 import { FilterService, parseFilterValuesFromUrl } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
