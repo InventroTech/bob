@@ -93,7 +93,7 @@ export function findNumberRangePreset(
 ): NumberRangePreset | undefined {
   if (!presets?.length || value == null) return undefined;
   const ids = selectedPresetIds(value);
-  if (ids.length === 1) return presets.find((p) => p.id === ids[0]);
+  if (ids.length) return presets.find((p) => p.id === ids[0]);
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const range = value as { min?: unknown; max?: unknown };
     const min = range.min === '' || range.min == null ? undefined : Number(range.min);
@@ -110,22 +110,7 @@ export function findRelativeDatePreset(
   if (!presets?.length || value == null) return undefined;
   const ids = selectedPresetIds(value);
   if (!ids.length) return undefined;
-  const selected = presets.filter((p) => ids.includes(p.id));
-  if (selected.length === 0) return undefined;
-  return selected.reduce((widest, preset) =>
-    dateWindowScore(preset) > dateWindowScore(widest) ? preset : widest
-  );
-}
-
-function dateWindowScore(preset: RelativeDatePreset): number {
-  const months = Number(preset.months);
-  const days = Number(preset.days);
-  if (preset.months != null && preset.days == null && Number.isFinite(months)) {
-    return months * 31;
-  }
-  if (Number.isFinite(days)) return days;
-  if (Number.isFinite(months)) return months * 31;
-  return 0;
+  return presets.find((p) => p.id === ids[0]);
 }
 
 export function resolveNumberRangeBounds(
@@ -134,16 +119,9 @@ export function resolveNumberRangeBounds(
 ): { min?: number; max?: number } {
   const ids = selectedPresetIds(value);
   if (ids.length && presets?.length) {
-    const selected = presets.filter((p) => ids.includes(p.id));
-    if (selected.length === 0) return {};
-    const mins = selected.map((p) => p.min).filter((n): n is number => n != null && !isNaN(n));
-    const maxs = selected.map((p) => p.max).filter((n): n is number => n != null && !isNaN(n));
-    const openMin = selected.some((p) => p.min == null);
-    const openMax = selected.some((p) => p.max == null);
-    return {
-      min: openMin || mins.length === 0 ? undefined : Math.min(...mins),
-      max: openMax || maxs.length === 0 ? undefined : Math.max(...maxs),
-    };
+    const selected = presets.find((p) => p.id === ids[0]);
+    if (!selected) return {};
+    return { min: selected.min, max: selected.max };
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const range = value as { min?: unknown; max?: unknown };

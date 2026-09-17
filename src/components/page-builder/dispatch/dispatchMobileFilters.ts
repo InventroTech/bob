@@ -365,10 +365,10 @@ export function getEmptyValueForFilter(f: FilterConfig): unknown {
       return [];
     case 'date_range':
     case 'date_time_range':
-      if (f.relativeDatePresets) return [];
+      if (f.relativeDatePresets?.length) return [];
       return { start: undefined, end: undefined };
     case 'number_range':
-      if (f.rangePresets) return [];
+      if (f.rangePresets?.length) return [];
       return { min: '', max: '' };
     case 'date_gte':
     case 'date_lte':

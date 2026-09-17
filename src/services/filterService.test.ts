@@ -29,13 +29,23 @@ describe('FilterService number_range and date_range', () => {
     expect(params.get('estimated_cost__lte')).toBe('500');
   });
 
-  it('sends union of selected price buckets', () => {
+  it('sends only the first selected price bucket', () => {
     const service = new FilterService([costFilter]);
     const params = service.generateQueryParams({
-      estimated_cost: ['0-500', '500-1000'],
+      estimated_cost: ['0-500', '1000-5000'],
     });
     expect(params.get('estimated_cost__gte')).toBe('0');
-    expect(params.get('estimated_cost__lte')).toBe('1000');
+    expect(params.get('estimated_cost__lte')).toBe('500');
+  });
+
+  it('sends only the first selected date preset', () => {
+    const service = new FilterService([dateFilter]);
+    const params = service.generateQueryParams({
+      request_date: ['last_3_days', 'last_7_days'],
+    });
+    const expected = resolveRelativeDateRange(DEFAULT_RELATIVE_DATE_PRESETS[0]);
+    expect(params.get('request_date__gte')).toBe(formatLocalYmd(expected.start));
+    expect(params.get('request_date__lte')).toBe(formatLocalYmd(expected.end));
   });
 
   it('sends only min when max is empty', () => {

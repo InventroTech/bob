@@ -353,12 +353,14 @@ function MobileSelectField({
   onChange,
   loadingOptions,
   optionsError,
+  singleSelect = false,
 }: {
   filter: FilterConfig;
   value: unknown;
   onChange: (v: string[]) => void;
   loadingOptions?: boolean;
   optionsError?: string;
+  singleSelect?: boolean;
 }) {
   const selected = Array.isArray(value) ? (value as string[]) : value ? [String(value)] : [];
   const options = filter.options ?? [];
@@ -366,6 +368,10 @@ function MobileSelectField({
   const [searchTerm, setSearchTerm] = useState('');
 
   const toggle = (optValue: string) => {
+    if (singleSelect) {
+      onChange(selected.includes(optValue) ? [] : [optValue]);
+      return;
+    }
     const next = selected.includes(optValue)
       ? selected.filter((v) => v !== optValue)
       : [...selected, optValue];
@@ -524,7 +530,7 @@ function renderField(
   switch (filter.type) {
     case 'date_range':
     case 'date_time_range':
-      if (filter.relativeDatePresets) {
+      if (filter.relativeDatePresets?.length) {
         return (
           <MobileSelectField
             key={filter.key}
@@ -537,6 +543,7 @@ function renderField(
             }}
             value={Array.isArray(raw) ? raw : selectedPresetIds(raw)}
             onChange={(v) => patch(filter.key, v)}
+            singleSelect
           />
         );
       }
@@ -588,7 +595,7 @@ function renderField(
         </div>
       );
     case 'number_range': {
-      if (filter.rangePresets) {
+      if (filter.rangePresets?.length) {
         return (
           <MobileSelectField
             key={filter.key}
@@ -601,6 +608,7 @@ function renderField(
             }}
             value={Array.isArray(raw) ? raw : selectedPresetIds(raw)}
             onChange={(v) => patch(filter.key, v)}
+            singleSelect
           />
         );
       }

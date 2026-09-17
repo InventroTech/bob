@@ -92,8 +92,8 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     if (filter?.type === 'select') {
       setFilterValue(key, []);
     } else if (
-      (filter?.type === 'date_range' && filter.relativeDatePresets) ||
-      (filter?.type === 'number_range' && filter.rangePresets)
+      (filter?.type === 'date_range' && filter.relativeDatePresets?.length) ||
+      (filter?.type === 'number_range' && filter.rangePresets?.length)
     ) {
       setFilterValue(key, []);
     } else if (
@@ -135,11 +135,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
       : options;
 
     const toggle = (id: string, checked: boolean) => {
-      if (checked) {
-        handleFilterChange(filter.key, selected.includes(id) ? selected : [...selected, id]);
-      } else {
-        handleFilterChange(filter.key, selected.filter((v) => v !== id));
-      }
+      handleFilterChange(filter.key, checked ? [id] : []);
     };
 
     return (
@@ -151,7 +147,9 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
           >
             <span className="text-sm">
               {selected.length > 0
-                ? `${selected.length} selected`
+                ? options.find((option) => option.id === selected[0])?.label ||
+                  filter.placeholder ||
+                  `Select ${filter.label.toLowerCase()}`
                 : filter.placeholder || `Select ${filter.label.toLowerCase()}`}
             </span>
             <ChevronDown className="h-4 w-4 opacity-50" />
@@ -172,20 +170,13 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
               className="mt-2 h-8 text-sm w-full"
             />
           </div>
-          <div className="flex items-center justify-between px-3 py-2 border-b">
-            <button
-              type="button"
-              className="text-xs text-blue-600"
-              onClick={() => handleFilterChange(filter.key, filteredOptions.map((option) => option.id))}
-            >
-              Select all matching ({filteredOptions.length})
-            </button>
+          <div className="flex items-center justify-end px-3 py-2 border-b">
             <button
               type="button"
               className="text-xs text-red-600"
               onClick={() => handleFilterChange(filter.key, [])}
             >
-              Clear matching
+              Clear
             </button>
           </div>
           <div className="max-h-60 overflow-y-auto p-1">
@@ -416,7 +407,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
         );
 
       case 'date_range': {
-        if (filter.relativeDatePresets) {
+        if (filter.relativeDatePresets?.length) {
           return renderPresetCheckboxPopover(
             filter,
             filter.relativeDatePresets.map((preset) => ({
@@ -624,7 +615,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
         );
 
       case 'number_range': {
-        if (filter.rangePresets) {
+        if (filter.rangePresets?.length) {
           return renderPresetCheckboxPopover(
             filter,
             filter.rangePresets.map((preset) => ({
@@ -679,9 +670,9 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
       <div className={`grid gap-4 ${compact ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
         {filters.map((filter) => {
           const isCustomRange =
-            (filter.type === 'date_range' && !filter.relativeDatePresets) ||
+            (filter.type === 'date_range' && !filter.relativeDatePresets?.length) ||
             (filter.type === 'date_time_range') ||
-            (filter.type === 'number_range' && !filter.rangePresets);
+            (filter.type === 'number_range' && !filter.rangePresets?.length);
           return (
           <div
             key={filter.key}

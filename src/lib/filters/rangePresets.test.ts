@@ -6,6 +6,8 @@ import {
   DEFAULT_RELATIVE_DATE_PRESETS,
   DEFAULT_PRICE_RANGE_PRESETS,
   matchNumberPresetFromParams,
+  resolveNumberRangeBounds,
+  resolveDateRangeBounds,
 } from './rangePresets';
 
 describe('resolveRelativeDateRange', () => {
@@ -46,5 +48,24 @@ describe('match presets from params', () => {
       now
     );
     expect(matched?.id).toBe('last_7_days');
+  });
+});
+
+describe('single selected preset', () => {
+  it('uses only the first price bucket, not the min/max union', () => {
+    expect(
+      resolveNumberRangeBounds(['0-500', '1000-5000'], DEFAULT_PRICE_RANGE_PRESETS)
+    ).toEqual({ min: 0, max: 500 });
+  });
+
+  it('uses only the first date preset, not the widest window', () => {
+    const now = new Date(2026, 8, 17);
+    const bounds = resolveDateRangeBounds(
+      ['last_3_days', 'last_7_days'],
+      DEFAULT_RELATIVE_DATE_PRESETS,
+      now
+    );
+    expect(formatLocalYmd(bounds.start as Date)).toBe('2026-09-15');
+    expect(formatLocalYmd(bounds.end as Date)).toBe('2026-09-17');
   });
 });

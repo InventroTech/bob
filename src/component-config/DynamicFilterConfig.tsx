@@ -176,13 +176,6 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                   if (!localConfig.showFilters) handleInputChange('showFilters', true);
                   const existingIndex = localFilters.findIndex((f) => (f.accessor || f.key) === accessor);
                   if (existingIndex >= 0) {
-                    const next = [...localFilters];
-                    next[existingIndex] = {
-                      ...next[existingIndex],
-                      type: 'number_range',
-                      rangePresets: next[existingIndex].rangePresets ?? [],
-                    };
-                    onReplaceFilters(next);
                     return;
                   }
                   onReplaceFilters([
@@ -192,7 +185,6 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       label: 'Estimated Cost',
                       type: 'number_range',
                       accessor,
-                      rangePresets: [],
                     },
                   ]);
                 }}
@@ -212,13 +204,6 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       (f.type === 'date_range' || f.type === 'date_time_range')
                   );
                   if (existingIndex >= 0) {
-                    const next = [...localFilters];
-                    next[existingIndex] = {
-                      ...next[existingIndex],
-                      type: 'date_range',
-                      relativeDatePresets: next[existingIndex].relativeDatePresets ?? [],
-                    };
-                    onReplaceFilters(next);
                     return;
                   }
                   onReplaceFilters([
@@ -228,7 +213,6 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       label: 'Date Range',
                       type: 'date_range',
                       accessor,
-                      relativeDatePresets: [],
                     },
                   ]);
                 }}
@@ -532,7 +516,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                           size="sm"
                           onClick={() => {
                             const next = (filter.relativeDatePresets ?? []).filter((_, i) => i !== optionIndex);
-                            handleFilterFieldChange(index, 'relativeDatePresets', next);
+                            handleFilterFieldChange(index, 'relativeDatePresets', next.length ? next : undefined);
                           }}
                           className="text-red-600 hover:text-red-700"
                         >
@@ -625,7 +609,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                           size="sm"
                           onClick={() => {
                             const next = (filter.rangePresets ?? []).filter((_, i) => i !== optionIndex);
-                            handleFilterFieldChange(index, 'rangePresets', next);
+                            handleFilterFieldChange(index, 'rangePresets', next.length ? next : undefined);
                           }}
                           className="text-red-600 hover:text-red-700"
                         >
