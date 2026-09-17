@@ -416,7 +416,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     [localFilters, debouncedUpdateWithDelay]
   );
 
-  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options'] | boolean) => {
+  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: FilterConfig[keyof FilterConfig]) => {
     const newFilters = [...localFilters];
 
     // If changing the accessor, also update the key to match for consistency
@@ -563,6 +563,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
+            onReplaceFilters={handleReplaceFilters}
           />
         );
 
@@ -586,6 +587,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
+            onReplaceFilters={handleReplaceFilters}
           />
         );
 
@@ -649,6 +651,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
+            onReplaceFilters={handleReplaceFilters}
           />
         );
 
