@@ -37,6 +37,7 @@ import {
 } from '@/lib/realtime/openLeadBus';
 import { crmLeadsApi } from '@/lib/api/services/crmLeads';
 import { FilterService } from '@/services/filterService';
+import { FilterService, parseFilterValuesFromUrl } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import type { CustomTableColumn } from '@/components/ui/CustomTable';
@@ -561,50 +562,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   // Parse URL parameters and restore filter state for deep links/bookmarks
   const parseURLFilters = useCallback((filters: FilterConfig[]): Record<string, any> => {
-    const urlParams = new URLSearchParams(location.search);
-    const filterValues: Record<string, any> = {};
-
-    filters.forEach(filter => {
-      const accessor = filter.accessor || filter.key;
-      const paramValue = urlParams.get(accessor);
-
-      if (paramValue !== null) {
-        switch (filter.type) {
-          case 'select': {
-            // Handle multiple values (separate parameters with same name)
-            const allValues = urlParams.getAll(accessor);
-            if (allValues.length > 0) {
-              filterValues[filter.key] = allValues;
-            }
-            break;
-          }
-          case 'date_gte':
-          case 'date_lte':
-          case 'date_exact':
-          case 'text':
-          case 'search':
-          case 'number_gte':
-          case 'number_lte':
-            filterValues[filter.key] = paramValue;
-            break;
-          case 'date_range':
-          case 'date_time_range': {
-            // Date range / date time range: start and end from __gte and __lte
-            const startValue = urlParams.get(`${accessor}__gte`);
-            const endValue = urlParams.get(`${accessor}__lte`);
-            if (startValue || endValue) {
-              filterValues[filter.key] = {
-                start: startValue ? new Date(startValue) : undefined,
-                end: endValue ? new Date(endValue) : undefined
-              };
-            }
-            break;
-          }
-        }
-      }
-    });
-
-    return filterValues;
+    return parseFilterValuesFromUrl(filters, new URLSearchParams(location.search));
   }, [location.search]);
 
   // Initialize filters from URL on component mount and reset when no filters

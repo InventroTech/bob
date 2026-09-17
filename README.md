@@ -141,4 +141,4 @@ Example: `@/components/page-builder/lead-table`.
 
 ## License
 
-Private.
+PolyForm Noncommercial License 1.0.0. Free for noncommercial use; commercial use requires a separate license from InventroTech. See [LICENSE](./LICENSE).
