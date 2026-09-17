@@ -5,7 +5,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { FilterConfig } from '@/component-config/DynamicFilterConfig';
+import { numberRangePresetLabel, relativeDatePresetLabel, selectedPresetIds } from '@/lib/filters/rangePresets';
 import { DispatchFilterIcon } from './DispatchFilterIcon';
 import {
   emptyDispatchFilterValues,
@@ -524,6 +524,22 @@ function renderField(
   switch (filter.type) {
     case 'date_range':
     case 'date_time_range':
+      if (filter.relativeDatePresets) {
+        return (
+          <MobileSelectField
+            key={filter.key}
+            filter={{
+              ...filter,
+              options: filter.relativeDatePresets.map((preset) => ({
+                label: relativeDatePresetLabel(preset),
+                value: preset.id,
+              })),
+            }}
+            value={Array.isArray(raw) ? raw : selectedPresetIds(raw)}
+            onChange={(v) => patch(filter.key, v)}
+          />
+        );
+      }
       return (
         <MobileDateRangeField
           key={filter.key}
@@ -571,6 +587,48 @@ function renderField(
           />
         </div>
       );
+    case 'number_range': {
+      if (filter.rangePresets) {
+        return (
+          <MobileSelectField
+            key={filter.key}
+            filter={{
+              ...filter,
+              options: filter.rangePresets.map((preset) => ({
+                label: numberRangePresetLabel(preset),
+                value: preset.id,
+              })),
+            }}
+            value={Array.isArray(raw) ? raw : selectedPresetIds(raw)}
+            onChange={(v) => patch(filter.key, v)}
+          />
+        );
+      }
+      const range = (raw as { min?: unknown; max?: unknown }) ?? {};
+      const minLabel = filter.numberRangeMinLabel || 'Min';
+      const maxLabel = filter.numberRangeMaxLabel || 'Max';
+      return (
+        <div key={filter.key}>
+          <FieldLabel>{filter.label}</FieldLabel>
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="number"
+              placeholder={minLabel}
+              value={range.min != null && range.min !== '' ? String(range.min) : ''}
+              onChange={(e) => patch(filter.key, { ...range, min: e.target.value })}
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-[#6366f1] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/25"
+            />
+            <input
+              type="number"
+              placeholder={maxLabel}
+              value={range.max != null && range.max !== '' ? String(range.max) : ''}
+              onChange={(e) => patch(filter.key, { ...range, max: e.target.value })}
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-[#6366f1] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/25"
+            />
+          </div>
+        </div>
+      );
+    }
     default:
       return (
         <FilterTextInput

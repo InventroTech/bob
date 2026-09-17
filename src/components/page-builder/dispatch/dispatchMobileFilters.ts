@@ -1,5 +1,6 @@
 import type { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
 import { FilterService } from '@/services/filterService';
+import { numberRangePresetLabel, relativeDatePresetLabel } from '@/lib/filters/rangePresets';
 
 const getNestedValue = (source: unknown, path: string): unknown => {
   if (!source || !path) return undefined;
@@ -364,7 +365,11 @@ export function getEmptyValueForFilter(f: FilterConfig): unknown {
       return [];
     case 'date_range':
     case 'date_time_range':
+      if (f.relativeDatePresets) return [];
       return { start: undefined, end: undefined };
+    case 'number_range':
+      if (f.rangePresets) return [];
+      return { min: '', max: '' };
     case 'date_gte':
     case 'date_lte':
     case 'date_exact':
@@ -423,7 +428,12 @@ export function isDispatchFilterActive(key: string, values: DispatchFilterValues
   if (value instanceof Date) return !isNaN(value.getTime());
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === 'object' && value !== null) {
-    const range = value as { start?: unknown; end?: unknown };
+    const range = value as { start?: unknown; end?: unknown; min?: unknown; max?: unknown; preset?: unknown };
+    if (range.preset) return true;
+    if ('min' in range || 'max' in range) {
+      return (range.min !== undefined && range.min !== '' && range.min !== null)
+        || (range.max !== undefined && range.max !== '' && range.max !== null);
+    }
     if ('start' in range || 'end' in range) {
       return !!(range.start || range.end);
     }
@@ -483,12 +493,43 @@ export function formatDispatchFilterChipLabel(
       return `${filter.label}: ${formatDate(value)}`;
     case 'date_range':
     case 'date_time_range': {
+      if (Array.isArray(value)) {
+        const labels = value.map((id) => {
+          const preset = filter.relativeDatePresets?.find((p) => p.id === id);
+          return preset ? relativeDatePresetLabel(preset) : String(id);
+        });
+        return `${filter.label}: ${labels.join(', ')}`;
+      }
+      if ((value as { preset?: string })?.preset) {
+        const preset = filter.relativeDatePresets?.find((p) => p.id === (value as { preset: string }).preset);
+        return `${filter.label}: ${preset ? relativeDatePresetLabel(preset) : (value as { preset: string }).preset}`;
+      }
       const range = value as { start?: unknown; end?: unknown };
       const start = formatDate(range?.start);
       const end = formatDate(range?.end);
       if (start && end) return `${filter.label}: ${start} – ${end}`;
       if (start) return `${filter.label}: from ${start}`;
       if (end) return `${filter.label}: until ${end}`;
+      return filter.label;
+    }
+    case 'number_range': {
+      if (Array.isArray(value)) {
+        const labels = value.map((id) => {
+          const preset = filter.rangePresets?.find((p) => p.id === id);
+          return preset ? numberRangePresetLabel(preset) : String(id);
+        });
+        return `${filter.label}: ${labels.join(', ')}`;
+      }
+      const range = value as { preset?: string; min?: unknown; max?: unknown };
+      if (range?.preset) {
+        const preset = filter.rangePresets?.find((p) => p.id === range.preset);
+        return `${filter.label}: ${preset ? numberRangePresetLabel(preset) : range.preset}`;
+      }
+      const min = range?.min !== undefined && range?.min !== '' ? String(range.min) : '';
+      const max = range?.max !== undefined && range?.max !== '' ? String(range.max) : '';
+      if (min && max) return `${filter.label}: ${min} – ${max}`;
+      if (min) return `${filter.label} ≥ ${min}`;
+      if (max) return `${filter.label} ≤ ${max}`;
       return filter.label;
     }
     default:
