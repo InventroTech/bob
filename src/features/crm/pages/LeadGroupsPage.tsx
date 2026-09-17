@@ -120,7 +120,40 @@ interface GroupEditState {
   states: string[];
   lead_sources: string[];
   lead_statuses: string[];
+  prioritize_lead_creator: boolean;
 }
+
+const isTicketQueue = (queueType: unknown) =>
+  typeof queueType === "string" && queueType.trim().toLowerCase() === "ticket";
+
+const isPrioritizeLeadCreator = (groupData: Record<string, unknown> | undefined) =>
+  groupData?.prioritize_lead_creator === true;
+
+const PrioritizeLeadCreatorCheckbox: React.FC<{
+  id: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+  compact?: boolean;
+}> = ({ id, checked, onCheckedChange, disabled, compact }) => (
+  <div className={compact ? "flex justify-center" : "flex items-start gap-2 pt-1"}>
+    <Checkbox
+      id={id}
+      checked={checked}
+      disabled={disabled}
+      title="Lead Creator Prioritization"
+      onCheckedChange={(value) => onCheckedChange(value === true)}
+    />
+    {!compact && (
+      <Label htmlFor={id} className="font-normal cursor-pointer leading-tight">
+        Lead Creator Prioritization
+        <span className="block text-xs text-muted-foreground font-normal">
+          Pull this RM's own referrals before newer Day-0 leads
+        </span>
+      </Label>
+    )}
+  </div>
+);
 
 interface GroupAssignmentUser {
   name: string;
@@ -152,6 +185,7 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
     party: [] as string[],
     lead_sources: [] as string[],
     lead_statuses: [] as string[],
+    prioritize_lead_creator: false,
   });
 
   const loadData = async () => {
@@ -225,6 +259,7 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
       party: [],
       lead_sources: [],
       lead_statuses: [],
+      prioritize_lead_creator: false,
     });
   };
 
@@ -249,6 +284,8 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
         party: form.party,
         lead_sources: form.lead_sources,
         lead_statuses: form.lead_statuses,
+        prioritize_lead_creator:
+          form.queue_type !== "ticket" && form.prioritize_lead_creator,
       },
     };
 
@@ -298,6 +335,7 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
       states: stateValues,
       lead_sources: sourceValues,
       lead_statuses: statusValues,
+      prioritize_lead_creator: isPrioritizeLeadCreator(group.group_data),
     });
   };
 
@@ -316,11 +354,15 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
     const payload: GroupCreatePayload = {
       name: existingGroup.name,
       group_data: {
+        ...(existingGroup.group_data || {}),
         queue_type: existingGroup.group_data?.queue_type || null,
         party: editingGroup.party,
         states: editingGroup.states,
         lead_sources: editingGroup.lead_sources,
         lead_statuses: editingGroup.lead_statuses,
+        prioritize_lead_creator:
+          !isTicketQueue(existingGroup.group_data?.queue_type) &&
+          editingGroup.prioritize_lead_creator,
       },
     };
 
@@ -384,30 +426,40 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
     return { chips: states as string[] };
   };
 
-  const renderCompactChipList = (items: string[], keyPrefix: string) => {
+  const renderCompactChipList = (
+    items: string[],
+    keyPrefix: string,
+    options?: { maxVisible?: number; dense?: boolean; centered?: boolean }
+  ) => {
     if (!items.length) {
       return <span className="text-sm text-muted-foreground">-</span>;
     }
 
-    const visibleItems = items.slice(0, 3);
+    const maxVisible = options?.maxVisible ?? 3;
+    const dense = options?.dense ?? false;
+    const centered = options?.centered ?? false;
+    const visibleItems = items.slice(0, maxVisible);
     const hiddenCount = items.length - visibleItems.length;
+    const chipClass = dense
+      ? "inline-flex max-w-[88px] truncate rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium"
+      : "inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-medium whitespace-nowrap";
 
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <div
+        className={`flex items-center ${dense ? "flex-nowrap gap-1" : "flex-wrap gap-2"} ${
+          centered ? "justify-center" : ""
+        }`}
+      >
         {visibleItems.map((item) => (
-          <span
-            key={`${keyPrefix}-${item}`}
-            title={item}
-            className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-medium whitespace-nowrap"
-          >
+          <span key={`${keyPrefix}-${item}`} title={item} className={chipClass}>
             {item}
           </span>
         ))}
         {hiddenCount > 0 && (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
-                +{hiddenCount} more
+              <Button variant="outline" size="sm" className={dense ? "h-6 px-1.5 text-[11px]" : "h-7 px-2 text-xs"}>
+                {dense ? `+${hiddenCount}` : `+${hiddenCount} more`}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-[340px] p-3">
@@ -441,7 +493,7 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="h-9 w-full min-w-[180px] justify-between font-normal">
+          <Button variant="outline" className="h-9 w-full min-w-[140px] justify-between font-normal">
             <span className="truncate">
               {validSelectedCount > 0 ? `${validSelectedCount} selected` : `Select ${label}`}
             </span>
@@ -544,6 +596,8 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                           queue_type: nextQueueType,
                           lead_sources: nextQueueType === "ticket" ? [] : prev.lead_sources,
                           lead_statuses: nextQueueType === "ticket" ? [] : prev.lead_statuses,
+                          prioritize_lead_creator:
+                            nextQueueType === "ticket" ? false : prev.prioritize_lead_creator,
                         }));
                       }}
                     >
@@ -686,6 +740,17 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                       </div>
                     </>
                   )}
+                  {form.queue_type !== "ticket" && (
+                    <div className="col-span-full">
+                      <PrioritizeLeadCreatorCheckbox
+                        id="create-prioritize-lead-creator"
+                        checked={form.prioritize_lead_creator}
+                        onCheckedChange={(checked) =>
+                          setForm((prev) => ({ ...prev, prioritize_lead_creator: checked }))
+                        }
+                      />
+                    </div>
+                  )}
                   <div className="col-span-full flex justify-end gap-2 mt-2">
                     <Button className="bg-black text-white hover:bg-black" onClick={handleCreate} disabled={saving}>
                       {saving ? "Saving..." : "Save changes"}
@@ -716,14 +781,20 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-black hover:bg-black">
-                        <TableHead className="text-white font-medium whitespace-nowrap">Group</TableHead>
-                        <TableHead className="text-white font-medium whitespace-nowrap">Queue</TableHead>
-                        <TableHead className="text-white font-medium min-w-[200px]">Party</TableHead>
-                        <TableHead className="text-white font-medium min-w-[150px]">State</TableHead>
-                        <TableHead className="text-white font-medium min-w-[200px]">Lead Sources</TableHead>
-                        <TableHead className="text-white font-medium text-right whitespace-nowrap">Fresh Leads</TableHead>
-                        <TableHead className="text-white font-medium min-w-[200px]">Lead Status</TableHead>
-                        <TableHead className="text-white font-medium text-right min-w-[120px]"></TableHead>
+                        <TableHead className="text-white font-medium whitespace-nowrap text-center">Group</TableHead>
+                        <TableHead className="text-white font-medium whitespace-nowrap text-center">Queue</TableHead>
+                        <TableHead className="text-white font-medium min-w-[96px] text-center">Party</TableHead>
+                        <TableHead className="text-white font-medium min-w-[150px] text-center">State</TableHead>
+                        <TableHead className="text-white font-medium min-w-[96px] text-center">Lead Sources</TableHead>
+                        <TableHead className="text-white font-medium whitespace-nowrap text-center">Fresh Leads</TableHead>
+                        <TableHead className="text-white font-medium min-w-[140px] text-center">Lead Status</TableHead>
+                        <TableHead
+                          title="Lead Creator Prioritization"
+                          className="text-white font-medium w-[96px] max-w-[96px] whitespace-normal leading-tight text-center"
+                        >
+                          Lead Creator Prioritization
+                        </TableHead>
+                        <TableHead className="text-white font-medium w-[88px] text-center"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -742,11 +813,11 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                           ? group.group_data.lead_statuses
                           : [];
                         return (
-                          <TableRow key={group.id}>
+                          <TableRow key={group.id} className="[&>td]:text-center [&>td]:align-middle">
                             <TableCell className="font-medium">
                               <button
                                 type="button"
-                                className="text-left text-blue-700 hover:text-blue-900 hover:underline"
+                                className="text-blue-700 hover:text-blue-900 hover:underline"
                                 onClick={() => setSelectedGroupForDrawer(group)}
                               >
                                 {group.name}
@@ -774,7 +845,11 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                                     )
                                 )
                               ) : (
-                                renderCompactChipList(partyValues, `${group.id}-party`)
+                                renderCompactChipList(partyValues, `${group.id}-party`, {
+                                  maxVisible: 1,
+                                  dense: true,
+                                  centered: true,
+                                })
                               )}
                             </TableCell>
                             <TableCell>
@@ -796,7 +871,9 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                                     )
                                 )
                               ) : (
-                                renderCompactChipList(conditions.chips, `${group.id}-state`)
+                                renderCompactChipList(conditions.chips, `${group.id}-state`, {
+                                  centered: true,
+                                })
                               )}
                             </TableCell>
                             <TableCell>
@@ -805,7 +882,7 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                                   label="Lead Sources"
                                   options={getLeadSourceOptions(editingGroup.lead_sources)}
                                   selected={editingGroup.lead_sources}
-                                  triggerClassName="h-9 w-full min-w-[220px] justify-between font-normal"
+                                  triggerClassName="h-8 w-full min-w-[96px] justify-between font-normal"
                                   onToggle={(value) =>
                                     setEditingGroup((prev) =>
                                       prev
@@ -840,10 +917,14 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                                   }
                                 />
                               ) : (
-                                renderCompactChipList(leadSources, `${group.id}-source`)
+                                renderCompactChipList(leadSources, `${group.id}-source`, {
+                                  maxVisible: 1,
+                                  dense: true,
+                                  centered: true,
+                                })
                               )}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums font-medium">
+                            <TableCell className="tabular-nums font-medium">
                               {formatFreshLeadsCount(group)}
                             </TableCell>
                             <TableCell>
@@ -865,11 +946,33 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                                     )
                                 )
                               ) : (
-                                renderCompactChipList(leadStatuses, `${group.id}-status`)
+                                renderCompactChipList(leadStatuses, `${group.id}-status`, {
+                                  centered: true,
+                                })
                               )}
                             </TableCell>
-                            <TableCell className="text-right">
-                              <div className="inline-flex items-center justify-end gap-2">
+                            <TableCell>
+                              {isTicketQueue(group.group_data?.queue_type) ? (
+                                <span className="text-sm text-muted-foreground">-</span>
+                              ) : isEditing && editingGroup ? (
+                                <PrioritizeLeadCreatorCheckbox
+                                  id={`edit-prioritize-lead-creator-${group.id}`}
+                                  checked={editingGroup.prioritize_lead_creator}
+                                  compact
+                                  onCheckedChange={(checked) =>
+                                    setEditingGroup((prev) =>
+                                      prev ? { ...prev, prioritize_lead_creator: checked } : prev
+                                    )
+                                  }
+                                />
+                              ) : isPrioritizeLeadCreator(group.group_data) ? (
+                                <span className="text-sm font-medium">Yes</span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">No</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="inline-flex items-center justify-center gap-2">
                                 {isEditing ? (
                                   <>
                                     <Button
@@ -1014,6 +1117,28 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                         `${group.id}-status-mobile`
                       )}
                     </div>
+
+                    {/* Lead Creator Prioritization */}
+                    {!isTicketQueue(group.group_data?.queue_type) && (
+                      <div className="col-span-2">
+                        <p className="text-sm text-gray-500 mb-1">Lead Creator Prioritization</p>
+                        {isEditing && editingGroup ? (
+                          <PrioritizeLeadCreatorCheckbox
+                            id={`mobile-prioritize-lead-creator-${group.id}`}
+                            checked={editingGroup.prioritize_lead_creator}
+                            onCheckedChange={(checked) =>
+                              setEditingGroup((prev) =>
+                                prev ? { ...prev, prioritize_lead_creator: checked } : prev
+                              )
+                            }
+                          />
+                        ) : (
+                          <p className="font-medium">
+                            {isPrioritizeLeadCreator(group.group_data) ? "Yes" : "No"}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Edit / Delete */}
@@ -1087,6 +1212,12 @@ const LeadGroupsPage: React.FC<LeadGroupsPageProps> = ({ className = "", showHea
                     {formatFreshLeadsCount(selectedGroupForDrawer)}
                   </p>
                   <p className="text-sm"><span className="font-medium">Lead Statuses:</span> {toList(selectedGroupForDrawer.group_data?.lead_statuses).join(", ") || "-"}</p>
+                  {!isTicketQueue(selectedGroupForDrawer.group_data?.queue_type) && (
+                    <p className="text-sm">
+                      <span className="font-medium">Lead Creator Prioritization:</span>{" "}
+                      {isPrioritizeLeadCreator(selectedGroupForDrawer.group_data) ? "Yes" : "No"}
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-lg border p-4 space-y-3">
