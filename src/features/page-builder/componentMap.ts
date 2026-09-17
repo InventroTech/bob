@@ -23,6 +23,7 @@ import {
   CseAnalyticsComponent,
   OperationsProgramsComponent,
   UserHierarchyComponent,
+  RmPrdAnalyticsComponent,
 } from "@/components/page-builder";
 import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
 import { LeadTableComponent } from "@/components/page-builder/lead-table";
@@ -197,6 +198,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   analyticsBoard: CseAnalyticsComponent,
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
+  rmPrdAnalytics: RmPrdAnalyticsComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
   procurementRequestForm: ProcurementRequestFormComponent,
   dispatchCardList: DispatchCardListComponent,

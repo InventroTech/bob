@@ -26,6 +26,8 @@ export { default as OperationsProgramsComponent } from './OperationsProgramsComp
 export { OperationsProgramsConfig } from './component-config/OperationsProgramsConfig';
 export { default as UserHierarchyComponent } from './UserHierarchyComponent';
 export { UserHierarchyConfig } from './component-config/UserHierarchyConfig';
+export { default as RmPrdAnalyticsComponent } from './RmPrdAnalyticsComponent';
+export { RmPrdAnalyticsConfig } from './component-config/RmPrdAnalyticsConfig';
 export { InventoryTableComponent } from './InventoryTableComponent';
 export { ProcurementTableComponent, DEFAULT_PROCUREMENT_TABLE_COLUMNS } from './ProcurementTableComponent';
 export { MyRequestTableComponent } from './MyRequestTableComponent';

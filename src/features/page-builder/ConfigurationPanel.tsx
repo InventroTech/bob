@@ -15,7 +15,7 @@ import { JobsPageConfigComponent } from "@/components/ATScomponents/configs/Jobs
 import { ApplicantTableConfigComponent } from "@/components/ATScomponents/configs/ApplicantTableConfig";
 import { DynamicScoringConfig } from "@/components/ATScomponents/configs/DynamicScoringConfig";
 import { FileUploadPageConfig } from "@/components/page-builder/FileUploadPageConfig";
-import { TeamDashboardConfig, CseAnalyticsConfig, OperationsProgramsConfig, UserHierarchyConfig } from "@/components/page-builder";
+import { TeamDashboardConfig, CseAnalyticsConfig, OperationsProgramsConfig, UserHierarchyConfig, RmPrdAnalyticsConfig } from "@/components/page-builder";
 import {
   DataCardConfig,
   TableConfig,
@@ -822,6 +822,14 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
       case 'userHierarchy':
         return (
           <UserHierarchyConfig
+            localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'rmPrdAnalytics':
+        return (
+          <RmPrdAnalyticsConfig
             localConfig={localConfig as any}
             handleInputChange={handleInputChange}
           />
