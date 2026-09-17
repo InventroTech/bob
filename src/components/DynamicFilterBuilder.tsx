@@ -11,6 +11,11 @@ import { Calendar as CalendarIcon, X, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
+import {
+  numberRangePresetLabel,
+  relativeDatePresetLabel,
+  selectedPresetIds,
+} from '@/lib/filters/rangePresets';
 
 export interface FilterContextInjected {
   filterState: FilterState;
@@ -86,6 +91,18 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     const filter = filters.find(f => f.key === key);
     if (filter?.type === 'select') {
       setFilterValue(key, []);
+    } else if (
+      (filter?.type === 'date_range' && filter.relativeDatePresets?.length) ||
+      (filter?.type === 'number_range' && filter.rangePresets?.length)
+    ) {
+      setFilterValue(key, []);
+    } else if (
+      filter?.type === 'date_range' ||
+      filter?.type === 'date_time_range'
+    ) {
+      setFilterValue(key, { start: undefined, end: undefined });
+    } else if (filter?.type === 'number_range') {
+      setFilterValue(key, { min: '', max: '' });
     } else {
       setFilterValue(key, '');
     }
@@ -100,6 +117,108 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
       const value = String(option.value ?? '').toLowerCase();
       return label.includes(term) || value.includes(term);
     });
+  };
+
+  const renderPresetCheckboxPopover = (
+    filter: FilterConfig,
+    options: Array<{ id: string; label: string }>,
+    isActive: boolean,
+  ) => {
+    const selected = selectedPresetIds(filterState.values[filter.key]);
+    const term = (selectSearchTerms[filter.key] ?? '').trim().toLowerCase();
+    const filteredOptions = term
+      ? options.filter((option) => {
+          const label = option.label.toLowerCase();
+          const id = option.id.toLowerCase();
+          return label.includes(term) || id.includes(term);
+        })
+      : options;
+
+    const toggle = (id: string, checked: boolean) => {
+      handleFilterChange(filter.key, checked ? [id] : []);
+    };
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={`w-full justify-between text-left font-normal ${isActive ? 'border-blue-500' : ''}`}
+          >
+            <span className="text-sm">
+              {selected.length > 0
+                ? options.find((option) => option.id === selected[0])?.label ||
+                  filter.placeholder ||
+                  `Select ${filter.label.toLowerCase()}`
+                : filter.placeholder || `Select ${filter.label.toLowerCase()}`}
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[355px] p-0" align="start">
+          <div className="px-1 py-3 border-b">
+            <Label className="text-sm font-medium">Select {filter.label}</Label>
+            <Input
+              value={selectSearchTerms[filter.key] ?? ''}
+              onChange={(e) =>
+                setSelectSearchTerms((prev) => ({
+                  ...prev,
+                  [filter.key]: e.target.value,
+                }))
+              }
+              placeholder="Search options..."
+              className="mt-2 h-8 text-sm w-full"
+            />
+          </div>
+          <div className="flex items-center justify-end px-3 py-2 border-b">
+            <button
+              type="button"
+              className="text-xs text-red-600"
+              onClick={() => handleFilterChange(filter.key, [])}
+            >
+              Clear
+            </button>
+          </div>
+          <div className="max-h-60 overflow-y-auto p-1">
+            {filteredOptions.map((option) => {
+              const isSelected = selected.includes(option.id);
+              return (
+                <div key={option.id} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded">
+                  <Checkbox
+                    id={`${filter.key}-${option.id}`}
+                    checked={isSelected}
+                    onCheckedChange={(checked) => toggle(option.id, checked === true)}
+                  />
+                  <label
+                    htmlFor={`${filter.key}-${option.id}`}
+                    className="text-sm font-medium leading-none cursor-pointer flex-1"
+                  >
+                    {option.label}
+                  </label>
+                </div>
+              );
+            })}
+            {filteredOptions.length === 0 && (
+              <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                No matching options
+              </div>
+            )}
+          </div>
+          {selected.length > 0 && (
+            <div className="p-3 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleFilterChange(filter.key, [])}
+                className="text-xs w-full"
+              >
+                Clear All
+              </Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    );
   };
 
   // Render appropriate input by filter type; values are kept in useFilters state
@@ -288,8 +407,20 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
         );
 
       case 'date_range': {
+        if (filter.relativeDatePresets?.length) {
+          return renderPresetCheckboxPopover(
+            filter,
+            filter.relativeDatePresets.map((preset) => ({
+              id: preset.id,
+              label: relativeDatePresetLabel(preset),
+            })),
+            isActive,
+          );
+        }
         const startDate = value?.start ? (value.start instanceof Date ? value.start : new Date(value.start)) : undefined;
         const endDate = value?.end ? (value.end instanceof Date ? value.end : new Date(value.end)) : undefined;
+        const startLabel = filter.dateRangeStartLabel || 'From';
+        const endLabel = filter.dateRangeEndLabel || 'To';
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -303,7 +434,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
                     {startDate ? (
                       format(startDate, 'PPP')
                     ) : (
-                      <span className="text-muted-foreground">Start date</span>
+                      <span className="text-muted-foreground">{startLabel}</span>
                     )}
                   </Button>
                 </PopoverTrigger>
@@ -333,7 +464,7 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
                     {endDate ? (
                       format(endDate, 'PPP')
                     ) : (
-                      <span className="text-muted-foreground">End date</span>
+                      <span className="text-muted-foreground">{endLabel}</span>
                     )}
                   </Button>
                 </PopoverTrigger>
@@ -483,6 +614,43 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
           />
         );
 
+      case 'number_range': {
+        if (filter.rangePresets?.length) {
+          return renderPresetCheckboxPopover(
+            filter,
+            filter.rangePresets.map((preset) => ({
+              id: preset.id,
+              label: numberRangePresetLabel(preset),
+            })),
+            isActive,
+          );
+        }
+        const minLabel = filter.numberRangeMinLabel || 'Min';
+        const maxLabel = filter.numberRangeMaxLabel || 'Max';
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              type="number"
+              placeholder={minLabel}
+              value={value?.min ?? ''}
+              onChange={(e) =>
+                handleFilterChange(filter.key, { ...value, min: e.target.value })
+              }
+              className={isActive ? 'border-blue-500' : ''}
+            />
+            <Input
+              type="number"
+              placeholder={maxLabel}
+              value={value?.max ?? ''}
+              onChange={(e) =>
+                handleFilterChange(filter.key, { ...value, max: e.target.value })
+              }
+              className={isActive ? 'border-blue-500' : ''}
+            />
+          </div>
+        );
+      }
+
       default:
         return (
           <Input
@@ -500,8 +668,16 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
     <div className={`space-y-4 ${className}`}>
       {/* Filter Inputs */}
       <div className={`grid gap-4 ${compact ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
-        {filters.map((filter) => (
-          <div key={filter.key} className="space-y-2">
+        {filters.map((filter) => {
+          const isCustomRange =
+            (filter.type === 'date_range' && !filter.relativeDatePresets?.length) ||
+            (filter.type === 'date_time_range') ||
+            (filter.type === 'number_range' && !filter.rangePresets?.length);
+          return (
+          <div
+            key={filter.key}
+            className={`space-y-2 ${isCustomRange ? 'sm:col-span-2' : ''}`}
+          >
             <Label className="text-sm font-medium">
               {filter.label}
               {isFilterActive(filter.key) && (
@@ -517,7 +693,8 @@ export const DynamicFilterBuilder: React.FC<DynamicFilterBuilderProps> = ({
             </Label>
             {renderFilterInput(filter)}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Action Buttons */}

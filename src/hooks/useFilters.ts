@@ -1,5 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
-import { FilterConfig, FilterOption } from '../component-config/DynamicFilterConfig';
+import { useState, useCallback } from 'react';
+import { FilterConfig } from '../component-config/DynamicFilterConfig';
+import { formatLocalYmd, numberRangePresetLabel, relativeDatePresetLabel, resolveDateRangeBounds, resolveNumberRangeBounds } from '@/lib/filters/rangePresets';
 
 export interface FilterValue {
   [key: string]: any;
@@ -87,11 +88,16 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
       return value.length > 0;
     }
     if (typeof value === 'object' && value !== null) {
-      const range = value as { start?: unknown; end?: unknown };
+      const range = value as { start?: unknown; end?: unknown; min?: unknown; max?: unknown; preset?: unknown };
+      if (range.preset) return true;
+      if ('min' in range || 'max' in range) {
+        return (range.min !== undefined && range.min !== '' && range.min !== null)
+          || (range.max !== undefined && range.max !== '' && range.max !== null);
+      }
       if ('start' in range || 'end' in range) {
         return !!(range.start || range.end);
       }
-      return Object.keys(value).length > 0;
+      return false;
     }
     return value !== undefined && value !== null && value !== '' && value !== false;
   }, [filterState.values]);
@@ -172,23 +178,27 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
           break;
 
         case 'date_range':
-        case 'date_time_range':
-          // Date range / date time range (both start and end)
-          if (value && typeof value === 'object') {
-            if (value.start && (value.start instanceof Date || typeof value.start === 'string')) {
-              const startDate = value.start instanceof Date ? value.start : new Date(value.start);
-              if (!isNaN(startDate.getTime())) {
-                params.append(`${accessor}__gte`, startDate.toISOString().slice(0, 10));
-              }
-            }
-            if (value.end && (value.end instanceof Date || typeof value.end === 'string')) {
-              const endDate = value.end instanceof Date ? value.end : new Date(value.end);
-              if (!isNaN(endDate.getTime())) {
-                params.append(`${accessor}__lte`, endDate.toISOString().slice(0, 10));
-              }
-            }
+        case 'date_time_range': {
+          const bounds = resolveDateRangeBounds(value, filter.relativeDatePresets);
+          if (bounds.start) {
+            params.append(`${accessor}__gte`, formatLocalYmd(bounds.start));
+          }
+          if (bounds.end) {
+            params.append(`${accessor}__lte`, formatLocalYmd(bounds.end));
           }
           break;
+        }
+
+        case 'number_range': {
+          const bounds = resolveNumberRangeBounds(value, filter.rangePresets);
+          if (bounds.min !== undefined) {
+            params.append(`${accessor}__gte`, String(bounds.min));
+          }
+          if (bounds.max !== undefined) {
+            params.append(`${accessor}__lte`, String(bounds.max));
+          }
+          break;
+        }
 
         case 'number_gte':
           // Number from (>=)
@@ -247,7 +257,19 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
         return String(value);
 
       case 'date_range':
+        if (Array.isArray(value)) {
+          return value
+            .map((id) => {
+              const preset = filter.relativeDatePresets?.find((p) => p.id === id);
+              return preset ? relativeDatePresetLabel(preset) : String(id);
+            })
+            .join(', ');
+        }
         if (value && typeof value === 'object') {
+          if (value.preset) {
+            const preset = filter.relativeDatePresets?.find((p) => p.id === value.preset);
+            return preset ? relativeDatePresetLabel(preset) : String(value.preset);
+          }
           const start = value.start instanceof Date ? value.start.toLocaleDateString() : String(value.start || '');
           const end = value.end instanceof Date ? value.end.toLocaleDateString() : String(value.end || '');
           return `${start} - ${end}`;
@@ -264,6 +286,28 @@ export const useFilters = (initialValues: FilterValue = {}): UseFiltersReturn =>
 
       case 'number_gte':
       case 'number_lte':
+        return String(value);
+
+      case 'number_range':
+        if (Array.isArray(value)) {
+          return value
+            .map((id) => {
+              const preset = filter.rangePresets?.find((p) => p.id === id);
+              return preset ? numberRangePresetLabel(preset) : String(id);
+            })
+            .join(', ');
+        }
+        if (value && typeof value === 'object') {
+          if (value.preset) {
+            const preset = filter.rangePresets?.find((p) => p.id === value.preset);
+            return preset ? numberRangePresetLabel(preset) : String(value.preset);
+          }
+          const min = value.min !== undefined && value.min !== '' ? String(value.min) : '';
+          const max = value.max !== undefined && value.max !== '' ? String(value.max) : '';
+          if (min && max) return `${min} – ${max}`;
+          if (min) return `≥ ${min}`;
+          if (max) return `≤ ${max}`;
+        }
         return String(value);
 
       default:

@@ -40,7 +40,7 @@ interface Props {
   handleFilterFieldChange: (
     index: number,
     field: keyof FilterConfig,
-    value: string | FilterConfig['options'] | boolean
+    value: FilterConfig[keyof FilterConfig]
   ) => void;
   handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
   handleAddFilterOption: (filterIndex: number) => void;
@@ -221,6 +221,7 @@ export const DispatchCardListConfigPanel: React.FC<Props> = ({
               handleAddFilterOption={handleAddFilterOption}
               handleRemoveFilterOption={handleRemoveFilterOption}
               handleFilterOptionChange={handleFilterOptionChange}
+              onReplaceFilters={onReplaceFilters}
             />
           </TabsContent>
         </Tabs>

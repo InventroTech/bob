@@ -6,16 +6,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Trash2, Plus, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { apiClient } from "@/lib/api";
+import type { NumberRangePreset, RelativeDatePreset } from '@/lib/filters/rangePresets';
+import { numberRangePresetLabel, relativeDatePresetLabel } from '@/lib/filters/rangePresets';
 
 export interface FilterOption {
   label: string;
   value: string;
 }
 
+export type { NumberRangePreset, RelativeDatePreset };
+
 export interface FilterConfig {
   key: string;
   label: string;
-  type: 'select' | 'text' | 'date_gte' | 'date_lte' | 'date_exact' | 'date_range' | 'date_time_range' | 'number_gte' | 'number_lte' | 'search' | 'exact' | 'icontains' | 'startswith' | 'endswith' | 'gt' | 'lt' | 'in';
+  type: 'select' | 'text' | 'date_gte' | 'date_lte' | 'date_exact' | 'date_range' | 'date_time_range' | 'number_gte' | 'number_lte' | 'number_range' | 'search' | 'exact' | 'icontains' | 'startswith' | 'endswith' | 'gt' | 'lt' | 'in';
   accessor?: string; // Field to filter on (defaults to key if not provided)
   lookup?: string; // Custom Django ORM lookup (e.g., 'icontains', 'exact', 'gte', etc.)
   options?: FilterOption[]; // For select type filters (manual options)
@@ -35,6 +39,14 @@ export interface FilterConfig {
   dateRangeStartLabel?: string;
   /** Label for the end date field in Date Range filter (e.g. "To", "End date"). */
   dateRangeEndLabel?: string;
+  /** Label for the min field in Number Range filter (e.g. "Min"). */
+  numberRangeMinLabel?: string;
+  /** Label for the max field in Number Range filter (e.g. "Max"). */
+  numberRangeMaxLabel?: string;
+  /** Named price/number buckets shown as selectable ranges (e.g. 0-500). */
+  rangePresets?: NumberRangePreset[];
+  /** Named relative windows shown as selectable date ranges (e.g. Last 7 days). */
+  relativeDatePresets?: RelativeDatePreset[];
   placeholder?: string; // For text and search filters
   /** Dispatch mobile sheet: control type (Page Builder → Dispatch Card List). */
   dispatchUi?: 'text' | 'date' | 'floatingDate' | 'toggle' | 'segment' | 'chip';
@@ -55,12 +67,16 @@ interface DynamicFilterConfigProps {
   handleInputChange: (field: string, value: string | number | boolean) => void;
   handleFilterCountChange: (count: number) => void;
   handleFilterDelete: (index: number) => void;
-  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterOption[] | boolean | undefined) => void;
+  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: FilterConfig[keyof FilterConfig]) => void;
   /** When switching options source (manual vs API), update all related fields in one go. */
   handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
   handleAddFilterOption: (filterIndex: number) => void;
   handleRemoveFilterOption: (filterIndex: number, optionIndex: number) => void;
   handleFilterOptionChange: (filterIndex: number, optionIndex: number, field: keyof FilterOption, value: string) => void;
+  /** Replace the full filters list (used by quick-add presets). */
+  onReplaceFilters?: (filters: FilterConfig[]) => void;
+  /** Inventory tables default date range to request_date; others use created_at. */
+  dateRangePresetAccessor?: string;
 }
 
 export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
@@ -75,7 +91,9 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
   handleFilterOptionsSourceChange,
   handleAddFilterOption,
   handleRemoveFilterOption,
-  handleFilterOptionChange
+  handleFilterOptionChange,
+  onReplaceFilters,
+  dateRangePresetAccessor = 'created_at',
 }) => {
   const [directFetchModes, setDirectFetchModes] = useState<Set<number>>(new Set());
   const [directFetchInputs, setDirectFetchInputs] = useState<Record<number, string>>({});
@@ -142,6 +160,68 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
     <div className="space-y-4">
 
       <div className="space-y-4">
+        {onReplaceFilters ? (
+          <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
+            <Label>Quick add</Label>
+            <p className="text-xs text-muted-foreground">
+              Adds a dropdown filter. Set the accessor and add your own options below.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const accessor = 'estimated_cost';
+                  if (!localConfig.showFilters) handleInputChange('showFilters', true);
+                  const existingIndex = localFilters.findIndex((f) => (f.accessor || f.key) === accessor);
+                  if (existingIndex >= 0) {
+                    return;
+                  }
+                  onReplaceFilters([
+                    ...localFilters,
+                    {
+                      key: accessor,
+                      label: 'Estimated Cost',
+                      type: 'number_range',
+                      accessor,
+                    },
+                  ]);
+                }}
+              >
+                Estimated Cost
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const accessor = dateRangePresetAccessor;
+                  if (!localConfig.showFilters) handleInputChange('showFilters', true);
+                  const existingIndex = localFilters.findIndex(
+                    (f) =>
+                      (f.accessor || f.key) === accessor &&
+                      (f.type === 'date_range' || f.type === 'date_time_range')
+                  );
+                  if (existingIndex >= 0) {
+                    return;
+                  }
+                  onReplaceFilters([
+                    ...localFilters,
+                    {
+                      key: accessor,
+                      label: 'Date Range',
+                      type: 'date_range',
+                      accessor,
+                    },
+                  ]);
+                }}
+              >
+                Date Range
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <div>
           <Label>Number of Filters</Label>
           <Input
@@ -277,6 +357,7 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                       <SelectItem value="date_time_range">Date Time Range</SelectItem>
                       <SelectItem value="number_gte">Number From (≥)</SelectItem>
                       <SelectItem value="number_lte">Number To (≤)</SelectItem>
+                      <SelectItem value="number_range">Number Range (min / max)</SelectItem>
                       <SelectItem value="gt">Greater Than</SelectItem>
                       <SelectItem value="lt">Less Than</SelectItem>
                       <SelectItem value="in">In List</SelectItem>
@@ -285,6 +366,11 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                   {(filter.type === 'date_gte' || filter.type === 'date_lte' || filter.type === 'date_exact' || filter.type === 'date_range' || filter.type === 'date_time_range') && (
                     <p className="text-xs text-muted-foreground mt-1">
                       <strong>Date filters:</strong> From (≥) → <code className="bg-muted px-1 rounded">accessor__gte</code>. To (≤) → <code className="bg-muted px-1 rounded">accessor__lte</code>. Exact (=) → <code className="bg-muted px-1 rounded">accessor</code> (YYYY-MM-DD). Range → both gte and lte.
+                    </p>
+                  )}
+                  {filter.type === 'number_range' && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Number range sends <code className="bg-muted px-1 rounded">accessor__gte</code> and <code className="bg-muted px-1 rounded">accessor__lte</code>. For estimated cost use accessor <code className="bg-muted px-1 rounded">estimated_cost</code>.
                     </p>
                   )}
                 </div>
@@ -335,25 +421,202 @@ export const DynamicFilterConfig: React.FC<DynamicFilterConfigProps> = ({
                   </div>
                 )}
 
-                {/* Date Range: labels for start and end date fields */}
                 {(filter.type === 'date_range' || filter.type === 'date_time_range') && (
-                  <div className="col-span-2 grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Start date label</Label>
-                      <Input
-                        value={filter.dateRangeStartLabel ?? ''}
-                        onChange={(e) => handleFilterFieldChange(index, 'dateRangeStartLabel', e.target.value)}
-                        placeholder="e.g. From, Start date"
-                      />
+                  <div className="col-span-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Dropdown options</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const next = [...(filter.relativeDatePresets ?? [])];
+                          next.push({
+                            id: `date_${Date.now()}`,
+                            label: '',
+                            days: 7,
+                          });
+                          handleFilterFieldChange(index, 'relativeDatePresets', next);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Option
+                      </Button>
                     </div>
-                    <div>
-                      <Label className="text-xs">End date label</Label>
-                      <Input
-                        value={filter.dateRangeEndLabel ?? ''}
-                        onChange={(e) => handleFilterFieldChange(index, 'dateRangeEndLabel', e.target.value)}
-                        placeholder="e.g. To, End date"
-                      />
+                    <p className="text-xs text-muted-foreground">
+                      Label is what appears in the dropdown. Amount + unit is the window ending today (e.g. 7 days, 1 month).
+                    </p>
+                    {(filter.relativeDatePresets ?? []).map((preset, optionIndex) => (
+                      <div key={preset.id || optionIndex} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Label (e.g. Last 7 days)"
+                          value={preset.label}
+                          onChange={(e) => {
+                            const next = [...(filter.relativeDatePresets ?? [])];
+                            const label = e.target.value;
+                            next[optionIndex] = {
+                              ...preset,
+                              label,
+                            };
+                            handleFilterFieldChange(index, 'relativeDatePresets', next);
+                          }}
+                          className="flex-1"
+                        />
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="7"
+                          value={preset.months ?? preset.days ?? ''}
+                          onChange={(e) => {
+                            const amount = e.target.value === '' ? undefined : Number(e.target.value);
+                            const next = [...(filter.relativeDatePresets ?? [])];
+                            const useMonths = preset.months != null && preset.days == null;
+                            const updated = useMonths
+                              ? { ...preset, months: amount, days: undefined }
+                              : { ...preset, days: amount, months: undefined };
+                            const prevAuto = relativeDatePresetLabel({ ...preset, label: '' });
+                            const nextAuto = relativeDatePresetLabel({ ...updated, label: '' });
+                            if (!preset.label.trim() || preset.label === prevAuto) {
+                              updated.label = nextAuto === 'Untitled' ? '' : nextAuto;
+                            }
+                            next[optionIndex] = updated;
+                            handleFilterFieldChange(index, 'relativeDatePresets', next);
+                          }}
+                          className="w-20"
+                        />
+                        <Select
+                          value={preset.months != null && preset.days == null ? 'months' : 'days'}
+                          onValueChange={(unit: 'days' | 'months') => {
+                            const amount = preset.months ?? preset.days ?? 1;
+                            const next = [...(filter.relativeDatePresets ?? [])];
+                            const updated =
+                              unit === 'months'
+                                ? { ...preset, months: amount, days: undefined }
+                                : { ...preset, days: amount, months: undefined };
+                            const prevAuto = relativeDatePresetLabel({ ...preset, label: '' });
+                            const nextAuto = relativeDatePresetLabel({ ...updated, label: '' });
+                            if (!String(preset.label || '').trim() || preset.label === prevAuto) {
+                              updated.label = nextAuto === 'Untitled' ? '' : nextAuto;
+                            }
+                            next[optionIndex] = updated;
+                            handleFilterFieldChange(index, 'relativeDatePresets', next);
+                          }}
+                        >
+                          <SelectTrigger className="w-28">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="days">Days</SelectItem>
+                            <SelectItem value="months">Months</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const next = (filter.relativeDatePresets ?? []).filter((_, i) => i !== optionIndex);
+                            handleFilterFieldChange(index, 'relativeDatePresets', next.length ? next : undefined);
+                          }}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {filter.type === 'number_range' && (
+                  <div className="col-span-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Dropdown options</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const next = [...(filter.rangePresets ?? [])];
+                          next.push({
+                            id: `range_${Date.now()}`,
+                            label: '',
+                          });
+                          handleFilterFieldChange(index, 'rangePresets', next);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Option
+                      </Button>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Label is what appears in the dropdown. Min/max are sent as accessor__gte / accessor__lte. Leave max empty for “and above”.
+                    </p>
+                    {(filter.rangePresets ?? []).map((preset, optionIndex) => (
+                      <div key={preset.id || optionIndex} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Label (e.g. 0-500)"
+                          value={preset.label}
+                          onChange={(e) => {
+                            const next = [...(filter.rangePresets ?? [])];
+                            const label = e.target.value;
+                            next[optionIndex] = {
+                              ...preset,
+                              label,
+                            };
+                            handleFilterFieldChange(index, 'rangePresets', next);
+                          }}
+                          className="flex-1"
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Min"
+                          value={preset.min ?? ''}
+                          onChange={(e) => {
+                            const min = e.target.value === '' ? undefined : Number(e.target.value);
+                            const next = [...(filter.rangePresets ?? [])];
+                            const updated = { ...preset, min };
+                            const prevAuto = numberRangePresetLabel({ ...preset, label: '' });
+                            const nextAuto = numberRangePresetLabel({ ...updated, label: '' });
+                            if (!String(preset.label || '').trim() || preset.label === prevAuto) {
+                              updated.label = nextAuto === 'Untitled' ? '' : nextAuto;
+                            }
+                            next[optionIndex] = updated;
+                            handleFilterFieldChange(index, 'rangePresets', next);
+                          }}
+                          className="w-24"
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Max"
+                          value={preset.max ?? ''}
+                          onChange={(e) => {
+                            const max = e.target.value === '' ? undefined : Number(e.target.value);
+                            const next = [...(filter.rangePresets ?? [])];
+                            const updated = { ...preset, max };
+                            const prevAuto = numberRangePresetLabel({ ...preset, label: '' });
+                            const nextAuto = numberRangePresetLabel({ ...updated, label: '' });
+                            if (!String(preset.label || '').trim() || preset.label === prevAuto) {
+                              updated.label = nextAuto === 'Untitled' ? '' : nextAuto;
+                            }
+                            next[optionIndex] = updated;
+                            handleFilterFieldChange(index, 'rangePresets', next);
+                          }}
+                          className="w-24"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const next = (filter.rangePresets ?? []).filter((_, i) => i !== optionIndex);
+                            handleFilterFieldChange(index, 'rangePresets', next.length ? next : undefined);
+                          }}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 )}
 
