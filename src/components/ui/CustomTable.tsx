@@ -233,7 +233,6 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   };
 
   const cellRenderer = renderCell || defaultRenderCell;
-  const colSpan = columns.length + (rowSelection ? 1 : 0);
 
   return (
     <div
@@ -380,14 +379,12 @@ export const CustomTable: React.FC<CustomTableProps> = ({
             {loading ? (
               <tr>
                 <td colSpan={columns.length + selectionColSpan} className="text-center py-8 text-sm text-gray-500">
-                <td colSpan={colSpan} className="text-center py-8 text-sm text-gray-500">
                   Loading...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + selectionColSpan} className="text-center py-8 text-sm text-gray-500">
-                <td colSpan={colSpan} className="text-center py-8 text-sm text-gray-500">
                   {emptyMessage}
                 </td>
               </tr>
@@ -413,15 +410,11 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   onClick={() => onRowClick?.(row)}
                   style={rowStyle}
                   className={cn(
-                    'border-b border-gray-200 bg-white',
-                    comfortable && !fitViewport && 'h-[4.5rem]',
-                    comfortable && fitViewport && 'h-auto',
-                    isRowSelected && 'bg-blue-50/60',
-                    hoverable && onRowClick && 'hover:bg-gray-50 cursor-pointer',
                     'border-b border-gray-200',
                     !isHighlighted && !isRowSelected && 'bg-white',
                     !isHighlighted && isRowSelected && 'bg-blue-50/60',
-                    comfortable && 'h-[4.5rem]',
+                    comfortable && !fitViewport && 'h-[4.5rem]',
+                    comfortable && fitViewport && 'h-auto',
                     hoverable && onRowClick && !isHighlighted && 'hover:bg-gray-50 cursor-pointer',
                     hoverable && onRowClick && isHighlighted && 'cursor-pointer',
                     !isHighlighted && isRowSelected && hoverable && onRowClick && 'hover:bg-blue-50/80',
@@ -436,7 +429,6 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                         cellY,
                         fitViewport ? 'px-1' : cellX
                       )}
-                      className={cn('w-10 min-w-[2.5rem] max-w-[2.5rem] text-center align-middle', cellY, cellX)}
                       style={
                         rowStyle?.backgroundColor
                           ? {
@@ -452,9 +444,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                         checked={isRowSelected}
                         disabled={!canSelectRow}
                         onCheckedChange={(checked) => {
-                          if (rowId == null || !canSelectRow) return;
-                          rowSelection!.onToggleRow(row, checked === true);
-                          if (selectionRowId == null || !canSelectRow) return;
+                          if (selectionRowId == null || !canSelectRow || !rowSelection) return;
                           rowSelection.onToggleRow(row, checked === true);
                         }}
                         aria-label={canSelectRow ? 'Select row' : 'Cannot select row'}
@@ -494,9 +484,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                         fitViewport && (isFixedCol || itemNameCol) && 'overflow-visible',
                         cellY,
                         col.align === 'left' ? `${cellPadLeft} text-left` : `${cellPadOther} text-center`,
-                        col.align === 'right' && `${cellPadOther} text-right`
-                        col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
-                        col.align === 'right' && `${cellX} text-right`,
+                        col.align === 'right' && `${cellPadOther} text-right`,
                         rowStyle?.backgroundColor && '!bg-[#BFDBFE]',
                       )}
                     >
@@ -510,7 +498,7 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                               checked={isRowSelected}
                               disabled={!canSelectRow}
                               onCheckedChange={(checked) => {
-                                if (rowId == null || !canSelectRow || !rowSelection) return;
+                                if (selectionRowId == null || !canSelectRow || !rowSelection) return;
                                 rowSelection.onToggleRow(row, checked === true);
                               }}
                               aria-label={canSelectRow ? 'Select row' : 'Cannot select row'}
