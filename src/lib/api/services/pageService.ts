@@ -48,7 +48,13 @@ export const pageService = {
   async getPagesForRole(
     tenantId: string,
     roleId: string
-  ): Promise<{ id: string; name: string; display_order: number; icon_name: string }[]> {
+  ): Promise<{
+    id: string;
+    name: string;
+    display_order: number;
+    icon_name: string;
+    header_title?: string;
+  }[]> {
     try {
       const response = await apiClient.get(`/pages/`, {
         params: { tenant_id: tenantId, role_id: roleId, role_preview: '1' },
@@ -72,6 +78,7 @@ export const pageService = {
         name: page.name,
         display_order: page.display_order ?? 0,
         icon_name: page.icon_name ?? 'Sparkles',
+        header_title: page.header_title ?? '',
       }));
     } catch (error) {
       console.error('Error fetching pages by role from API:', error);

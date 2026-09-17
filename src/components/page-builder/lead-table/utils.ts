@@ -283,6 +283,12 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
     if (!transformedLead.vendor) {
       transformedLead.vendor = lead.data?.vendor || lead.vendor || null;
     }
+
+    // Always set top-level praja from nested data only — never user_id / CRM id.
+    // filteredData is transformed; open/highlight must not trust a poisoned top-level.
+    const realPraja = lead.data?.praja_id;
+    transformedLead.praja_id =
+      realPraja != null && String(realPraja).trim() !== '' ? realPraja : 'N/A';
     
     return transformedLead;
   }
@@ -292,7 +298,11 @@ export const transformLeadData = (lead: any, config?: LeadTableProps['config']) 
     ...lead,
     lead_stage: lead.data?.lead_stage || lead.data?.lead_status || lead.lead_stage || 'in_queue',
     name: lead.data?.name || 'N/A', // name is now in data column
-    praja_id: lead.data?.praja_id || lead.data?.user_id || lead.id || 'N/A',
+    // Never fall back to user_id or CRM id — those collide with highlight / open-by-praja.
+    praja_id:
+      lead.data?.praja_id != null && String(lead.data.praja_id).trim() !== ''
+        ? lead.data.praja_id
+        : 'N/A',
     affiliated_party: lead.data?.affiliated_party || 'N/A',
     phone_number: lead.data?.phone_number || lead.data?.phone_no || lead.phone || 'N/A',
     whatsapp_link: lead.data?.whatsapp_link || lead.whatsapp_link || '',
