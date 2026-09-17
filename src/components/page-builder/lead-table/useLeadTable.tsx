@@ -98,7 +98,8 @@ function getBulkRowStatus(row: any): string {
 }
 
 const INVENTORY_PRIORITY_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[5rem] min-w-[4.5rem]`;
-const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[9.5rem] min-w-[6.5rem]`;
+const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[8.5rem] min-w-[6rem]`;
+const INVENTORY_SHIPMENT_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[6.25rem] min-w-[5.25rem] max-w-full`;
 
 const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
@@ -112,16 +113,17 @@ function procurementColumnLayout(
 ): { width?: string; minWidth?: string; maxWidth?: string } | undefined {
   const key = String(accessor || '').trim().toLowerCase();
   // Keep chip cols near the chip width so Item Name isn't crushed in table-fixed layout.
-  const chipCol = { width: '10rem', minWidth: '10rem', maxWidth: '10rem' };
+  const chipCol = { width: '8.5rem', minWidth: '8.5rem', maxWidth: '8.5rem' };
   const priorityCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '5.75rem' };
   const dateCol = { width: '5.5rem', minWidth: '5.5rem', maxWidth: '5.5rem' };
   const costCol = { width: '6.25rem', minWidth: '6.25rem', maxWidth: '6.5rem' };
   const vendorCol = { width: '8rem', minWidth: '7.5rem', maxWidth: '9rem' };
   const requesterCol = { width: '7rem', minWidth: '7rem', maxWidth: '8rem' };
-  const linkCol = { width: '4.5rem', minWidth: '4.5rem', maxWidth: '4.5rem' };
+  const shipmentCol = { width: '6.5rem', minWidth: '6.5rem', maxWidth: '6.75rem' };
+  const linkCol = { width: '4rem', minWidth: '4rem', maxWidth: '4.25rem' };
   const editCol = { width: '5.5rem', minWidth: '5.5rem', maxWidth: '5.5rem' };
-  // Flexible column — must keep enough room for "ITEM NAME" header + thumbnail row.
-  const itemNameCol = { minWidth: '14rem' };
+  // Flexible — thumbnail + truncated name (+ checkbox in bulk edit).
+  const itemNameCol = { width: '12rem', minWidth: '11rem', maxWidth: '14rem' };
   const layouts: Record<string, { width?: string; minWidth?: string; maxWidth?: string }> = {
     item_name_freeform: itemNameCol,
     item_name: itemNameCol,
@@ -134,7 +136,7 @@ function procurementColumnLayout(
     urgency_level: priorityCol,
     priority: priorityCol,
     status: chipCol,
-    shipment_status: chipCol,
+    shipment_status: shipmentCol,
     product_link: linkCol,
     additional_link: linkCol,
     link: linkCol,
@@ -348,6 +350,20 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       /[?&]entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(endpoint)
     );
   }, [config?.entityType, config?.apiEndpoint, effectiveApiEndpoint]);
+
+  const inventoryTableKind = useMemo(
+    () =>
+      resolveEffectiveInventoryTableKind({
+        pageDisplayName:
+          inventoryTablePageName ||
+          (config as { pageDisplayName?: string } | undefined)?.pageDisplayName,
+        pageComponentType: (config as { pageComponentType?: string } | undefined)?.pageComponentType,
+        configuredKind: (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind,
+      }),
+    [config, inventoryTablePageName]
+  );
+
+  const isMyRequestPage = inventoryTableKind === 'my_request';
 
   // Helper: for GM users, remove assigned_to only when it came from endpoint/default, not when user explicitly set "Assigned to" filter
   const removeAssignedToForGM = useCallback(
@@ -861,6 +877,35 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
     if (column.accessor === REQUESTER_EDIT_COLUMN_ACCESSOR) {
+      // All Request / ops: never show Edit — open the product URL instead.
+      if (!isMyRequestPage) {
+        const nestedData =
+          row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : null;
+        const rawHref = String(
+          row?.product_link ||
+            nestedData?.product_link ||
+            row?.additional_link ||
+            nestedData?.additional_link ||
+            ''
+        ).trim();
+        const href = rawHref && rawHref !== 'N/A' && rawHref !== '#' ? rawHref : '';
+        if (!href) {
+          return <span className="text-gray-400 text-sm">-</span>;
+        }
+        return (
+          <div className="flex w-full items-center justify-center">
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-[#2563EB] hover:text-[#1D4ED8] transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Link
+            </a>
+          </div>
+        );
+      }
       if (canOpsInlineEditShipment) {
         const isEditing = opsEditingRowId === row.id;
         const isSaving = opsRowSavingId === row.id;
@@ -1133,19 +1178,31 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         config?.entityType === 'unmannd_request';
 
       // Default link rendering
+      if (isTrackingCol || isProcurementLink) {
+        return (
+          <div className="flex w-full items-center justify-center">
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-[#2563EB] hover:text-[#1D4ED8] transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {linkLabel}
+            </a>
+          </div>
+        );
+      }
+
       return (
         <a
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className={
-            isTrackingCol || isProcurementLink
-              ? 'text-sm font-semibold text-[#1A44A1] underline underline-offset-2 hover:text-[#163a8a] transition-colors'
-              : 'inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors'
-          }
+          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
           onClick={(e) => e.stopPropagation()}
         >
-          {isTrackingCol || isProcurementLink ? null : <ExternalLink className="h-4 w-4" />}
+          <ExternalLink className="h-4 w-4" />
           <span className="text-sm">{truncateText(linkLabel, columnIndex)}</span>
         </a>
       );
@@ -1159,7 +1216,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       headerLower === 'item name' ||
       headerLower === 'item';
 
-    // Item name: always use default placeholder thumbnail (no person avatar)
+    // Item name: thumbnail + full name under ITEM NAME header.
     if (isItemNameColumn) {
       const itemName =
         displayValue && displayValue !== 'N/A' ? displayValue : String(row.item_name_freeform || '').trim();
@@ -1171,7 +1228,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           compact
           wrapName
           useDefaultItemImage
-          className="mx-auto w-full min-w-0 max-w-full"
+          className="w-full min-w-0 max-w-full justify-start"
         />
       );
     }
@@ -1272,7 +1329,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           options.unshift(cur as typeof options[number]);
         }
         return (
-          <div className="min-w-[9.5rem]" onClick={(e) => e.stopPropagation()}>
+          <div className="min-w-[6.5rem] max-w-[6.75rem]" onClick={(e) => e.stopPropagation()}>
             <Select
               value={String(current || 'N/A')}
               disabled={opsRowSavingId === row.id}
@@ -1317,11 +1374,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         : String(chipLabel);
       const chipSizeClass = usePriorityTone
         ? INVENTORY_PRIORITY_CHIP_SIZE
-        : useShipmentTone || useInventoryStatusTone
-          ? INVENTORY_STATUS_CHIP_SIZE
-          : 'rounded-[8px] px-3 py-0.5 text-xs font-semibold uppercase tracking-wide border';
+        : useShipmentTone
+          ? INVENTORY_SHIPMENT_CHIP_SIZE
+          : useInventoryStatusTone
+            ? INVENTORY_STATUS_CHIP_SIZE
+            : 'rounded-[8px] px-3 py-0.5 text-xs font-semibold uppercase tracking-wide border';
       return (
-        <div className="flex justify-center">
+        <div className="flex justify-center overflow-hidden px-0.5">
           <Badge
             variant="outline"
             className={`${chipToneClass} ${chipSizeClass} hover:opacity-90`}
@@ -1485,7 +1544,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, isMyRequestPage, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
@@ -1495,19 +1554,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return list;
   }, [config?.tableType, config?.statusButtons]);
 
-  const inventoryTableKind = useMemo(
-    () =>
-      resolveEffectiveInventoryTableKind({
-        pageDisplayName:
-          inventoryTablePageName ||
-          (config as { pageDisplayName?: string } | undefined)?.pageDisplayName,
-        pageComponentType: (config as { pageComponentType?: string } | undefined)?.pageComponentType,
-        configuredKind: (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind,
-      }),
-    [config, inventoryTablePageName]
-  );
-
-  const isMyRequestPage = inventoryTableKind === 'my_request';
   const showRequestStageTabs =
     !isInPageBuilder &&
     isInventoryRequestTable &&
@@ -1517,6 +1563,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [requestStageTab, setRequestStageTabState] = useState<RequestStageTabId>('all');
   const requestStageTabRef = useRef<RequestStageTabId>('all');
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
+  /** Full row snapshots so bulk Save works across stage tabs / pages. */
+  const [selectedBulkRowsById, setSelectedBulkRowsById] = useState<Record<string, any>>(
+    () => ({})
+  );
   const [bulkApplying, setBulkApplying] = useState<string | null>(null);
   const [requestStageCounts, setRequestStageCounts] = useState<
     Record<RequestStageTabId, number>
@@ -1653,80 +1703,56 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const canSelectBulkRow = useCallback(
     (row: any) => {
       if (!bulkSelectionEnabled) return false;
-      if (normalizeBulkRowId(row?.id) == null) return false;
-      if (bulkSelectionStatus == null) return true;
-      return getBulkRowStatus(row) === bulkSelectionStatus;
+      return normalizeBulkRowId(row?.id) != null;
     },
-    [bulkSelectionEnabled, bulkSelectionStatus]
+    [bulkSelectionEnabled]
   );
 
-  const toggleBulkRowSelection = useCallback(
-    (row: any, selected: boolean) => {
-      const rowId = normalizeBulkRowId(row?.id);
-      if (rowId == null) return;
+  const toggleBulkRowSelection = useCallback((row: any, selected: boolean) => {
+    const rowId = normalizeBulkRowId(row?.id);
+    if (rowId == null) return;
 
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(rowId);
+      else next.delete(rowId);
+      return next;
+    });
+    setSelectedBulkRowsById((prev) => {
       if (!selected) {
-        setSelectedRowIds((prev) => {
-          const next = new Set(prev);
-          next.delete(rowId);
-          return next;
-        });
-        return;
-      }
-
-      const rowStatus = getBulkRowStatus(row);
-      setSelectedRowIds((prev) => {
-        if (prev.size > 0) {
-          let anchorStatus: string | null = null;
-          for (const existing of stageFilteredData) {
-            const existingId = normalizeBulkRowId(existing?.id);
-            if (existingId != null && prev.has(existingId)) {
-              anchorStatus = getBulkRowStatus(existing);
-              break;
-            }
-          }
-          if (anchorStatus != null && rowStatus !== anchorStatus) {
-            toast({
-              title: 'Different status',
-              description: 'Bulk select only works for requests with the same status as the first selected row.',
-              variant: 'destructive',
-            });
-            return prev;
-          }
-        }
-        const next = new Set(prev);
-        next.add(rowId);
+        if (!(rowId in prev)) return prev;
+        const next = { ...prev };
+        delete next[rowId];
         return next;
-      });
-    },
-    [stageFilteredData, toast]
-  );
+      }
+      return { ...prev, [rowId]: row };
+    });
+  }, []);
 
   const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
   const [bulkStatusPickerOptions, setBulkStatusPickerOptions] = useState<
     Array<{ status: string; count: number }>
   >([]);
 
-  const getPageStatusCounts = useCallback(() => {
-    const counts = new Map<string, number>();
-    for (const row of stageFilteredData) {
-      if (normalizeBulkRowId(row?.id) == null) continue;
-      const status = getBulkRowStatus(row);
-      if (!status) continue;
-      counts.set(status, (counts.get(status) || 0) + 1);
-    }
-    return Array.from(counts.entries())
-      .map(([status, count]) => ({ status, count }))
-      .sort((a, b) => a.status.localeCompare(b.status));
-  }, [stageFilteredData]);
-
   const selectBulkRowsByStatus = useCallback(
     (status: string) => {
-      const matchingIds = stageFilteredData
-        .filter((row) => getBulkRowStatus(row) === status)
-        .map((row) => normalizeBulkRowId(row?.id))
-        .filter((id): id is string => id != null);
-      setSelectedRowIds(new Set(matchingIds));
+      const matchingRows = stageFilteredData.filter((row) => getBulkRowStatus(row) === status);
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        for (const row of matchingRows) {
+          const id = normalizeBulkRowId(row?.id);
+          if (id != null) next.add(id);
+        }
+        return next;
+      });
+      setSelectedBulkRowsById((prev) => {
+        const next = { ...prev };
+        for (const row of matchingRows) {
+          const id = normalizeBulkRowId(row?.id);
+          if (id != null) next[id] = row;
+        }
+        return next;
+      });
       setBulkStatusPickerOpen(false);
       setBulkStatusPickerOptions([]);
     },
@@ -1734,59 +1760,82 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   );
 
   const toggleBulkSelectAll = useCallback(() => {
-    // If a status is already locked by current selection, toggle that group only.
-    if (selectedRowIds.size > 0) {
-      let anchorStatus: string | null = null;
-      for (const row of stageFilteredData) {
-        const rowId = normalizeBulkRowId(row?.id);
-        if (rowId != null && selectedRowIds.has(rowId)) {
-          anchorStatus = getBulkRowStatus(row);
-          break;
-        }
+    const visibleRows = stageFilteredData
+      .map((row) => {
+        const id = normalizeBulkRowId(row?.id);
+        return id != null ? { id, row } : null;
+      })
+      .filter((entry): entry is { id: string; row: any } => entry != null);
+    if (visibleRows.length === 0) return;
+
+    const allVisibleSelected = visibleRows.every(({ id }) => selectedRowIds.has(id));
+
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const { id } of visibleRows) next.delete(id);
+      } else {
+        for (const { id } of visibleRows) next.add(id);
       }
-      if (anchorStatus) {
-        const matchingIds = stageFilteredData
-          .filter((row) => getBulkRowStatus(row) === anchorStatus)
-          .map((row) => normalizeBulkRowId(row?.id))
-          .filter((id): id is string => id != null);
-        const allMatchingSelected =
-          matchingIds.length > 0 && matchingIds.every((id) => selectedRowIds.has(id));
-        setSelectedRowIds(allMatchingSelected ? new Set() : new Set(matchingIds));
-        return;
+      return next;
+    });
+    setSelectedBulkRowsById((prev) => {
+      const next = { ...prev };
+      if (allVisibleSelected) {
+        for (const { id } of visibleRows) delete next[id];
+      } else {
+        for (const { id, row } of visibleRows) next[id] = row;
       }
-    }
-
-    const statusOptions = getPageStatusCounts();
-    if (statusOptions.length === 0) return;
-
-    if (statusOptions.length === 1) {
-      selectBulkRowsByStatus(statusOptions[0].status);
-      return;
-    }
-
-    // Mixed statuses on this page — ask which status to select.
-    setBulkStatusPickerOptions(statusOptions);
-    setBulkStatusPickerOpen(true);
-  }, [stageFilteredData, getPageStatusCounts, selectBulkRowsByStatus, selectedRowIds]);
+      return next;
+    });
+    setBulkStatusPickerOpen(false);
+    setBulkStatusPickerOptions([]);
+  }, [stageFilteredData, selectedRowIds]);
 
   const clearBulkSelection = useCallback(() => {
     setSelectedRowIds(new Set());
+    setSelectedBulkRowsById({});
     setBulkStatusPickerOpen(false);
     setBulkStatusPickerOptions([]);
   }, []);
 
+  // Only reset selection when the underlying table API changes — keep picks across
+  // stage tabs (All / Pending / Cart / …) and pagination.
   useEffect(() => {
     setSelectedRowIds(new Set());
+    setSelectedBulkRowsById({});
     setBulkStatusPickerOpen(false);
     setBulkStatusPickerOptions([]);
-  }, [pagination.currentPage, effectiveApiEndpoint, requestStageTab]);
+  }, [effectiveApiEndpoint]);
+
+  // Keep cached bulk rows fresh when the current page includes them.
+  useEffect(() => {
+    if (selectedRowIds.size === 0) return;
+    setSelectedBulkRowsById((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const row of stageFilteredData) {
+        const id = normalizeBulkRowId(row?.id);
+        if (id == null || !selectedRowIds.has(id)) continue;
+        if (next[id] !== row) {
+          next[id] = row;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [stageFilteredData, selectedRowIds]);
 
   const rowSupportsBulkAction = useCallback(
     (row: any, button: { statusValue: string; targetAttribute?: string }) => {
       const key = bulkActionButtonKey(button);
       const workflowMatch = getRowWorkflowButtons(row).some((btn) => bulkActionButtonKey(btn) === key);
       if (workflowMatch) return true;
-      return effectiveStatusButtons.some((btn) => bulkActionButtonKey(btn) === key);
+      if (effectiveStatusButtons.some((btn) => bulkActionButtonKey(btn) === key)) return true;
+      // All Request bulk edit: allow status / shipment_status updates for ops tables
+      // even when the page has no configured statusButtons.
+      const attr = ((button.targetAttribute || 'status').trim() || 'status');
+      return attr === 'status' || attr === 'shipment_status';
     },
     [effectiveStatusButtons, getRowWorkflowButtons]
   );
@@ -1802,11 +1851,39 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
     const perRowButtons = selectedRows.map((row) => getRowWorkflowButtons(row));
     const configured = filterDuplicateInventoryWorkflowButtons(effectiveStatusButtons);
-    const candidateButtons = mergeBulkActionButtons([...perRowButtons, configured]);
 
-    return candidateButtons.filter((btn) =>
+    // Fallback catalog so Bulk Edit still works when page config has no statusButtons
+    // and the current user gets few/no per-row workflow actions.
+    const fallbackStatusButtons: Array<{
+      label: string;
+      statusValue: string;
+      targetAttribute?: string;
+      statusText?: string;
+    }> = [
+      { label: 'New request', statusValue: 'NEW_REQUEST', targetAttribute: 'status' },
+      { label: 'On hold', statusValue: 'ON_HOLD', targetAttribute: 'status' },
+      { label: 'Vendor identified', statusValue: 'VENDOR_IDENTIFIED', targetAttribute: 'status' },
+      { label: 'In cart', statusValue: 'IN_CART', targetAttribute: 'status' },
+      { label: 'In shipping', statusValue: 'IN_SHIPPING', targetAttribute: 'status' },
+      { label: 'Rejected', statusValue: 'REJECTED', targetAttribute: 'status' },
+      { label: 'N/A', statusValue: 'N/A', targetAttribute: 'shipment_status' },
+      { label: 'In transit', statusValue: 'IN_TRANSIT', targetAttribute: 'shipment_status' },
+      { label: 'Out for delivery', statusValue: 'OUT_FOR_DELIVERY', targetAttribute: 'shipment_status' },
+      { label: 'Delivered', statusValue: 'DELIVERED', targetAttribute: 'shipment_status' },
+    ];
+
+    const candidateButtons = mergeBulkActionButtons([
+      ...perRowButtons,
+      configured,
+      fallbackStatusButtons,
+    ]);
+
+    // Prefer workflow/config matches; if none, still allow the fallback catalog.
+    const eligible = candidateButtons.filter((btn) =>
       selectedRows.some((row) => rowSupportsBulkAction(row, btn))
     );
+    if (eligible.length > 0) return eligible;
+    return candidateButtons;
   }, [
     bulkSelectionEnabled,
     effectiveStatusButtons,
@@ -1858,10 +1935,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }) => {
       if (!bulkSelectionEnabled || selectedRowIds.size === 0) return;
       const applyingKey = bulkActionButtonKey(button);
-      const selectedRows = stageFilteredData.filter((row) => {
-        const rowId = normalizeBulkRowId(row?.id);
-        return rowId != null && selectedRowIds.has(rowId);
-      });
+      // Prefer cached rows so selections from other stage tabs / pages still apply.
+      const selectedRows = Array.from(selectedRowIds)
+        .map((id) => {
+          const cached = selectedBulkRowsById[id];
+          if (cached) return cached;
+          return stageFilteredData.find((row) => normalizeBulkRowId(row?.id) === id);
+        })
+        .filter((row): row is any => row != null);
       const eligibleRows = selectedRows.filter((row) => rowSupportsBulkAction(row, button));
       const skippedCount = selectedRows.length - eligibleRows.length;
 
@@ -1944,6 +2025,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           description: `${successCount} request${successCount === 1 ? '' : 's'} updated with "${actionLabel}".`,
         });
         setSelectedRowIds(new Set());
+        setSelectedBulkRowsById({});
       } else if (successCount > 0) {
         const parts: string[] = [`${successCount} updated with "${actionLabel}"`];
         if (failCount > 0) parts.push(`${failCount} failed`);
@@ -1953,7 +2035,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           description: `${parts.join(', ')}.`,
           variant: failCount > 0 ? 'destructive' : undefined,
         });
-        if (failCount === 0) setSelectedRowIds(new Set());
+        if (failCount === 0) {
+          setSelectedRowIds(new Set());
+          setSelectedBulkRowsById({});
+        }
       } else {
         toast({
           title: 'Update failed',
@@ -1978,6 +2063,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       bulkSelectionEnabled,
       config,
       stageFilteredData,
+      selectedBulkRowsById,
       patchInventoryRowStatus,
       rowSupportsBulkAction,
       selectedRowIds,
@@ -2001,18 +2087,25 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       : config?.columns;
     const mapped = (configuredColumns ?? [])
       .filter((col) => {
-        const key = String(col.key || '').trim();
+        const key = String(col.key || '').trim().toLowerCase();
+        const label = String(col.label || '').trim().toLowerCase();
+        // Hide ETA / requirement date from inventory request tables.
+        if (
+          isInventoryRequestTable &&
+          (key === 'eta' ||
+            key === 'required_date' ||
+            key === 'requirement_date' ||
+            label === 'eta')
+        ) {
+          return false;
+        }
         return key !== 'tracking_details' && key !== 'tracking_number' && key !== 'courier_name';
       })
       .map(col => {
         const key = String(col.key || '').trim();
-        const isRequirementDate = key === 'required_date' || key === 'requirement_date';
-        const resolvedKey = isRequirementDate ? 'eta' : key;
+        const resolvedKey = key;
         return {
-      header:
-        resolvedKey === 'eta'
-          ? 'ETA'
-          : col.label,
+      header: col.label,
       accessor: resolvedKey,
       type: (col.type === 'chip'
         ? 'chip'
@@ -2065,46 +2158,70 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             ...procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR),
           });
         }
-      } else {
-        // Drop any Edit columns that may exist in saved page config.
-        for (let i = base.length - 1; i >= 0; i -= 1) {
-          const accessor = String(base[i].accessor || '').trim().toLowerCase();
-          const header = String(base[i].header || '').trim().toLowerCase();
-          if (
-            accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
-            accessor === 'edit' ||
-            header === 'edit'
-          ) {
-            base.splice(i, 1);
-          }
-        }
-
-        const hasProductLink = base.some((col) => {
-          const accessor = String(col.accessor || '').trim().toLowerCase();
-          return accessor === 'product_link' || accessor === 'additional_link';
-        });
-        if (!hasProductLink) {
-          base.push({
-            header: 'Link',
-            accessor: 'product_link',
-            type: 'link',
-            linkField: 'product_link',
-            align: 'center',
-            ...procurementColumnLayout('product_link'),
-          });
         } else {
-          // Normalize label to "Link" to match All Request mock.
+          // Drop any Edit columns that may exist in saved page config.
+          for (let i = base.length - 1; i >= 0; i -= 1) {
+            const accessor = String(base[i].accessor || '').trim().toLowerCase();
+            const header = String(base[i].header || '').trim().toLowerCase();
+            if (
+              accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
+              accessor === 'edit' ||
+              accessor === '__edit' ||
+              accessor === 'actions' ||
+              header === 'edit'
+            ) {
+              base.splice(i, 1);
+            }
+          }
+
+          // Normalize requester column label to single-word "Requestor".
           for (const col of base) {
             const accessor = String(col.accessor || '').trim().toLowerCase();
-            if (accessor === 'product_link' || accessor === 'additional_link') {
-              col.header = 'Link';
-              col.type = 'link';
-              col.linkField = col.linkField || accessor;
-              Object.assign(col, procurementColumnLayout(accessor));
+            const header = String(col.header || '').trim().toLowerCase();
+            if (
+              accessor === 'requester_name' ||
+              accessor === 'requested_by' ||
+              header === 'requested by' ||
+              header === 'requester' ||
+              header === 'requester name' ||
+              header === 'requestor name'
+            ) {
+              col.header = 'Requestor';
+            }
+          }
+
+          const hasProductLink = base.some((col) => {
+            const accessor = String(col.accessor || '').trim().toLowerCase();
+            return accessor === 'product_link' || accessor === 'additional_link' || accessor === 'link';
+          });
+          if (!hasProductLink) {
+            base.push({
+              header: 'Link',
+              accessor: 'product_link',
+              type: 'link',
+              linkField: 'product_link',
+              align: 'center',
+              ...procurementColumnLayout('product_link'),
+            });
+          } else {
+            // Normalize label to "Link" to match All Request mock.
+            for (const col of base) {
+              const accessor = String(col.accessor || '').trim().toLowerCase();
+              if (
+                accessor === 'product_link' ||
+                accessor === 'additional_link' ||
+                accessor === 'link'
+              ) {
+                col.header = 'Link';
+                col.type = 'link';
+                col.align = 'center';
+                col.accessor = accessor === 'link' ? 'product_link' : col.accessor;
+                col.linkField = col.linkField || (accessor === 'link' ? 'product_link' : accessor);
+                Object.assign(col, procurementColumnLayout('product_link'));
+              }
             }
           }
         }
-      }
     }
     return base;
   }, [config?.columns, config?.tableType, effectiveStatusButtons, inventoryTableKind, isInPageBuilder, isInventoryRequestTable, isMyRequestPage]);
