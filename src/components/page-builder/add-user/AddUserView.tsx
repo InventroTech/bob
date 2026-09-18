@@ -18,6 +18,7 @@ import {
   type UserManagementColumn,
   type UserManagementCustomField,
 } from './userManagementConfig';
+import { cn } from '@/lib/utils';
 
 /** Tenant slug that gets the branded Settings / User Management layout. */
 const TENANT_SLUG = 'unmannd';
@@ -161,7 +162,6 @@ export function AddUserView(props: AddUserModel) {
     userSearchTerm,
     setUserSearchTerm,
     filteredUsersWithSettings,
-    usersEmptyReason,
     handleDownloadUsersPdf,
     handleChange,
     handleAddRole,
@@ -795,17 +795,48 @@ export function AddUserView(props: AddUserModel) {
   };
 
   return (
-    <div className="w-full space-y-6">
-      <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <div className="flex items-center gap-2">
-          <UserPlus className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">User Management</h3>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-5 rounded-lg border p-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+    <div className={cn('w-full space-y-6', isUnmannd && 'pb-6')}>
+      <Card
+        className={cn(
+          'w-full',
+          isUnmannd && 'border-0 bg-transparent shadow-none'
+        )}
+      >
+      {!isUnmannd ? (
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div className="flex items-center gap-2.5">
+            <UserPlus className="h-5 w-5 shrink-0 text-foreground" />
+            <h3 className="text-lg font-semibold">User Management</h3>
+          </div>
+        </CardHeader>
+      ) : null}
+      <CardContent className={cn('space-y-6', isUnmannd && 'p-0')}>
+        <div
+          className={cn(
+            'space-y-5 rounded-lg border p-5',
+            isUnmannd && 'rounded-[10px] border border-[#D5DEE8] bg-white p-5 shadow-none'
+          )}
+        >
+          {isUnmannd ? (
+            <div className="flex items-center gap-2.5">
+              <UserPlus
+                className="h-5 w-5 shrink-0 text-black"
+                strokeWidth={2.5}
+              />
+              <h3
+                className="text-[18px] font-bold leading-none tracking-tight text-black"
+                style={{ fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }}
+              >
+                User Management
+              </h3>
+            </div>
+          ) : null}
+          <div
+            className={cn(
+              'grid grid-cols-1 gap-5',
+              isUnmannd ? 'md:grid-cols-2' : 'md:grid-cols-3'
+            )}
+          >
             {showField('name') && (
               <div className="space-y-2">
                 <Label
@@ -1395,21 +1426,8 @@ export function AddUserView(props: AddUserModel) {
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
             </div>
-          ) : usersEmptyReason === 'none_loaded' ? (
-            <div className="text-center text-muted-foreground py-8">
-              No users found. Check that you are signed in and the membership API is reachable.
-            </div>
-          ) : usersEmptyReason === 'search' ? (
-            <div className="text-center text-muted-foreground py-8">
-              No users match your search.
-            </div>
-          ) : usersEmptyReason === 'under_me' ? (
-            <div className="text-center text-muted-foreground py-8">
-              No users report to you yet. Set each user&apos;s manager (parent) in hierarchy, or
-              change this page&apos;s User Management scope to &quot;All users&quot;.
-            </div>
-          ) : usersEmptyReason === 'filtered' ? (
-            <div className="text-center text-muted-foreground py-8">No users to show.</div>
+          ) : filteredUsersWithSettings.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No users found</div>
           ) : (
 
             <>
