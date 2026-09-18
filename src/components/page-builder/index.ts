@@ -52,3 +52,5 @@ export { InventoryRequestFormComponent } from './inventory-request-form';
 export { ProcurementRequestFormComponent } from './ProcurementRequestFormComponent';
 export { DispatchCardListComponent } from './DispatchCardListComponent';
 export { DispatchDashboardComponent } from './DispatchDashboardComponent';
+export { ZohoMailComponent } from './ZohoMailComponent';
+export { ZohoMailConfig } from './component-config/ZohoMailConfig';

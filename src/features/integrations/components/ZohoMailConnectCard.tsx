@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Link2, Loader2, Mail, RefreshCw, Unplug } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +36,7 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 export function ZohoMailConnectCard() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<ZohoMailStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -58,6 +60,30 @@ export function ZohoMailConnectCard() {
     void loadStatus();
   }, [loadStatus]);
 
+  // Zoho OAuth return lands on this page with ?zoho_mail=ok|error
+  useEffect(() => {
+    const result = searchParams.get('zoho_mail');
+    if (!result) return;
+
+    const email = searchParams.get('email') || '';
+    const detail = searchParams.get('detail') || '';
+
+    if (result === 'ok') {
+      toast.success(
+        email ? `Zoho Mail connected (${email})` : 'Zoho Mail connected successfully'
+      );
+      void loadStatus();
+    } else {
+      toast.error(detail || 'Zoho Mail connect failed');
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('zoho_mail');
+    next.delete('email');
+    next.delete('detail');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, loadStatus]);
+
   const handleConnect = async () => {
     setConnecting(true);
     try {
@@ -66,7 +92,7 @@ export function ZohoMailConnectCard() {
         toast.error('Zoho authorize URL missing. Check backend ZOHO_* env vars.');
         return;
       }
-      // Return to this Settings/User Management page after Zoho consent.
+      // Return to the page that hosts this widget after Zoho consent.
       try {
         sessionStorage.setItem(
           'zoho_oauth_return',

@@ -4,8 +4,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 const ZOHO_OAUTH_RETURN_KEY = 'zoho_oauth_return';
 
 /**
- * OAuth landing. Prefer returning to the tenant Settings page (User Management)
- * that started Connect; fall back to /add-user.
+ * OAuth landing. Prefer returning to the tenant page that started Connect
+ * (the opt-in Zoho Mail widget); fall back to /add-user.
  */
 const IntegrationsSettingsPage = () => {
   const navigate = useNavigate();
