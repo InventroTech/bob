@@ -31,6 +31,18 @@ const DOWNLOAD_PDF_BTN =
 const FORM_INPUT =
   'h-11 rounded-[6px] border-gray-200 bg-white shadow-sm focus-visible:ring-[#1B6FE8]';
 
+/** Tenant slug that gets the branded Settings / User Management layout. */
+const TENANT_SLUG = 'unmannd';
+
+const PRIMARY_BTN =
+  'h-11 flex-1 rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-4 text-white shadow-[0_4px_12px_rgba(8,71,184,0.35)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white disabled:bg-gray-400 disabled:opacity-100';
+const SECONDARY_BTN =
+  'h-11 flex-1 rounded-[6px] border border-[#D5DEE8] bg-[#EDF2FA] text-[#333C4E] hover:bg-[#E2EAF5] hover:text-[#333C4E]';
+const DOWNLOAD_PDF_BTN =
+  'h-11 shrink-0 inline-flex items-center justify-center gap-2 rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-5 text-sm font-medium leading-none text-white shadow-[0_2px_8px_rgba(8,71,184,0.3)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white';
+const FORM_INPUT =
+  'h-11 rounded-[6px] border-gray-200 bg-white shadow-sm focus-visible:ring-[#1B6FE8]';
+
 function SupportDailyDualDisplay({
   selfTrial,
   other,
