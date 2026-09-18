@@ -61,6 +61,11 @@ export interface CustomTableProps {
     getRowId?: (row: any) => string | number | null | undefined;
     /** When false, the row checkbox is disabled (e.g. different status than first selected). */
     canSelectRow?: (row: any) => boolean;
+    /**
+     * When set (e.g. item_name), place the checkbox beside that column
+     * instead of a separate leading column.
+     */
+    placeBesideAccessor?: string;
   };
 }
 
@@ -71,6 +76,17 @@ export interface CustomTableProps {
 function isItemNameAccessor(accessor: string): boolean {
   const key = String(accessor || '').trim().toLowerCase();
   return key === 'item_name' || key === 'item_name_freeform';
+}
+
+/** Shipment + Link sit side-by-side — keep horizontal padding minimal. */
+function isTightPairAccessor(accessor: string): boolean {
+  const key = String(accessor || '').trim().toLowerCase();
+  return (
+    key === 'shipment_status' ||
+    key === 'product_link' ||
+    key === 'additional_link' ||
+    key === 'link'
+  );
 }
 
 function renderStackedHeader(
@@ -96,7 +112,12 @@ function renderStackedHeader(
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length <= 1) return text;
   return (
-    <span className="inline-flex flex-col items-center justify-center gap-0.5 leading-tight">
+    <span
+      className={cn(
+        'inline-flex flex-col justify-center gap-0.5 leading-tight',
+        align === 'left' ? 'items-start' : align === 'right' ? 'items-end' : 'items-center'
+      )}
+    >
       {words.map((word, i) => (
         <span key={`${word}-${i}`}>{word}</span>
       ))}
@@ -134,6 +155,21 @@ export const CustomTable: React.FC<CustomTableProps> = ({
     if (id == null || id === '') return null;
     return String(id);
   };
+  const selectionBesideKey = String(rowSelection?.placeBesideAccessor || '')
+    .trim()
+    .toLowerCase();
+  const embedSelectionBesideColumn = Boolean(rowSelection && selectionBesideKey);
+  const showLeadingSelectionColumn = Boolean(rowSelection) && !embedSelectionBesideColumn;
+  const isSelectionBesideAccessor = (accessor: string) => {
+    if (!embedSelectionBesideColumn) return false;
+    const key = String(accessor || '').trim().toLowerCase();
+    if (key === selectionBesideKey) return true;
+    // Item name column can be item_name or item_name_freeform depending on page config.
+    const besideIsItemName =
+      selectionBesideKey === 'item_name' || selectionBesideKey === 'item_name_freeform';
+    return besideIsItemName && (key === 'item_name' || key === 'item_name_freeform');
+  };
+
   const selectableRows = rowSelection
     ? data.filter((row) => (rowSelection.canSelectRow ? rowSelection.canSelectRow(row) : true))
     : [];
@@ -149,11 +185,19 @@ export const CustomTable: React.FC<CustomTableProps> = ({
     visibleSelectableIds.some((id) => rowSelection.selectedRowIds.has(id)) &&
     !allVisibleSelected;
 
-  const cellY = comfortable ? (fitViewport ? 'py-3' : 'py-4') : dense ? 'py-1' : 'py-2';
-  const cellX = comfortable ? (fitViewport ? 'px-2.5' : 'px-3') : dense ? 'px-2.5' : 'px-4';
+  const selectionColSpan = showLeadingSelectionColumn ? 1 : 0;
+
+  const cellY = comfortable
+    ? fitViewport
+      ? 'py-1.5'
+      : 'py-4'
+    : dense
+      ? 'py-1'
+      : 'py-2';
+  const cellX = comfortable ? (fitViewport ? 'px-1.5' : 'px-3') : dense ? 'px-2.5' : 'px-4';
   const leftCellX = comfortable
     ? fitViewport
-      ? 'pl-2.5 pr-2.5'
+      ? 'pl-1.5 pr-1'
       : 'pl-3 pr-3'
     : dense
       ? 'pl-2 pr-2.5'
@@ -189,7 +233,6 @@ export const CustomTable: React.FC<CustomTableProps> = ({
   };
 
   const cellRenderer = renderCell || defaultRenderCell;
-  const colSpan = columns.length + (rowSelection ? 1 : 0);
 
   return (
     <div
@@ -202,48 +245,56 @@ export const CustomTable: React.FC<CustomTableProps> = ({
       <div
         className={cn(
           'w-full max-w-full min-w-0',
-          fitViewport ? 'overflow-x-hidden' : 'overflow-x-auto',
-          fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-hidden'
+          // Allow horizontal scroll when columns exceed the viewport; keep vertical scroll for tall tables.
+          'overflow-x-auto',
+          fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-visible'
         )}
       >
         <table
           className={cn(
-            fitViewport ? 'table-fixed w-full' : 'min-w-max w-full',
+            fitViewport ? 'w-full min-w-[72rem] table-fixed' : 'min-w-max w-full',
             'bg-white',
             tableClassName
           )}
         >
           {fitViewport ? (
             <colgroup>
-              {rowSelection ? (
+              {showLeadingSelectionColumn ? (
                 <col style={{ width: '2.5rem', minWidth: '2.5rem', maxWidth: '2.5rem' }} />
               ) : null}
-              {columns.map((col, idx) => (
-                <col
-                  key={idx}
-                  style={{
-                    width: col.width,
-                    minWidth: col.minWidth,
-                    maxWidth: col.maxWidth,
-                  }}
-                />
-              ))}
+              {columns.map((col, idx) => {
+                const beside = isSelectionBesideAccessor(col.accessor);
+                const minW = beside
+                  ? col.minWidth || '11rem'
+                  : col.minWidth;
+                const width = beside ? col.width || '12rem' : col.width;
+                return (
+                  <col
+                    key={idx}
+                    style={{
+                      width,
+                      minWidth: minW,
+                      maxWidth: col.maxWidth,
+                    }}
+                  />
+                );
+              })}
             </colgroup>
           ) : null}
           <thead className={fillHeight ? 'sticky top-0 z-10' : undefined}>
             <tr className={cn('border-b border-gray-200', headerBgColor, headerTextColor)}>
-              {rowSelection ? (
+              {showLeadingSelectionColumn ? (
                 <th
                   className={cn(
-                    'w-10 min-w-[2.5rem] max-w-[2.5rem] text-sm font-medium',
-                    comfortable ? 'py-3' : cellY,
-                    `${cellX} text-center`
+                    'w-8 min-w-[2rem] max-w-[2rem] text-sm font-medium',
+                    comfortable ? (fitViewport ? 'py-2' : 'py-3') : cellY,
+                    fitViewport ? 'px-1 text-center' : `${cellX} text-center`
                   )}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Checkbox
                     checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
-                    onCheckedChange={() => rowSelection.onToggleAll()}
+                    onCheckedChange={() => rowSelection!.onToggleAll()}
                     aria-label="Select all rows on this page"
                     className="border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0E3777]"
                   />
@@ -251,35 +302,73 @@ export const CustomTable: React.FC<CustomTableProps> = ({
               ) : null}
               {columns.map((col, idx) => {
                 const itemNameCol = isItemNameAccessor(col.accessor);
+                const selectionBeside = isSelectionBesideAccessor(col.accessor);
+                const tightPairCol = isTightPairAccessor(col.accessor);
+                const isFixedCol = Boolean(col.width || col.maxWidth);
+                // Keep "ITEM NAME" on one line so the header isn't clipped to "ITEM".
                 const headerSingleLine = fitViewport && itemNameCol;
+                const tightPad = fitViewport && tightPairCol ? 'px-0.5' : null;
                 const headerPadLeft =
-                  fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
+                  fitViewport && itemNameCol
+                    ? 'pl-2 pr-2'
+                    : tightPad ?? leftCellX;
+                const headerPadCenter = tightPad ?? cellX;
                 return (
                 <th
                   key={idx}
                   className={cn(
                     'text-sm font-medium',
-                    fitViewport && 'overflow-hidden',
+                    fitViewport && !itemNameCol && !isFixedCol && 'overflow-hidden',
+                    itemNameCol && fitViewport && 'min-w-[9rem] overflow-visible',
+                    isFixedCol && fitViewport && 'overflow-visible',
                     headerSingleLine && 'whitespace-nowrap',
                     headerUppercase && 'uppercase tracking-wide font-semibold',
-                    comfortable ? 'py-3' : cellY,
+                    comfortable ? (fitViewport ? 'py-2' : 'py-3') : cellY,
                     col.align === 'left'
                       ? `${headerPadLeft} text-left`
                       : col.align === 'right'
-                        ? `${cellX} text-right`
-                        : `${cellX} text-center`,
+                        ? `${headerPadCenter} text-right`
+                        : `${headerPadCenter} text-center`,
                     col.width && `w-[${col.width}]`
                   )}
                   style={
-                    col.width || col.minWidth || col.maxWidth
-                      ? { width: col.width, minWidth: col.minWidth, maxWidth: col.maxWidth }
+                    col.width || col.minWidth || col.maxWidth || selectionBeside
+                      ? {
+                          width: selectionBeside ? col.width || '12rem' : col.width,
+                          minWidth: selectionBeside ? col.minWidth || '11rem' : col.minWidth,
+                          maxWidth: col.maxWidth,
+                        }
                       : undefined
                   }
                 >
-                  {renderStackedHeader(
-                    col.header,
-                    col.align === 'left' || col.align === 'right' ? col.align : 'center',
-                    headerSingleLine
+                  {selectionBeside ? (
+                    <div className="flex items-center gap-2">
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={
+                            allVisibleSelected
+                              ? true
+                              : someVisibleSelected
+                                ? 'indeterminate'
+                                : false
+                          }
+                          onCheckedChange={() => rowSelection!.onToggleAll()}
+                          aria-label="Select all rows on this page"
+                          className="border-white data-[state=checked]:bg-white data-[state=checked]:text-[#0E3777]"
+                        />
+                      </span>
+                      {renderStackedHeader(
+                        col.header,
+                        col.align === 'left' || col.align === 'right' ? col.align : 'center',
+                        headerSingleLine
+                      )}
+                    </div>
+                  ) : (
+                    renderStackedHeader(
+                      col.header,
+                      col.align === 'left' || col.align === 'right' ? col.align : 'center',
+                      headerSingleLine
+                    )
                   )}
                 </th>
                 );
@@ -289,13 +378,13 @@ export const CustomTable: React.FC<CustomTableProps> = ({
           <tbody className="text-gray-600 text-sm bg-white">
             {loading ? (
               <tr>
-                <td colSpan={colSpan} className="text-center py-8 text-sm text-gray-500">
+                <td colSpan={columns.length + selectionColSpan} className="text-center py-8 text-sm text-gray-500">
                   Loading...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} className="text-center py-8 text-sm text-gray-500">
+                <td colSpan={columns.length + selectionColSpan} className="text-center py-8 text-sm text-gray-500">
                   {emptyMessage}
                 </td>
               </tr>
@@ -324,7 +413,8 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     'border-b border-gray-200',
                     !isHighlighted && !isRowSelected && 'bg-white',
                     !isHighlighted && isRowSelected && 'bg-blue-50/60',
-                    comfortable && 'h-[4.5rem]',
+                    comfortable && !fitViewport && 'h-[4.5rem]',
+                    comfortable && fitViewport && 'h-auto',
                     hoverable && onRowClick && !isHighlighted && 'hover:bg-gray-50 cursor-pointer',
                     hoverable && onRowClick && isHighlighted && 'cursor-pointer',
                     !isHighlighted && isRowSelected && hoverable && onRowClick && 'hover:bg-blue-50/80',
@@ -332,9 +422,13 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                     rowClassName,
                   )}
                 >
-                  {rowSelection ? (
+                  {showLeadingSelectionColumn ? (
                     <td
-                      className={cn('w-10 min-w-[2.5rem] max-w-[2.5rem] text-center align-middle', cellY, cellX)}
+                      className={cn(
+                        'w-8 min-w-[2rem] max-w-[2rem] text-center align-middle',
+                        cellY,
+                        fitViewport ? 'px-1' : cellX
+                      )}
                       style={
                         rowStyle?.backgroundColor
                           ? {
@@ -350,26 +444,25 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                         checked={isRowSelected}
                         disabled={!canSelectRow}
                         onCheckedChange={(checked) => {
-                          if (selectionRowId == null || !canSelectRow) return;
+                          if (selectionRowId == null || !canSelectRow || !rowSelection) return;
                           rowSelection.onToggleRow(row, checked === true);
                         }}
-                        aria-label={
-                          canSelectRow
-                            ? 'Select row'
-                            : 'Cannot select — status differs from the first selected request'
-                        }
-                        title={
-                          canSelectRow
-                            ? undefined
-                            : 'Select only requests with the same status as the first selected row'
-                        }
+                        aria-label={canSelectRow ? 'Select row' : 'Cannot select row'}
+                        title={canSelectRow ? undefined : 'Cannot select this row'}
                       />
                     </td>
                   ) : null}
                   {columns.map((col, colIdx) => {
                     const itemNameCol = isItemNameAccessor(col.accessor);
+                    const selectionBeside = isSelectionBesideAccessor(col.accessor);
+                    const tightPairCol = isTightPairAccessor(col.accessor);
+                    const isFixedCol = Boolean(col.width || col.maxWidth);
+                    const tightPad = fitViewport && tightPairCol ? 'px-0.5' : null;
                     const cellPadLeft =
-                      fitViewport && itemNameCol && col.align === 'left' ? 'pl-5 pr-2.5' : leftCellX;
+                      fitViewport && itemNameCol
+                        ? 'pl-2 pr-2'
+                        : tightPad ?? leftCellX;
+                    const cellPadOther = tightPad ?? cellX;
                     return (
                     <td
                       key={colIdx}
@@ -386,15 +479,37 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                       className={cn(
                         'text-sm align-middle',
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
-                        // Clip overflowing cell text in fixed layout so adjacent columns stay spaced.
-                        fitViewport && 'max-w-0 overflow-hidden',
+                        // Only clip flexible text columns — item name + fixed cols must stay visible.
+                        fitViewport && !isFixedCol && !itemNameCol && 'max-w-0 overflow-hidden',
+                        fitViewport && (isFixedCol || itemNameCol) && 'overflow-visible',
                         cellY,
-                        col.align === 'left' ? `${cellPadLeft} text-left` : `${cellX} text-center`,
-                        col.align === 'right' && `${cellX} text-right`,
+                        col.align === 'left' ? `${cellPadLeft} text-left` : `${cellPadOther} text-center`,
+                        col.align === 'right' && `${cellPadOther} text-right`,
                         rowStyle?.backgroundColor && '!bg-[#BFDBFE]',
                       )}
                     >
-                      {cellRenderer(row, col, colIdx)}
+                      {selectionBeside ? (
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              checked={isRowSelected}
+                              disabled={!canSelectRow}
+                              onCheckedChange={(checked) => {
+                                if (selectionRowId == null || !canSelectRow || !rowSelection) return;
+                                rowSelection.onToggleRow(row, checked === true);
+                              }}
+                              aria-label={canSelectRow ? 'Select row' : 'Cannot select row'}
+                              title={canSelectRow ? undefined : 'Cannot select this row'}
+                            />
+                          </span>
+                          <div className="min-w-0 flex-1">{cellRenderer(row, col, colIdx)}</div>
+                        </div>
+                      ) : (
+                        cellRenderer(row, col, colIdx)
+                      )}
                     </td>
                     );
                   })}
