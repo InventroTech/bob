@@ -1,7 +1,6 @@
 /** Presentational JSX for AddUserComponent — columns/fields from tenant config. */
 
-import React, { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -9,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format } from "date-fns";
 import { Trash2, UserPlus, Pencil, Check, X, Search, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { toast } from 'sonner';
 import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
 import { formatResolveRateGoal, isCseRole } from './utils';
@@ -20,7 +18,6 @@ import {
   type UserManagementColumn,
   type UserManagementCustomField,
 } from './userManagementConfig';
-import { ZohoMailConnectCard } from '@/features/integrations/components/ZohoMailConnectCard';
 import { cn } from '@/lib/utils';
 
 /** Tenant slug that gets the branded Settings / User Management layout. */
@@ -141,7 +138,6 @@ function boundCustomFieldDisplay(user: User, fieldKey: string): string {
 }
 
 export function AddUserView(props: AddUserModel) {
-  const [searchParams, setSearchParams] = useSearchParams();
   const {
     config,
     roles,
@@ -206,29 +202,6 @@ export function AddUserView(props: AddUserModel) {
     String(tenantSlug || '').trim().toLowerCase() === TENANT_SLUG;
   const showCustomForm = (key: string) =>
     schema.customFields.some((f) => f.key === key && f.showInForm);
-
-  // Zoho OAuth return may land back on this Settings page with ?zoho_mail=ok|error
-  useEffect(() => {
-    const result = searchParams.get('zoho_mail');
-    if (!result) return;
-
-    const email = searchParams.get('email') || '';
-    const detail = searchParams.get('detail') || '';
-
-    if (result === 'ok') {
-      toast.success(
-        email ? `Zoho Mail connected (${email})` : 'Zoho Mail connected successfully'
-      );
-    } else {
-      toast.error(detail || 'Zoho Mail connect failed');
-    }
-
-    const next = new URLSearchParams(searchParams);
-    next.delete('zoho_mail');
-    next.delete('email');
-    next.delete('detail');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
 
   const customFormFields = schema.customFields.filter(
     (f) => f.showInForm && !isBoundCustomField(f.key)
@@ -824,7 +797,6 @@ export function AddUserView(props: AddUserModel) {
 
   return (
     <div className={cn('w-full space-y-6', isUnmannd && 'pb-6')}>
-      <ZohoMailConnectCard />
       <Card
         className={cn(
           'w-full',
@@ -1455,21 +1427,8 @@ export function AddUserView(props: AddUserModel) {
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
             </div>
-          ) : usersEmptyReason === 'none_loaded' ? (
-            <div className="text-center text-muted-foreground py-8">
-              No users found. Check that you are signed in and the membership API is reachable.
-            </div>
-          ) : usersEmptyReason === 'search' ? (
-            <div className="text-center text-muted-foreground py-8">
-              No users match your search.
-            </div>
-          ) : usersEmptyReason === 'under_me' ? (
-            <div className="text-center text-muted-foreground py-8">
-              No users report to you yet. Set each user&apos;s manager (parent) in hierarchy, or
-              change this page&apos;s User Management scope to &quot;All users&quot;.
-            </div>
-          ) : usersEmptyReason === 'filtered' ? (
-            <div className="text-center text-muted-foreground py-8">No users to show.</div>
+          ) : filteredUsersWithSettings.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No users found</div>
           ) : (
 
             <>
