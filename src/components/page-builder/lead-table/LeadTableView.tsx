@@ -12,6 +12,13 @@ import { ReceiveShipmentDetailModal } from '../ReceiveShipmentDetailModal';
 import { AssignLeadModal } from '../AssignLeadModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
@@ -21,13 +28,16 @@ import {
 } from './constants';
 import type { LeadTableModel } from './useLeadTable';
 import {
-  formatBulkActionLabel,
   formatInventoryTableToolbarTitle,
   inferInventoryTableKindFromPageName,
   TABLE_COMPONENT_KIND_MAP,
 } from './utils';
 import { usePageDisplayTitle } from './InventoryTablePageContext';
-import { urgencyToneButtonClassName } from '@/lib/utils/urgencyButtonStyles';
+import {
+  REQUEST_STAGE_TABS,
+  formatStageCount,
+  type RequestStageTabId,
+} from '@/lib/inventory/requestStageTabs';
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -94,7 +104,6 @@ export function LeadTableView(props: LeadTableModel) {
     bulkSelectionEnabled,
     selectedRowIds,
     selectedRowCount,
-    bulkSelectionStatus,
     bulkActionButtons,
     bulkApplying,
     canSelectBulkRow,
@@ -102,11 +111,15 @@ export function LeadTableView(props: LeadTableModel) {
     toggleBulkSelectAll,
     clearBulkSelection,
     handleBulkStatusAction,
-    bulkStatusPickerOpen,
-    setBulkStatusPickerOpen,
-    bulkStatusPickerOptions,
-    selectBulkRowsByStatus,
+    showRequestStageTabs,
+    requestStageTab,
+    setRequestStageTab,
+    requestStageCounts,
   } = props;
+
+  const [bulkTargetAttribute, setBulkTargetAttribute] = useState('status');
+  const [bulkTargetValue, setBulkTargetValue] = useState('');
+  const [bulkEditMode, setBulkEditMode] = useState(false);
 
   // Row navigation for the detail modals: lets users page through filteredData
   // without closing the modal, scrolling back to the table, and reopening the next row.
@@ -114,6 +127,80 @@ export function LeadTableView(props: LeadTableModel) {
     if (selectedRecord?.id == null) return -1;
     return filteredData.findIndex((r: any) => r.id === selectedRecord.id);
   }, [filteredData, selectedRecord]);
+
+  const bulkAttributeOptions = useMemo(
+    () =>
+      [
+        { value: 'status', label: 'Status' },
+        { value: 'shipment_status', label: 'Shipment status' },
+      ] as const,
+    []
+  );
+
+  const bulkValueOptions = useMemo(() => {
+    const attr = (bulkTargetAttribute || 'status').trim() || 'status';
+    if (attr === 'shipment_status') {
+      return [
+        { value: 'N/A', label: 'N/A' },
+        { value: 'NOT_SHIPPED', label: 'Not shipped' },
+        { value: 'ORDERED', label: 'Ordered' },
+        { value: 'IN_TRANSIT', label: 'In transit' },
+        { value: 'OUT_FOR_DELIVERY', label: 'Out for delivery' },
+        { value: 'DELIVERED', label: 'Delivered' },
+        { value: 'EXCEPTION', label: 'Exception' },
+      ];
+    }
+    return [
+      { value: 'NEW_REQUEST', label: 'New request' },
+      { value: 'ON_HOLD', label: 'On hold' },
+      { value: 'VENDOR_IDENTIFIED', label: 'Vendor identified' },
+      { value: 'IN_CART', label: 'In cart' },
+      { value: 'IN_SHIPPING', label: 'In shipping' },
+      { value: 'REJECTED', label: 'Rejected' },
+      { value: 'REQ_TO_VERIFY', label: 'Req to verify' },
+    ];
+  }, [bulkTargetAttribute]);
+
+  useEffect(() => {
+    if (!bulkAttributeOptions.some((opt) => opt.value === bulkTargetAttribute)) {
+      setBulkTargetAttribute(bulkAttributeOptions[0]?.value || 'status');
+    }
+  }, [bulkAttributeOptions, bulkTargetAttribute]);
+
+  useEffect(() => {
+    if (bulkValueOptions.length === 0) {
+      setBulkTargetValue('');
+      return;
+    }
+    if (!bulkValueOptions.some((opt) => opt.value === bulkTargetValue)) {
+      setBulkTargetValue('');
+    }
+  }, [bulkValueOptions, bulkTargetValue]);
+
+  const handleBulkSave = useCallback(() => {
+    if (!bulkTargetValue) return;
+    const match = bulkValueOptions.find((opt) => opt.value === bulkTargetValue);
+    if (!match) return;
+    void handleBulkStatusAction({
+      label: match.label,
+      statusValue: match.value,
+      targetAttribute: bulkTargetAttribute,
+      statusText: match.label,
+    });
+  }, [bulkTargetAttribute, bulkTargetValue, bulkValueOptions, handleBulkStatusAction]);
+
+  const handleStartBulkEdit = useCallback(() => {
+    setBulkEditMode(true);
+    clearBulkSelection();
+    setBulkTargetAttribute('status');
+    setBulkTargetValue('');
+  }, [clearBulkSelection]);
+
+  const handleExitBulkEdit = useCallback(() => {
+    setBulkEditMode(false);
+    clearBulkSelection();
+    setBulkTargetValue('');
+  }, [clearBulkSelection]);
 
   const handleNavigateRecord = useCallback(
     (direction: 'prev' | 'next') => {
@@ -157,7 +244,7 @@ export function LeadTableView(props: LeadTableModel) {
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
   const procurementHeaderBg = 'bg-[#0E3777]';
-  const procurementTableFrame = 'overflow-hidden mb-3';
+  const procurementTableFrame = 'mb-3 min-h-0';
   const pageChromeTitle = usePageDisplayTitle().trim();
   const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
   const inventoryTableKindForTitle =
@@ -242,12 +329,15 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — title left; search + Filters right.
-            On mobile, title takes its own row so it isn't squeezed away by flex-nowrap + min-width search. */}
+        {/* Toolbar — All Request: title → numbered stage strip → Bulk Edit / search / Filters.
+            Other tables: title left, search + Filters right. */}
         <div
-          className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3 ${
-            pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
-          }`}
+          className={cn(
+            'mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3',
+            !showRequestStageTabs &&
+              'sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3',
+            !showRequestStageTabs && (pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end')
+          )}
         >
           {pageTitleDisplay ? (
             <h1
@@ -260,16 +350,193 @@ export function LeadTableView(props: LeadTableModel) {
               {pageTitleDisplay}
             </h1>
           ) : null}
-          <div className="flex shrink-0 items-center gap-2 sm:mt-1.5">
+
+          {showRequestStageTabs ? (
+            <div className="w-full overflow-x-auto rounded-[10px] border border-gray-200 bg-white px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+              <div className="flex min-w-max items-center justify-between gap-6">
+                {REQUEST_STAGE_TABS.map((tab) => {
+                  const active = requestStageTab === tab.id;
+                  const count = requestStageCounts[tab.id] ?? 0;
+                  const isClosedTab = Boolean(tab.completeSuffix);
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setRequestStageTab(tab.id as RequestStageTabId)}
+                      className={cn(
+                        'inline-flex shrink-0 items-center gap-2.5 border-0 bg-transparent p-0 text-left transition-colors',
+                        active ? 'text-[#3B66D1]' : 'text-[#1F2937] hover:text-gray-900'
+                      )}
+                    >
+                      {/* Squircle stage icon — pale outer ring + solid blue inner (active) */}
+                      <span
+                        className={cn(
+                          'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] p-[3px]',
+                          active ? 'bg-[#D9E4FF]' : 'bg-transparent'
+                        )}
+                        aria-hidden
+                      >
+                        <span
+                          className={cn(
+                            'inline-flex h-full w-full items-center justify-center rounded-[10px] text-[14px] font-bold leading-none',
+                            active
+                              ? 'bg-[#3B66D1] text-white'
+                              : 'bg-[#E8F0FF] text-[#374151]'
+                          )}
+                        >
+                          {tab.step}
+                        </span>
+                      </span>
+                      {isClosedTab ? (
+                        <span className="flex flex-col items-start justify-center leading-[1.15] whitespace-nowrap">
+                          <span
+                            className={cn(
+                              'text-[13px] font-bold',
+                              active ? 'text-[#3B66D1]' : 'text-[#111827]'
+                            )}
+                          >
+                            {tab.label}
+                          </span>
+                          <span className="mt-0.5 text-[11px] font-medium text-gray-400">
+                            {formatStageCount(count)} {tab.completeSuffix}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <span
+                            className={cn(
+                              'text-[13px] font-bold leading-[1.15]',
+                              active ? 'text-[#3B66D1]' : 'text-[#111827]'
+                            )}
+                          >
+                            {(tab.labelLines ?? [tab.label]).map((line) => (
+                              <span key={line} className="block">
+                                {line}
+                              </span>
+                            ))}
+                          </span>
+                          <span className="inline-flex h-5 min-w-[1.75rem] items-center justify-center rounded-full bg-[#ECEFF3] px-2 text-[11px] font-semibold text-[#4B5563]">
+                            {formatStageCount(count)}
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <div
+            className={cn(
+              'flex w-full shrink-0 flex-wrap items-center gap-2',
+              showRequestStageTabs
+                ? 'justify-end'
+                : pageTitleDisplay
+                  ? 'sm:mt-1.5 sm:justify-end'
+                  : 'sm:justify-end'
+            )}
+          >
+            {bulkSelectionEnabled && bulkEditMode ? (
+              <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+                <Select
+                  value={bulkTargetAttribute}
+                  onValueChange={setBulkTargetAttribute}
+                  disabled={bulkApplying != null}
+                >
+                  <SelectTrigger className="h-9 w-[160px] rounded-[6px] border-gray-200 bg-white text-sm shadow-sm">
+                    <SelectValue placeholder="Choose field" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bulkAttributeOptions.map((attr) => (
+                      <SelectItem key={attr.value} value={attr.value}>
+                        {attr.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-gray-600">set to</span>
+                <Select
+                  value={bulkTargetValue || undefined}
+                  onValueChange={setBulkTargetValue}
+                  disabled={bulkValueOptions.length === 0 || bulkApplying != null}
+                >
+                  <SelectTrigger className="h-9 w-[180px] rounded-[6px] border-gray-200 bg-white text-sm shadow-sm">
+                    <SelectValue placeholder="Choose value" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bulkValueOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 rounded-[6px] bg-[#0E3777] px-4 text-white hover:bg-[#0b2d61]"
+                  disabled={
+                    selectedRowCount === 0 ||
+                    !bulkTargetValue ||
+                    bulkValueOptions.length === 0 ||
+                    bulkApplying != null
+                  }
+                  onClick={handleBulkSave}
+                >
+                  {bulkApplying != null ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
+                      Saving…
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </Button>
+                <button
+                  type="button"
+                  className="text-sm text-[#1A44A1] underline-offset-2 hover:underline"
+                  onClick={handleExitBulkEdit}
+                >
+                  Cancel{selectedRowCount > 0 ? ` (${selectedRowCount})` : ''}
+                </button>
+              </div>
+            ) : null}
+            {bulkSelectionEnabled ? (
+              <CustomButton
+                variant="default"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (bulkEditMode) {
+                    handleExitBulkEdit();
+                  } else {
+                    handleStartBulkEdit();
+                  }
+                }}
+                className={
+                  bulkEditMode
+                    ? 'h-9 shrink-0 justify-center rounded-[6px] border border-[#0E3777] bg-white px-4 text-[#0E3777] hover:bg-[#F4F8FF]'
+                    : 'h-9 shrink-0 justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-4 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white'
+                }
+              >
+                {bulkEditMode ? 'Exit bulk' : 'Bulk Edit'}
+              </CustomButton>
+            ) : null}
             <div
-              className={`relative flex-1 max-w-sm ${
-                isProcurementStyleTable ? 'min-w-[180px]' : 'min-w-[200px]'
-              }`}
+              className={cn(
+                'relative',
+                showRequestStageTabs
+                  ? 'w-full max-w-[280px] min-w-[200px] sm:w-[280px]'
+                  : isProcurementStyleTable
+                    ? 'min-w-[180px] max-w-sm flex-1'
+                    : 'min-w-[200px] max-w-sm flex-1'
+              )}
             >
               <Search
                 className={
                   isProcurementStyleTable
-                    ? 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#1A44A1]'
+                    ? 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400'
                     : 'absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400'
                 }
               />
@@ -280,7 +547,7 @@ export function LeadTableView(props: LeadTableModel) {
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className={
                   isProcurementStyleTable
-                    ? 'h-9 rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm'
+                    ? 'h-9 w-full rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm'
                     : 'pl-9 h-8 rounded-md'
                 }
               />
@@ -296,8 +563,8 @@ export function LeadTableView(props: LeadTableModel) {
               className={
                 isProcurementStyleTable
                   ? showFilters
-                    ? 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[#0E3777] px-3 text-white shadow-[0_4px_10px_rgba(10,94,205,0.35)] hover:bg-[#0b2d61] hover:text-white'
-                    : 'h-[38px] w-[108px] justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-3 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white hover:shadow-[0_4px_10px_rgba(10,94,205,0.28)]'
+                    ? 'h-[38px] w-[108px] shrink-0 justify-center rounded-[6px] border-0 bg-[#0E3777] px-3 text-white shadow-[0_4px_10px_rgba(10,94,205,0.35)] hover:bg-[#0b2d61] hover:text-white'
+                    : 'h-[38px] w-[108px] shrink-0 justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-3 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white hover:shadow-[0_4px_10px_rgba(10,94,205,0.28)]'
                   : undefined
               }
             >
@@ -310,53 +577,14 @@ export function LeadTableView(props: LeadTableModel) {
           </div>
         </div>
 
-        {bulkSelectionEnabled && selectedRowCount > 0 && bulkActionButtons.length > 0 ? (
-          <div
-            className={
-              isProcurementStyleTable
-                ? 'mb-2 flex shrink-0 flex-wrap items-center gap-3 rounded-md border border-[#0E3777]/20 bg-[#F4F8FF] px-3 py-2'
-                : 'mb-2 flex flex-wrap items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2'
-            }
-          >
-            <span className="text-sm font-medium text-gray-800">
-              {selectedRowCount} selected
-              {bulkSelectionStatus ? (
-                <span className="ml-1 font-normal text-gray-500">
-                  ({bulkSelectionStatus.replace(/_/g, ' ')})
-                </span>
-              ) : null}
-            </span>
-            <button
-              type="button"
-              className="text-sm text-[#1A44A1] underline-offset-2 hover:underline"
-              onClick={clearBulkSelection}
-            >
-              Clear
-            </button>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {bulkActionButtons.map((btn) => {
-                const applyingKey = `${btn.statusValue}::${(btn.targetAttribute || 'status').trim() || 'status'}`;
-                const applyingThis = bulkApplying === applyingKey;
-                const bulkLabel = formatBulkActionLabel(btn.label, selectedRowCount);
-                return (
-                  <Button
-                    key={`${btn.label}-${btn.statusValue}-${btn.targetAttribute || 'status'}`}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      'h-9 gap-1.5 rounded-md px-4 font-semibold',
-                      urgencyToneButtonClassName(btn.statusValue, applyingThis)
-                    )}
-                    disabled={bulkApplying != null}
-                    onClick={() => void handleBulkStatusAction(btn)}
-                  >
-                    {applyingThis ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
-                    {applyingThis ? 'Updating…' : bulkLabel}
-                  </Button>
-                );
-              })}
-            </div>
+        {bulkSelectionEnabled && bulkEditMode && selectedRowCount === 0 ? (
+          <div className="mb-2 shrink-0 text-sm text-gray-600">
+            Select rows on any stage filter (All Request, Pending Approval, Cart, …). Selections stay as you switch tabs — then choose Status or Shipment status and Save.
+          </div>
+        ) : null}
+        {bulkSelectionEnabled && bulkEditMode && selectedRowCount > 0 ? (
+          <div className="mb-2 shrink-0 text-sm text-gray-600">
+            {selectedRowCount} selected across filters — switch tabs to add more, then Save.
           </div>
         ) : null}
 
@@ -538,7 +766,7 @@ export function LeadTableView(props: LeadTableModel) {
         <div
           className={
             isProcurementStyleTable
-              ? 'relative mt-1 block min-h-0 w-full max-w-full flex-1 md:flex md:flex-col'
+              ? 'relative mt-1 flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden'
               : 'hidden md:block w-full max-w-full min-w-0 relative mt-1.5'
           }
         >
@@ -586,12 +814,13 @@ export function LeadTableView(props: LeadTableModel) {
             className={isProcurementStyleTable ? procurementTableFrame : undefined}
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}
             rowSelection={
-              bulkSelectionEnabled
+              bulkSelectionEnabled && bulkEditMode
                 ? {
                     selectedRowIds,
                     onToggleRow: (row, selected) => toggleBulkRowSelection(row, selected),
                     onToggleAll: toggleBulkSelectAll,
                     canSelectRow: canSelectBulkRow,
+                    placeBesideAccessor: 'item_name',
                   }
                 : undefined
             }
@@ -669,33 +898,6 @@ export function LeadTableView(props: LeadTableModel) {
             </div>
           )}
       </div>
-
-      <Dialog open={bulkStatusPickerOpen} onOpenChange={setBulkStatusPickerOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Select by status</DialogTitle>
-            <DialogDescription>
-              This page has requests with different statuses. Choose which status to select.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 pt-2">
-            {bulkStatusPickerOptions.map((opt) => (
-              <Button
-                key={opt.status}
-                type="button"
-                variant="outline"
-                className="h-10 justify-between rounded-md px-4"
-                onClick={() => selectBulkRowsByStatus(opt.status)}
-              >
-                <span className="font-semibold uppercase tracking-wide">
-                  {opt.status.replace(/_/g, ' ')}
-                </span>
-                <span className="text-muted-foreground">{opt.count}</span>
-              </Button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Lead Modal with LeadCard */}
       <Dialog open={isLeadModalOpen} onOpenChange={(open) => {

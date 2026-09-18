@@ -54,7 +54,7 @@ const ShortProfileCard = ({
         wrapName
           ? 'w-full max-w-full min-w-0 items-center'
           : 'max-w-[14rem] items-center sm:max-w-[18rem]',
-        wrapName ? 'gap-3' : compact ? 'gap-2' : 'gap-3',
+        wrapName ? 'gap-1.5' : compact ? 'gap-2' : 'gap-3',
         className
       )}
     >
@@ -63,7 +63,7 @@ const ShortProfileCard = ({
           'relative shrink-0 overflow-hidden bg-gray-200 text-gray-600',
           'flex items-center justify-center',
           wrapName || useDefaultItemImage ? 'rounded-md' : 'rounded-full',
-          wrapName ? 'h-11 w-11' : compact ? 'h-9 w-9' : 'h-10 w-10'
+          wrapName ? 'h-8 w-8' : compact ? 'h-9 w-9' : 'h-10 w-10'
         )}
       >
         {showImage ? (
@@ -85,7 +85,7 @@ const ShortProfileCard = ({
           className={cn(
             'text-gray-900',
             wrapName
-              ? 'font-[Inter,sans-serif] text-[14px] font-medium leading-[20px] tracking-normal whitespace-normal break-words [overflow-wrap:anywhere] line-clamp-3'
+              ? 'block truncate font-[Inter,sans-serif] text-[13px] font-medium leading-[16px] tracking-normal'
               : 'block truncate text-sm font-bold'
           )}
           title={nameTitle || name || undefined}
