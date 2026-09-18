@@ -913,7 +913,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
       if (editingRow.district.trim()) payload.district = Number(editingRow.district);
       if (editingRow.party.trim()) payload.party = Number(editingRow.party);
       if (!isCseRole(editedRole)) {
-        if (editingRow.dailyTarget !== '') payload.dailyTarget = Number(editingRow.dailyTarget);
+        if (editingRow.dailyTarget !== '') payload.daily_target = Number(editingRow.dailyTarget);
         if (editingRow.dailyLimit !== '') payload.daily_limit = Number(editingRow.dailyLimit);
       }
 
