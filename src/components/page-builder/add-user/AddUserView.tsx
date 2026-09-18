@@ -162,6 +162,7 @@ export function AddUserView(props: AddUserModel) {
     userSearchTerm,
     setUserSearchTerm,
     filteredUsersWithSettings,
+    usersEmptyReason,
     handleDownloadUsersPdf,
     handleChange,
     handleAddRole,
