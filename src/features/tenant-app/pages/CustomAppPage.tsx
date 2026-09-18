@@ -107,6 +107,14 @@ const CustomAppPage: React.FC = () => {
     }
   }, [tenantSlug, pageId, tenantId, userRoleId, session?.access_token, navigate]);
 
+  // Supabase silently rotates session.access_token every so often, which recreates
+  // redirectToFirstSidebarPage above. Keeping it out of the fetch effect's own deps
+  // (via this ref) stops a routine token refresh from re-running the fetch and
+  // flashing the whole page through "Loading page..." — it still always calls the
+  // latest version when a redirect is actually needed.
+  const redirectToFirstSidebarPageRef = useRef(redirectToFirstSidebarPage);
+  redirectToFirstSidebarPageRef.current = redirectToFirstSidebarPage;
+
   useEffect(() => {
     if (!tenantId || !pageId) return;
 
@@ -152,7 +160,7 @@ const CustomAppPage: React.FC = () => {
             setLoading(false);
           } else {
             pageCache.delete(cacheKey);
-            await redirectToFirstSidebarPage();
+            await redirectToFirstSidebarPageRef.current();
           }
           return;
         }
@@ -202,7 +210,7 @@ const CustomAppPage: React.FC = () => {
         fetchingRef.current = null;
       }
     };
-  }, [pageId, tenantId, redirectToFirstSidebarPage]);
+  }, [pageId, tenantId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;

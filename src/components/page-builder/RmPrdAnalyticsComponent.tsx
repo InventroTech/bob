@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Select,
   SelectContent,
@@ -53,7 +53,7 @@ type Tab = 'performance' | 'adherence';
 
 const DEFAULT_FILTERS = {
   manager: 'All managers',
-  dateRange: 'Yesterday',
+  dateRange: 'Today',
   leadBucket: 'All buckets',
   state: 'All states',
   party: 'All parties',
@@ -63,6 +63,28 @@ const DEFAULT_FILTERS = {
 
 type Filters = typeof DEFAULT_FILTERS;
 
+// Persists the filter bar (and which tab was open) across page reloads/revisits —
+// otherwise every remount of this component (e.g. a page-config refetch) silently
+// snapped everything back to the defaults.
+const FILTERS_STORAGE_KEY = 'rmPrdAnalytics.filters';
+const TAB_STORAGE_KEY = 'rmPrdAnalytics.tab';
+
+function loadStoredFilters(): Filters {
+  if (typeof window === 'undefined') return DEFAULT_FILTERS;
+  try {
+    const raw = window.localStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!raw) return DEFAULT_FILTERS;
+    return { ...DEFAULT_FILTERS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+}
+
+function loadStoredTab(): Tab {
+  if (typeof window === 'undefined') return 'performance';
+  return window.localStorage.getItem(TAB_STORAGE_KEY) === 'adherence' ? 'adherence' : 'performance';
+}
+
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
 // rows fetched from the backend — see useRmActivityEvents + aggregate.ts.
 // Only the Date Range filter actually filters the data so far; the rest
@@ -70,14 +92,30 @@ type Filters = typeof DEFAULT_FILTERS;
 export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = ({ config }) => {
   const { events, loading, error } = useRmActivityEvents();
   const { options: filterOptions } = useRmFilterOptions();
-  const [tab, setTab] = useState<Tab>('performance');
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [tab, setTab] = useState<Tab>(loadStoredTab);
+  const [filters, setFilters] = useState<Filters>(loadStoredFilters);
   const [drill, setDrill] = useState<DrillFilter | null>(null);
   // when the touch report was opened from inside an RM's own detail modal,
   // this scopes it to just that RM instead of every visible RM
   const [drillRmUserId, setDrillRmUserId] = useState<string | null>(null);
   const [rmSearch, setRmSearch] = useState('');
   const [selectedRmUserId, setSelectedRmUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {
+      // localStorage unavailable (e.g. private browsing) — filters just won't persist
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TAB_STORAGE_KEY, tab);
+    } catch {
+      // localStorage unavailable — tab just won't persist
+    }
+  }, [tab]);
 
   const dateBounds = useMemo(
     () => resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo),
