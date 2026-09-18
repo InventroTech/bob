@@ -1,7 +1,6 @@
 /** Presentational JSX for AddUserComponent — columns/fields from tenant config. */
 
-import React, { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -9,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format } from "date-fns";
 import { Trash2, UserPlus, Pencil, Check, X, Search, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { toast } from 'sonner';
 import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
 import { formatResolveRateGoal, isCseRole } from './utils';
@@ -20,8 +18,19 @@ import {
   type UserManagementColumn,
   type UserManagementCustomField,
 } from './userManagementConfig';
-import { ZohoMailConnectCard } from '@/features/integrations/components/ZohoMailConnectCard';
 import { cn } from '@/lib/utils';
+
+/** Tenant slug that gets the branded Settings / User Management layout. */
+const TENANT_SLUG = 'unmannd';
+
+const PRIMARY_BTN =
+  'h-11 flex-1 rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-4 text-white shadow-[0_4px_12px_rgba(8,71,184,0.35)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white disabled:bg-gray-400 disabled:opacity-100';
+const SECONDARY_BTN =
+  'h-11 flex-1 rounded-[6px] border border-[#D5DEE8] bg-[#EDF2FA] text-[#333C4E] hover:bg-[#E2EAF5] hover:text-[#333C4E]';
+const DOWNLOAD_PDF_BTN =
+  'h-11 shrink-0 inline-flex items-center justify-center gap-2 rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-5 text-sm font-medium leading-none text-white shadow-[0_2px_8px_rgba(8,71,184,0.3)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white';
+const FORM_INPUT =
+  'h-11 rounded-[6px] border-gray-200 bg-white shadow-sm focus-visible:ring-[#1B6FE8]';
 
 function SupportDailyDualDisplay({
   selfTrial,
@@ -129,7 +138,6 @@ function boundCustomFieldDisplay(user: User, fieldKey: string): string {
 }
 
 export function AddUserView(props: AddUserModel) {
-  const [searchParams, setSearchParams] = useSearchParams();
   const {
     config,
     roles,
@@ -154,6 +162,7 @@ export function AddUserView(props: AddUserModel) {
     userSearchTerm,
     setUserSearchTerm,
     filteredUsersWithSettings,
+    usersEmptyReason,
     handleDownloadUsersPdf,
     handleChange,
     handleAddRole,
@@ -177,6 +186,7 @@ export function AddUserView(props: AddUserModel) {
     setSelectedQueueType,
     queueTypes,
     availableLeadGroups,
+    tenantSlug,
     geoStates,
     geoDistricts,
     geoParties,
@@ -188,31 +198,10 @@ export function AddUserView(props: AddUserModel) {
   } = props;
 
   const { schema, showField } = useUserManagementConfig(config);
+  const isUnmannd =
+    String(tenantSlug || '').trim().toLowerCase() === TENANT_SLUG;
   const showCustomForm = (key: string) =>
     schema.customFields.some((f) => f.key === key && f.showInForm);
-
-  // Zoho OAuth return may land back on this Settings page with ?zoho_mail=ok|error
-  useEffect(() => {
-    const result = searchParams.get('zoho_mail');
-    if (!result) return;
-
-    const email = searchParams.get('email') || '';
-    const detail = searchParams.get('detail') || '';
-
-    if (result === 'ok') {
-      toast.success(
-        email ? `Zoho Mail connected (${email})` : 'Zoho Mail connected successfully'
-      );
-    } else {
-      toast.error(detail || 'Zoho Mail connect failed');
-    }
-
-    const next = new URLSearchParams(searchParams);
-    next.delete('zoho_mail');
-    next.delete('email');
-    next.delete('detail');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
 
   const customFormFields = schema.customFields.filter(
     (f) => f.showInForm && !isBoundCustomField(f.key)
@@ -807,25 +796,60 @@ export function AddUserView(props: AddUserModel) {
   };
 
   return (
-    <div className="w-full space-y-6">
-      <ZohoMailConnectCard />
-      <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <div className="flex items-center gap-2">
-          <UserPlus className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">User Management</h3>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-5 rounded-lg border p-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+    <div className={cn('w-full space-y-6', isUnmannd && 'pb-6')}>
+      <Card
+        className={cn(
+          'w-full',
+          isUnmannd && 'border-0 bg-transparent shadow-none'
+        )}
+      >
+      {!isUnmannd ? (
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div className="flex items-center gap-2.5">
+            <UserPlus className="h-5 w-5 shrink-0 text-foreground" />
+            <h3 className="text-lg font-semibold">User Management</h3>
+          </div>
+        </CardHeader>
+      ) : null}
+      <CardContent className={cn('space-y-6', isUnmannd && 'p-0')}>
+        <div
+          className={cn(
+            'space-y-5 rounded-lg border p-5',
+            isUnmannd && 'rounded-[10px] border border-[#D5DEE8] bg-white p-5 shadow-none'
+          )}
+        >
+          {isUnmannd ? (
+            <div className="flex items-center gap-2.5">
+              <UserPlus
+                className="h-5 w-5 shrink-0 text-black"
+                strokeWidth={2.5}
+              />
+              <h3
+                className="text-[18px] font-bold leading-none tracking-tight text-black"
+                style={{ fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }}
+              >
+                User Management
+              </h3>
+            </div>
+          ) : null}
+          <div
+            className={cn(
+              'grid grid-cols-1 gap-5',
+              isUnmannd ? 'md:grid-cols-2' : 'md:grid-cols-3'
+            )}
+          >
             {showField('name') && (
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label
+                  htmlFor="name"
+                  className={cn(isUnmannd && 'font-bold text-[#0B1F4D]')}
+                >
+                  Full Name
+                </Label>
                 <Input
                   id="name"
                   name="name"
-                  className="h-11"
+                  className={cn('h-11', isUnmannd && FORM_INPUT)}
                   value={formData.name}
                   onChange={handleChange}
                   placeholder="Full name"
@@ -834,37 +858,37 @@ export function AddUserView(props: AddUserModel) {
             )}
             {showField('email') && (
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label
+                  htmlFor="email"
+                  className={cn(isUnmannd && 'font-bold text-[#0B1F4D]')}
+                >
+                  Email
+                </Label>
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  className="h-11"
+                  className={cn('h-11', isUnmannd && FORM_INPUT)}
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="Email"
                 />
               </div>
             )}
-            {showField('department') && (
-              <div className="space-y-2">
-                <Label htmlFor="department">Department</Label>
-                <Input
-                  id="department"
-                  name="department"
-                  className="h-11"
-                  value={formData.department}
-                  onChange={handleChange}
-                  placeholder="Department"
-                />
-              </div>
-            )}
             {showField('role') && (
               <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
+                <Label
+                  htmlFor="role"
+                  className={cn(isUnmannd && 'font-bold text-[#0B1F4D]')}
+                >
+                  Role
+                </Label>
                 <select
                   id="role"
-                  className="h-11 w-full border rounded-md px-3 text-sm bg-white"
+                  className={cn(
+                    'h-11 w-full border rounded-md px-3 text-sm bg-white',
+                    isUnmannd && 'rounded-[6px] border-gray-200 shadow-sm'
+                  )}
                   value={selectedRoleId}
                   onChange={(e) => setSelectedRoleId(e.target.value)}
                 >
@@ -875,6 +899,24 @@ export function AddUserView(props: AddUserModel) {
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+            {showField('department') && (
+              <div className="space-y-2">
+                <Label
+                  htmlFor="department"
+                  className={cn(isUnmannd && 'font-bold text-[#0B1F4D]')}
+                >
+                  Department
+                </Label>
+                <Input
+                  id="department"
+                  name="department"
+                  className={cn('h-11', isUnmannd && FORM_INPUT)}
+                  value={formData.department}
+                  onChange={handleChange}
+                  placeholder="Department"
+                />
               </div>
             )}
           </div>
@@ -1245,9 +1287,17 @@ export function AddUserView(props: AddUserModel) {
               ))}
             </div>
           )}
-          <div className="flex gap-2">
+          <div
+            className={cn(
+              'flex gap-2',
+              isUnmannd && 'grid grid-cols-1 gap-5 md:grid-cols-2'
+            )}
+          >
             <Button
-              className="flex-1 h-11 bg-black text-white hover:bg-black border-none rounded-md disabled:bg-gray-400 disabled:text-white disabled:opacity-100"
+              className={cn(
+                'flex-1 h-11 bg-black text-white hover:bg-black border-none rounded-md disabled:bg-gray-400 disabled:text-white disabled:opacity-100',
+                isUnmannd && cn(PRIMARY_BTN, 'w-full flex-none')
+              )}
               onClick={handleAddUser}
               disabled={(showField('role') && !selectedRoleId) || isCreatingUser}
             >
@@ -1257,7 +1307,10 @@ export function AddUserView(props: AddUserModel) {
               <Button
                 type="button"
                 variant="outline"
-                className="flex-1 h-11 text-black border-gray-300 hover:bg-white hover:text-black rounded-md"
+                className={cn(
+                  'flex-1 h-11 text-black border-gray-300 hover:bg-white hover:text-black rounded-md',
+                  isUnmannd && cn(SECONDARY_BTN, 'w-full flex-none')
+                )}
                 onClick={() => setShowRoleFields(!showRoleFields)}
                 disabled={!!selectedRoleId}
               >
@@ -1296,28 +1349,77 @@ export function AddUserView(props: AddUserModel) {
           )}
         </div>
 
-        <div className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <h5 className="text-2xl font-semibold">Users</h5>
-            <div className="flex w-full flex-col gap-3 sm:max-w-md sm:flex-row sm:items-center">
-              <div className="relative w-full sm:flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <div className={cn('space-y-4', isUnmannd && 'pl-5 pr-0')}>
+          <div
+            className={cn(
+              'flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between',
+              isUnmannd && 'w-full flex-row flex-wrap items-center gap-3 sm:flex-nowrap'
+            )}
+          >
+            <h5
+              className={cn(
+                'text-2xl font-semibold shrink-0',
+                isUnmannd &&
+                  'text-[18px] font-bold leading-none tracking-tight text-black'
+              )}
+              style={
+                isUnmannd
+                  ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
+                  : undefined
+              }
+            >
+              Users
+            </h5>
+            <div
+              className={cn(
+                'flex w-full flex-col gap-3 sm:max-w-lg sm:flex-row sm:items-center',
+                isUnmannd &&
+                  'ml-auto flex w-auto max-w-none flex-nowrap flex-row items-center gap-2 sm:max-w-none'
+              )}
+            >
+              <div
+                className={cn(
+                  'relative flex h-11 w-full items-center sm:flex-1',
+                  isUnmannd && 'h-11 w-[min(100%,18rem)] shrink-0 sm:w-[18rem] sm:flex-none'
+                )}
+              >
+                <Search
+                  className={cn(
+                    'pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2',
+                    isUnmannd ? 'text-[#2563EB]' : 'text-gray-400'
+                  )}
+                  strokeWidth={isUnmannd ? 2.5 : 2}
+                />
                 <Input
                   value={userSearchTerm}
                   onChange={(e) => setUserSearchTerm(e.target.value)}
                   placeholder="Search by name, email or role..."
-                  className="h-11 pl-9"
+                  className={cn(
+                    'h-11 w-full pl-9',
+                    isUnmannd && cn('h-11 rounded-[8px]', FORM_INPUT)
+                  )}
                 />
               </div>
               <Button
                 type="button"
-                variant="outline"
+                variant={isUnmannd ? 'default' : 'outline'}
                 onClick={() => void handleDownloadUsersPdf()}
                 disabled={isLoading || usersPdfLoading || filteredUsersWithSettings.length === 0}
-                className="h-11 shrink-0 border-black text-black hover:bg-black hover:text-white"
+                className={cn(
+                  'h-11 shrink-0 border-black text-black hover:bg-black hover:text-white inline-flex items-center justify-center',
+                  isUnmannd && cn(DOWNLOAD_PDF_BTN, 'h-11 self-center')
+                )}
               >
-                <Download className="mr-2 h-4 w-4" />
-                {usersPdfLoading ? 'Generating…' : 'Download PDF'}
+                <Download
+                  className={cn(
+                    'shrink-0',
+                    isUnmannd ? 'mr-0 h-3.5 w-3.5' : 'mr-2 h-4 w-4'
+                  )}
+                  aria-hidden
+                />
+                <span className="leading-none">
+                  {usersPdfLoading ? 'Generating…' : 'Download PDF'}
+                </span>
               </Button>
             </div>
           </div>
@@ -1325,10 +1427,8 @@ export function AddUserView(props: AddUserModel) {
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
             </div>
-          ) : users.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">No users found</div>
           ) : filteredUsersWithSettings.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">No users match your search</div>
+            <div className="text-center text-muted-foreground py-8">No users found</div>
           ) : (
 
             <>
@@ -1448,24 +1548,51 @@ export function AddUserView(props: AddUserModel) {
                 })}
               </div>
 
-              <div className="hidden md:block rounded-md border overflow-x-auto">
+              <div
+                className={cn(
+                  'hidden md:block rounded-md border overflow-x-auto',
+                  isUnmannd && 'w-full rounded-[10px] border-gray-200'
+                )}
+              >
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-black hover:bg-black">
+                    <TableRow
+                      className={cn(
+                        'bg-black hover:bg-black',
+                        isUnmannd && 'bg-[#0E3777] hover:bg-[#0E3777]'
+                      )}
+                    >
                       {schema.columns
                         .filter((column) => column !== 'actions')
                         .map((column) => (
-                          <TableHead key={column} className="text-white font-medium">
+                          <TableHead
+                            key={column}
+                            className={cn(
+                              'text-white font-medium',
+                              isUnmannd && 'uppercase tracking-wide text-xs font-semibold'
+                            )}
+                          >
                             {getColumnLabel(column)}
                           </TableHead>
                         ))}
                       {customTableFields.map((field) => (
-                        <TableHead key={`cf-${field.key}`} className="text-white font-medium">
+                        <TableHead
+                          key={`cf-${field.key}`}
+                          className={cn(
+                            'text-white font-medium',
+                            isUnmannd && 'uppercase tracking-wide text-xs font-semibold'
+                          )}
+                        >
                           {field.label}
                         </TableHead>
                       ))}
                       {schema.columns.includes('actions') && (
-                        <TableHead className="text-white font-medium text-right" />
+                        <TableHead
+                          className={cn(
+                            'text-white font-medium text-right',
+                            isUnmannd && 'uppercase tracking-wide text-xs font-semibold'
+                          )}
+                        />
                       )}
                     </TableRow>
                   </TableHeader>
