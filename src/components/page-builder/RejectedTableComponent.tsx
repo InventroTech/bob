@@ -41,7 +41,7 @@ interface RejectedTableProps {
  */
 export const DEFAULT_REJECTED_TABLE_COLUMNS: RejectedTableColumn[] = [
   { key: 'item_name_freeform', label: 'Item Name', type: 'text' },
-  { key: 'requester_name', label: 'Requested By', type: 'text' },
+  { key: 'requester_name', label: 'Requestor', type: 'text' },
   { key: 'estimated_cost', label: 'Estimated Cost', type: 'text' },
   { key: 'vendor', label: 'Vendor', type: 'text' },
   { key: 'urgency_level', label: 'Urgency Level', type: 'chip' },
