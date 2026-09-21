@@ -111,6 +111,10 @@ export function LeadTableView(props: LeadTableModel) {
     toggleBulkSelectAll,
     clearBulkSelection,
     handleBulkStatusAction,
+    bulkStatusPickerOpen,
+    setBulkStatusPickerOpen,
+    bulkStatusPickerOptions,
+    selectBulkRowsByStatus,
     showRequestStageTabs,
     requestStageTab,
     setRequestStageTab,
@@ -884,6 +888,33 @@ export function LeadTableView(props: LeadTableModel) {
             </div>
           )}
       </div>
+
+      <Dialog open={bulkStatusPickerOpen} onOpenChange={setBulkStatusPickerOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Select by status</DialogTitle>
+            <DialogDescription>
+              This page has requests with different statuses. Choose which status to select.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-2">
+            {bulkStatusPickerOptions.map((opt) => (
+              <Button
+                key={opt.status}
+                type="button"
+                variant="outline"
+                className="h-10 justify-between rounded-md px-4"
+                onClick={() => selectBulkRowsByStatus(opt.status)}
+              >
+                <span className="font-semibold uppercase tracking-wide">
+                  {opt.status.replace(/_/g, ' ')}
+                </span>
+                <span className="text-muted-foreground">{opt.count}</span>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Lead Modal with LeadCard */}
       <Dialog open={isLeadModalOpen} onOpenChange={(open) => {

@@ -1767,33 +1767,43 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
 
       const rowStatus = getBulkRowStatus(row);
-      setSelectedRowIds((prev) => {
-        if (prev.size > 0) {
-          let anchorStatus: string | null = null;
-          for (const existing of stageFilteredData) {
-            const existingId = normalizeBulkRowId(existing?.id);
-            if (existingId != null && prev.has(existingId)) {
-              anchorStatus = getBulkRowStatus(existing);
-              break;
-            }
-          }
-          if (anchorStatus != null && rowStatus !== anchorStatus) {
-            toast({
-              title: 'Different status',
-              description:
-                'Bulk select only works for requests with the same status as the first selected row.',
-              variant: 'destructive',
-            });
-            return prev;
+      if (selectedRowIds.size > 0) {
+        let anchorStatus: string | null = null;
+        for (const existing of stageFilteredData) {
+          const existingId = normalizeBulkRowId(existing?.id);
+          if (existingId != null && selectedRowIds.has(existingId)) {
+            anchorStatus = getBulkRowStatus(existing);
+            break;
           }
         }
+        if (anchorStatus == null) {
+          for (const id of selectedRowIds) {
+            const cached = selectedBulkRowsById[id];
+            if (cached) {
+              anchorStatus = getBulkRowStatus(cached);
+              if (anchorStatus) break;
+            }
+          }
+        }
+        if (anchorStatus != null && rowStatus !== anchorStatus) {
+          toast({
+            title: 'Different status',
+            description:
+              'Bulk select only works for requests with the same status as the first selected row.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
+      setSelectedRowIds((prev) => {
         const next = new Set(prev);
         next.add(rowId);
         return next;
       });
       setSelectedBulkRowsById((prev) => ({ ...prev, [rowId]: row }));
     },
-    [stageFilteredData, toast]
+    [selectedBulkRowsById, selectedRowIds, stageFilteredData, toast]
   );
 
   const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
@@ -1801,25 +1811,32 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     Array<{ status: string; count: number }>
   >([]);
 
+  const getPageStatusCounts = useCallback(() => {
+    const counts = new Map<string, number>();
+    for (const row of stageFilteredData) {
+      if (normalizeBulkRowId(row?.id) == null) continue;
+      const status = getBulkRowStatus(row);
+      if (!status) continue;
+      counts.set(status, (counts.get(status) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => a.status.localeCompare(b.status));
+  }, [stageFilteredData]);
+
   const selectBulkRowsByStatus = useCallback(
     (status: string) => {
       const matchingRows = stageFilteredData.filter((row) => getBulkRowStatus(row) === status);
-      setSelectedRowIds((prev) => {
-        const next = new Set(prev);
-        for (const row of matchingRows) {
-          const id = normalizeBulkRowId(row?.id);
-          if (id != null) next.add(id);
-        }
-        return next;
-      });
-      setSelectedBulkRowsById((prev) => {
-        const next = { ...prev };
-        for (const row of matchingRows) {
-          const id = normalizeBulkRowId(row?.id);
-          if (id != null) next[id] = row;
-        }
-        return next;
-      });
+      const nextIds = new Set<string>();
+      const nextCache: Record<string, any> = {};
+      for (const row of matchingRows) {
+        const id = normalizeBulkRowId(row?.id);
+        if (id == null) continue;
+        nextIds.add(id);
+        nextCache[id] = row;
+      }
+      setSelectedRowIds(nextIds);
+      setSelectedBulkRowsById(nextCache);
       setBulkStatusPickerOpen(false);
       setBulkStatusPickerOptions([]);
     },
@@ -1827,37 +1844,70 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   );
 
   const toggleBulkSelectAll = useCallback(() => {
-    const visibleRows = stageFilteredData
-      .map((row) => {
-        const id = normalizeBulkRowId(row?.id);
-        return id != null ? { id, row } : null;
-      })
-      .filter((entry): entry is { id: string; row: any } => entry != null);
-    if (visibleRows.length === 0) return;
-
-    const allVisibleSelected = visibleRows.every(({ id }) => selectedRowIds.has(id));
-
-    setSelectedRowIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const { id } of visibleRows) next.delete(id);
-      } else {
-        for (const { id } of visibleRows) next.add(id);
+    // If a status is already locked by current selection, toggle that group only.
+    if (selectedRowIds.size > 0) {
+      let anchorStatus: string | null = null;
+      for (const row of stageFilteredData) {
+        const rowId = normalizeBulkRowId(row?.id);
+        if (rowId != null && selectedRowIds.has(rowId)) {
+          anchorStatus = getBulkRowStatus(row);
+          break;
+        }
       }
-      return next;
-    });
-    setSelectedBulkRowsById((prev) => {
-      const next = { ...prev };
-      if (allVisibleSelected) {
-        for (const { id } of visibleRows) delete next[id];
-      } else {
-        for (const { id, row } of visibleRows) next[id] = row;
+      if (anchorStatus == null) {
+        for (const id of selectedRowIds) {
+          const cached = selectedBulkRowsById[id];
+          if (cached) {
+            anchorStatus = getBulkRowStatus(cached);
+            if (anchorStatus) break;
+          }
+        }
       }
-      return next;
-    });
-    setBulkStatusPickerOpen(false);
-    setBulkStatusPickerOptions([]);
-  }, [stageFilteredData, selectedRowIds]);
+      if (anchorStatus) {
+        const matchingRows = stageFilteredData.filter(
+          (row) => getBulkRowStatus(row) === anchorStatus
+        );
+        const matchingIds = matchingRows
+          .map((row) => normalizeBulkRowId(row?.id))
+          .filter((id): id is string => id != null);
+        const allMatchingSelected =
+          matchingIds.length > 0 && matchingIds.every((id) => selectedRowIds.has(id));
+        if (allMatchingSelected) {
+          setSelectedRowIds(new Set());
+          setSelectedBulkRowsById({});
+        } else {
+          const nextCache: Record<string, any> = {};
+          for (const row of matchingRows) {
+            const id = normalizeBulkRowId(row?.id);
+            if (id != null) nextCache[id] = row;
+          }
+          setSelectedRowIds(new Set(matchingIds));
+          setSelectedBulkRowsById(nextCache);
+        }
+        setBulkStatusPickerOpen(false);
+        setBulkStatusPickerOptions([]);
+        return;
+      }
+    }
+
+    const statusOptions = getPageStatusCounts();
+    if (statusOptions.length === 0) return;
+
+    if (statusOptions.length === 1) {
+      selectBulkRowsByStatus(statusOptions[0].status);
+      return;
+    }
+
+    // Mixed statuses on this page — ask which status to select.
+    setBulkStatusPickerOptions(statusOptions);
+    setBulkStatusPickerOpen(true);
+  }, [
+    getPageStatusCounts,
+    selectBulkRowsByStatus,
+    selectedBulkRowsById,
+    selectedRowIds,
+    stageFilteredData,
+  ]);
 
   const clearBulkSelection = useCallback(() => {
     setSelectedRowIds(new Set());

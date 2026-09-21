@@ -79,6 +79,35 @@ describe('requestStageTabs', () => {
     );
   });
 
+  it('keeps user status filters on All stage list URL (counts match table)', () => {
+    const extra = new URLSearchParams('status=VENDOR_IDENTIFIED&search=widget&shipment_status=ORDERED');
+    const url = buildRequestStageListUrl(
+      '/crm-records/records/?entity_type=unmannd_request&status=OLD&page=9',
+      {
+        stage: 'all',
+        extraParams: extra,
+        page: 1,
+        pageSize: 10,
+        includeCount: true,
+      }
+    );
+    expect(url).toContain('status=VENDOR_IDENTIFIED');
+    expect(url).toContain('shipment_status=ORDERED');
+    expect(url).toContain('search=widget');
+    expect(url).not.toContain('status=OLD');
+    expect(url).toContain('include_count=true');
+
+    const orderedUrl = buildRequestStageListUrl('/crm-records/records/?entity_type=unmannd_request', {
+      stage: 'ordered',
+      extraParams: new URLSearchParams('status=VENDOR_IDENTIFIED'),
+      page: 1,
+      pageSize: 1,
+      includeCount: true,
+    });
+    expect(orderedUrl).toContain('shipment_status=ORDERED');
+    expect(orderedUrl).not.toContain('status=VENDOR_IDENTIFIED');
+  });
+
   it('parses list totals', () => {
     expect(parseListTotalCount({ page_meta: { total_count: 14 } })).toBe(14);
     expect(parseListTotalCount({ count: 8 })).toBe(8);

@@ -156,7 +156,9 @@ export function applyRequestStageFiltersToParams(
 
 /**
  * Build a list URL for stage count / filtered fetch.
- * Strips existing page/status params from the endpoint so ours win.
+ * Strips pagination from the endpoint so ours win.
+ * For concrete stages, also strips status / shipment_status so stage filters win.
+ * For "all", preserves status / shipment_status from the endpoint, forceQueryParams, and extraParams.
  */
 export function buildRequestStageListUrl(
   endpoint: string,
@@ -175,15 +177,16 @@ export function buildRequestStageListUrl(
   const path = qIndex >= 0 ? base.slice(0, qIndex) : base;
   const existing = new URLSearchParams(qIndex >= 0 ? base.slice(qIndex + 1) : '');
 
-  // Drop pagination / stage filters from the saved endpoint so we control them.
-  for (const key of [
-    'page',
-    'page_size',
-    'include_count',
-    'status',
-    'shipment_status',
-  ]) {
+  // Drop pagination from the saved endpoint so we control it.
+  // For concrete stages, also drop status / shipment_status so stage filters win.
+  // For "all", keep them so count requests match the table's user filters.
+  for (const key of ['page', 'page_size', 'include_count']) {
     existing.delete(key);
+  }
+  const keepUserStatusFilters = options.stage === 'all';
+  if (!keepUserStatusFilters) {
+    existing.delete('status');
+    existing.delete('shipment_status');
   }
 
   if (
@@ -196,15 +199,16 @@ export function buildRequestStageListUrl(
 
   if (options.forceQueryParams) {
     for (const [k, v] of Object.entries(options.forceQueryParams)) {
-      if (v != null && String(v).trim() !== '' && k !== 'status' && k !== 'shipment_status') {
-        existing.set(k, String(v));
-      }
+      if (v == null || String(v).trim() === '') continue;
+      if (!keepUserStatusFilters && (k === 'status' || k === 'shipment_status')) continue;
+      existing.set(k, String(v));
     }
   }
 
   if (options.extraParams) {
     options.extraParams.forEach((v, k) => {
-      if (k === 'page' || k === 'page_size' || k === 'status' || k === 'shipment_status') return;
+      if (k === 'page' || k === 'page_size') return;
+      if (!keepUserStatusFilters && (k === 'status' || k === 'shipment_status')) return;
       existing.set(k, v);
     });
   }
