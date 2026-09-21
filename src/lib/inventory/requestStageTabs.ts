@@ -66,12 +66,6 @@ export function getRowShipmentStatus(row: Record<string, unknown> | null | undef
   return normalize(data?.shipment_status ?? row?.shipment_status);
 }
 
-function dataFlag(row: Record<string, unknown>, key: string): unknown {
-  const data =
-    row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : null;
-  return data?.[key] ?? row?.[key];
-}
-
 /**
  * Assign each row to exactly one stage (priority order) so client filters stay consistent.
  * Rows like VENDOR_IDENTIFIED only appear under "All Request".
@@ -83,9 +77,9 @@ export function getRowPrimaryRequestStage(
 
   const status = getRowRequestStatus(row);
   const shipment = getRowShipmentStatus(row);
-  const invoiced = normalize(dataFlag(row, 'invoiced'));
 
-  if (status === 'REJECTED' || invoiced === 'TRUE' || invoiced === 'YES' || invoiced === '1') {
+  // Closed first — matches server filter status=REJECTED (exclusive primary stage).
+  if (status === 'REJECTED') {
     return 'invoiced_closed';
   }
   // Shipment-driven stages (Ordered / Delivered) take priority over request status.
@@ -143,15 +137,19 @@ export function formatStageCount(count: number): string {
   return String(Math.max(0, count)).padStart(2, '0');
 }
 
-/** Apply stage filters onto a URLSearchParams (overwrites status / shipment_status). */
+/**
+ * Apply stage filters onto a URLSearchParams.
+ * For a concrete stage, overwrites status / shipment_status.
+ * For "all", leaves any user/endpoint status filters intact.
+ */
 export function applyRequestStageFiltersToParams(
   params: URLSearchParams,
   stage: RequestStageTabId
 ): void {
-  params.delete('status');
-  params.delete('shipment_status');
   const filters = REQUEST_STAGE_SERVER_FILTERS[stage];
   if (!filters) return;
+  params.delete('status');
+  params.delete('shipment_status');
   if (filters.status) params.set('status', filters.status);
   if (filters.shipment_status) params.set('shipment_status', filters.shipment_status);
 }

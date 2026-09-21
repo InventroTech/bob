@@ -128,38 +128,24 @@ export function LeadTableView(props: LeadTableModel) {
     return filteredData.findIndex((r: any) => r.id === selectedRecord.id);
   }, [filteredData, selectedRecord]);
 
-  const bulkAttributeOptions = useMemo(
-    () =>
-      [
-        { value: 'status', label: 'Status' },
-        { value: 'shipment_status', label: 'Shipment status' },
-      ] as const,
-    []
-  );
+  const bulkAttributeOptions = useMemo(() => {
+    const attrs = new Set(
+      bulkActionButtons.map((b) => ((b.targetAttribute || 'status').trim() || 'status'))
+    );
+    const options: Array<{ value: string; label: string }> = [];
+    if (attrs.has('status')) options.push({ value: 'status', label: 'Status' });
+    if (attrs.has('shipment_status')) {
+      options.push({ value: 'shipment_status', label: 'Shipment status' });
+    }
+    return options;
+  }, [bulkActionButtons]);
 
   const bulkValueOptions = useMemo(() => {
     const attr = (bulkTargetAttribute || 'status').trim() || 'status';
-    if (attr === 'shipment_status') {
-      return [
-        { value: 'N/A', label: 'N/A' },
-        { value: 'NOT_SHIPPED', label: 'Not shipped' },
-        { value: 'ORDERED', label: 'Ordered' },
-        { value: 'IN_TRANSIT', label: 'In transit' },
-        { value: 'OUT_FOR_DELIVERY', label: 'Out for delivery' },
-        { value: 'DELIVERED', label: 'Delivered' },
-        { value: 'EXCEPTION', label: 'Exception' },
-      ];
-    }
-    return [
-      { value: 'NEW_REQUEST', label: 'New request' },
-      { value: 'ON_HOLD', label: 'On hold' },
-      { value: 'VENDOR_IDENTIFIED', label: 'Vendor identified' },
-      { value: 'IN_CART', label: 'In cart' },
-      { value: 'IN_SHIPPING', label: 'In shipping' },
-      { value: 'REJECTED', label: 'Rejected' },
-      { value: 'REQ_TO_VERIFY', label: 'Req to verify' },
-    ];
-  }, [bulkTargetAttribute]);
+    return bulkActionButtons
+      .filter((b) => ((b.targetAttribute || 'status').trim() || 'status') === attr)
+      .map((b) => ({ value: b.statusValue, label: b.label }));
+  }, [bulkActionButtons, bulkTargetAttribute]);
 
   useEffect(() => {
     if (!bulkAttributeOptions.some((opt) => opt.value === bulkTargetAttribute)) {

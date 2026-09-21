@@ -44,9 +44,15 @@ describe('requestStageTabs', () => {
     expect(REQUEST_STAGE_SERVER_FILTERS.ordered?.shipment_status).toBe('ORDERED');
     expect(REQUEST_STAGE_SERVER_FILTERS.delivered?.shipment_status).toBe('DELIVERED');
     expect(REQUEST_STAGE_SERVER_FILTERS.in_cart?.status).toBe('IN_CART');
+    expect(REQUEST_STAGE_SERVER_FILTERS.invoiced_closed?.status).toBe('REJECTED');
     const params = new URLSearchParams('status=FOO&page=3');
     applyRequestStageFiltersToParams(params, 'in_cart');
     expect(params.get('status')).toBe('IN_CART');
+
+    const allParams = new URLSearchParams('status=VENDOR_IDENTIFIED&shipment_status=ORDERED');
+    applyRequestStageFiltersToParams(allParams, 'all');
+    expect(allParams.get('status')).toBe('VENDOR_IDENTIFIED');
+    expect(allParams.get('shipment_status')).toBe('ORDERED');
 
     const url = buildRequestStageListUrl('/crm-records/records/?entity_type=unmannd_request&page=9', {
       stage: 'ordered',
@@ -59,6 +65,18 @@ describe('requestStageTabs', () => {
     expect(url).toContain('page_size=1');
     expect(url).toContain('include_count=true');
     expect(url).not.toContain('page=9');
+  });
+
+  it('treats REJECTED as closed; shipment ORDERED beats IN_CART (no double-count)', () => {
+    expect(getRowPrimaryRequestStage({ data: { status: 'REJECTED', shipment_status: 'DELIVERED' } })).toBe(
+      'invoiced_closed'
+    );
+    expect(
+      getRowPrimaryRequestStage({ data: { status: 'IN_CART', shipment_status: 'ORDERED' } })
+    ).toBe('ordered');
+    expect(rowMatchesRequestStage({ data: { status: 'IN_CART', shipment_status: 'ORDERED' } }, 'in_cart')).toBe(
+      false
+    );
   });
 
   it('parses list totals', () => {

@@ -36,7 +36,7 @@ import {
   type OpenLeadRequest,
 } from '@/lib/realtime/openLeadBus';
 import { crmLeadsApi } from '@/lib/api/services/crmLeads';
-import { FilterService } from '@/services/filterService';
+import { FilterService, parseFilterValuesFromUrl } from '@/services/filterService';
 import { apiClient } from '@/lib/api';
 import { CustomButton } from '@/components/ui/CustomButton';
 import type { CustomTableColumn } from '@/components/ui/CustomTable';
@@ -596,50 +596,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   // Parse URL parameters and restore filter state for deep links/bookmarks
   const parseURLFilters = useCallback((filters: FilterConfig[]): Record<string, any> => {
-    const urlParams = new URLSearchParams(location.search);
-    const filterValues: Record<string, any> = {};
-
-    filters.forEach(filter => {
-      const accessor = filter.accessor || filter.key;
-      const paramValue = urlParams.get(accessor);
-
-      if (paramValue !== null) {
-        switch (filter.type) {
-          case 'select': {
-            // Handle multiple values (separate parameters with same name)
-            const allValues = urlParams.getAll(accessor);
-            if (allValues.length > 0) {
-              filterValues[filter.key] = allValues;
-            }
-            break;
-          }
-          case 'date_gte':
-          case 'date_lte':
-          case 'date_exact':
-          case 'text':
-          case 'search':
-          case 'number_gte':
-          case 'number_lte':
-            filterValues[filter.key] = paramValue;
-            break;
-          case 'date_range':
-          case 'date_time_range': {
-            // Date range / date time range: start and end from __gte and __lte
-            const startValue = urlParams.get(`${accessor}__gte`);
-            const endValue = urlParams.get(`${accessor}__lte`);
-            if (startValue || endValue) {
-              filterValues[filter.key] = {
-                start: startValue ? new Date(startValue) : undefined,
-                end: endValue ? new Date(endValue) : undefined
-              };
-            }
-            break;
-          }
-        }
-      }
-    });
-
-    return filterValues;
+    return parseFilterValuesFromUrl(filters, new URLSearchParams(location.search));
   }, [location.search]);
 
   // Initialize filters from URL on component mount and reset when no filters
@@ -1629,7 +1586,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
   }, [showRequestStageTabs, requestStageTab]);
 
-  // Server-side totals per stage (page_size=1 + include_count) — matches dedicated pages.
+  // Server-side totals per stage (page_size=1 + include_count) — same search/filters as the table.
   useEffect(() => {
     if (!showRequestStageTabs || !effectiveApiEndpoint) {
       setRequestStageCounts(emptyRequestStageCounts());
@@ -1641,8 +1598,33 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     const forceParams = (config as { forceQueryParams?: Record<string, string> } | undefined)
       ?.forceQueryParams;
 
+    const buildExtraParams = (): URLSearchParams => {
+      const service = filterServiceRef.current;
+      const useDynamicFilters =
+        normalizedFilters.length > 0 && !config?.showFallbackOnly && service;
+      let params: URLSearchParams;
+      if (useDynamicFilters) {
+        params = service.generateQueryParams(filterState.values);
+      } else {
+        params = new URLSearchParams();
+      }
+      const currentSearch = (latestSearchValueRef.current || searchTerm).trim();
+      if (currentSearch) {
+        params.set('search', currentSearch);
+        if (config?.searchFields) {
+          params.set('search_fields', config.searchFields);
+        }
+      }
+      removeAssignedToForGM(params, {
+        effectiveFilters,
+        filterStateValues: filterState.values,
+      });
+      return params;
+    };
+
     const run = async () => {
       try {
+        const extraParams = buildExtraParams();
         const results = await Promise.all(
           REQUEST_STAGE_TABS.map(async (tab) => {
             const url = buildRequestStageListUrl(effectiveApiEndpoint, {
@@ -1652,6 +1634,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
               page: 1,
               pageSize: 1,
               includeCount: true,
+              extraParams,
             });
             const response = await apiClient.get(url, { signal: controller.signal });
             return [tab.id, parseListTotalCount(response?.data)] as const;
@@ -1678,18 +1661,26 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     showRequestStageTabs,
     effectiveApiEndpoint,
     config?.entityType,
+    config?.showFallbackOnly,
+    config?.searchFields,
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams,
     stageCountsTick,
+    normalizedFilters.length,
+    filterState.values,
+    searchTerm,
+    effectiveFilters,
+    removeAssignedToForGM,
   ]);
 
   // List is filtered on the server when a stage tab is active.
   const stageFilteredData = filteredData;
 
+  // Bulk Edit only on All Request (procurement itemsTable), not every ops table.
   const bulkSelectionEnabled =
     !isInPageBuilder &&
     isInventoryRequestTable &&
     config?.tableType === 'itemsTable' &&
-    !isMyRequestPage;
+    inventoryTableKind === 'procurement';
 
   const getRowWorkflowButtons = useCallback(
     (row: any) => {
@@ -1748,31 +1739,62 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const canSelectBulkRow = useCallback(
     (row: any) => {
       if (!bulkSelectionEnabled) return false;
-      return normalizeBulkRowId(row?.id) != null;
+      if (normalizeBulkRowId(row?.id) == null) return false;
+      if (bulkSelectionStatus == null) return true;
+      return getBulkRowStatus(row) === bulkSelectionStatus;
     },
-    [bulkSelectionEnabled]
+    [bulkSelectionEnabled, bulkSelectionStatus]
   );
 
-  const toggleBulkRowSelection = useCallback((row: any, selected: boolean) => {
-    const rowId = normalizeBulkRowId(row?.id);
-    if (rowId == null) return;
+  const toggleBulkRowSelection = useCallback(
+    (row: any, selected: boolean) => {
+      const rowId = normalizeBulkRowId(row?.id);
+      if (rowId == null) return;
 
-    setSelectedRowIds((prev) => {
-      const next = new Set(prev);
-      if (selected) next.add(rowId);
-      else next.delete(rowId);
-      return next;
-    });
-    setSelectedBulkRowsById((prev) => {
       if (!selected) {
-        if (!(rowId in prev)) return prev;
-        const next = { ...prev };
-        delete next[rowId];
-        return next;
+        setSelectedRowIds((prev) => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
+        setSelectedBulkRowsById((prev) => {
+          if (!(rowId in prev)) return prev;
+          const next = { ...prev };
+          delete next[rowId];
+          return next;
+        });
+        return;
       }
-      return { ...prev, [rowId]: row };
-    });
-  }, []);
+
+      const rowStatus = getBulkRowStatus(row);
+      setSelectedRowIds((prev) => {
+        if (prev.size > 0) {
+          let anchorStatus: string | null = null;
+          for (const existing of stageFilteredData) {
+            const existingId = normalizeBulkRowId(existing?.id);
+            if (existingId != null && prev.has(existingId)) {
+              anchorStatus = getBulkRowStatus(existing);
+              break;
+            }
+          }
+          if (anchorStatus != null && rowStatus !== anchorStatus) {
+            toast({
+              title: 'Different status',
+              description:
+                'Bulk select only works for requests with the same status as the first selected row.',
+              variant: 'destructive',
+            });
+            return prev;
+          }
+        }
+        const next = new Set(prev);
+        next.add(rowId);
+        return next;
+      });
+      setSelectedBulkRowsById((prev) => ({ ...prev, [rowId]: row }));
+    },
+    [stageFilteredData, toast]
+  );
 
   const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
   const [bulkStatusPickerOptions, setBulkStatusPickerOptions] = useState<
@@ -1844,14 +1866,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     setBulkStatusPickerOptions([]);
   }, []);
 
-  // Only reset selection when the underlying table API changes — keep picks across
-  // stage tabs (All / Pending / Cart / …) and pagination.
+  // Reset selection when the table API, stage tab, or page changes.
   useEffect(() => {
     setSelectedRowIds(new Set());
     setSelectedBulkRowsById({});
     setBulkStatusPickerOpen(false);
     setBulkStatusPickerOptions([]);
-  }, [effectiveApiEndpoint]);
+  }, [effectiveApiEndpoint, requestStageTab, pagination.currentPage]);
 
   // Keep cached bulk rows fresh when the current page includes them.
   useEffect(() => {
@@ -1874,13 +1895,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const rowSupportsBulkAction = useCallback(
     (row: any, button: { statusValue: string; targetAttribute?: string }) => {
       const key = bulkActionButtonKey(button);
-      const workflowMatch = getRowWorkflowButtons(row).some((btn) => bulkActionButtonKey(btn) === key);
+      const workflowMatch = getRowWorkflowButtons(row).some(
+        (btn) => bulkActionButtonKey(btn) === key
+      );
       if (workflowMatch) return true;
-      if (effectiveStatusButtons.some((btn) => bulkActionButtonKey(btn) === key)) return true;
-      // All Request bulk edit: allow status / shipment_status updates for ops tables
-      // even when the page has no configured statusButtons.
-      const attr = ((button.targetAttribute || 'status').trim() || 'status');
-      return attr === 'status' || attr === 'shipment_status';
+      return effectiveStatusButtons.some((btn) => bulkActionButtonKey(btn) === key);
     },
     [effectiveStatusButtons, getRowWorkflowButtons]
   );
@@ -1896,39 +1915,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
     const perRowButtons = selectedRows.map((row) => getRowWorkflowButtons(row));
     const configured = filterDuplicateInventoryWorkflowButtons(effectiveStatusButtons);
+    const candidateButtons = mergeBulkActionButtons([...perRowButtons, configured]);
 
-    // Fallback catalog so Bulk Edit still works when page config has no statusButtons
-    // and the current user gets few/no per-row workflow actions.
-    const fallbackStatusButtons: Array<{
-      label: string;
-      statusValue: string;
-      targetAttribute?: string;
-      statusText?: string;
-    }> = [
-      { label: 'New request', statusValue: 'NEW_REQUEST', targetAttribute: 'status' },
-      { label: 'On hold', statusValue: 'ON_HOLD', targetAttribute: 'status' },
-      { label: 'Vendor identified', statusValue: 'VENDOR_IDENTIFIED', targetAttribute: 'status' },
-      { label: 'In cart', statusValue: 'IN_CART', targetAttribute: 'status' },
-      { label: 'In shipping', statusValue: 'IN_SHIPPING', targetAttribute: 'status' },
-      { label: 'Rejected', statusValue: 'REJECTED', targetAttribute: 'status' },
-      { label: 'N/A', statusValue: 'N/A', targetAttribute: 'shipment_status' },
-      { label: 'In transit', statusValue: 'IN_TRANSIT', targetAttribute: 'shipment_status' },
-      { label: 'Out for delivery', statusValue: 'OUT_FOR_DELIVERY', targetAttribute: 'shipment_status' },
-      { label: 'Delivered', statusValue: 'DELIVERED', targetAttribute: 'shipment_status' },
-    ];
-
-    const candidateButtons = mergeBulkActionButtons([
-      ...perRowButtons,
-      configured,
-      fallbackStatusButtons,
-    ]);
-
-    // Prefer workflow/config matches; if none, still allow the fallback catalog.
-    const eligible = candidateButtons.filter((btn) =>
+    return candidateButtons.filter((btn) =>
       selectedRows.some((row) => rowSupportsBulkAction(row, btn))
     );
-    if (eligible.length > 0) return eligible;
-    return candidateButtons;
   }, [
     bulkSelectionEnabled,
     effectiveStatusButtons,
