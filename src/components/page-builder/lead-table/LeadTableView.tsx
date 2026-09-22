@@ -38,6 +38,14 @@ import {
   formatStageCount,
   type RequestStageTabId,
 } from '@/lib/inventory/requestStageTabs';
+import {
+  INVENTORY_REQUEST_STATUSES,
+  SHIPMENT_STATUSES,
+} from '@/constants/inventory';
+import {
+  getInventoryStatusChipLabel,
+  getShipmentStatusLabel,
+} from '@/lib/inventory/statusStyles';
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -104,7 +112,6 @@ export function LeadTableView(props: LeadTableModel) {
     bulkSelectionEnabled,
     selectedRowIds,
     selectedRowCount,
-    bulkActionButtons,
     bulkApplying,
     canSelectBulkRow,
     toggleBulkRowSelection,
@@ -132,24 +139,28 @@ export function LeadTableView(props: LeadTableModel) {
     return filteredData.findIndex((r: any) => r.id === selectedRecord.id);
   }, [filteredData, selectedRecord]);
 
-  const bulkAttributeOptions = useMemo(() => {
-    const attrs = new Set(
-      bulkActionButtons.map((b) => ((b.targetAttribute || 'status').trim() || 'status'))
-    );
-    const options: Array<{ value: string; label: string }> = [];
-    if (attrs.has('status')) options.push({ value: 'status', label: 'Status' });
-    if (attrs.has('shipment_status')) {
-      options.push({ value: 'shipment_status', label: 'Shipment status' });
-    }
-    return options;
-  }, [bulkActionButtons]);
+  // Always offer Status + Shipment status catalogs (not workflow-gated).
+  const bulkAttributeOptions = useMemo(
+    () => [
+      { value: 'status', label: 'Status' },
+      { value: 'shipment_status', label: 'Shipment status' },
+    ],
+    []
+  );
 
   const bulkValueOptions = useMemo(() => {
     const attr = (bulkTargetAttribute || 'status').trim() || 'status';
-    return bulkActionButtons
-      .filter((b) => ((b.targetAttribute || 'status').trim() || 'status') === attr)
-      .map((b) => ({ value: b.statusValue, label: b.label }));
-  }, [bulkActionButtons, bulkTargetAttribute]);
+    if (attr === 'shipment_status') {
+      return ['N/A', ...SHIPMENT_STATUSES].map((value) => ({
+        value,
+        label: getShipmentStatusLabel(value),
+      }));
+    }
+    return INVENTORY_REQUEST_STATUSES.map((value) => ({
+      value,
+      label: getInventoryStatusChipLabel(value),
+    }));
+  }, [bulkTargetAttribute]);
 
   useEffect(() => {
     if (!bulkAttributeOptions.some((opt) => opt.value === bulkTargetAttribute)) {
@@ -167,18 +178,6 @@ export function LeadTableView(props: LeadTableModel) {
     }
   }, [bulkValueOptions, bulkTargetValue]);
 
-  const handleBulkSave = useCallback(() => {
-    if (!bulkTargetValue) return;
-    const match = bulkValueOptions.find((opt) => opt.value === bulkTargetValue);
-    if (!match) return;
-    void handleBulkStatusAction({
-      label: match.label,
-      statusValue: match.value,
-      targetAttribute: bulkTargetAttribute,
-      statusText: match.label,
-    });
-  }, [bulkTargetAttribute, bulkTargetValue, bulkValueOptions, handleBulkStatusAction]);
-
   const handleStartBulkEdit = useCallback(() => {
     setBulkEditMode(true);
     clearBulkSelection();
@@ -186,11 +185,28 @@ export function LeadTableView(props: LeadTableModel) {
     setBulkTargetValue('');
   }, [clearBulkSelection]);
 
-  const handleExitBulkEdit = useCallback(() => {
-    setBulkEditMode(false);
-    clearBulkSelection();
-    setBulkTargetValue('');
-  }, [clearBulkSelection]);
+  /** Bulk Edit → Save: apply catalogs then return to Bulk Edit. */
+  const handleBulkSave = useCallback(async () => {
+    if (!bulkTargetValue || selectedRowCount === 0) return;
+    const match = bulkValueOptions.find((opt) => opt.value === bulkTargetValue);
+    if (!match) return;
+    const ok = await handleBulkStatusAction({
+      label: match.label,
+      statusValue: match.value,
+      targetAttribute: bulkTargetAttribute,
+      statusText: match.label,
+    });
+    if (ok) {
+      setBulkEditMode(false);
+      setBulkTargetValue('');
+    }
+  }, [
+    bulkTargetAttribute,
+    bulkTargetValue,
+    bulkValueOptions,
+    handleBulkStatusAction,
+    selectedRowCount,
+  ]);
 
   const handleNavigateRecord = useCallback(
     (direction: 'prev' | 'next') => {
@@ -234,7 +250,7 @@ export function LeadTableView(props: LeadTableModel) {
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
   const procurementHeaderBg = 'bg-[#0E3777]';
-  const procurementTableFrame = 'mb-3 min-h-0';
+  const procurementTableFrame = 'mb-3';
   const pageChromeTitle = usePageDisplayTitle().trim();
   const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
   const inventoryTableKindForTitle =
@@ -248,6 +264,16 @@ export function LeadTableView(props: LeadTableModel) {
   const pageTitleDisplay = isProcurementStyleTable
     ? pageTitleText.toUpperCase()
     : pageTitleText;
+  const isMyRequestPageChrome = inventoryTableKindForTitle === 'my_request';
+  /** My Request: compact search; Filters fixed on the right, same height. */
+  const searchFieldWidthClass = isMyRequestPageChrome
+    ? 'w-[180px] max-w-[180px] shrink-0'
+    : isProcurementStyleTable
+      ? 'min-w-[180px] max-w-sm flex-1'
+      : 'min-w-[200px] max-w-sm flex-1';
+  const filtersButtonWidthClass = isMyRequestPageChrome ? 'w-[100px]' : 'w-[108px]';
+  const filtersButtonPadClass = 'px-3';
+  const toolbarControlHeightClass = 'h-9';
   const isUnmanndEntity =
     config?.entityType === 'unmannd_request' ||
     /(?:^|[?&])entity_type=unmannd_request(?:&|$)/i.test(
@@ -308,14 +334,14 @@ export function LeadTableView(props: LeadTableModel) {
     <div
       className={
         isProcurementStyleTable
-          ? 'flex h-full min-h-0 w-full flex-col'
+          ? 'flex w-full flex-col'
           : undefined
       }
     >
       <div
         className={
           isProcurementStyleTable
-            ? 'flex min-h-0 w-full max-w-full flex-1 flex-col bg-white px-1 py-1 sm:px-2'
+            ? 'flex w-full max-w-full flex-col bg-white px-1 py-1 sm:px-2'
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
@@ -325,7 +351,7 @@ export function LeadTableView(props: LeadTableModel) {
           className={cn(
             'mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3',
             !showRequestStageTabs &&
-              'sm:flex-row sm:flex-nowrap sm:items-start sm:gap-3',
+              'sm:flex-row sm:flex-nowrap sm:items-center sm:gap-3',
             !showRequestStageTabs && (pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end')
           )}
         >
@@ -419,12 +445,14 @@ export function LeadTableView(props: LeadTableModel) {
 
           <div
             className={cn(
-              'flex w-full shrink-0 flex-wrap items-center gap-2',
+              'flex w-full shrink-0 flex-nowrap items-center gap-2',
               showRequestStageTabs
                 ? 'justify-end'
-                : pageTitleDisplay
-                  ? 'sm:mt-1.5 sm:justify-end'
-                  : 'sm:justify-end'
+                : isMyRequestPageChrome
+                  ? 'ml-auto w-auto shrink-0 justify-end'
+                  : pageTitleDisplay
+                    ? 'sm:mt-0 sm:w-auto sm:justify-end'
+                    : 'sm:justify-end'
             )}
           >
             {bulkSelectionEnabled && bulkEditMode ? (
@@ -462,55 +490,43 @@ export function LeadTableView(props: LeadTableModel) {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 rounded-[6px] bg-[#0E3777] px-4 text-white hover:bg-[#0b2d61]"
-                  disabled={
-                    selectedRowCount === 0 ||
-                    !bulkTargetValue ||
-                    bulkValueOptions.length === 0 ||
-                    bulkApplying != null
-                  }
-                  onClick={handleBulkSave}
-                >
-                  {bulkApplying != null ? (
-                    <>
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
-                      Saving…
-                    </>
-                  ) : (
-                    'Save'
-                  )}
-                </Button>
-                <button
-                  type="button"
-                  className="text-sm text-[#1A44A1] underline-offset-2 hover:underline"
-                  onClick={handleExitBulkEdit}
-                >
-                  Cancel{selectedRowCount > 0 ? ` (${selectedRowCount})` : ''}
-                </button>
               </div>
             ) : null}
             {bulkSelectionEnabled ? (
               <CustomButton
                 variant="default"
                 size="sm"
+                disabled={
+                  bulkEditMode &&
+                  (selectedRowCount === 0 ||
+                    !bulkTargetValue ||
+                    bulkValueOptions.length === 0 ||
+                    bulkApplying != null)
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                   if (bulkEditMode) {
-                    handleExitBulkEdit();
+                    void handleBulkSave();
                   } else {
                     handleStartBulkEdit();
                   }
                 }}
                 className={
                   bulkEditMode
-                    ? 'h-9 shrink-0 justify-center rounded-[6px] border border-[#0E3777] bg-white px-4 text-[#0E3777] hover:bg-[#F4F8FF]'
+                    ? 'h-9 shrink-0 justify-center rounded-[6px] border-0 bg-[#0E3777] px-4 text-white hover:bg-[#0b2d61]'
                     : 'h-9 shrink-0 justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-4 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white'
                 }
               >
-                {bulkEditMode ? 'Exit bulk' : 'Bulk Edit'}
+                {bulkApplying != null ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
+                    Saving…
+                  </>
+                ) : bulkEditMode ? (
+                  'Save'
+                ) : (
+                  'Bulk Edit'
+                )}
               </CustomButton>
             ) : null}
             <div
@@ -518,9 +534,7 @@ export function LeadTableView(props: LeadTableModel) {
                 'relative',
                 showRequestStageTabs
                   ? 'w-full max-w-[280px] min-w-[200px] sm:w-[280px]'
-                  : isProcurementStyleTable
-                    ? 'min-w-[180px] max-w-sm flex-1'
-                    : 'min-w-[200px] max-w-sm flex-1'
+                  : searchFieldWidthClass
               )}
             >
               <Search
@@ -537,7 +551,7 @@ export function LeadTableView(props: LeadTableModel) {
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className={
                   isProcurementStyleTable
-                    ? 'h-9 w-full rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm'
+                    ? `${toolbarControlHeightClass} w-full rounded-[6px] border-gray-200 bg-white pl-9 text-sm shadow-sm`
                     : 'pl-9 h-8 rounded-md'
                 }
               />
@@ -553,8 +567,8 @@ export function LeadTableView(props: LeadTableModel) {
               className={
                 isProcurementStyleTable
                   ? showFilters
-                    ? 'h-[38px] w-[108px] shrink-0 justify-center rounded-[6px] border-0 bg-[#0E3777] px-3 text-white shadow-[0_4px_10px_rgba(10,94,205,0.35)] hover:bg-[#0b2d61] hover:text-white'
-                    : 'h-[38px] w-[108px] shrink-0 justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-3 text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white hover:shadow-[0_4px_10px_rgba(10,94,205,0.28)]'
+                    ? `${toolbarControlHeightClass} ${filtersButtonWidthClass} shrink-0 justify-center rounded-[6px] border-0 bg-[#0E3777] ${filtersButtonPadClass} text-white shadow-none hover:bg-[#0b2d61] hover:text-white`
+                    : `${toolbarControlHeightClass} ${filtersButtonWidthClass} shrink-0 justify-center rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] ${filtersButtonPadClass} text-white shadow-none hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)] hover:text-white`
                   : undefined
               }
             >
@@ -756,7 +770,7 @@ export function LeadTableView(props: LeadTableModel) {
         <div
           className={
             isProcurementStyleTable
-              ? 'relative mt-1 flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden'
+              ? 'relative mt-1 w-full max-w-full'
               : 'hidden md:block w-full max-w-full min-w-0 relative mt-1.5'
           }
         >
@@ -799,7 +813,7 @@ export function LeadTableView(props: LeadTableModel) {
             headerTextColor="text-white"
             dense={false}
             comfortable={isProcurementStyleTable}
-            fillHeight={isProcurementStyleTable}
+            fillHeight={false}
             fitViewport={isProcurementStyleTable}
             className={isProcurementStyleTable ? procurementTableFrame : undefined}
             hoverable={!isInPageBuilder && effectiveDetailMode !== 'none'}

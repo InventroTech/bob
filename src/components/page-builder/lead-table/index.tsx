@@ -11,7 +11,7 @@ import { LeadTableView } from './LeadTableView';
 export const LeadTableComponent: React.FC<LeadTableProps> = (props) => {
   const table = useLeadTable(props);
   return (
-    <div className="flex h-full min-h-0 w-full flex-col">
+    <div className="flex w-full flex-col">
       <LeadTableView {...table} />
     </div>
   );
