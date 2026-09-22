@@ -35,6 +35,7 @@ import {
   type RmPerformanceRow,
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
+import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
 import { useRmFilterOptions, type RmFilterOptions } from './rm-prd-analytics/useRmFilterOptions';
 import { filterByDateRange, resolveDateRange } from './rm-prd-analytics/dateRange';
 import { TouchReportSheet } from './rm-prd-analytics/TouchReportSheet';
@@ -92,6 +93,7 @@ function loadStoredTab(): Tab {
 export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = ({ config }) => {
   const { events, loading, error } = useRmActivityEvents();
   const { options: filterOptions } = useRmFilterOptions();
+  const { targets: dailyTargets } = useRmDailyTargets();
   const [tab, setTab] = useState<Tab>(loadStoredTab);
   const [filters, setFilters] = useState<Filters>(loadStoredFilters);
   const [drill, setDrill] = useState<DrillFilter | null>(null);
@@ -123,9 +125,15 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   );
   const visibleEvents = useMemo(() => filterByDateRange(events, dateBounds), [events, dateBounds]);
 
-  const performanceByRm = useMemo(() => computePerformanceByRm(visibleEvents), [visibleEvents]);
+  const performanceByRm = useMemo(
+    () => computePerformanceByRm(visibleEvents, dailyTargets),
+    [visibleEvents, dailyTargets]
+  );
   const adherenceByRm = useMemo(() => computeAdherenceByRm(visibleEvents), [visibleEvents]);
-  const teamTotals = useMemo(() => computeTeamTotals(visibleEvents), [visibleEvents]);
+  const teamTotals = useMemo(
+    () => computeTeamTotals(visibleEvents, dailyTargets),
+    [visibleEvents, dailyTargets]
+  );
   const shiftTimeAverages = useMemo(() => computeShiftTimeAverages(visibleEvents), [visibleEvents]);
   const achtOverall = useMemo(() => computeAchtOverall(visibleEvents), [visibleEvents]);
 
@@ -152,7 +160,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     () => (selectedRmUserId ? visibleEvents.filter((e) => e.rmUserId === selectedRmUserId) : []),
     [visibleEvents, selectedRmUserId]
   );
-  const selectedRmTeamTotals = useMemo(() => computeTeamTotals(selectedRmEvents), [selectedRmEvents]);
+  const selectedRmTeamTotals = useMemo(
+    () => computeTeamTotals(selectedRmEvents, dailyTargets),
+    [selectedRmEvents, dailyTargets]
+  );
   const selectedRmShiftTimeAverages = useMemo(() => computeShiftTimeAverages(selectedRmEvents), [selectedRmEvents]);
   const selectedRmAchtOverall = useMemo(() => computeAchtOverall(selectedRmEvents), [selectedRmEvents]);
   const selectedRmProfile: RmActivityEvent | undefined = selectedRmEvents[0];

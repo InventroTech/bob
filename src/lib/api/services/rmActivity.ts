@@ -39,6 +39,11 @@ export interface RmFilterOptionsDto {
   parties: string[];
 }
 
+// rm_user_id -> that RM's DAILY_TARGET user setting (same value the Team
+// Dashboard's "Trial Target" sums up). RMs with no target set are simply
+// absent from this map.
+export type RmDailyTargetsDto = Record<string, number>;
+
 export const rmActivityApi = {
   async getEvents(): Promise<RmActivityEventDto[]> {
     const response = await apiClient.get<RmActivityEventDto[]>('/analytics/rm-activity-events/');
@@ -49,6 +54,12 @@ export const rmActivityApi = {
    * crm_records.Bucket, states/parties from what's actually on real leads. */
   async getFilterOptions(): Promise<RmFilterOptionsDto> {
     const response = await apiClient.get<RmFilterOptionsDto>('/analytics/rm-filter-options/');
+    return response.data;
+  },
+
+  /** Per-RM daily trial targets, keyed by rm_user_id. */
+  async getDailyTargets(): Promise<RmDailyTargetsDto> {
+    const response = await apiClient.get<RmDailyTargetsDto>('/analytics/rm-daily-targets/');
     return response.data;
   },
 };

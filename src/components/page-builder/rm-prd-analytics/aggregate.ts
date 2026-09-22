@@ -15,10 +15,11 @@ export const BREACH_SECONDS = ACHT_THRESHOLDS.trial;
 // a "full" reference shift, used only to project a pace/occupancy bar
 const STANDARD_SHIFT_MINUTES = 600; // 10 hours
 
-// Placeholder until RMs have a real daily-trial-target field somewhere
-// (there isn't one on the membership table yet). Swap this for a real
-// lookup once that exists — nothing else here needs to change.
-const DEFAULT_DAILY_TRIAL_TARGET = 9;
+// rm_user_id -> that RM's own DAILY_TARGET setting (see useRmDailyTargets).
+// An RM absent from this map has no target configured, which reads as 0 —
+// matching how the Team Dashboard's "Trial Target" already treats it.
+export type DailyTargetsByRm = Record<string, number>;
+const targetFor = (targetsByRm: DailyTargetsByRm, rmUserId: string) => targetsByRm[rmUserId] ?? 0;
 
 const isCallTouch = (e: RmActivityEvent) => e.eventType === 'CALL_TOUCH';
 const isClosedCallTouch = (e: RmActivityEvent) => isCallTouch(e) && e.endedAt !== null;
@@ -155,7 +156,11 @@ export interface RmPerformanceRow {
   target: number;
 }
 
-function buildPerformanceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmPerformanceRow {
+function buildPerformanceRow(
+  rmUserId: string,
+  rmEvents: RmActivityEvent[],
+  targetsByRm: DailyTargetsByRm
+): RmPerformanceRow {
   const first = rmEvents[0];
   // only finished calls have a settled outcome — a call still in progress
   // can't be classified into a disposition yet, so it doesn't count here
@@ -179,22 +184,28 @@ function buildPerformanceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmP
     notInterestedRate: pct(counts.NOT_INTERESTED),
     trialRate: pct(counts.TRIAL_ACTIVATED),
     achieved: counts.TRIAL_ACTIVATED,
-    target: DEFAULT_DAILY_TRIAL_TARGET,
+    target: targetFor(targetsByRm, rmUserId),
   };
 }
 
-export function computePerformanceByRm(events: RmActivityEvent[]): RmPerformanceRow[] {
-  return [...groupByRm(events)].map(([rmUserId, rmEvents]) => buildPerformanceRow(rmUserId, rmEvents));
+export function computePerformanceByRm(
+  events: RmActivityEvent[],
+  targetsByRm: DailyTargetsByRm = {}
+): RmPerformanceRow[] {
+  return [...groupByRm(events)].map(([rmUserId, rmEvents]) => buildPerformanceRow(rmUserId, rmEvents, targetsByRm));
 }
 
-export function computeTeamTotals(events: RmActivityEvent[]) {
+export function computeTeamTotals(events: RmActivityEvent[], targetsByRm: DailyTargetsByRm = {}) {
   // same rule as the per-RM rows: a call still in progress has no outcome yet
   const calls = events.filter(isClosedCallTouch);
   const uniqueLeads = new Set(calls.map((c) => c.leadRecordId)).size;
   const touches = calls.length;
   const counts = countByDisposition(latestTouchPerLead(calls));
   const achieved = counts.TRIAL_ACTIVATED;
-  const target = groupByRm(events).size * DEFAULT_DAILY_TRIAL_TARGET;
+  // sum of each RM's own target, for whichever RMs were actually active
+  // (have events) in this range — not a flat number × headcount
+  const activeRmIds = [...groupByRm(events).keys()];
+  const target = activeRmIds.reduce((sum, rmUserId) => sum + targetFor(targetsByRm, rmUserId), 0);
   const pct = (n: number) => (uniqueLeads ? Math.round((n / uniqueLeads) * 1000) / 10 : 0);
 
   return {
