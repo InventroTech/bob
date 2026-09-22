@@ -28,6 +28,7 @@ import {
   resolveLeadRecordId,
   tasksSignature,
 } from "./utils";
+import { useLeadTimer } from "./useLeadTimer";
 
 export function useLeadCardCarousel(
   {
@@ -91,6 +92,10 @@ export function useLeadCardCarousel(
       nextFollowUp: "",
       leadStartTime: new Date(),
     });
+
+    // live "time spent on this lead" clock — ticks while a lead is on screen,
+    // stops (shows 0) once there's no current lead
+    const elapsedSeconds = useLeadTimer(currentLead ? lead.leadStartTime : null);
     
     const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
     const [processingAction, setProcessingAction] = useState<string | null>(null);
@@ -830,6 +835,8 @@ export function useLeadCardCarousel(
     const { event, success } = eventMap[action];
 
     const actingUserId = activeUserId || currentLead.praja_id;
+    // how long this lead has been on screen, right up to the moment of the click
+    const durationSeconds = Math.max(0, Math.floor((Date.now() - lead.leadStartTime.getTime()) / 1000));
     const payload: Record<string, any> = {
       notes: lead.notes || "",
       remarks: currentLead.latest_remarks,
@@ -837,6 +844,7 @@ export function useLeadCardCarousel(
       user_id: actingUserId,
       user_supabase_uid: actingUserId, // Backend filters by this field
       lead_owner_user_id: currentLead.praja_id,
+      duration_seconds: durationSeconds,
     };
 
     if (extra?.reason) {
@@ -1207,6 +1215,8 @@ export function useLeadCardCarousel(
     refreshingLead,
     currentLead,
     lead,
+    elapsedSeconds,
+    activeUserId,
     actionButtonsVisible,
     processingAction,
     imageError,

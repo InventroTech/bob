@@ -23,6 +23,7 @@ import {
   CseAnalyticsComponent,
   OperationsProgramsComponent,
   UserHierarchyComponent,
+  RmPrdAnalyticsComponent,
   ZohoMailComponent,
 } from "@/components/page-builder";
 import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
@@ -201,6 +202,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   analyticsBoard: CseAnalyticsComponent,
   operationsPrograms: OperationsProgramsComponent,
   userHierarchy: UserHierarchyComponent,
+  rmPrdAnalytics: RmPrdAnalyticsComponent,
   inventoryRequestForm: InventoryRequestFormComponent,
   procurementRequestForm: ProcurementRequestFormComponent,
   dispatchCardList: DispatchCardListComponent,
