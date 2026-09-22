@@ -24,6 +24,7 @@ import {
   OperationsProgramsComponent,
   UserHierarchyComponent,
   RmPrdAnalyticsComponent,
+  ZohoMailComponent,
 } from "@/components/page-builder";
 import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
 import { LeadTableComponent } from "@/components/page-builder/lead-table";
@@ -142,6 +143,9 @@ export interface ComponentConfig {
   initialStatusText?: string;
   defaultStatus?: string;
   urgencyOptions?: Array<{ label: string; value: string }>;
+  redirectAfterSubmitPageName?: string;
+  defaultDeliveryAddress?: string;
+  defaultDeliveryPincode?: string;
 }
 
 // Update CanvasComponentData to include config
@@ -203,6 +207,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   procurementRequestForm: ProcurementRequestFormComponent,
   dispatchCardList: DispatchCardListComponent,
   dispatchDashboard: DispatchDashboardComponent,
+  zohoMail: ZohoMailComponent,
 };
 
 

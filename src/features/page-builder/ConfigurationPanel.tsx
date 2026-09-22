@@ -37,6 +37,7 @@ import { DispatchCardListConfigPanel } from "@/components/page-builder/component
 import { DispatchDashboardConfigPanel } from "@/components/page-builder/component-config/DispatchDashboardConfig";
 import { ProcurementDashboardConfigPanel } from "@/components/page-builder/component-config/ProcurementDashboardConfig";
 import { AddUserConfig } from "@/components/page-builder/component-config/AddUserConfig";
+import { ZohoMailConfig } from "@/components/page-builder/component-config/ZohoMailConfig";
 import type { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import type { CanvasComponentData, ComponentConfig } from "./componentMap";
 
@@ -131,6 +132,9 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     initialStatusText?: string;
     defaultStatus?: string;
     urgencyOptions?: Array<{ label: string; value: string }>;
+    redirectAfterSubmitPageName?: string;
+    defaultDeliveryAddress?: string;
+    defaultDeliveryPincode?: string;
     // Records / procurement tables (leadTable / inventoryTable / procurementTable): items table mode
     tableType?: 'default' | 'itemsTable';
     statusButtons?: Array<{
@@ -230,6 +234,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     defaultStatus: (initialConfig as any).defaultStatus ?? '',
     urgencyOptions: (initialConfig as any).urgencyOptions ?? undefined,
     redirectAfterSubmitPageName: (initialConfig as any).redirectAfterSubmitPageName ?? '',
+    defaultDeliveryAddress: (initialConfig as any).defaultDeliveryAddress ?? '',
+    defaultDeliveryPincode: (initialConfig as any).defaultDeliveryPincode ?? '',
     // Records table: items table + status buttons
     tableType: (initialConfig as any).tableType || 'default',
     statusButtons: (initialConfig as any).statusButtons ?? [],
@@ -411,7 +417,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     [localFilters, debouncedUpdateWithDelay]
   );
 
-  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: string | FilterConfig['options'] | boolean) => {
+  const handleFilterFieldChange = useCallback((index: number, field: keyof FilterConfig, value: FilterConfig[keyof FilterConfig]) => {
     const newFilters = [...localFilters];
 
     // If changing the accessor, also update the key to match for consistency
@@ -558,6 +564,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
+            onReplaceFilters={handleReplaceFilters}
           />
         );
 
@@ -581,6 +588,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
+            onReplaceFilters={handleReplaceFilters}
           />
         );
 
@@ -644,6 +652,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
+            onReplaceFilters={handleReplaceFilters}
           />
         );
 
@@ -786,6 +795,9 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
           />
         );
 
+      case 'zohoMail':
+        return <ZohoMailConfig />;
+
       case 'teamDashboard':
         return (
           <TeamDashboardConfig
@@ -894,10 +906,43 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
               <Input
                 value={(localConfig as { redirectAfterSubmitPageName?: string }).redirectAfterSubmitPageName ?? ''}
                 onChange={(e) => handleInputChange('redirectAfterSubmitPageName', e.target.value)}
-                placeholder="My Requests"
+                placeholder="Settings"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                After Create Request, go to this sidebar page. Defaults to “My Request” / “My Requests”.
+                After Create Request, go to this sidebar page. Type the label you see in the
+                sidebar (e.g. Settings), or Header Title. “Settings page” also matches Settings.
+                Leave blank to stay on this form.
+              </p>
+            </div>
+
+            <div>
+              <Label>Default delivery address</Label>
+              <Input
+                value={localConfig.defaultDeliveryAddress ?? ''}
+                onChange={(e) => handleInputChange('defaultDeliveryAddress', e.target.value)}
+                placeholder="Company name, street, city"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Prefills New Request for this tenant only. Leave empty so users type their own.
+              </p>
+            </div>
+
+            <div>
+              <Label>Default delivery PIN code</Label>
+              <Input
+                inputMode="numeric"
+                maxLength={6}
+                value={localConfig.defaultDeliveryPincode ?? ''}
+                onChange={(e) =>
+                  handleInputChange(
+                    'defaultDeliveryPincode',
+                    e.target.value.replace(/\D/g, '').slice(0, 6)
+                  )
+                }
+                placeholder="e.g. 560001"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                6-digit PIN for this company. Other tenants never see this value.
               </p>
             </div>
 

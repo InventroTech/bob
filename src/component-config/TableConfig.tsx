@@ -123,11 +123,12 @@ interface TableConfigProps {
   handleColumnDelete?: (index: number) => void;
   handleFilterCountChange: (count: number) => void;
   handleFilterDelete: (index: number) => void;
-  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: string | FilterConfig['options'] | boolean) => void;
+  handleFilterFieldChange: (index: number, field: keyof FilterConfig, value: FilterConfig[keyof FilterConfig]) => void;
   handleFilterOptionsSourceChange?: (index: number, source: 'manual' | 'api') => void;
   handleAddFilterOption: (filterIndex: number) => void;
   handleRemoveFilterOption: (filterIndex: number, optionIndex: number) => void;
   handleFilterOptionChange: (filterIndex: number, optionIndex: number, field: keyof FilterOption, value: string) => void;
+  onReplaceFilters?: (filters: FilterConfig[]) => void;
   /**
    * `inventory` = All Requests style helpers (lean form fields).
    * Status transitions stay configured via Status action buttons.
@@ -171,6 +172,7 @@ export const TableConfig: React.FC<TableConfigProps> = ({
   handleAddFilterOption,
   handleRemoveFilterOption,
   handleFilterOptionChange,
+  onReplaceFilters,
   profile = 'default',
 }) => {
   const isInventoryProfile =
@@ -1340,6 +1342,8 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             handleAddFilterOption={handleAddFilterOption}
             handleRemoveFilterOption={handleRemoveFilterOption}
             handleFilterOptionChange={handleFilterOptionChange}
+            onReplaceFilters={onReplaceFilters}
+            dateRangePresetAccessor={isInventoryProfile ? 'request_date' : 'created_at'}
           />
         </TabsContent>
       </Tabs>

@@ -1,4 +1,13 @@
 import { FilterConfig, FilterOption } from '@/component-config/DynamicFilterConfig';
+import {
+  formatLocalYmd,
+  matchNumberPresetFromParams,
+  matchRelativeDatePresetFromParams,
+  numberRangePresetLabel,
+  relativeDatePresetLabel,
+  resolveDateRangeBounds,
+  resolveNumberRangeBounds,
+} from '@/lib/filters/rangePresets';
 
 export interface FilterQueryParams {
   [key: string]: string | string[];
@@ -204,6 +213,7 @@ export class FilterService {
         break;
       case 'number_gte':
       case 'number_lte':
+      case 'number_range':
       case 'gt':
       case 'lt':
         this.addNumberParam(params, accessor, filter, value);
@@ -235,6 +245,7 @@ export class FilterService {
         return 'search';
       case 'date_range':
       case 'date_time_range':
+      case 'number_range':
         return [`${accessor}__gte`, `${accessor}__lte`];
       case 'date_gte':
       case 'number_gte':
@@ -288,6 +299,8 @@ export class FilterService {
         return 'gte';
       case 'number_lte':
         return 'lte';
+      case 'number_range':
+        return 'range';
       case 'gt':
         return 'gt';
       case 'lt':
@@ -355,14 +368,12 @@ export class FilterService {
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
 
     if ((filter.type === 'date_range' || filter.type === 'date_time_range') && value && typeof value === 'object') {
-      // Handle date range and date time range (start/end with optional time)
-      if (value.start && this.isValidDate(value.start)) {
-        const startDate = value.start instanceof Date ? value.start : new Date(value.start);
-        params.append(`${accessor}__gte`, startDate.toISOString().slice(0, 10));
+      const bounds = resolveDateRangeBounds(value, filter.relativeDatePresets);
+      if (bounds.start && this.isValidDate(bounds.start)) {
+        params.append(`${accessor}__gte`, formatLocalYmd(bounds.start));
       }
-      if (value.end && this.isValidDate(value.end)) {
-        const endDate = value.end instanceof Date ? value.end : new Date(value.end);
-        params.append(`${accessor}__lte`, endDate.toISOString().slice(0, 10));
+      if (bounds.end && this.isValidDate(bounds.end)) {
+        params.append(`${accessor}__lte`, formatLocalYmd(bounds.end));
       }
     } else if (this.isValidDate(value)) {
       const date = value instanceof Date ? value : new Date(value);
@@ -385,6 +396,17 @@ export class FilterService {
   // Support numeric bounds (gte/lte/gt/lt)
   private addNumberParam(params: URLSearchParams, accessor: string, filter: FilterConfig, value: any): void {
     const lookup = filter.lookup || this.getLookupFromType(filter.type);
+
+    if (filter.type === 'number_range' && value && typeof value === 'object') {
+      const bounds = resolveNumberRangeBounds(value, filter.rangePresets);
+      if (this.isValidNumber(bounds.min)) {
+        params.append(`${accessor}__gte`, String(bounds.min));
+      }
+      if (this.isValidNumber(bounds.max)) {
+        params.append(`${accessor}__lte`, String(bounds.max));
+      }
+      return;
+    }
 
     if (this.isValidNumber(value)) {
       const paramName = lookup === 'gte' || lookup === '' ? `${accessor}__gte` :
@@ -448,7 +470,17 @@ export class FilterService {
     if (value instanceof Date) return isNaN(value.getTime());
     if (typeof value === 'string') return value.trim() === '';
     if (Array.isArray(value)) return value.length === 0;
-    if (typeof value === 'object') return Object.keys(value).length === 0;
+    if (typeof value === 'object') {
+      const range = value as { start?: unknown; end?: unknown; min?: unknown; max?: unknown; preset?: unknown };
+      if (range.preset) return false;
+      if ('min' in range || 'max' in range) {
+        return !this.isValidNumber(range.min) && !this.isValidNumber(range.max);
+      }
+      if ('start' in range || 'end' in range) {
+        return !range.start && !range.end;
+      }
+      return Object.keys(value).length === 0;
+    }
     return false;
   }
 
@@ -526,7 +558,18 @@ export class FilterService {
       }
 
       case 'date_range':
+        if (Array.isArray(value)) {
+          const labels = value.map((id) => {
+            const preset = filter.relativeDatePresets?.find((p) => p.id === id);
+            return preset ? relativeDatePresetLabel(preset) : String(id);
+          });
+          return `${filter.label}: ${labels.join(', ')}`;
+        }
         if (value && typeof value === 'object') {
+          if (value.preset) {
+            const preset = filter.relativeDatePresets?.find((p) => p.id === value.preset);
+            return `${filter.label}: ${preset ? relativeDatePresetLabel(preset) : value.preset}`;
+          }
           const start = value.start instanceof Date ? value.start.toLocaleDateString() : String(value.start || '');
           const end = value.end instanceof Date ? value.end.toLocaleDateString() : String(value.end || '');
           return `${filter.label}: ${start} - ${end}`;
@@ -547,9 +590,130 @@ export class FilterService {
       case 'number_lte':
         return `${filter.label} ≤ ${value}`;
 
+      case 'number_range':
+        if (Array.isArray(value)) {
+          const labels = value.map((id) => {
+            const preset = filter.rangePresets?.find((p) => p.id === id);
+            return preset ? numberRangePresetLabel(preset) : String(id);
+          });
+          return `${filter.label}: ${labels.join(', ')}`;
+        }
+        if (value && typeof value === 'object') {
+          if (value.preset) {
+            const preset = filter.rangePresets?.find((p) => p.id === value.preset);
+            return `${filter.label}: ${preset ? numberRangePresetLabel(preset) : value.preset}`;
+          }
+          const min = value.min !== undefined && value.min !== '' ? String(value.min) : '';
+          const max = value.max !== undefined && value.max !== '' ? String(value.max) : '';
+          if (min && max) return `${filter.label}: ${min} – ${max}`;
+          if (min) return `${filter.label} ≥ ${min}`;
+          if (max) return `${filter.label} ≤ ${max}`;
+        }
+        return `${filter.label}: ${String(value)}`;
+
       default:
         return `${filter.label}: ${String(value)}`;
     }
   }
 
+}
+
+/** Restore filter UI values from bookmarkable query params. */
+export function parseFilterValuesFromUrl(
+  filters: FilterConfig[],
+  urlParams: URLSearchParams
+): Record<string, any> {
+  const filterValues: Record<string, any> = {};
+
+  filters.forEach((filter) => {
+    const accessor = filter.accessor || filter.key;
+
+    switch (filter.type) {
+      case 'select':
+      case 'in': {
+        const allValues = urlParams.getAll(accessor);
+        if (allValues.length > 1) {
+          filterValues[filter.key] = allValues;
+        } else if (allValues.length === 1 && allValues[0]) {
+          filterValues[filter.key] = allValues[0].includes(',')
+            ? allValues[0].split(',').filter(Boolean)
+            : allValues;
+        }
+        break;
+      }
+      case 'date_range':
+      case 'date_time_range': {
+        const startValue = urlParams.get(`${accessor}__gte`);
+        const endValue = urlParams.get(`${accessor}__lte`);
+        if (startValue || endValue) {
+          const matched = matchRelativeDatePresetFromParams(
+            filter.relativeDatePresets,
+            startValue,
+            endValue
+          );
+          filterValues[filter.key] = matched
+            ? [matched.id]
+            : {
+                start: startValue ? new Date(startValue) : undefined,
+                end: endValue ? new Date(endValue) : undefined,
+              };
+        }
+        break;
+      }
+      case 'number_range': {
+        const minValue = urlParams.get(`${accessor}__gte`);
+        const maxValue = urlParams.get(`${accessor}__lte`);
+        if (minValue || maxValue) {
+          const matched = matchNumberPresetFromParams(filter.rangePresets, minValue, maxValue);
+          filterValues[filter.key] = matched
+            ? [matched.id]
+            : {
+                min: minValue ?? '',
+                max: maxValue ?? '',
+              };
+        }
+        break;
+      }
+      case 'date_gte':
+      case 'number_gte': {
+        const paramValue = urlParams.get(`${accessor}__gte`);
+        if (paramValue !== null) filterValues[filter.key] = paramValue;
+        break;
+      }
+      case 'date_lte':
+      case 'number_lte': {
+        const paramValue = urlParams.get(`${accessor}__lte`);
+        if (paramValue !== null) filterValues[filter.key] = paramValue;
+        break;
+      }
+      case 'gt': {
+        const paramValue = urlParams.get(`${accessor}__gt`);
+        if (paramValue !== null) filterValues[filter.key] = paramValue;
+        break;
+      }
+      case 'lt': {
+        const paramValue = urlParams.get(`${accessor}__lt`);
+        if (paramValue !== null) filterValues[filter.key] = paramValue;
+        break;
+      }
+      case 'search': {
+        const paramValue = urlParams.get('search');
+        if (paramValue !== null) filterValues[filter.key] = paramValue;
+        break;
+      }
+      case 'text':
+      case 'icontains': {
+        const paramValue = urlParams.get(`${accessor}__icontains`) ?? urlParams.get(accessor);
+        if (paramValue !== null) filterValues[filter.key] = paramValue;
+        break;
+      }
+      default: {
+        const paramValue = urlParams.get(accessor);
+        if (paramValue !== null) filterValues[filter.key] = paramValue;
+        break;
+      }
+    }
+  });
+
+  return filterValues;
 }
