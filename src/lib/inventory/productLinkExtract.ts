@@ -31,7 +31,7 @@ export async function fetchProductFromLink(input: {
     const res = await apiClient.post<ProductLinkExtractResult>(
       '/crm-records/product-link-extract/',
       body,
-      { timeout: 45000 }
+      { timeout: 70000 }
     );
     const data = res.data ?? {};
     console.log('[product-link-extract] response', {

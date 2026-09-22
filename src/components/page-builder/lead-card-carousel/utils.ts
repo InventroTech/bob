@@ -62,7 +62,8 @@ export const normalizeApiLeadToLeadData = (apiLead: any): LeadData => {
     website: apiLead.website ?? d.website ?? '',
     next_follow_up: apiLead.next_follow_up ?? d.next_follow_up ?? d.next_call_at ?? '',
     lead_stage: apiLead.lead_stage ?? d.lead_stage ?? d.lead_status ?? 'New',
-    praja_id: apiLead.praja_id ?? d.praja_id ?? d.user_id ?? '',
+    // Never fall back to user_id — can collide with highlight / open-by-praja.
+    praja_id: apiLead.praja_id ?? d.praja_id ?? '',
     affiliated_party: apiLead.affiliated_party ?? d.affiliated_party ?? '',
     rm_dashboard: apiLead.rm_dashboard ?? d.rm_dashboard ?? '',
     user_profile_link: apiLead.user_profile_link ?? d.user_profile_link ?? '',
