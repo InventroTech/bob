@@ -3,8 +3,46 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { BREACH_SECONDS, DISPOSITIONS, DRILL_TITLES, generateTouches, type DrillFilter } from './touchData';
+import { BREACH_SECONDS, DISPOSITIONS, DRILL_TITLES, generateTouches, type DrillFilter, type TouchRow } from './touchData';
 import type { RmActivityEvent } from './types';
+
+const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | number }> = [
+  { header: 'Touch ID', value: (r) => r.touchId },
+  { header: 'Lead ID', value: (r) => r.leadId ?? '' },
+  { header: 'RM', value: (r) => r.rmName },
+  { header: 'Manager', value: (r) => r.manager },
+  { header: 'State', value: (r) => r.state },
+  { header: 'Party', value: (r) => r.party },
+  { header: 'Bucket', value: (r) => r.bucket },
+  { header: 'Disposition', value: (r) => DISPOSITIONS[r.dispositionKey].full },
+  { header: 'Start (IST)', value: (r) => r.start },
+  { header: 'End (IST)', value: (r) => r.end },
+  { header: 'Duration (s)', value: (r) => r.durationSeconds },
+  { header: 'Over 25m', value: (r) => (r.durationSeconds >= BREACH_SECONDS ? 'Y' : '') },
+];
+
+// wraps a field in quotes only when it needs escaping, per RFC 4180
+const csvCell = (value: string | number): string => {
+  const s = String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+function downloadTouchReportCsv(rows: TouchRow[], title: string) {
+  const lines = [
+    CSV_COLUMNS.map((col) => csvCell(col.header)).join(','),
+    ...rows.map((row) => CSV_COLUMNS.map((col) => csvCell(col.value(row))).join(',')),
+  ];
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  link.href = url;
+  link.download = `${slug || 'touch-report'}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 interface TouchReportSheetProps {
   events: RmActivityEvent[];
@@ -37,7 +75,6 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filt
               <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
                 <TableHead className="whitespace-nowrap text-white">Touch ID</TableHead>
                 <TableHead className="whitespace-nowrap text-white">Lead ID</TableHead>
-                <TableHead className="whitespace-nowrap text-white">User ID</TableHead>
                 <TableHead className="whitespace-nowrap text-white">RM</TableHead>
                 <TableHead className="whitespace-nowrap text-white">Manager</TableHead>
                 <TableHead className="whitespace-nowrap text-white">State</TableHead>
@@ -57,7 +94,6 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filt
                   <TableRow key={row.touchId}>
                     <TableCell className="whitespace-nowrap font-mono">{row.touchId}</TableCell>
                     <TableCell className="whitespace-nowrap font-mono">{row.leadId ?? '—'}</TableCell>
-                    <TableCell className="whitespace-nowrap font-mono">{row.userId}</TableCell>
                     <TableCell className="whitespace-nowrap font-medium text-stone-900">{row.rmName}</TableCell>
                     <TableCell className="whitespace-nowrap text-stone-500">{row.manager}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.state}</TableCell>
@@ -96,7 +132,12 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filt
 
         <div className="flex items-center gap-3 border-t border-stone-200 px-6 py-4 text-sm text-stone-500">
           <span>{rows.length} rows · one row per touch</span>
-          <Button variant="outline" className="ml-auto" disabled>
+          <Button
+            variant="outline"
+            className="ml-auto"
+            disabled={rows.length === 0}
+            onClick={() => downloadTouchReportCsv(rows, filter ? DRILL_TITLES[filter] : 'touch-report')}
+          >
             Download CSV
           </Button>
         </div>

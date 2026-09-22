@@ -21,6 +21,12 @@ const STANDARD_SHIFT_MINUTES = 600; // 10 hours
 export type DailyTargetsByRm = Record<string, number>;
 const targetFor = (targetsByRm: DailyTargetsByRm, rmUserId: string) => targetsByRm[rmUserId] ?? 0;
 
+// "—" when there's no target to compare against — an unset target must not
+// silently read as achieved/0 (Infinity% or NaN%, depending on achieved)
+export function formatVsTarget(achieved: number, target: number): string {
+  return target ? `${((achieved / target) * 100).toFixed(1)}%` : '—';
+}
+
 const isCallTouch = (e: RmActivityEvent) => e.eventType === 'CALL_TOUCH';
 const isClosedCallTouch = (e: RmActivityEvent) => isCallTouch(e) && e.endedAt !== null;
 
@@ -64,6 +70,14 @@ function latestTouchPerLead(calls: RmActivityEvent[]): RmActivityEvent[] {
   return [...latestById.values()];
 }
 
+// distinct real leads only — a null leadRecordId (shouldn't normally happen,
+// but isn't a lead) must not collapse into a single counted "unique lead",
+// or the 4 disposition rates stop summing to 100%
+function uniqueLeadCount(calls: RmActivityEvent[]): number {
+  const ids = new Set(calls.map((c) => c.leadRecordId).filter((id): id is number => id != null));
+  return ids.size;
+}
+
 function countByDisposition(calls: RmActivityEvent[]): Record<UpdatedStatus, number> {
   const counts: Record<UpdatedStatus, number> = {
     NOT_CONNECTED: 0,
@@ -82,7 +96,7 @@ function countByDisposition(calls: RmActivityEvent[]): Record<UpdatedStatus, num
 interface ShiftTiming {
   loginMinutes: number;
   breakMinutes: number;
-  status: 'On lead' | 'Off lead';
+  status: 'On lead' | 'Off lead' | 'Idle';
   statusMinutes: number;
 }
 
@@ -134,7 +148,9 @@ function computeShiftTiming(rmEvents: RmActivityEvent[]): ShiftTiming {
       statusMinutes: Math.round((now - openBreakStartedAtMs) / 60_000),
     };
   }
-  return { loginMinutes, breakMinutes, status: 'On lead', statusMinutes: 0 };
+  // no open call and no open break — not actively on a lead, but not on a
+  // logged break either (was 'On lead', which falsely implied an active call)
+  return { loginMinutes, breakMinutes, status: 'Idle', statusMinutes: 0 };
 }
 
 // ---- Performance tab ----
@@ -165,7 +181,7 @@ function buildPerformanceRow(
   // only finished calls have a settled outcome — a call still in progress
   // can't be classified into a disposition yet, so it doesn't count here
   const calls = rmEvents.filter(isClosedCallTouch);
-  const uniqueLeads = new Set(calls.map((c) => c.leadRecordId)).size;
+  const uniqueLeads = uniqueLeadCount(calls);
   const touches = calls.length;
   const counts = countByDisposition(latestTouchPerLead(calls));
   const pct = (n: number) => (uniqueLeads ? Math.round((n / uniqueLeads) * 1000) / 10 : 0);
@@ -198,7 +214,7 @@ export function computePerformanceByRm(
 export function computeTeamTotals(events: RmActivityEvent[], targetsByRm: DailyTargetsByRm = {}) {
   // same rule as the per-RM rows: a call still in progress has no outcome yet
   const calls = events.filter(isClosedCallTouch);
-  const uniqueLeads = new Set(calls.map((c) => c.leadRecordId)).size;
+  const uniqueLeads = uniqueLeadCount(calls);
   const touches = calls.length;
   const counts = countByDisposition(latestTouchPerLead(calls));
   const achieved = counts.TRIAL_ACTIVATED;
@@ -230,7 +246,7 @@ export interface RmAdherenceRow {
   manager: string;
   team: string;
   state: string;
-  status: 'On lead' | 'Off lead';
+  status: 'On lead' | 'Off lead' | 'Idle';
   statusMinutes: number;
   loginHours: string;
   handlingHours: string;
@@ -291,7 +307,10 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
     notInterestedLabel: formatDuration(notInterestedTime),
     trialTime,
     trialLabel: formatDuration(trialTime),
-    breaches: closedCalls.filter((c) => (c.durationSeconds ?? 0) > BREACH_SECONDS).length,
+    // >= matches the touch report's own breach flag (and the PDF spec: "shown
+    // if duration_seconds >= 1500") — a call landing at exactly 25:00 must
+    // count as a breach in both places, not just one
+    breaches: closedCalls.filter((c) => (c.durationSeconds ?? 0) >= BREACH_SECONDS).length,
     open: openCalls.length,
   };
 }

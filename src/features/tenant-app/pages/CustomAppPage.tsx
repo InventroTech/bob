@@ -191,7 +191,7 @@ const CustomAppPage: React.FC = () => {
           setLoading(false);
         } else {
           pageCache.delete(cacheKey);
-          await redirectToFirstSidebarPage();
+          await redirectToFirstSidebarPageRef.current();
         }
       } catch (err: any) {
         fetchingRef.current = null;

@@ -31,6 +31,7 @@ import {
   computePerformanceByRm,
   computeShiftTimeAverages,
   computeTeamTotals,
+  formatVsTarget,
   type RmAdherenceRow,
   type RmPerformanceRow,
 } from './rm-prd-analytics/aggregate';
@@ -52,10 +53,11 @@ interface RmPrdAnalyticsComponentProps {
 
 type Tab = 'performance' | 'adherence';
 
+// no leadBucket filter: buckets are pipeline-pull slices, never a field on a
+// lead touch, so there's nothing real for it to match (see RmPrdFilterOptionsView)
 const DEFAULT_FILTERS = {
   manager: 'All managers',
   dateRange: 'Today',
-  leadBucket: 'All buckets',
   state: 'All states',
   party: 'All parties',
   customFrom: '',
@@ -66,14 +68,29 @@ type Filters = typeof DEFAULT_FILTERS;
 
 // Persists the filter bar (and which tab was open) across page reloads/revisits —
 // otherwise every remount of this component (e.g. a page-config refetch) silently
-// snapped everything back to the defaults.
-const FILTERS_STORAGE_KEY = 'rmPrdAnalytics.filters';
-const TAB_STORAGE_KEY = 'rmPrdAnalytics.tab';
+// snapped everything back to the defaults. Keyed per-tenant (see currentTenantSlug)
+// so switching tenants in the same browser profile doesn't leak one tenant's
+// filter picks as another's.
+function currentTenantSlug(): string {
+  if (typeof window === 'undefined') return 'unknown-tenant';
+  try {
+    // useTenant() already caches the active tenant's slug here as a side
+    // effect on every mount — reading it directly keeps these storage keys
+    // synchronous (they're computed as useState initializers, before any
+    // hook/effect has resolved a fresh tenant fetch).
+    return window.localStorage.getItem('tenant_slug') || 'unknown-tenant';
+  } catch {
+    return 'unknown-tenant';
+  }
+}
+
+const filtersStorageKey = () => `rmPrdAnalytics.filters.${currentTenantSlug()}`;
+const tabStorageKey = () => `rmPrdAnalytics.tab.${currentTenantSlug()}`;
 
 function loadStoredFilters(): Filters {
   if (typeof window === 'undefined') return DEFAULT_FILTERS;
   try {
-    const raw = window.localStorage.getItem(FILTERS_STORAGE_KEY);
+    const raw = window.localStorage.getItem(filtersStorageKey());
     if (!raw) return DEFAULT_FILTERS;
     return { ...DEFAULT_FILTERS, ...JSON.parse(raw) };
   } catch {
@@ -83,15 +100,14 @@ function loadStoredFilters(): Filters {
 
 function loadStoredTab(): Tab {
   if (typeof window === 'undefined') return 'performance';
-  return window.localStorage.getItem(TAB_STORAGE_KEY) === 'adherence' ? 'adherence' : 'performance';
+  return window.localStorage.getItem(tabStorageKey()) === 'adherence' ? 'adherence' : 'performance';
 }
 
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
 // rows fetched from the backend — see useRmActivityEvents + aggregate.ts.
-// Only the Date Range filter actually filters the data so far; the rest
-// (manager/bucket/state/party) still just update local UI state.
+// Manager/state/party/date-range all filter visibleEvents (see below); there
+// is deliberately no Lead Bucket filter — see DEFAULT_FILTERS.
 export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = ({ config }) => {
-  const { events, loading, error } = useRmActivityEvents();
   const { options: filterOptions } = useRmFilterOptions();
   const { targets: dailyTargets } = useRmDailyTargets();
   const [tab, setTab] = useState<Tab>(loadStoredTab);
@@ -105,7 +121,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+      window.localStorage.setItem(filtersStorageKey(), JSON.stringify(filters));
     } catch {
       // localStorage unavailable (e.g. private browsing) — filters just won't persist
     }
@@ -113,7 +129,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(TAB_STORAGE_KEY, tab);
+      window.localStorage.setItem(tabStorageKey(), tab);
     } catch {
       // localStorage unavailable — tab just won't persist
     }
@@ -123,7 +139,16 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     () => resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo),
     [filters.dateRange, filters.customFrom, filters.customTo]
   );
-  const visibleEvents = useMemo(() => filterByDateRange(events, dateBounds), [events, dateBounds]);
+  // windows the fetch itself to this range (see useRmActivityEvents) — not
+  // just a client-side filter over the whole tenant table anymore
+  const { events, loading, error } = useRmActivityEvents(dateBounds);
+  const visibleEvents = useMemo(() => {
+    let result = filterByDateRange(events, dateBounds);
+    if (filters.manager !== 'All managers') result = result.filter((e) => e.managerName === filters.manager);
+    if (filters.state !== 'All states') result = result.filter((e) => e.state === filters.state);
+    if (filters.party !== 'All parties') result = result.filter((e) => e.party === filters.party);
+    return result;
+  }, [events, dateBounds, filters.manager, filters.state, filters.party]);
 
   const performanceByRm = useMemo(
     () => computePerformanceByRm(visibleEvents, dailyTargets),
@@ -276,9 +301,8 @@ const FilterBar: React.FC<{
   onReset: () => void;
 }> = ({ filters, filterOptions, onChange, onReset }) => {
   const fields: Array<{ key: keyof Filters; label: string; options: string[] }> = [
-    { key: 'manager', label: 'Manager Email', options: filterOptions.managers },
+    { key: 'manager', label: 'Manager', options: filterOptions.managers },
     { key: 'dateRange', label: 'Date Range', options: filterOptions.dateRanges },
-    { key: 'leadBucket', label: 'Lead Bucket', options: filterOptions.leadBuckets },
     { key: 'state', label: 'State', options: filterOptions.states },
     { key: 'party', label: 'Party', options: filterOptions.parties },
   ];
@@ -595,7 +619,7 @@ const PerformanceTable: React.FC<{ rows: RmPerformanceRow[]; onSelectRm: (rmUser
             <TableCell
               className={cn('whitespace-nowrap text-right font-mono font-semibold', vsTargetColor(row.achieved, row.target))}
             >
-              {((row.achieved / row.target) * 100).toFixed(1)}%
+              {formatVsTarget(row.achieved, row.target)}
             </TableCell>
           </TableRow>
         ))}
@@ -748,7 +772,9 @@ const AdherenceTable: React.FC<{ rows: RmAdherenceRow[]; onSelectRm: (rmUserId: 
                 <span
                   className={cn(
                     'rounded-full px-2 py-0.5 text-xs font-medium',
-                    row.status === 'On lead' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    row.status === 'On lead' && 'bg-emerald-50 text-emerald-700',
+                    row.status === 'Off lead' && 'bg-amber-50 text-amber-700',
+                    row.status === 'Idle' && 'bg-stone-100 text-stone-500'
                   )}
                 >
                   {row.status}

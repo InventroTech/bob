@@ -34,7 +34,6 @@ export interface RmActivityEventDto {
 
 export interface RmFilterOptionsDto {
   managers: string[];
-  lead_buckets: string[];
   states: string[];
   parties: string[];
 }
@@ -44,10 +43,29 @@ export interface RmFilterOptionsDto {
 // absent from this map.
 export type RmDailyTargetsDto = Record<string, number>;
 
+interface RmActivityEventsPage {
+  data: RmActivityEventDto[];
+  page_meta: { next_page_link: string | null };
+}
+
 export const rmActivityApi = {
-  async getEvents(): Promise<RmActivityEventDto[]> {
-    const response = await apiClient.get<RmActivityEventDto[]>('/analytics/rm-activity-events/');
-    return response.data;
+  /**
+   * `from`/`to` are "YYYY-MM-DD" — omit both to get the backend's default
+   * (today only), never the whole tenant table. Pages through the response
+   * until exhausted; a date-windowed query is almost always a single page.
+   */
+  async getEvents(params?: { from?: string; to?: string }): Promise<RmActivityEventDto[]> {
+    const rows: RmActivityEventDto[] = [];
+    let page = 1;
+    for (;;) {
+      const response = await apiClient.get<RmActivityEventsPage>('/analytics/rm-activity-events/', {
+        params: { from: params?.from, to: params?.to, page, page_size: 2000, include_count: false },
+      });
+      rows.push(...response.data.data);
+      if (!response.data.page_meta.next_page_link) break;
+      page += 1;
+    }
+    return rows;
   },
 
   /** Real filter-bar values — managers from TenantMembership, buckets from

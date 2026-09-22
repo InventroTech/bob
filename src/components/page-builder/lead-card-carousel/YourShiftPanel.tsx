@@ -21,14 +21,16 @@ interface YourShiftPanelProps {
 // same rm_activity_events aggregation as the RM PRD analytics dashboard,
 // just scoped down to this one RM.
 export const YourShiftPanel: React.FC<YourShiftPanelProps> = ({ activeUserId, elapsedSecondsOnLead }) => {
-  const { events, loading } = useRmActivityEvents();
+  // this panel only ever needs "today" — windows the fetch itself instead of
+  // downloading the whole tenant table on every lead card open
+  const todayBounds = useMemo(() => resolveDateRange('Today', '', ''), []);
+  const { events, loading } = useRmActivityEvents(todayBounds);
 
   const snapshot = useMemo(() => {
     if (!activeUserId) return null;
-    const todayBounds = resolveDateRange('Today', '', '');
     const todaysEvents = filterByDateRange(events, todayBounds);
     return computeMyShiftSnapshot(todaysEvents, activeUserId);
-  }, [events, activeUserId]);
+  }, [events, activeUserId, todayBounds]);
 
   if (loading || !snapshot) return null;
 

@@ -36,7 +36,6 @@ export const DRILL_TITLES: Record<DrillFilter, string> = {
 export interface TouchRow {
   touchId: number;
   leadId: number | null;
-  userId: string;
   rmName: string;
   manager: string;
   state: string;
@@ -45,6 +44,9 @@ export interface TouchRow {
   dispositionKey: DispositionKey;
   start: string;
   end: string;
+  /** raw start instant, epoch ms — sort key; `start` is a formatted clock
+   * string (HH:mm:ss) and isn't chronological across multiple days */
+  startedAtMs: number;
   durationSeconds: number;
   durationLabel: string;
 }
@@ -67,10 +69,6 @@ const formatDuration = (seconds: number) => {
   return `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
 };
 
-// the lead's own customer-facing id — derived the same way a real join would
-// pull it from the lead record, so we don't need to store it twice
-const deriveUserId = (leadRecordId: number) => `U${700000 + (leadRecordId % 9999)}`;
-
 function toTouchRow(event: RmActivityEvent): TouchRow | null {
   // skip anything that isn't a finished call (open calls have no end time yet)
   if (event.eventType !== 'CALL_TOUCH' || event.endedAt === null) return null;
@@ -80,7 +78,6 @@ function toTouchRow(event: RmActivityEvent): TouchRow | null {
   return {
     touchId: event.id,
     leadId: event.leadRecordId,
-    userId: event.leadRecordId !== null ? deriveUserId(event.leadRecordId) : '—',
     rmName: event.rmName,
     manager: event.managerName,
     state: event.state,
@@ -89,6 +86,7 @@ function toTouchRow(event: RmActivityEvent): TouchRow | null {
     dispositionKey: DISPOSITION_TO_KEY[event.updatedStatus],
     start: formatClock(event.startedAt),
     end: formatClock(event.endedAt),
+    startedAtMs: new Date(event.startedAt).getTime(),
     durationSeconds,
     durationLabel: formatDuration(durationSeconds),
   };
@@ -106,5 +104,5 @@ export function generateTouches(events: RmActivityEvent[], filter: DrillFilter):
         ? rows
         : rows.filter((row) => row.dispositionKey === filter);
 
-  return filtered.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+  return filtered.sort((a, b) => a.startedAtMs - b.startedAtMs);
 }

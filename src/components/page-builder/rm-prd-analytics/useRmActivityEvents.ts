@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { rmActivityApi, type RmActivityEventDto } from '@/lib/api/services/rmActivity';
 import type { RmActivityEvent } from './types';
+import type { DateBounds } from './dateRange';
+
+// bounds are epoch ms and may straddle two UTC calendar days (e.g. "Today"
+// in IST); widen to the UTC dates the instants fall in so the backend
+// window is a superset — filterByDateRange does the precise trim afterward.
+const toUtcDateParam = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 // The backend's server clock runs in UTC and it sends timestamps like
 // "2026-09-15T12:12:25.948229" — a real UTC instant, but with no "Z" or
@@ -36,18 +42,33 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
   };
 }
 
-export function useRmActivityEvents() {
+// `bounds` windows the fetch to just that range instead of the whole tenant
+// table — pass null only when there's genuinely nothing to show yet (e.g.
+// "Custom" range picked but no dates chosen), which skips the fetch entirely
+// rather than falling back to an unbounded one.
+export function useRmActivityEvents(bounds: DateBounds | null) {
   const [events, setEvents] = useState<RmActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const from = bounds ? toUtcDateParam(bounds.from) : undefined;
+  const to = bounds ? toUtcDateParam(bounds.to) : undefined;
+  const hasWindow = bounds !== null;
+
   useEffect(() => {
     let cancelled = false;
+
+    if (!hasWindow) {
+      setEvents([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
     rmActivityApi
-      .getEvents()
+      .getEvents({ from, to })
       .then((rows) => {
         if (!cancelled) setEvents(rows.map(mapDto));
       })
@@ -61,7 +82,7 @@ export function useRmActivityEvents() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasWindow, from, to]);
 
   return { events, loading, error };
 }
