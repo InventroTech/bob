@@ -43,7 +43,7 @@ interface ProcurementTableProps {
  */
 export const DEFAULT_PROCUREMENT_TABLE_COLUMNS: ProcurementTableColumn[] = [
   { key: 'item_name_freeform', label: 'Item Name', type: 'text' },
-  { key: 'requester_name', label: 'Requested By', type: 'text' },
+  { key: 'requester_name', label: 'Requestor', type: 'text' },
   { key: 'estimated_cost', label: 'Estimated Cost', type: 'text' },
   { key: 'vendor', label: 'Vendor', type: 'text' },
   { key: 'request_date', label: 'Request Date', type: 'date' },

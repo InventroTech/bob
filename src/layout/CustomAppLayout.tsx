@@ -649,7 +649,7 @@ const CustomAppLayout: React.FC = () => {
         <div
           className={
             isUnmanndApp
-              ? 'flex min-h-0 w-full flex-col'
+              ? 'flex h-full min-h-0 w-full flex-col'
               : 'min-h-screen w-full'
           }
           style={
