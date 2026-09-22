@@ -38,6 +38,14 @@ import {
   formatStageCount,
   type RequestStageTabId,
 } from '@/lib/inventory/requestStageTabs';
+import {
+  INVENTORY_REQUEST_STATUSES,
+  SHIPMENT_STATUSES,
+} from '@/constants/inventory';
+import {
+  getInventoryStatusChipLabel,
+  getShipmentStatusLabel,
+} from '@/lib/inventory/statusStyles';
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -132,24 +140,28 @@ export function LeadTableView(props: LeadTableModel) {
     return filteredData.findIndex((r: any) => r.id === selectedRecord.id);
   }, [filteredData, selectedRecord]);
 
-  const bulkAttributeOptions = useMemo(() => {
-    const attrs = new Set(
-      bulkActionButtons.map((b) => ((b.targetAttribute || 'status').trim() || 'status'))
-    );
-    const options: Array<{ value: string; label: string }> = [];
-    if (attrs.has('status')) options.push({ value: 'status', label: 'Status' });
-    if (attrs.has('shipment_status')) {
-      options.push({ value: 'shipment_status', label: 'Shipment status' });
-    }
-    return options;
-  }, [bulkActionButtons]);
+  // Only Status + Shipment status (full catalogs — not workflow-gated).
+  const bulkAttributeOptions = useMemo(
+    () => [
+      { value: 'status', label: 'Status' },
+      { value: 'shipment_status', label: 'Shipment status' },
+    ],
+    []
+  );
 
   const bulkValueOptions = useMemo(() => {
     const attr = (bulkTargetAttribute || 'status').trim() || 'status';
-    return bulkActionButtons
-      .filter((b) => ((b.targetAttribute || 'status').trim() || 'status') === attr)
-      .map((b) => ({ value: b.statusValue, label: b.label }));
-  }, [bulkActionButtons, bulkTargetAttribute]);
+    if (attr === 'shipment_status') {
+      return ['N/A', ...SHIPMENT_STATUSES].map((value) => ({
+        value,
+        label: getShipmentStatusLabel(value),
+      }));
+    }
+    return INVENTORY_REQUEST_STATUSES.map((value) => ({
+      value,
+      label: getInventoryStatusChipLabel(value),
+    }));
+  }, [bulkTargetAttribute]);
 
   useEffect(() => {
     if (!bulkAttributeOptions.some((opt) => opt.value === bulkTargetAttribute)) {

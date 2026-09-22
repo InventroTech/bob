@@ -1739,11 +1739,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const canSelectBulkRow = useCallback(
     (row: any) => {
       if (!bulkSelectionEnabled) return false;
-      if (normalizeBulkRowId(row?.id) == null) return false;
-      if (bulkSelectionStatus == null) return true;
-      return getBulkRowStatus(row) === bulkSelectionStatus;
+      // Allow selecting any row; selections persist across stage tabs.
+      return normalizeBulkRowId(row?.id) != null;
     },
-    [bulkSelectionEnabled, bulkSelectionStatus]
+    [bulkSelectionEnabled]
   );
 
   const toggleBulkRowSelection = useCallback(
@@ -1766,36 +1765,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         return;
       }
 
-      const rowStatus = getBulkRowStatus(row);
-      if (selectedRowIds.size > 0) {
-        let anchorStatus: string | null = null;
-        for (const existing of stageFilteredData) {
-          const existingId = normalizeBulkRowId(existing?.id);
-          if (existingId != null && selectedRowIds.has(existingId)) {
-            anchorStatus = getBulkRowStatus(existing);
-            break;
-          }
-        }
-        if (anchorStatus == null) {
-          for (const id of selectedRowIds) {
-            const cached = selectedBulkRowsById[id];
-            if (cached) {
-              anchorStatus = getBulkRowStatus(cached);
-              if (anchorStatus) break;
-            }
-          }
-        }
-        if (anchorStatus != null && rowStatus !== anchorStatus) {
-          toast({
-            title: 'Different status',
-            description:
-              'Bulk select only works for requests with the same status as the first selected row.',
-            variant: 'destructive',
-          });
-          return;
-        }
-      }
-
       setSelectedRowIds((prev) => {
         const next = new Set(prev);
         next.add(rowId);
@@ -1803,7 +1772,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       });
       setSelectedBulkRowsById((prev) => ({ ...prev, [rowId]: row }));
     },
-    [selectedBulkRowsById, selectedRowIds, stageFilteredData, toast]
+    []
   );
 
   const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
@@ -1844,70 +1813,43 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   );
 
   const toggleBulkSelectAll = useCallback(() => {
-    // If a status is already locked by current selection, toggle that group only.
-    if (selectedRowIds.size > 0) {
-      let anchorStatus: string | null = null;
-      for (const row of stageFilteredData) {
-        const rowId = normalizeBulkRowId(row?.id);
-        if (rowId != null && selectedRowIds.has(rowId)) {
-          anchorStatus = getBulkRowStatus(row);
-          break;
+    // Toggle all rows on the current stage page; keep selections from other tabs.
+    const pageRows = stageFilteredData.filter((row) => normalizeBulkRowId(row?.id) != null);
+    const pageIds = pageRows
+      .map((row) => normalizeBulkRowId(row?.id))
+      .filter((id): id is string => id != null);
+    if (pageIds.length === 0) return;
+
+    const allPageSelected = pageIds.every((id) => selectedRowIds.has(id));
+    if (allPageSelected) {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        for (const id of pageIds) next.delete(id);
+        return next;
+      });
+      setSelectedBulkRowsById((prev) => {
+        const next = { ...prev };
+        for (const id of pageIds) delete next[id];
+        return next;
+      });
+    } else {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        for (const id of pageIds) next.add(id);
+        return next;
+      });
+      setSelectedBulkRowsById((prev) => {
+        const next = { ...prev };
+        for (const row of pageRows) {
+          const id = normalizeBulkRowId(row?.id);
+          if (id != null) next[id] = row;
         }
-      }
-      if (anchorStatus == null) {
-        for (const id of selectedRowIds) {
-          const cached = selectedBulkRowsById[id];
-          if (cached) {
-            anchorStatus = getBulkRowStatus(cached);
-            if (anchorStatus) break;
-          }
-        }
-      }
-      if (anchorStatus) {
-        const matchingRows = stageFilteredData.filter(
-          (row) => getBulkRowStatus(row) === anchorStatus
-        );
-        const matchingIds = matchingRows
-          .map((row) => normalizeBulkRowId(row?.id))
-          .filter((id): id is string => id != null);
-        const allMatchingSelected =
-          matchingIds.length > 0 && matchingIds.every((id) => selectedRowIds.has(id));
-        if (allMatchingSelected) {
-          setSelectedRowIds(new Set());
-          setSelectedBulkRowsById({});
-        } else {
-          const nextCache: Record<string, any> = {};
-          for (const row of matchingRows) {
-            const id = normalizeBulkRowId(row?.id);
-            if (id != null) nextCache[id] = row;
-          }
-          setSelectedRowIds(new Set(matchingIds));
-          setSelectedBulkRowsById(nextCache);
-        }
-        setBulkStatusPickerOpen(false);
-        setBulkStatusPickerOptions([]);
-        return;
-      }
+        return next;
+      });
     }
-
-    const statusOptions = getPageStatusCounts();
-    if (statusOptions.length === 0) return;
-
-    if (statusOptions.length === 1) {
-      selectBulkRowsByStatus(statusOptions[0].status);
-      return;
-    }
-
-    // Mixed statuses on this page — ask which status to select.
-    setBulkStatusPickerOptions(statusOptions);
-    setBulkStatusPickerOpen(true);
-  }, [
-    getPageStatusCounts,
-    selectBulkRowsByStatus,
-    selectedBulkRowsById,
-    selectedRowIds,
-    stageFilteredData,
-  ]);
+    setBulkStatusPickerOpen(false);
+    setBulkStatusPickerOptions([]);
+  }, [selectedRowIds, stageFilteredData]);
 
   const clearBulkSelection = useCallback(() => {
     setSelectedRowIds(new Set());
@@ -1916,13 +1858,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     setBulkStatusPickerOptions([]);
   }, []);
 
-  // Reset selection when the table API, stage tab, or page changes.
+  // Reset selection only when the table API endpoint changes (keep across stage tabs / pages).
   useEffect(() => {
     setSelectedRowIds(new Set());
     setSelectedBulkRowsById({});
     setBulkStatusPickerOpen(false);
     setBulkStatusPickerOptions([]);
-  }, [effectiveApiEndpoint, requestStageTab, pagination.currentPage]);
+  }, [effectiveApiEndpoint]);
 
   // Keep cached bulk rows fresh when the current page includes them.
   useEffect(() => {
@@ -1944,6 +1886,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   const rowSupportsBulkAction = useCallback(
     (row: any, button: { statusValue: string; targetAttribute?: string }) => {
+      const attr = (button.targetAttribute || 'status').trim() || 'status';
+      // Status / Shipment status catalogs — any selected row can be updated.
+      if (attr === 'status' || attr === 'shipment_status') return true;
       const key = bulkActionButtonKey(button);
       const workflowMatch = getRowWorkflowButtons(row).some(
         (btn) => bulkActionButtonKey(btn) === key
@@ -1991,7 +1936,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       const existingData = (row.data as Record<string, unknown>) || {};
       const targetAttribute = (button.targetAttribute || 'status').trim() || 'status';
       const dataToSend: Record<string, unknown> = { ...existingData };
-      dataToSend[targetAttribute] = button.statusValue;
+      let nextValue: unknown = button.statusValue;
+      if (targetAttribute === 'shipment_status') {
+        const raw = String(button.statusValue ?? '').trim();
+        nextValue = raw === 'N/A' || raw === '' ? '' : raw;
+      }
+      dataToSend[targetAttribute] = nextValue;
       if (targetAttribute === 'status') {
         dataToSend.status_text = (button.statusText ?? button.label ?? button.statusValue).trim();
         applyInventoryCartStatusSideEffects({
@@ -2004,6 +1954,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             dataToSend.shipment_status,
             true
           );
+        }
+      } else if (targetAttribute === 'shipment_status') {
+        const prevShipment = String(existingData.shipment_status ?? row.shipment_status ?? '').trim();
+        if (String(nextValue) !== prevShipment) {
+          dataToSend.tracking_updated_at = new Date().toISOString();
         }
       }
       const response = await apiClient.patch(url, { data: dataToSend });
