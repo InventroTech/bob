@@ -308,7 +308,10 @@ const CustomAppPage: React.FC = () => {
       {/* Sticky Header Title — mobile, tablet, and desktop */}
       {headerTitle && !hidePageHeader && (
         <div className="sticky top-0 z-40 w-full shrink-0 border-b border-gray-200 bg-white">
-          <div className={isUnmanndApp ? 'px-4 py-3' : 'px-4 py-1.5'}>
+          {/* non-unmannd padding is tuned to vertically center the title
+              against the sidebar's Pyro logo (see CustomAppLayout's
+              pt-6 pb-4 logo row) — don't shrink this back to py-1.5 */}
+          <div className={isUnmanndApp ? 'px-4 py-3' : 'px-4 pt-[36px] pb-[18px]'}>
             <h2
               className={
                 isUnmanndApp
