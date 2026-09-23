@@ -41,6 +41,20 @@ import { usePageDisplayTitle } from '@/components/page-builder/lead-table/Invent
 import { cn } from '@/lib/utils';
 import { ProductLinkFetchLoader } from './ProductLinkFetchLoader';
 
+/** Black star: filled by the product-link fetch or the system. Red star: the user enters it. */
+function FieldStar({ filledBy }: { filledBy: 'auto' | 'user' }) {
+  const auto = filledBy === 'auto';
+  return (
+    <span
+      className={auto ? 'text-black' : 'text-destructive'}
+      title={auto ? 'Filled automatically' : 'You need to fill this'}
+      aria-label={auto ? 'filled automatically' : 'you need to fill this'}
+    >
+      *
+    </span>
+  );
+}
+
 export function InventoryRequestFormView(props: InventoryRequestFormModel) {
   const {
     user,
@@ -179,7 +193,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     return (
     <div className={fieldStackClass}>
       <Label htmlFor={`project-purpose-${item.id}`} className={itemFieldLabelClass}>
-        Project <span className="text-destructive">*</span>
+        Project <FieldStar filledBy="user" />
       </Label>
       {wrapShake(
         itemKey(item.id, 'project_purpose'),
@@ -247,7 +261,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
   const renderShipmentTypeField = (item: { id: string; request_category: string }) => (
     <div className={fieldStackClass}>
       <Label htmlFor={`request-category-${item.id}`} className={itemFieldLabelClass}>
-        Shipment Type <span className="text-destructive">*</span>
+        Shipment Type <FieldStar filledBy="user" />
       </Label>
       {wrapShake(
         itemKey(item.id, 'request_category'),
@@ -329,12 +343,17 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
     >
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-3 px-4 py-3 sm:px-5">
+          <p className="text-[11px] leading-tight text-muted-foreground">
+            <span className="font-semibold text-black">*</span> filled automatically
+            <span className="mx-1.5">·</span>
+            <span className="font-semibold text-destructive">*</span> you fill this
+          </p>
           {/* Header fields — 3-col like prototype */}
           <section className="space-y-2.5">
             <div className="grid grid-cols-1 gap-x-4 gap-y-2 md:grid-cols-3">
               <div className={fieldStackClass}>
                 <Label className={fieldLabelClass}>
-                  Requester name <span className="text-destructive">*</span>
+                  Requester name <FieldStar filledBy="auto" />
                 </Label>
                 <div className="relative">
                   <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -348,7 +367,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
               </div>
               <div className={fieldStackClass}>
                 <Label htmlFor="department" className={fieldLabelClass}>
-                  Department <span className="text-destructive">*</span>
+                  Department <FieldStar filledBy="auto" />
                 </Label>
                 <Input
                   id="department"
@@ -361,7 +380,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
               </div>
               <div className={fieldStackClass}>
                 <Label className={fieldLabelClass}>
-                  Date <span className="text-destructive">*</span>
+                  Date <FieldStar filledBy="auto" />
                 </Label>
                 <div className="relative">
                   <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -378,7 +397,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
             <div className="grid grid-cols-1 gap-x-4 gap-y-2 md:grid-cols-3">
               <div className={`${fieldStackClass} md:col-span-2`}>
                 <Label htmlFor="delivery-address" className={fieldLabelClass}>
-                  Delivery address <span className="text-destructive">*</span>
+                  Delivery address <FieldStar filledBy="auto" />
                 </Label>
                 {wrapShake(
                   'deliveryAddress',
@@ -399,7 +418,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
               </div>
               <div className={fieldStackClass}>
                 <Label htmlFor="delivery-pincode" className={fieldLabelClass}>
-                  Delivery PIN code <span className="text-destructive">*</span>
+                  Delivery PIN code <FieldStar filledBy="auto" />
                 </Label>
                 {wrapShake(
                   'deliveryPincode',
@@ -507,7 +526,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   {/* 2nd Position: Item Name (Mandatory) */}
                   <div className={fieldStackClass}>
                     <Label className={itemFieldLabelClass}>
-                      Item name <span className="text-destructive">*</span>
+                      Item name <FieldStar filledBy="auto" />
                     </Label>
                     {wrapShake(
                       itemKey(item.id, 'item_name_freeform'),
@@ -607,7 +626,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   {/* Specifications (Restored as Mandatory with *) */}
                   <div className={fieldStackClass}>
                     <Label className={itemFieldLabelClass}>
-                      Specifications <span className="text-destructive">*</span>
+                      Specifications <FieldStar filledBy="auto" />
                     </Label>
                     {wrapShake(
                       itemKey(item.id, 'specifications'),
@@ -626,7 +645,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                   {/* Vendor | Cost | Qty  /  Project | Shipment | Priority — same 3 columns */}
                   <div className="grid grid-cols-1 gap-x-4 gap-y-2 md:grid-cols-3 md:items-end">
                     <div className={fieldStackClass}>
-                      <Label className={itemFieldLabelClass}>Vendor *</Label>
+                      <Label className={itemFieldLabelClass}>Vendor <FieldStar filledBy="auto" /></Label>
                       <div className="flex items-center gap-2">
                         {wrapShake(
                           itemKey(item.id, 'vendor'),
@@ -714,7 +733,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     </div>
 
                     <div className={fieldStackClass}>
-                      <Label className={itemFieldLabelClass}>Estimated cost *</Label>
+                      <Label className={itemFieldLabelClass}>Estimated cost <FieldStar filledBy="auto" /></Label>
                       {wrapShake(
                         itemKey(item.id, 'estimated_cost'),
                         <div
@@ -766,7 +785,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     </div>
 
                     <div className={fieldStackClass}>
-                      <Label className={itemFieldLabelClass}>Quantity *</Label>
+                      <Label className={itemFieldLabelClass}>Quantity <FieldStar filledBy="user" /></Label>
                       {wrapShake(
                         itemKey(item.id, 'quantity_required'),
                         <Input
@@ -787,7 +806,7 @@ export function InventoryRequestFormView(props: InventoryRequestFormModel) {
                     {renderProjectField(item)}
                     {renderShipmentTypeField(item)}
                     <div className={fieldStackClass}>
-                      <Label className={itemFieldLabelClass}>Priority *</Label>
+                      <Label className={itemFieldLabelClass}>Priority <FieldStar filledBy="user" /></Label>
                       {wrapShake(
                         itemKey(item.id, 'urgency_level'),
                         <Select
