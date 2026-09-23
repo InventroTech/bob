@@ -34,11 +34,6 @@ import {
 } from './utils';
 import { usePageDisplayTitle } from './InventoryTablePageContext';
 import {
-  REQUEST_STAGE_TABS,
-  formatStageCount,
-  type RequestStageTabId,
-} from '@/lib/inventory/requestStageTabs';
-import {
   INVENTORY_REQUEST_STATUSES,
   SHIPMENT_STATUSES,
 } from '@/constants/inventory';
@@ -122,10 +117,6 @@ export function LeadTableView(props: LeadTableModel) {
     setBulkStatusPickerOpen,
     bulkStatusPickerOptions,
     selectBulkRowsByStatus,
-    showRequestStageTabs,
-    requestStageTab,
-    setRequestStageTab,
-    requestStageCounts,
   } = props;
 
   const [bulkTargetAttribute, setBulkTargetAttribute] = useState('status');
@@ -264,13 +255,11 @@ export function LeadTableView(props: LeadTableModel) {
   const pageTitleDisplay = isProcurementStyleTable
     ? pageTitleText.toUpperCase()
     : pageTitleText;
-  const isMyRequestPageChrome = inventoryTableKindForTitle === 'my_request';
-  /** My Request: compact search; Filters fixed on the right, same height. */
+  const isMyRequestPageChrome = isProcurementStyleTable;
+  /** Inventory tables: compact search; Filters fixed on the right, same height. */
   const searchFieldWidthClass = isMyRequestPageChrome
     ? 'w-[180px] max-w-[180px] shrink-0'
-    : isProcurementStyleTable
-      ? 'min-w-[180px] max-w-sm flex-1'
-      : 'min-w-[200px] max-w-sm flex-1';
+    : 'min-w-[200px] max-w-sm flex-1';
   const filtersButtonWidthClass = isMyRequestPageChrome ? 'w-[100px]' : 'w-[108px]';
   const filtersButtonPadClass = 'px-3';
   const toolbarControlHeightClass = 'h-9';
@@ -345,14 +334,12 @@ export function LeadTableView(props: LeadTableModel) {
             : 'w-full max-w-full min-w-0 border border-gray-200 rounded-lg bg-white px-2 py-1.5'
         }
       >
-        {/* Toolbar — All Request: title → numbered stage strip → Bulk Edit / search / Filters.
-            Other tables: title left, search + Filters right. */}
+        {/* Toolbar — title left; Bulk Edit / search / Filters right. */}
         <div
           className={cn(
             'mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3',
-            !showRequestStageTabs &&
-              'sm:flex-row sm:flex-nowrap sm:items-center sm:gap-3',
-            !showRequestStageTabs && (pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end')
+            'sm:flex-row sm:flex-nowrap sm:items-center sm:gap-3',
+            pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
           )}
         >
           {pageTitleDisplay ? (
@@ -367,92 +354,14 @@ export function LeadTableView(props: LeadTableModel) {
             </h1>
           ) : null}
 
-          {showRequestStageTabs ? (
-            <div className="w-full overflow-x-auto rounded-[10px] border border-gray-200 bg-white px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-              <div className="flex min-w-max items-center justify-between gap-6">
-                {REQUEST_STAGE_TABS.map((tab) => {
-                  const active = requestStageTab === tab.id;
-                  const count = requestStageCounts[tab.id] ?? 0;
-                  const isClosedTab = Boolean(tab.completeSuffix);
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setRequestStageTab(tab.id as RequestStageTabId)}
-                      className={cn(
-                        'inline-flex shrink-0 items-center gap-2.5 border-0 bg-transparent p-0 text-left transition-colors',
-                        active ? 'text-[#3B66D1]' : 'text-[#1F2937] hover:text-gray-900'
-                      )}
-                    >
-                      {/* Squircle stage icon — pale outer ring + solid blue inner (active) */}
-                      <span
-                        className={cn(
-                          'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] p-[3px]',
-                          active ? 'bg-[#D9E4FF]' : 'bg-transparent'
-                        )}
-                        aria-hidden
-                      >
-                        <span
-                          className={cn(
-                            'inline-flex h-full w-full items-center justify-center rounded-[10px] text-[14px] font-bold leading-none',
-                            active
-                              ? 'bg-[#3B66D1] text-white'
-                              : 'bg-[#E8F0FF] text-[#374151]'
-                          )}
-                        >
-                          {tab.step}
-                        </span>
-                      </span>
-                      {isClosedTab ? (
-                        <span className="flex flex-col items-start justify-center leading-[1.15] whitespace-nowrap">
-                          <span
-                            className={cn(
-                              'text-[13px] font-bold',
-                              active ? 'text-[#3B66D1]' : 'text-[#111827]'
-                            )}
-                          >
-                            {tab.label}
-                          </span>
-                          <span className="mt-0.5 text-[11px] font-medium text-gray-400">
-                            {formatStageCount(count)} {tab.completeSuffix}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                          <span
-                            className={cn(
-                              'text-[13px] font-bold leading-[1.15]',
-                              active ? 'text-[#3B66D1]' : 'text-[#111827]'
-                            )}
-                          >
-                            {(tab.labelLines ?? [tab.label]).map((line) => (
-                              <span key={line} className="block">
-                                {line}
-                              </span>
-                            ))}
-                          </span>
-                          <span className="inline-flex h-5 min-w-[1.75rem] items-center justify-center rounded-full bg-[#ECEFF3] px-2 text-[11px] font-semibold text-[#4B5563]">
-                            {formatStageCount(count)}
-                          </span>
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
           <div
             className={cn(
               'flex w-full shrink-0 flex-nowrap items-center gap-2',
-              showRequestStageTabs
-                ? 'justify-end'
-                : isMyRequestPageChrome
-                  ? 'ml-auto w-auto shrink-0 justify-end'
-                  : pageTitleDisplay
-                    ? 'sm:mt-0 sm:w-auto sm:justify-end'
-                    : 'sm:justify-end'
+              isMyRequestPageChrome
+                ? 'ml-auto w-auto shrink-0 justify-end'
+                : pageTitleDisplay
+                  ? 'sm:mt-0 sm:w-auto sm:justify-end'
+                  : 'sm:justify-end'
             )}
           >
             {bulkSelectionEnabled && bulkEditMode ? (
@@ -532,9 +441,7 @@ export function LeadTableView(props: LeadTableModel) {
             <div
               className={cn(
                 'relative',
-                showRequestStageTabs
-                  ? 'w-full max-w-[280px] min-w-[200px] sm:w-[280px]'
-                  : searchFieldWidthClass
+                searchFieldWidthClass
               )}
             >
               <Search
@@ -583,12 +490,12 @@ export function LeadTableView(props: LeadTableModel) {
 
         {bulkSelectionEnabled && bulkEditMode && selectedRowCount === 0 ? (
           <div className="mb-2 shrink-0 text-sm text-gray-600">
-            Select rows on any stage filter (All Request, Pending Approval, Cart, …). Selections stay as you switch tabs — then choose Status or Shipment status and Save.
+            Select rows, then choose Status or Shipment status and Save.
           </div>
         ) : null}
         {bulkSelectionEnabled && bulkEditMode && selectedRowCount > 0 ? (
           <div className="mb-2 shrink-0 text-sm text-gray-600">
-            {selectedRowCount} selected across filters — switch tabs to add more, then Save.
+            {selectedRowCount} selected — choose Status or Shipment status, then Save.
           </div>
         ) : null}
 

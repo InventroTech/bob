@@ -82,9 +82,7 @@ import {
   applyPlaceholderTemplate,
   transformLeadData,
   formatBulkActionLabel,
-  resolveEffectiveInventoryTableKind,
 } from './utils';
-import { useInventoryTablePageName } from './InventoryTablePageContext';
 import {
   applyInventoryCartStatusSideEffects,
   canRequesterEditInventoryRequest,
@@ -119,8 +117,13 @@ function getBulkRowStatus(row: any): string {
 }
 
 const INVENTORY_PRIORITY_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[5rem] min-w-[4.5rem]`;
-const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[8.5rem] min-w-[6rem]`;
-const INVENTORY_SHIPMENT_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[6.25rem] min-w-[5.25rem] max-w-full`;
+// Auto-width so long statuses (VENDOR IDENTIFIED) and shipment labels fully show.
+const INVENTORY_STATUS_CHIP_SHAPE =
+  '!rounded-full inline-flex h-7 shrink-0 items-center justify-center px-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap border';
+const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_STATUS_CHIP_SHAPE} w-auto min-w-[5.5rem]`;
+const INVENTORY_SHIPMENT_CHIP_SHAPE =
+  '!rounded-full inline-flex h-7 shrink-0 items-center justify-center px-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap border';
+const INVENTORY_SHIPMENT_CHIP_SIZE = `${INVENTORY_SHIPMENT_CHIP_SHAPE} w-auto min-w-[6.5rem]`;
 
 const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
@@ -134,14 +137,14 @@ function procurementColumnLayout(
 ): { width?: string; minWidth?: string; maxWidth?: string } | undefined {
   const key = String(accessor || '').trim().toLowerCase();
   // Keep chip cols near the chip width so Item Name isn't crushed in table-fixed layout.
-  const chipCol = { width: '8.5rem', minWidth: '8.5rem', maxWidth: '8.5rem' };
+  const chipCol = { width: '10.5rem', minWidth: '9.5rem', maxWidth: '11.5rem' };
   const priorityCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '5.75rem' };
   const dateCol = { width: '5rem', minWidth: '4.75rem', maxWidth: '5.25rem' };
   const costCol = { width: '6.25rem', minWidth: '6.25rem', maxWidth: '6.5rem' };
   // Keep Vendor tight next to Request Date (long names truncate).
   const vendorCol = { width: '6.5rem', minWidth: '5.75rem', maxWidth: '7rem' };
   const requesterCol = { width: '7rem', minWidth: '7rem', maxWidth: '8rem' };
-  const shipmentCol = { width: '6.5rem', minWidth: '6.5rem', maxWidth: '6.75rem' };
+  const shipmentCol = { width: '10.5rem', minWidth: '10rem', maxWidth: '11rem' };
   const linkCol = { width: '3.5rem', minWidth: '3.5rem', maxWidth: '3.75rem' };
   const editCol = { width: '4.5rem', minWidth: '4.5rem', maxWidth: '4.75rem' };
   // Flexible filler — absorbs leftover width so Link stays flush with Filters (no h-scroll).
@@ -269,7 +272,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const { session, user } = useAuth();
   const spoofUserId = useSpoofUserId();
   const { customRole, membershipLoaded, membershipId } = useTenant();
-  const inventoryTablePageName = useInventoryTablePageName();
   const sessionUser = session?.user ?? null;
   const activeUser = user ?? sessionUser ?? null;
   // Spoof JWT `sub` when active; otherwise Supabase user id (aligns with API `{{current_user}}`).
@@ -384,20 +386,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       /[?&]entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(endpoint)
     );
   }, [config?.entityType, config?.apiEndpoint, effectiveApiEndpoint]);
-
-  const inventoryTableKind = useMemo(
-    () =>
-      resolveEffectiveInventoryTableKind({
-        pageDisplayName:
-          inventoryTablePageName ||
-          (config as { pageDisplayName?: string } | undefined)?.pageDisplayName,
-        pageComponentType: (config as { pageComponentType?: string } | undefined)?.pageComponentType,
-        configuredKind: (config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind,
-      }),
-    [config, inventoryTablePageName]
-  );
-
-  const isMyRequestPage = inventoryTableKind === 'my_request';
 
   // Helper: for GM users, remove assigned_to only when it came from endpoint/default, not when user explicitly set "Assigned to" filter
   const removeAssignedToForGM = useCallback(
@@ -883,35 +871,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   // Custom cell renderer - completely generic
   const renderCell = useCallback((row: any, column: Column | CustomTableColumn, columnIndex: number, rowIndex: number = 0) => {
     if (column.accessor === REQUESTER_EDIT_COLUMN_ACCESSOR) {
-      // All Request / ops: never show Edit — open the product URL instead.
-      if (!isMyRequestPage) {
-        const nestedData =
-          row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : null;
-        const rawHref = String(
-          row?.product_link ||
-            nestedData?.product_link ||
-            row?.additional_link ||
-            nestedData?.additional_link ||
-            ''
-        ).trim();
-        const href = rawHref && rawHref !== 'N/A' && rawHref !== '#' ? rawHref : '';
-        if (!href) {
-          return <span className="text-gray-400 text-sm">-</span>;
-        }
-        return (
-          <div className="flex w-full items-center justify-center">
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-[#2563EB] hover:text-[#1D4ED8] transition-colors"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Link
-            </a>
-          </div>
-        );
-      }
       if (canOpsInlineEditShipment) {
         const isEditing = opsEditingRowId === row.id;
         const isSaving = opsRowSavingId === row.id;
@@ -1358,7 +1317,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           options.unshift(cur as typeof options[number]);
         }
         return (
-          <div className="min-w-[6.5rem] max-w-[6.75rem]" onClick={(e) => e.stopPropagation()}>
+          <div className="min-w-[10rem] max-w-[11rem]" onClick={(e) => e.stopPropagation()}>
             <Select
               value={String(current || 'N/A')}
               disabled={opsRowSavingId === row.id}
@@ -1591,11 +1550,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return list;
   }, [config?.tableType, config?.statusButtons]);
 
-  const showRequestStageTabs =
-    !isInPageBuilder &&
-    isInventoryRequestTable &&
-    config?.tableType === 'itemsTable' &&
-    inventoryTableKind === 'procurement';
+  // Stage strip (All Request / Pending Approval / …) removed from All Request UI.
+  const showRequestStageTabs = false;
 
   const [requestStageTab, setRequestStageTabState] = useState<RequestStageTabId>('all');
   const requestStageTabRef = useRef<RequestStageTabId>('all');
@@ -1714,12 +1670,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return filterRowsByRequestStage(filteredData, requestStageTab);
   }, [filteredData, requestStageTab, showRequestStageTabs]);
 
-  // Bulk Edit only on All Request (procurement itemsTable), not every ops table.
-  const bulkSelectionEnabled =
-    !isInPageBuilder &&
-    isInventoryRequestTable &&
-    config?.tableType === 'itemsTable' &&
-    inventoryTableKind === 'procurement';
+  // Bulk Edit on every inventory request table page (not New Request form).
+  const bulkSelectionEnabled = !isInPageBuilder && isInventoryRequestTable;
 
   const getRowWorkflowButtons = useCallback(
     (row: any) => {
@@ -2153,8 +2105,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       'department',
       'project_purpose',
     ]);
-    const isMyRequestTable = isMyRequestPage;
-    const configuredColumns = isMyRequestTable
+    // My Request layout on every inventory table page (not the New Request form).
+    const useMyRequestTableLayout = isInventoryRequestTable;
+    const configuredColumns = useMyRequestTableLayout
       ? excludeInventoryTrackColumn(config?.columns)
       : config?.columns;
     const mapped = (configuredColumns ?? [])
@@ -2194,9 +2147,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       actionApiHeaders: col.actionApiHeaders,
       actionApiPayload: col.actionApiPayload,
       align: (leftAlignKeys.has(String(col.key || '')) ? 'left' : 'center') as Column['align'],
-      ...(config?.tableType === 'itemsTable' && isInventoryRequestTable
-        ? procurementColumnLayout(resolvedKey)
-        : {}),
+      ...(isInventoryRequestTable ? procurementColumnLayout(resolvedKey) : {}),
     };
     });
     const deduped: typeof mapped = [];
@@ -2208,126 +2159,85 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
     const base: Column[] = [...(deduped.length > 0 ? deduped : defaultColumns)] as Column[];
 
-    // All Request / ops tables: show product Link instead of Edit.
-    // My Request keeps the Edit action for the requester.
+    // Every inventory request table page: product Link column (not Edit).
+    // New Request is a separate form page and does not use this table.
     if (!isInPageBuilder && isInventoryRequestTable) {
-      if (isMyRequestPage) {
-        const hasEditColumn = base.some((col) => {
+      for (const col of base) {
+        const accessor = String(col.accessor || '').trim().toLowerCase();
+        const header = String(col.header || '').trim().toLowerCase();
+        if (
+          accessor === 'requester_name' ||
+          accessor === 'requested_by' ||
+          header === 'requested by' ||
+          header === 'requester' ||
+          header === 'requester name' ||
+          header === 'requestor' ||
+          header === 'requestor name'
+        ) {
+          col.header = 'Requested By';
+        }
+      }
+
+      // Drop Edit columns — Link opens the product URL on every inventory table page.
+      for (let i = base.length - 1; i >= 0; i -= 1) {
+        const accessor = String(base[i].accessor || '').trim().toLowerCase();
+        const header = String(base[i].header || '').trim().toLowerCase();
+        if (
+          accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
+          accessor === 'edit' ||
+          accessor === '__edit' ||
+          accessor === 'actions' ||
+          header === 'edit'
+        ) {
+          base.splice(i, 1);
+        }
+      }
+
+      const hasProductLink = base.some((col) => {
+        const accessor = String(col.accessor || '').trim().toLowerCase();
+        return accessor === 'product_link' || accessor === 'additional_link' || accessor === 'link';
+      });
+      if (!hasProductLink) {
+        base.push({
+          header: 'Link',
+          accessor: 'product_link',
+          type: 'link',
+          linkField: 'product_link',
+          align: 'right',
+          ...procurementColumnLayout('product_link'),
+        });
+      } else {
+        for (const col of base) {
           const accessor = String(col.accessor || '').trim().toLowerCase();
-          const header = String(col.header || '').trim().toLowerCase();
+          if (
+            accessor === 'product_link' ||
+            accessor === 'additional_link' ||
+            accessor === 'link'
+          ) {
+            col.header = 'Link';
+            col.type = 'link';
+            col.align = 'right';
+            col.accessor = accessor === 'link' ? 'product_link' : col.accessor;
+            col.linkField = col.linkField || (accessor === 'link' ? 'product_link' : accessor);
+            Object.assign(col, procurementColumnLayout('product_link'));
+          }
+        }
+        const linkIdx = base.findIndex((col) => {
+          const accessor = String(col.accessor || '').trim().toLowerCase();
           return (
-            accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
-            accessor === 'edit' ||
-            header === 'edit'
+            accessor === 'product_link' ||
+            accessor === 'additional_link' ||
+            accessor === 'link'
           );
         });
-        if (!hasEditColumn) {
-          base.push({
-            header: 'Edit',
-            accessor: REQUESTER_EDIT_COLUMN_ACCESSOR,
-            type: 'action',
-            align: 'center',
-            ...procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR),
-          });
-        } else {
-          // Keep Edit as the last column so buttons line up under EDIT / Next.
-          const editIdx = base.findIndex((col) => {
-            const accessor = String(col.accessor || '').trim().toLowerCase();
-            const header = String(col.header || '').trim().toLowerCase();
-            return (
-              accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
-              accessor === 'edit' ||
-              header === 'edit'
-            );
-          });
-          if (editIdx >= 0 && editIdx !== base.length - 1) {
-            const [editColumn] = base.splice(editIdx, 1);
-            editColumn.header = 'Edit';
-            editColumn.align = 'center';
-            Object.assign(editColumn, procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR));
-            base.push(editColumn);
-          }
+        if (linkIdx >= 0 && linkIdx !== base.length - 1) {
+          const [linkCol] = base.splice(linkIdx, 1);
+          base.push(linkCol);
         }
-        } else {
-          // Drop any Edit columns that may exist in saved page config.
-          for (let i = base.length - 1; i >= 0; i -= 1) {
-            const accessor = String(base[i].accessor || '').trim().toLowerCase();
-            const header = String(base[i].header || '').trim().toLowerCase();
-            if (
-              accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
-              accessor === 'edit' ||
-              accessor === '__edit' ||
-              accessor === 'actions' ||
-              header === 'edit'
-            ) {
-              base.splice(i, 1);
-            }
-          }
-
-          // Normalize requester column label to single-word "Requestor".
-          for (const col of base) {
-            const accessor = String(col.accessor || '').trim().toLowerCase();
-            const header = String(col.header || '').trim().toLowerCase();
-            if (
-              accessor === 'requester_name' ||
-              accessor === 'requested_by' ||
-              header === 'requested by' ||
-              header === 'requester' ||
-              header === 'requester name' ||
-              header === 'requestor name'
-            ) {
-              col.header = 'Requestor';
-            }
-          }
-
-          const hasProductLink = base.some((col) => {
-            const accessor = String(col.accessor || '').trim().toLowerCase();
-            return accessor === 'product_link' || accessor === 'additional_link' || accessor === 'link';
-          });
-          if (!hasProductLink) {
-            base.push({
-              header: 'Link',
-              accessor: 'product_link',
-              type: 'link',
-              linkField: 'product_link',
-              align: 'right',
-              ...procurementColumnLayout('product_link'),
-            });
-          } else {
-            // Normalize label to "Link" to match All Request mock.
-            for (const col of base) {
-              const accessor = String(col.accessor || '').trim().toLowerCase();
-              if (
-                accessor === 'product_link' ||
-                accessor === 'additional_link' ||
-                accessor === 'link'
-              ) {
-                col.header = 'Link';
-                col.type = 'link';
-                col.align = 'right';
-                col.accessor = accessor === 'link' ? 'product_link' : col.accessor;
-                col.linkField = col.linkField || (accessor === 'link' ? 'product_link' : accessor);
-                Object.assign(col, procurementColumnLayout('product_link'));
-              }
-            }
-            // Keep Link as the last column so it lines up under Filters.
-            const linkIdx = base.findIndex((col) => {
-              const accessor = String(col.accessor || '').trim().toLowerCase();
-              return (
-                accessor === 'product_link' ||
-                accessor === 'additional_link' ||
-                accessor === 'link'
-              );
-            });
-            if (linkIdx >= 0 && linkIdx !== base.length - 1) {
-              const [linkCol] = base.splice(linkIdx, 1);
-              base.push(linkCol);
-            }
-          }
-        }
+      }
     }
     return base;
-  }, [config?.columns, config?.tableType, effectiveStatusButtons, inventoryTableKind, isInPageBuilder, isInventoryRequestTable, isMyRequestPage]);
+  }, [config?.columns, config?.tableType, effectiveStatusButtons, isInPageBuilder, isInventoryRequestTable]);
 
   // Get unique values for filters
   const getUniqueLeadStatuses = () => {
