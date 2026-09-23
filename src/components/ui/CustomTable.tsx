@@ -78,14 +78,17 @@ function isItemNameAccessor(accessor: string): boolean {
   return key === 'item_name' || key === 'item_name_freeform';
 }
 
-/** Shipment + Link sit side-by-side — keep horizontal padding minimal. */
+/** Adjacent pairs that should sit close — minimal horizontal padding. */
 function isTightPairAccessor(accessor: string): boolean {
   const key = String(accessor || '').trim().toLowerCase();
   return (
     key === 'shipment_status' ||
     key === 'product_link' ||
     key === 'additional_link' ||
-    key === 'link'
+    key === 'link' ||
+    key === 'vendor' ||
+    key === 'vendor_name' ||
+    key === 'request_date'
   );
 }
 
@@ -245,14 +248,14 @@ export const CustomTable: React.FC<CustomTableProps> = ({
       <div
         className={cn(
           'w-full max-w-full min-w-0',
-          // Allow horizontal scroll when columns exceed the viewport; keep vertical scroll for tall tables.
-          'overflow-x-auto',
+          // fitViewport: no horizontal scroll — columns shrink to the parent width.
+          fitViewport ? 'overflow-x-hidden' : 'overflow-x-auto',
           fillHeight ? 'min-h-0 flex-1 overflow-y-auto' : 'overflow-y-visible'
         )}
       >
         <table
           className={cn(
-            fitViewport ? 'w-full min-w-[72rem] table-fixed' : 'min-w-max w-full',
+            fitViewport ? 'w-full table-fixed' : 'min-w-max w-full',
             'bg-white',
             tableClassName
           )}
@@ -265,9 +268,9 @@ export const CustomTable: React.FC<CustomTableProps> = ({
               {columns.map((col, idx) => {
                 const beside = isSelectionBesideAccessor(col.accessor);
                 const minW = beside
-                  ? col.minWidth || '11rem'
+                  ? col.minWidth || '9rem'
                   : col.minWidth;
-                const width = beside ? col.width || '12rem' : col.width;
+                const width = beside ? col.width || '10rem' : col.width;
                 return (
                   <col
                     key={idx}
@@ -319,8 +322,8 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   className={cn(
                     'text-sm font-medium',
                     fitViewport && !itemNameCol && !isFixedCol && 'overflow-hidden',
-                    itemNameCol && fitViewport && 'min-w-[9rem] overflow-visible',
-                    isFixedCol && fitViewport && 'overflow-visible',
+                    itemNameCol && fitViewport && 'min-w-0 overflow-hidden',
+                    isFixedCol && fitViewport && 'overflow-hidden',
                     headerSingleLine && 'whitespace-nowrap',
                     headerUppercase && 'uppercase tracking-wide font-semibold',
                     comfortable ? (fitViewport ? 'py-2' : 'py-3') : cellY,
@@ -334,8 +337,8 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                   style={
                     col.width || col.minWidth || col.maxWidth || selectionBeside
                       ? {
-                          width: selectionBeside ? col.width || '12rem' : col.width,
-                          minWidth: selectionBeside ? col.minWidth || '11rem' : col.minWidth,
+                          width: selectionBeside ? col.width || '10rem' : col.width,
+                          minWidth: selectionBeside ? col.minWidth || '9rem' : col.minWidth,
                           maxWidth: col.maxWidth,
                         }
                       : undefined
@@ -481,10 +484,13 @@ export const CustomTable: React.FC<CustomTableProps> = ({
                         comfortable ? 'whitespace-normal' : 'whitespace-nowrap',
                         // Only clip flexible text columns — item name + fixed cols must stay visible.
                         fitViewport && !isFixedCol && !itemNameCol && 'max-w-0 overflow-hidden',
-                        fitViewport && (isFixedCol || itemNameCol) && 'overflow-visible',
+                        fitViewport && (isFixedCol || itemNameCol) && 'overflow-hidden',
                         cellY,
-                        col.align === 'left' ? `${cellPadLeft} text-left` : `${cellPadOther} text-center`,
-                        col.align === 'right' && `${cellPadOther} text-right`,
+                        col.align === 'left'
+                          ? `${cellPadLeft} text-left`
+                          : col.align === 'right'
+                            ? `${cellPadOther} text-right`
+                            : `${cellPadOther} text-center`,
                         rowStyle?.backgroundColor && '!bg-[#BFDBFE]',
                       )}
                     >

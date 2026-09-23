@@ -304,7 +304,7 @@ const CustomAppPage: React.FC = () => {
 
   return (
     <InventoryTablePageProvider pageName={effectivePageName} headerTitle={headerTitle ?? ''}>
-    <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'h-full min-h-0 flex flex-col' : ''}`}>
+    <div className={`w-full max-w-full min-w-0 ${isUnmanndApp ? 'flex flex-col' : ''}`}>
       {/* Sticky Header Title — mobile, tablet, and desktop */}
       {headerTitle && !hidePageHeader && (
         <div className="sticky top-0 z-40 w-full shrink-0 border-b border-gray-200 bg-white">
@@ -330,13 +330,13 @@ const CustomAppPage: React.FC = () => {
       {/* Page Content */}
       <div
         className={`w-full max-w-full min-w-0 ${
-          isUnmanndApp ? 'flex flex-1 min-h-0 flex-col' : ''
+          isUnmanndApp ? 'flex flex-col' : ''
         }`}
       >
         <div
           className={`max-w-full min-w-0 ${
             isUnmanndApp
-              ? `px-2 pt-1 pb-2 flex flex-1 min-h-0 flex-col ${pageHasInventoryRequestTable ? 'h-full' : ''}`
+              ? 'px-2 pt-1 pb-2 flex flex-col'
               : 'pt-1'
           }`}
         >
@@ -346,18 +346,13 @@ const CustomAppPage: React.FC = () => {
                 if (!Renderer) return null;
                 // Skip header components if they exist in the config (we show it as fixed header above)
                 if (component.type === 'header') return null;
-                const fillHeight =
-                  isUnmanndApp && isInventoryTableComponent(component);
                 const tableConfig = enrichInventoryTableConfig(
                   String(component.type || ''),
                   effectivePageName,
                   component.config as Record<string, unknown> | undefined
                 );
                 return (
-                  <div
-                    key={component.id}
-                    className={fillHeight ? 'flex min-h-0 flex-1 flex-col' : undefined}
-                  >
+                  <div key={component.id}>
                     <Renderer {...component.props} config={tableConfig} />
                   </div>
                 );
