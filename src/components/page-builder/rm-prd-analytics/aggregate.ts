@@ -263,7 +263,6 @@ export interface RmAdherenceRow {
   trialTime: number;
   trialLabel: string;
   breaches: number;
-  open: number;
 }
 
 function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdherenceRow {
@@ -272,7 +271,6 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
 
   const calls = rmEvents.filter(isCallTouch);
   const closedCalls = calls.filter(isClosedCallTouch);
-  const openCalls = calls.filter((c) => c.endedAt === null);
 
   const handlingSeconds = closedCalls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0);
   const handlingMinutes = handlingSeconds / 60;
@@ -311,7 +309,6 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
     // if duration_seconds >= 1500") — a call landing at exactly 25:00 must
     // count as a breach in both places, not just one
     breaches: closedCalls.filter((c) => (c.durationSeconds ?? 0) >= BREACH_SECONDS).length,
-    open: openCalls.length,
   };
 }
 
@@ -346,7 +343,6 @@ export function computeShiftTimeAverages(events: RmActivityEvent[]) {
     },
     occupancy: { value: Math.round(occupancyFraction * 100), sub: 'Handling ÷ login' },
     breaches: { value: rows.reduce((sum, r) => sum + r.breaches, 0), sub: 'Today' },
-    openTouches: { value: rows.reduce((sum, r) => sum + r.open, 0), sub: 'Never closed' },
   };
 }
 

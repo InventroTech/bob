@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Select,
   SelectContent,
@@ -565,12 +565,34 @@ const PerformanceView: React.FC<{
   );
 };
 
+// The whole page scrolls in <main>, not just this table — so when the "By
+// RM" search filters rows down (e.g. to just one match), the table's own
+// height can drop far enough that main.scrollTop no longer fits the
+// shrunk document, and the browser clamps it back up. That yanks the page
+// (and the search box mid-keystroke) upward. Remembering the tallest
+// height this table has actually rendered, and never reporting a smaller
+// min-height, keeps a narrowing search from collapsing the page — it can
+// still grow past that height later (e.g. search cleared), just never shrink.
+function useStableMinHeight(deps: React.DependencyList) {
+  const ref = useRef<HTMLTableElement>(null);
+  const [minHeight, setMinHeight] = useState(0);
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const height = ref.current.getBoundingClientRect().height;
+    setMinHeight((prev) => Math.max(prev, height));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return { ref, minHeight };
+}
+
 const PerformanceTable: React.FC<{ rows: RmPerformanceRow[]; onSelectRm: (rmUserId: string) => void }> = ({
   rows,
   onSelectRm,
-}) => (
-  <div className="overflow-x-auto rounded-xl border border-stone-200">
-    <Table className="min-w-[920px]">
+}) => {
+  const { ref, minHeight } = useStableMinHeight([rows.length]);
+  return (
+  <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
+    <Table ref={ref} className="min-w-[920px]">
       <TableHeader>
         <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
           <TableHead className="whitespace-nowrap text-white">RM</TableHead>
@@ -626,7 +648,8 @@ const PerformanceTable: React.FC<{ rows: RmPerformanceRow[]; onSelectRm: (rmUser
       </TableBody>
     </Table>
   </div>
-);
+  );
+};
 
 // ---- Adherence tab ----
 
@@ -642,7 +665,7 @@ const AdherenceView: React.FC<{
   <div className="space-y-6">
     <section>
       <SectionLabel>Shift Time · Average per RM</SectionLabel>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Login Hours"
           value={shiftTimeAverages.loginHours.value}
@@ -669,12 +692,6 @@ const AdherenceView: React.FC<{
           sub={`${shiftTimeAverages.breaches.sub}   Review`}
           highlight="red"
           onClick={() => onDrill('breach')}
-        />
-        <StatCard
-          label="Open Touches"
-          value={shiftTimeAverages.openTouches.value}
-          sub={shiftTimeAverages.openTouches.sub}
-          highlight="amber"
         />
       </div>
     </section>
@@ -733,9 +750,11 @@ const AdherenceView: React.FC<{
 const AdherenceTable: React.FC<{ rows: RmAdherenceRow[]; onSelectRm: (rmUserId: string) => void }> = ({
   rows,
   onSelectRm,
-}) => (
-  <div className="overflow-x-auto rounded-xl border border-stone-200">
-    <Table className="min-w-[1180px]">
+}) => {
+  const { ref, minHeight } = useStableMinHeight([rows.length]);
+  return (
+  <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
+    <Table ref={ref} className="min-w-[1180px]">
       <TableHeader>
         <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
           <TableHead className="whitespace-nowrap text-white">RM</TableHead>
@@ -751,7 +770,6 @@ const AdherenceTable: React.FC<{ rows: RmAdherenceRow[]; onSelectRm: (rmUserId: 
           <TableHead className="whitespace-nowrap text-right text-white">Not Int</TableHead>
           <TableHead className="whitespace-nowrap text-right text-white">Trial</TableHead>
           <TableHead className="whitespace-nowrap text-right text-white">Breach</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Open</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody className="bg-white">
@@ -823,15 +841,13 @@ const AdherenceTable: React.FC<{ rows: RmAdherenceRow[]; onSelectRm: (rmUserId: 
                 <span className="font-mono text-stone-300">0</span>
               )}
             </TableCell>
-            <TableCell className={cn('whitespace-nowrap text-right font-mono', row.open > 0 ? 'font-semibold text-red-600' : 'text-stone-300')}>
-              {row.open}
-            </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
   </div>
-);
+  );
+};
 
 // ---- RM detail modal ----
 // Opened by clicking a row in either "By RM" table. Same cards as the team
@@ -955,7 +971,6 @@ const RmDetailModal: React.FC<{
                   highlight="red"
                   onClick={() => onDrill('breach')}
                 />
-                <StatCard label="Open Touches" value={shiftTimeAverages.openTouches.value} highlight="amber" />
               </div>
             </section>
 
