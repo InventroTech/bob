@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     // Bind IPv4 only — host "::" also listens on IPv6 and can leave two
     // competing Vite instances on :8080 (localhost often prefers ::1).
     host: "127.0.0.1",
-    port: 8080,
+    port: 8081,
     strictPort: true,
   },
   plugins: [
