@@ -51,13 +51,10 @@ export function getShipmentStatusLabel(status: unknown): string {
   const raw = String(status ?? '').trim();
   if (!raw || raw === '—' || raw.toUpperCase() === 'N/A') return 'N/A';
   const normalized = normalizeStatus(raw);
-  // Match All Request mock: keep underscored uppercase labels (IN_TRANSIT, etc.).
-  return normalized || 'N/A';
+  return normalized ? normalized.replace(/_/g, ' ') : 'N/A';
 }
 
-/** Table chip label for request status — keep underscored form like IN_CART. */
+/** Table chip label for request status — spaced uppercase (NEW REQUEST, IN CART). */
 export function getInventoryStatusChipLabel(status: unknown): string {
-  const raw = String(status ?? '').trim();
-  if (!raw || raw === '—') return '—';
-  return normalizeStatus(raw) || '—';
+  return getInventoryStatusLabel(status);
 }
