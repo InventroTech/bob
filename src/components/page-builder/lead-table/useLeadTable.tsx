@@ -62,6 +62,7 @@ import {
   applyRequestStageFiltersToParams,
   buildRequestStageListUrl,
   emptyRequestStageCounts,
+  filterRowsByRequestStage,
   parseListTotalCount,
   type RequestStageTabId,
 } from '@/lib/inventory/requestStageTabs';
@@ -135,15 +136,16 @@ function procurementColumnLayout(
   // Keep chip cols near the chip width so Item Name isn't crushed in table-fixed layout.
   const chipCol = { width: '8.5rem', minWidth: '8.5rem', maxWidth: '8.5rem' };
   const priorityCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '5.75rem' };
-  const dateCol = { width: '5.5rem', minWidth: '5.5rem', maxWidth: '5.5rem' };
+  const dateCol = { width: '5rem', minWidth: '4.75rem', maxWidth: '5.25rem' };
   const costCol = { width: '6.25rem', minWidth: '6.25rem', maxWidth: '6.5rem' };
-  const vendorCol = { width: '8rem', minWidth: '7.5rem', maxWidth: '9rem' };
+  // Keep Vendor tight next to Request Date (long names truncate).
+  const vendorCol = { width: '6.5rem', minWidth: '5.75rem', maxWidth: '7rem' };
   const requesterCol = { width: '7rem', minWidth: '7rem', maxWidth: '8rem' };
   const shipmentCol = { width: '6.5rem', minWidth: '6.5rem', maxWidth: '6.75rem' };
-  const linkCol = { width: '4rem', minWidth: '4rem', maxWidth: '4.25rem' };
-  const editCol = { width: '5.5rem', minWidth: '5.5rem', maxWidth: '5.5rem' };
-  // Flexible — thumbnail + truncated name (+ checkbox in bulk edit).
-  const itemNameCol = { width: '12rem', minWidth: '11rem', maxWidth: '14rem' };
+  const linkCol = { width: '3.5rem', minWidth: '3.5rem', maxWidth: '3.75rem' };
+  const editCol = { width: '4.5rem', minWidth: '4.5rem', maxWidth: '4.75rem' };
+  // Flexible filler — absorbs leftover width so Link stays flush with Filters (no h-scroll).
+  const itemNameCol = { minWidth: '8rem' };
   const layouts: Record<string, { width?: string; minWidth?: string; maxWidth?: string }> = {
     item_name_freeform: itemNameCol,
     item_name: itemNameCol,
@@ -841,9 +843,24 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
               }
             : r;
         setData((prev) => prev.map(updateRow));
-        setFilteredData((prev) => prev.map(updateRow));
+        setFilteredData((prev) => {
+          const next = prev.map(updateRow);
+          if (showRequestStageTabs && requestStageTabRef.current !== 'all') {
+            return filterRowsByRequestStage(next, requestStageTabRef.current);
+          }
+          return next;
+        });
         cancelOpsShipmentEdit(row.id);
         toast({ title: 'Saved', description: 'Shipment updated.' });
+        setStageCountsTick((n) => n + 1);
+        try {
+          await fetchFilteredDataRef.current?.(undefined, undefined, {
+            silent: true,
+            keepPage: true,
+          });
+        } catch (e) {
+          console.error('Error refreshing table after shipment update', e);
+        }
       } catch (e: any) {
         toast({
           title: 'Update failed',
@@ -899,39 +916,43 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         const isEditing = opsEditingRowId === row.id;
         const isSaving = opsRowSavingId === row.id;
         return (
-          <CustomButton
-            variant="default"
-            size="sm"
-            className={isEditing ? OPS_SAVE_BTN : OPS_EDIT_BTN}
-            disabled={isSaving || (opsRowSavingId != null && !isEditing)}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isEditing) {
-                void saveOpsShipmentEdit(row);
-              } else {
-                startOpsShipmentEdit(row);
-              }
-            }}
-          >
-            {isSaving ? 'Saving…' : isEditing ? 'Save' : 'Edit'}
-          </CustomButton>
+          <div className="flex w-full items-center justify-center">
+            <CustomButton
+              variant="default"
+              size="sm"
+              className={isEditing ? OPS_SAVE_BTN : OPS_EDIT_BTN}
+              disabled={isSaving || (opsRowSavingId != null && !isEditing)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isEditing) {
+                  void saveOpsShipmentEdit(row);
+                } else {
+                  startOpsShipmentEdit(row);
+                }
+              }}
+            >
+              {isSaving ? 'Saving…' : isEditing ? 'Save' : 'Edit'}
+            </CustomButton>
+          </div>
         );
       }
       // Status changes use inventory workflow actions in the detail modal (Approve / Reject / Order, etc.).
       return (
-        <CustomButton
-          variant="default"
-          size="sm"
-          className={OPS_EDIT_BTN}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (effectiveDetailMode === 'none') return;
-            setSelectedRecord(row);
-            setIsRecordDetailModalOpen(true);
-          }}
-        >
-          Edit
-        </CustomButton>
+        <div className="flex w-full items-center justify-center">
+          <CustomButton
+            variant="default"
+            size="sm"
+            className={OPS_EDIT_BTN}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (effectiveDetailMode === 'none') return;
+              setSelectedRecord(row);
+              setIsRecordDetailModalOpen(true);
+            }}
+          >
+            Edit
+          </CustomButton>
+        </div>
       );
     }
 
@@ -1169,7 +1190,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Default link rendering
       if (isTrackingCol || isProcurementLink) {
         return (
-          <div className="flex w-full items-center justify-center">
+          <div
+            className={
+              isProcurementLink
+                ? 'flex w-full items-center justify-end pr-0.5'
+                : 'flex w-full items-center justify-center'
+            }
+          >
             <a
               href={href}
               target="_blank"
@@ -1400,21 +1427,29 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         String(column.header || '').trim().toLowerCase() === 'edit' ||
         String(column.accessor || '').trim().toLowerCase() === 'edit';
       return (
-        <CustomButton
-          variant={isEditAction && isInventoryRequestTable ? 'default' : 'outline'}
-          size="sm"
+        <div
           className={
             isEditAction && isInventoryRequestTable
-              ? 'h-9 rounded-md border-0 bg-[#1A44A1] px-4 text-xs font-semibold text-white hover:bg-[#163a8a] hover:text-white'
+              ? 'flex w-full items-center justify-center'
               : undefined
           }
-          onClick={(e) => {
-            e.stopPropagation();
-            handleActionClick(row, column as Column);
-          }}
         >
-          {column.header || 'Action'}
-        </CustomButton>
+          <CustomButton
+            variant={isEditAction && isInventoryRequestTable ? 'default' : 'outline'}
+            size="sm"
+            className={
+              isEditAction && isInventoryRequestTable
+                ? OPS_EDIT_BTN
+                : undefined
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              handleActionClick(row, column as Column);
+            }}
+          >
+            {isEditAction && isInventoryRequestTable ? 'Edit' : column.header || 'Action'}
+          </CustomButton>
+        </div>
       );
     }
 
@@ -1672,8 +1707,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     removeAssignedToForGM,
   ]);
 
-  // List is filtered on the server when a stage tab is active.
-  const stageFilteredData = filteredData;
+  // Prefer server filters; also exclusivity-filter client-side so shipment/status
+  // updates immediately move a row out of the wrong stage tab.
+  const stageFilteredData = useMemo(() => {
+    if (!showRequestStageTabs || requestStageTab === 'all') return filteredData;
+    return filterRowsByRequestStage(filteredData, requestStageTab);
+  }, [filteredData, requestStageTab, showRequestStageTabs]);
 
   // Bulk Edit only on All Request (procurement itemsTable), not every ops table.
   const bulkSelectionEnabled =
@@ -1739,11 +1778,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const canSelectBulkRow = useCallback(
     (row: any) => {
       if (!bulkSelectionEnabled) return false;
-      if (normalizeBulkRowId(row?.id) == null) return false;
-      if (bulkSelectionStatus == null) return true;
-      return getBulkRowStatus(row) === bulkSelectionStatus;
+      // Allow selecting any row; selections persist across stage tabs.
+      return normalizeBulkRowId(row?.id) != null;
     },
-    [bulkSelectionEnabled, bulkSelectionStatus]
+    [bulkSelectionEnabled]
   );
 
   const toggleBulkRowSelection = useCallback(
@@ -1766,36 +1804,6 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         return;
       }
 
-      const rowStatus = getBulkRowStatus(row);
-      if (selectedRowIds.size > 0) {
-        let anchorStatus: string | null = null;
-        for (const existing of stageFilteredData) {
-          const existingId = normalizeBulkRowId(existing?.id);
-          if (existingId != null && selectedRowIds.has(existingId)) {
-            anchorStatus = getBulkRowStatus(existing);
-            break;
-          }
-        }
-        if (anchorStatus == null) {
-          for (const id of selectedRowIds) {
-            const cached = selectedBulkRowsById[id];
-            if (cached) {
-              anchorStatus = getBulkRowStatus(cached);
-              if (anchorStatus) break;
-            }
-          }
-        }
-        if (anchorStatus != null && rowStatus !== anchorStatus) {
-          toast({
-            title: 'Different status',
-            description:
-              'Bulk select only works for requests with the same status as the first selected row.',
-            variant: 'destructive',
-          });
-          return;
-        }
-      }
-
       setSelectedRowIds((prev) => {
         const next = new Set(prev);
         next.add(rowId);
@@ -1803,7 +1811,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       });
       setSelectedBulkRowsById((prev) => ({ ...prev, [rowId]: row }));
     },
-    [selectedBulkRowsById, selectedRowIds, stageFilteredData, toast]
+    []
   );
 
   const [bulkStatusPickerOpen, setBulkStatusPickerOpen] = useState(false);
@@ -1844,70 +1852,43 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   );
 
   const toggleBulkSelectAll = useCallback(() => {
-    // If a status is already locked by current selection, toggle that group only.
-    if (selectedRowIds.size > 0) {
-      let anchorStatus: string | null = null;
-      for (const row of stageFilteredData) {
-        const rowId = normalizeBulkRowId(row?.id);
-        if (rowId != null && selectedRowIds.has(rowId)) {
-          anchorStatus = getBulkRowStatus(row);
-          break;
+    // Toggle all rows on the current stage page; keep selections from other tabs.
+    const pageRows = stageFilteredData.filter((row) => normalizeBulkRowId(row?.id) != null);
+    const pageIds = pageRows
+      .map((row) => normalizeBulkRowId(row?.id))
+      .filter((id): id is string => id != null);
+    if (pageIds.length === 0) return;
+
+    const allPageSelected = pageIds.every((id) => selectedRowIds.has(id));
+    if (allPageSelected) {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        for (const id of pageIds) next.delete(id);
+        return next;
+      });
+      setSelectedBulkRowsById((prev) => {
+        const next = { ...prev };
+        for (const id of pageIds) delete next[id];
+        return next;
+      });
+    } else {
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        for (const id of pageIds) next.add(id);
+        return next;
+      });
+      setSelectedBulkRowsById((prev) => {
+        const next = { ...prev };
+        for (const row of pageRows) {
+          const id = normalizeBulkRowId(row?.id);
+          if (id != null) next[id] = row;
         }
-      }
-      if (anchorStatus == null) {
-        for (const id of selectedRowIds) {
-          const cached = selectedBulkRowsById[id];
-          if (cached) {
-            anchorStatus = getBulkRowStatus(cached);
-            if (anchorStatus) break;
-          }
-        }
-      }
-      if (anchorStatus) {
-        const matchingRows = stageFilteredData.filter(
-          (row) => getBulkRowStatus(row) === anchorStatus
-        );
-        const matchingIds = matchingRows
-          .map((row) => normalizeBulkRowId(row?.id))
-          .filter((id): id is string => id != null);
-        const allMatchingSelected =
-          matchingIds.length > 0 && matchingIds.every((id) => selectedRowIds.has(id));
-        if (allMatchingSelected) {
-          setSelectedRowIds(new Set());
-          setSelectedBulkRowsById({});
-        } else {
-          const nextCache: Record<string, any> = {};
-          for (const row of matchingRows) {
-            const id = normalizeBulkRowId(row?.id);
-            if (id != null) nextCache[id] = row;
-          }
-          setSelectedRowIds(new Set(matchingIds));
-          setSelectedBulkRowsById(nextCache);
-        }
-        setBulkStatusPickerOpen(false);
-        setBulkStatusPickerOptions([]);
-        return;
-      }
+        return next;
+      });
     }
-
-    const statusOptions = getPageStatusCounts();
-    if (statusOptions.length === 0) return;
-
-    if (statusOptions.length === 1) {
-      selectBulkRowsByStatus(statusOptions[0].status);
-      return;
-    }
-
-    // Mixed statuses on this page — ask which status to select.
-    setBulkStatusPickerOptions(statusOptions);
-    setBulkStatusPickerOpen(true);
-  }, [
-    getPageStatusCounts,
-    selectBulkRowsByStatus,
-    selectedBulkRowsById,
-    selectedRowIds,
-    stageFilteredData,
-  ]);
+    setBulkStatusPickerOpen(false);
+    setBulkStatusPickerOptions([]);
+  }, [selectedRowIds, stageFilteredData]);
 
   const clearBulkSelection = useCallback(() => {
     setSelectedRowIds(new Set());
@@ -1916,13 +1897,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     setBulkStatusPickerOptions([]);
   }, []);
 
-  // Reset selection when the table API, stage tab, or page changes.
+  // Reset selection only when the table API endpoint changes (not stage tabs / pages).
   useEffect(() => {
     setSelectedRowIds(new Set());
     setSelectedBulkRowsById({});
     setBulkStatusPickerOpen(false);
     setBulkStatusPickerOptions([]);
-  }, [effectiveApiEndpoint, requestStageTab, pagination.currentPage]);
+  }, [effectiveApiEndpoint]);
 
   // Keep cached bulk rows fresh when the current page includes them.
   useEffect(() => {
@@ -1944,6 +1925,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   const rowSupportsBulkAction = useCallback(
     (row: any, button: { statusValue: string; targetAttribute?: string }) => {
+      const attr = (button.targetAttribute || 'status').trim() || 'status';
+      // Free Status / Shipment catalogs — any selected row can be updated.
+      if (attr === 'status' || attr === 'shipment_status') return true;
       const key = bulkActionButtonKey(button);
       const workflowMatch = getRowWorkflowButtons(row).some(
         (btn) => bulkActionButtonKey(btn) === key
@@ -2018,8 +2002,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       statusValue: string;
       targetAttribute?: string;
       statusText?: string;
-    }) => {
-      if (!bulkSelectionEnabled || selectedRowIds.size === 0) return;
+    }): Promise<boolean> => {
+      if (!bulkSelectionEnabled || selectedRowIds.size === 0) return false;
       const applyingKey = bulkActionButtonKey(button);
       // Prefer cached rows so selections from other stage tabs / pages still apply.
       const selectedRows = Array.from(selectedRowIds)
@@ -2038,7 +2022,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           description: `None of the selected requests can be updated with "${formatBulkActionLabel(button.label, selectedRows.length)}".`,
           variant: 'destructive',
         });
-        return;
+        return false;
       }
 
       setBulkApplying(applyingKey);
@@ -2144,6 +2128,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           console.error('Error refreshing table after bulk status update', e);
         }
       }
+
+      return successCount > 0;
     },
     [
       bulkSelectionEnabled,
@@ -2243,6 +2229,24 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
             align: 'center',
             ...procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR),
           });
+        } else {
+          // Keep Edit as the last column so buttons line up under EDIT / Next.
+          const editIdx = base.findIndex((col) => {
+            const accessor = String(col.accessor || '').trim().toLowerCase();
+            const header = String(col.header || '').trim().toLowerCase();
+            return (
+              accessor === REQUESTER_EDIT_COLUMN_ACCESSOR ||
+              accessor === 'edit' ||
+              header === 'edit'
+            );
+          });
+          if (editIdx >= 0 && editIdx !== base.length - 1) {
+            const [editColumn] = base.splice(editIdx, 1);
+            editColumn.header = 'Edit';
+            editColumn.align = 'center';
+            Object.assign(editColumn, procurementColumnLayout(REQUESTER_EDIT_COLUMN_ACCESSOR));
+            base.push(editColumn);
+          }
         }
         } else {
           // Drop any Edit columns that may exist in saved page config.
@@ -2286,7 +2290,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
               accessor: 'product_link',
               type: 'link',
               linkField: 'product_link',
-              align: 'center',
+              align: 'right',
               ...procurementColumnLayout('product_link'),
             });
           } else {
@@ -2300,11 +2304,24 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
               ) {
                 col.header = 'Link';
                 col.type = 'link';
-                col.align = 'center';
+                col.align = 'right';
                 col.accessor = accessor === 'link' ? 'product_link' : col.accessor;
                 col.linkField = col.linkField || (accessor === 'link' ? 'product_link' : accessor);
                 Object.assign(col, procurementColumnLayout('product_link'));
               }
+            }
+            // Keep Link as the last column so it lines up under Filters.
+            const linkIdx = base.findIndex((col) => {
+              const accessor = String(col.accessor || '').trim().toLowerCase();
+              return (
+                accessor === 'product_link' ||
+                accessor === 'additional_link' ||
+                accessor === 'link'
+              );
+            });
+            if (linkIdx >= 0 && linkIdx !== base.length - 1) {
+              const [linkCol] = base.splice(linkIdx, 1);
+              base.push(linkCol);
             }
           }
         }
