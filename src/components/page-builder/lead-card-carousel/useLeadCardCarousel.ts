@@ -27,6 +27,8 @@ import {
   normalizePhoneForLinks,
   resolveLeadRecordId,
   tasksSignature,
+  getOrCreateLeadStartTime,
+  clearLeadStartTime,
 } from "./utils";
 import { useLeadTimer } from "./useLeadTimer";
 
@@ -164,7 +166,10 @@ export function useLeadCardCarousel(
         notes: normalized.notes || normalized.data?.notes || normalized.latest_remarks || "",
         selectedTags: parseTags(normalized.tags || []),
         nextFollowUp: normalized.next_follow_up || normalized.data?.next_follow_up || normalized.data?.next_call_at || "",
-        leadStartTime: new Date(),
+        // reuses the start time already set for this lead — this fires both
+        // right after a genuinely new lead loads (already timed) and on a
+        // same-lead realtime re-fetch, where resetting would be wrong
+        leadStartTime: getOrCreateLeadStartTime(leadId),
       }));
       if (onLeadUpdate) onLeadUpdate(normalized);
     } catch (err) {
@@ -203,7 +208,7 @@ export function useLeadCardCarousel(
         notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
         selectedTags: parseTags(initialLead.tags || []),
         nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
-        leadStartTime: new Date(),
+        leadStartTime: getOrCreateLeadStartTime(leadId),
       });
       isInitialized.current = true;
 
@@ -701,7 +706,7 @@ export function useLeadCardCarousel(
         notes: (leadData?.data?.notes as string) || leadData?.notes || "",
         selectedTags: parseTags(leadData?.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
-        leadStartTime: new Date(),
+        leadStartTime: getOrCreateLeadStartTime(leadData.id),
       }));
 
       // Increment fetched leads count (only if daily limit is configured)
@@ -874,6 +879,10 @@ export function useLeadCardCarousel(
 
       if (ok) {
         console.log('[handleActionButton] Event sent successfully, updating state. initialLead:', !!initialLead);
+        // this lead's viewing session is over — a later, genuinely new visit
+        // to the same lead id (e.g. re-queued after Call Back Later) must not
+        // inherit this start time
+        clearLeadStartTime(currentLead.id);
         if (action === "Trial Activated") {
           window.dispatchEvent(new CustomEvent('trial-activated', { 
             detail: { leadId: currentLead.id } 
@@ -1028,7 +1037,10 @@ export function useLeadCardCarousel(
           notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
           selectedTags: parseTags(currentLead?.tags || []),
           nextFollowUp: currentLead.next_follow_up || "",
-          leadStartTime: new Date(),
+          // this branch is the "fetch current assigned lead on refresh" path —
+          // reuse the persisted start time so a page reload doesn't restart
+          // the clock on a lead the RM was already working before reloading
+          leadStartTime: getOrCreateLeadStartTime(currentLead.id),
         }));
         isInitialized.current = true;
       } else {
@@ -1064,7 +1076,7 @@ export function useLeadCardCarousel(
           notes: (currentLead?.data?.notes as string) || currentLead?.notes || "",
           selectedTags: parseTags(currentLead?.tags || []),
           nextFollowUp: currentLead.next_follow_up || "",
-          leadStartTime: new Date(),
+          leadStartTime: getOrCreateLeadStartTime(currentLead.id),
         }));
         isInitialized.current = true;
         setLoading(false);

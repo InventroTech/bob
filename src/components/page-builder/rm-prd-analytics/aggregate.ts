@@ -19,7 +19,13 @@ const STANDARD_SHIFT_MINUTES = 600; // 10 hours
 // An RM absent from this map has no target configured, which reads as 0 —
 // matching how the Team Dashboard's "Trial Target" already treats it.
 export type DailyTargetsByRm = Record<string, number>;
-const targetFor = (targetsByRm: DailyTargetsByRm, rmUserId: string) => targetsByRm[rmUserId] ?? 0;
+// daysInRange scales a *daily* target up to whatever multi-day window is
+// selected (Last 7/30/Custom) — "achieved" naturally accumulates over the
+// whole window, so comparing it against an un-scaled single-day target
+// would make every RM look like they smashed a one-day goal. Today/
+// Yesterday pass daysInRange=1, leaving the target unchanged.
+const targetFor = (targetsByRm: DailyTargetsByRm, rmUserId: string, daysInRange: number) =>
+  (targetsByRm[rmUserId] ?? 0) * daysInRange;
 
 // "—" when there's no target to compare against — an unset target must not
 // silently read as achieved/0 (Infinity% or NaN%, depending on achieved)
@@ -100,57 +106,91 @@ interface ShiftTiming {
   statusMinutes: number;
 }
 
+// local calendar day key — matches dateRange.ts's local-clock day boundaries
+// (Today/Yesterday/etc. are computed off the browser's local time too)
+function calendarDayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+const isToday = (iso: string) => calendarDayKey(iso) === calendarDayKey(new Date().toISOString());
+function endOfDayMs(iso: string): number {
+  const d = new Date(iso);
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+function groupByCalendarDay(events: RmActivityEvent[]): RmActivityEvent[][] {
+  const byDay = new Map<string, RmActivityEvent[]>();
+  events.forEach((e) => {
+    const key = calendarDayKey(e.startedAt);
+    const list = byDay.get(key);
+    if (list) list.push(e);
+    else byDay.set(key, [e]);
+  });
+  return [...byDay.values()];
+}
+
+// A "shift" only makes sense within one calendar day — summing timestamps
+// across a multi-day range (Last 7/30/Custom) as if it were one continuous
+// shift turns "login hours" into wall-clock time including the overnight
+// gaps between days, which wrecks occupancy (handling ÷ login) too. So each
+// day is timed independently (envelope + break-pairing) and the results are
+// summed; live Status is only ever read off *today's* bucket — a call or
+// break left open on a past day is a data gap, not something still running.
 function computeShiftTiming(rmEvents: RmActivityEvent[]): ShiftTiming {
   const now = Date.now();
-
-  // RMs are only ever actually recorded touching leads in production — LOGIN/LOGOUT
-  // rows aren't created by any real flow, so anchoring to them left loginMinutes at
-  // 0 for everyone. Instead, treat the shift span as the envelope of every recorded
-  // activity: the first touch of the day to the most recent one, whether that's the
-  // start of a lead or the end of one.
-  const timestamps: number[] = [];
-  rmEvents.forEach((e) => {
-    timestamps.push(new Date(e.startedAt).getTime());
-    if (e.endedAt) timestamps.push(new Date(e.endedAt).getTime());
-  });
-  const loginAtMs = timestamps.length ? Math.min(...timestamps) : now;
-  const loggedOutAtMs = timestamps.length ? Math.max(...timestamps) : now;
-  const loginMinutes = (loggedOutAtMs - loginAtMs) / 60_000;
-
+  let loginMinutes = 0;
   let breakMinutes = 0;
-  let openBreakStartedAtMs: number | null = null;
-  rmEvents
-    .filter((e) => e.eventType === 'BREAK_START')
-    .forEach((breakStart) => {
-      const startMs = new Date(breakStart.startedAt).getTime();
-      const matchingEnd = rmEvents.find(
-        (e) => e.eventType === 'BREAK_END' && new Date(e.startedAt).getTime() > startMs
-      );
-      const endMs = matchingEnd ? new Date(matchingEnd.startedAt).getTime() : now;
-      breakMinutes += (endMs - startMs) / 60_000;
-      if (!matchingEnd) openBreakStartedAtMs = startMs;
-    });
+  let status: ShiftTiming['status'] = 'Idle';
+  let statusMinutes = 0;
 
-  const openCall = rmEvents.find((e) => isCallTouch(e) && e.endedAt === null);
-  if (openCall) {
-    return {
-      loginMinutes,
-      breakMinutes,
-      status: 'On lead',
-      statusMinutes: Math.round((now - new Date(openCall.startedAt).getTime()) / 60_000),
-    };
-  }
-  if (openBreakStartedAtMs !== null) {
-    return {
-      loginMinutes,
-      breakMinutes,
-      status: 'Off lead',
-      statusMinutes: Math.round((now - openBreakStartedAtMs) / 60_000),
-    };
-  }
-  // no open call and no open break — not actively on a lead, but not on a
-  // logged break either (was 'On lead', which falsely implied an active call)
-  return { loginMinutes, breakMinutes, status: 'Idle', statusMinutes: 0 };
+  groupByCalendarDay(rmEvents).forEach((dayEvents) => {
+    const dayIsToday = isToday(dayEvents[0].startedAt);
+
+    const timestamps: number[] = [];
+    dayEvents.forEach((e) => {
+      timestamps.push(new Date(e.startedAt).getTime());
+      if (e.endedAt) timestamps.push(new Date(e.endedAt).getTime());
+    });
+    loginMinutes += (Math.max(...timestamps) - Math.min(...timestamps)) / 60_000;
+
+    // sequential pairing, chronological order: a BREAK_END is consumed by
+    // the nearest still-open BREAK_START and can't be reused for a second
+    // one — the old .find()-based match let two breaks (or a start with no
+    // end at all) collapse onto the same end
+    const chrono = [...dayEvents].sort(
+      (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
+    );
+    let openBreakStartMs: number | null = null;
+    chrono.forEach((e) => {
+      if (e.eventType === 'BREAK_START' && openBreakStartMs === null) {
+        openBreakStartMs = new Date(e.startedAt).getTime();
+      } else if (e.eventType === 'BREAK_END' && openBreakStartMs !== null) {
+        breakMinutes += (new Date(e.startedAt).getTime() - openBreakStartMs) / 60_000;
+        openBreakStartMs = null;
+      }
+    });
+    if (openBreakStartMs !== null) {
+      // still running today → clock it up to now; left open on a past day
+      // → bound it at that day's end rather than stretching it to "now"
+      // (which could be days away for e.g. a Last 7 days view)
+      const endMs = dayIsToday ? now : endOfDayMs(dayEvents[0].startedAt);
+      breakMinutes += (endMs - openBreakStartMs) / 60_000;
+    }
+
+    if (dayIsToday) {
+      const openCall = dayEvents.find((e) => isCallTouch(e) && e.endedAt === null);
+      if (openCall) {
+        status = 'On lead';
+        statusMinutes = Math.round((now - new Date(openCall.startedAt).getTime()) / 60_000);
+      } else if (openBreakStartMs !== null) {
+        status = 'Off lead';
+        statusMinutes = Math.round((now - openBreakStartMs) / 60_000);
+      }
+    }
+  });
+
+  return { loginMinutes, breakMinutes, status, statusMinutes };
 }
 
 // ---- Performance tab ----
@@ -175,7 +215,8 @@ export interface RmPerformanceRow {
 function buildPerformanceRow(
   rmUserId: string,
   rmEvents: RmActivityEvent[],
-  targetsByRm: DailyTargetsByRm
+  targetsByRm: DailyTargetsByRm,
+  daysInRange: number
 ): RmPerformanceRow {
   const first = rmEvents[0];
   // only finished calls have a settled outcome — a call still in progress
@@ -200,28 +241,31 @@ function buildPerformanceRow(
     notInterestedRate: pct(counts.NOT_INTERESTED),
     trialRate: pct(counts.TRIAL_ACTIVATED),
     achieved: counts.TRIAL_ACTIVATED,
-    target: targetFor(targetsByRm, rmUserId),
+    target: targetFor(targetsByRm, rmUserId, daysInRange),
   };
 }
 
 export function computePerformanceByRm(
   events: RmActivityEvent[],
-  targetsByRm: DailyTargetsByRm = {}
+  targetsByRm: DailyTargetsByRm = {},
+  daysInRange = 1
 ): RmPerformanceRow[] {
-  return [...groupByRm(events)].map(([rmUserId, rmEvents]) => buildPerformanceRow(rmUserId, rmEvents, targetsByRm));
+  return [...groupByRm(events)].map(([rmUserId, rmEvents]) =>
+    buildPerformanceRow(rmUserId, rmEvents, targetsByRm, daysInRange)
+  );
 }
 
-export function computeTeamTotals(events: RmActivityEvent[], targetsByRm: DailyTargetsByRm = {}) {
+export function computeTeamTotals(events: RmActivityEvent[], targetsByRm: DailyTargetsByRm = {}, daysInRange = 1) {
   // same rule as the per-RM rows: a call still in progress has no outcome yet
   const calls = events.filter(isClosedCallTouch);
   const uniqueLeads = uniqueLeadCount(calls);
   const touches = calls.length;
   const counts = countByDisposition(latestTouchPerLead(calls));
   const achieved = counts.TRIAL_ACTIVATED;
-  // sum of each RM's own target, for whichever RMs were actually active
-  // (have events) in this range — not a flat number × headcount
+  // sum of each RM's own (days-scaled) target, for whichever RMs were
+  // actually active (have events) in this range — not a flat number × headcount
   const activeRmIds = [...groupByRm(events).keys()];
-  const target = activeRmIds.reduce((sum, rmUserId) => sum + targetFor(targetsByRm, rmUserId), 0);
+  const target = activeRmIds.reduce((sum, rmUserId) => sum + targetFor(targetsByRm, rmUserId, daysInRange), 0);
   const pct = (n: number) => (uniqueLeads ? Math.round((n / uniqueLeads) * 1000) / 10 : 0);
 
   return {
@@ -316,7 +360,7 @@ export function computeAdherenceByRm(events: RmActivityEvent[]): RmAdherenceRow[
   return [...groupByRm(events)].map(([rmUserId, rmEvents]) => buildAdherenceRow(rmUserId, rmEvents));
 }
 
-export function computeShiftTimeAverages(events: RmActivityEvent[]) {
+export function computeShiftTimeAverages(events: RmActivityEvent[], rangeLabel = 'Today') {
   const rows = computeAdherenceByRm(events);
   const n = rows.length || 1;
 
@@ -342,7 +386,7 @@ export function computeShiftTimeAverages(events: RmActivityEvent[]) {
       offLeadPct: avgLoginMinutes ? Math.round((avgBreakMinutes / avgLoginMinutes) * 100) : 0,
     },
     occupancy: { value: Math.round(occupancyFraction * 100), sub: 'Handling ÷ login' },
-    breaches: { value: rows.reduce((sum, r) => sum + r.breaches, 0), sub: 'Today' },
+    breaches: { value: rows.reduce((sum, r) => sum + r.breaches, 0), sub: rangeLabel },
   };
 }
 

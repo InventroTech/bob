@@ -51,18 +51,33 @@ interface RmActivityEventsPage {
 export const rmActivityApi = {
   /**
    * `from`/`to` are "YYYY-MM-DD" — omit both to get the backend's default
-   * (today only), never the whole tenant table. Pages through the response
-   * until exhausted; a date-windowed query is almost always a single page.
+   * (today only), never the whole tenant table. `rmUserId` narrows to one
+   * RM's own rows (e.g. the lead-card "Your Shift" panel), omit for every
+   * RM. Pages through the response until exhausted; a date/RM-windowed
+   * query is almost always a single page.
    */
-  async getEvents(params?: { from?: string; to?: string }): Promise<RmActivityEventDto[]> {
+  async getEvents(params?: { from?: string; to?: string; rmUserId?: string }): Promise<RmActivityEventDto[]> {
     const rows: RmActivityEventDto[] = [];
     let page = 1;
-    for (;;) {
+    // date/RM-windowed queries are small; this is just a backstop against a
+    // next_page_link that never resolves to null (backend bug or bad state)
+    const MAX_PAGES = 200;
+    for (let i = 0; i < MAX_PAGES; i++) {
       const response = await apiClient.get<RmActivityEventsPage>('/analytics/rm-activity-events/', {
-        params: { from: params?.from, to: params?.to, page, page_size: 2000, include_count: false },
+        params: {
+          from: params?.from,
+          to: params?.to,
+          rm_user_id: params?.rmUserId,
+          page,
+          page_size: 2000,
+          include_count: false,
+        },
       });
-      rows.push(...response.data.data);
-      if (!response.data.page_meta.next_page_link) break;
+      const pageRows = response.data.data;
+      rows.push(...pageRows);
+      // an empty page means there's nothing left, regardless of what
+      // next_page_link claims — don't trust it alone to end the loop
+      if (pageRows.length === 0 || !response.data.page_meta.next_page_link) break;
       page += 1;
     }
     return rows;

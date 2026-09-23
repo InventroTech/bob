@@ -1,9 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useRmActivityEvents } from '../rm-prd-analytics/useRmActivityEvents';
 import { filterByDateRange, resolveDateRange } from '../rm-prd-analytics/dateRange';
 import { computeMyShiftSnapshot } from '../rm-prd-analytics/aggregate';
 import { formatElapsed } from './useLeadTimer';
+
+// how often the panel re-pulls today's events — without this it freezes at
+// whatever it looked like when the lead card first opened
+const REFRESH_INTERVAL_MS = 60_000;
 
 const TODAY_LABEL = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -21,10 +25,26 @@ interface YourShiftPanelProps {
 // same rm_activity_events aggregation as the RM PRD analytics dashboard,
 // just scoped down to this one RM.
 export const YourShiftPanel: React.FC<YourShiftPanelProps> = ({ activeUserId, elapsedSecondsOnLead }) => {
-  // this panel only ever needs "today" — windows the fetch itself instead of
-  // downloading the whole tenant table on every lead card open
-  const todayBounds = useMemo(() => resolveDateRange('Today', '', ''), []);
-  const { events, loading } = useRmActivityEvents(todayBounds);
+  // Bumped every REFRESH_INTERVAL_MS so both todayBounds' `to` (the
+  // client-side trim boundary below) and the fetch itself move forward —
+  // "today"'s date string alone never changes intraday, so without this
+  // the panel would fetch once at mount and then sit frozen for the rest
+  // of the shift while only the "On This Lead" stopwatch above kept ticking.
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick((t) => t + 1), REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // this panel only ever needs today's events, scoped to this one RM —
+  // windows the fetch itself instead of downloading every RM's events
+  // tenant-wide and filtering to the current user in the browser
+  const todayBounds = useMemo(() => resolveDateRange('Today', '', ''), [refreshTick]);
+  const { events, loading } = useRmActivityEvents(
+    activeUserId ? todayBounds : null,
+    activeUserId ?? undefined,
+    refreshTick
+  );
 
   const snapshot = useMemo(() => {
     if (!activeUserId) return null;

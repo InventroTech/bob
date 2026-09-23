@@ -38,7 +38,7 @@ import {
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
 import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
 import { useRmFilterOptions, type RmFilterOptions } from './rm-prd-analytics/useRmFilterOptions';
-import { filterByDateRange, resolveDateRange } from './rm-prd-analytics/dateRange';
+import { daysInRange, filterByDateRange, resolveDateRange } from './rm-prd-analytics/dateRange';
 import { TouchReportSheet } from './rm-prd-analytics/TouchReportSheet';
 import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
@@ -139,27 +139,41 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     () => resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo),
     [filters.dateRange, filters.customFrom, filters.customTo]
   );
+  // a per-RM target is a *daily* goal — scale it up to however many
+  // calendar days the selected range actually covers (1 for Today/Yesterday)
+  const rangeDays = useMemo(() => daysInRange(dateBounds), [dateBounds]);
   // windows the fetch itself to this range (see useRmActivityEvents) — not
   // just a client-side filter over the whole tenant table anymore
   const { events, loading, error } = useRmActivityEvents(dateBounds);
   const visibleEvents = useMemo(() => {
     let result = filterByDateRange(events, dateBounds);
     if (filters.manager !== 'All managers') result = result.filter((e) => e.managerName === filters.manager);
-    if (filters.state !== 'All states') result = result.filter((e) => e.state === filters.state);
-    if (filters.party !== 'All parties') result = result.filter((e) => e.party === filters.party);
+    // state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/BREAK_* rows
+    // don't carry a lead's state/party) — filtering the whole event stream
+    // by them would silently drop real break/login rows and corrupt the
+    // login/break/occupancy numbers whenever a state or party filter is active
+    if (filters.state !== 'All states') {
+      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.state === filters.state);
+    }
+    if (filters.party !== 'All parties') {
+      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.party === filters.party);
+    }
     return result;
   }, [events, dateBounds, filters.manager, filters.state, filters.party]);
 
   const performanceByRm = useMemo(
-    () => computePerformanceByRm(visibleEvents, dailyTargets),
-    [visibleEvents, dailyTargets]
+    () => computePerformanceByRm(visibleEvents, dailyTargets, rangeDays),
+    [visibleEvents, dailyTargets, rangeDays]
   );
   const adherenceByRm = useMemo(() => computeAdherenceByRm(visibleEvents), [visibleEvents]);
   const teamTotals = useMemo(
-    () => computeTeamTotals(visibleEvents, dailyTargets),
-    [visibleEvents, dailyTargets]
+    () => computeTeamTotals(visibleEvents, dailyTargets, rangeDays),
+    [visibleEvents, dailyTargets, rangeDays]
   );
-  const shiftTimeAverages = useMemo(() => computeShiftTimeAverages(visibleEvents), [visibleEvents]);
+  const shiftTimeAverages = useMemo(
+    () => computeShiftTimeAverages(visibleEvents, filters.dateRange),
+    [visibleEvents, filters.dateRange]
+  );
   const achtOverall = useMemo(() => computeAchtOverall(visibleEvents), [visibleEvents]);
 
   // "By RM" table search — exact-substring match on the RM's name, doesn't
@@ -186,10 +200,13 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     [visibleEvents, selectedRmUserId]
   );
   const selectedRmTeamTotals = useMemo(
-    () => computeTeamTotals(selectedRmEvents, dailyTargets),
-    [selectedRmEvents, dailyTargets]
+    () => computeTeamTotals(selectedRmEvents, dailyTargets, rangeDays),
+    [selectedRmEvents, dailyTargets, rangeDays]
   );
-  const selectedRmShiftTimeAverages = useMemo(() => computeShiftTimeAverages(selectedRmEvents), [selectedRmEvents]);
+  const selectedRmShiftTimeAverages = useMemo(
+    () => computeShiftTimeAverages(selectedRmEvents, filters.dateRange),
+    [selectedRmEvents, filters.dateRange]
+  );
   const selectedRmAchtOverall = useMemo(() => computeAchtOverall(selectedRmEvents), [selectedRmEvents]);
   const selectedRmProfile: RmActivityEvent | undefined = selectedRmEvents[0];
 
