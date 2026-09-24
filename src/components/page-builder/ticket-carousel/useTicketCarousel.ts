@@ -29,8 +29,6 @@ import {
   resolveTicketRecordId,
   getCleanPhoneNumber,
   getPhoneDialLink,
-  getJatraLink,
-  getRawUserInput,
 } from "./utils";
 
 export function useTicketCarousel({
@@ -183,8 +181,13 @@ export function useTicketCarousel({
   const [whatsappPhone, setWhatsappPhone] = useState<string>("");
   const [whatsappLink, setWhatsappLink] = useState<string | undefined>(undefined);
 
+  // One successful GET per ticket id (hydrate + existence). Avoids N+1 when
+  // setCurrentTicket used to retrigger effects that depended on the whole object.
+  const lastValidatedTicketIdRef = React.useRef<number | null>(null);
+
   const abandonStaleTicket = useCallback(() => {
     if (isInModal) return;
+    lastValidatedTicketIdRef.current = null;
     clearPersistedState();
     setCurrentTicket(null);
     setShowPendingCard(true);
@@ -198,12 +201,11 @@ export function useTicketCarousel({
     });
   }, [isInModal]);
 
-  const lastFetchedTicketIdRef = React.useRef<number | null>(null);
-
   const fetchFreshTicketForCard = useCallback(async (ticketId: number) => {
     if (!session?.access_token) return;
     try {
       const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
+      lastValidatedTicketIdRef.current = ticketId;
       const normalized = normalizeTicketFromApi(response.data);
       setCurrentTicket((prev: any) => mergeRefreshedTicket(prev, normalized));
       setShowPendingCard(false);
@@ -222,14 +224,13 @@ export function useTicketCarousel({
 
   useEffect(() => {
     if (!initialTicket) {
-      lastFetchedTicketIdRef.current = null;
       return;
     }
 
     const normalizedTicket = normalizeTicketFromApi(initialTicket);
     const ticketId = resolveTicketRecordId(normalizedTicket);
     const isNewTicket =
-      ticketId != null && lastFetchedTicketIdRef.current !== ticketId;
+      ticketId != null && lastValidatedTicketIdRef.current !== ticketId;
 
     setCurrentTicket(normalizedTicket);
     setShowPendingCard(false);
@@ -241,7 +242,7 @@ export function useTicketCarousel({
     }));
 
     if (isInModal && ticketId != null && isNewTicket) {
-      lastFetchedTicketIdRef.current = ticketId;
+      lastValidatedTicketIdRef.current = ticketId;
       void fetchFreshTicketForCard(ticketId);
     }
   }, [initialTicket, isInModal, fetchFreshTicketForCard]);
@@ -267,25 +268,26 @@ export function useTicketCarousel({
     isInitialized.current = true;
   }, [isInModal, initialTicket, currentTicket?.id, showPendingCard]);
 
+  const currentTicketId = resolveTicketRecordId(currentTicket);
+
+  // Single fetch: hydrate missing fields + drop stale session tickets (404).
   useEffect(() => {
-    const ticketId = resolveTicketRecordId(currentTicket);
-    const hasJatra = Boolean(getJatraLink(currentTicket));
-    const hasUserInput = Boolean(getRawUserInput(currentTicket));
-    if (ticketId == null || (hasJatra && hasUserInput) || !session?.access_token) {
+    if (currentTicketId == null || !session?.access_token) {
+      if (currentTicketId == null) lastValidatedTicketIdRef.current = null;
       return;
     }
+    if (!isInModal && showPendingCard) return;
+    if (lastValidatedTicketIdRef.current === currentTicketId) return;
 
     let cancelled = false;
     (async () => {
       try {
-        const response = await apiClient.get(`/crm-records/records/${ticketId}/`);
+        const response = await apiClient.get(`/crm-records/records/${currentTicketId}/`);
         if (cancelled) return;
+        lastValidatedTicketIdRef.current = currentTicketId;
         const hydrated = normalizeTicketFromApi(response.data);
-        const link = getJatraLink(hydrated);
-        const userInput = getRawUserInput(hydrated);
-        if (!link && !userInput) return;
         setCurrentTicket((prev: any) =>
-          resolveTicketRecordId(prev) === ticketId
+          resolveTicketRecordId(prev) === currentTicketId
             ? mergeRefreshedTicket(prev, hydrated)
             : prev
         );
@@ -303,32 +305,13 @@ export function useTicketCarousel({
     return () => {
       cancelled = true;
     };
-  }, [currentTicket, session?.access_token, abandonStaleTicket, isInModal]);
-
-  // Drop session-persisted ticket if the CRM record no longer exists (prevents repeat 404s).
-  useEffect(() => {
-    if (isInModal) return;
-
-    const ticketId = resolveTicketRecordId(currentTicket);
-    if (ticketId == null || !session?.access_token || showPendingCard) {
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        await apiClient.get(`/crm-records/records/${ticketId}/`);
-      } catch (error) {
-        if (!cancelled && isExpectedTicketRecordNotFound(error)) {
-          abandonStaleTicket();
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [session?.access_token, showPendingCard, currentTicket, abandonStaleTicket, isInModal]);
+  }, [
+    currentTicketId,
+    session?.access_token,
+    showPendingCard,
+    abandonStaleTicket,
+    isInModal,
+  ]);
 
   //calculating the resolution time
   const calculateResolutionTime = (): string => {
@@ -899,7 +882,7 @@ export function useTicketCarousel({
     whatsappLink,
     setWhatsappLink,
     abandonStaleTicket,
-    lastFetchedTicketIdRef,
+    lastValidatedTicketIdRef,
     fetchFreshTicketForCard,
     calculateResolutionTime,
     fetchTicketStats,
