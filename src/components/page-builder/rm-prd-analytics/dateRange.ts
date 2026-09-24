@@ -57,3 +57,15 @@ export function filterByDateRange<T extends { startedAt: string }>(rows: T[], bo
     return t >= bounds.from && t <= bounds.to;
   });
 }
+
+// Inclusive count of calendar days spanned by bounds — Today/Yesterday are
+// always 1, Last 7 days is 7, Custom is however many days were picked. Used
+// to scale a per-RM *daily* target up to whatever multi-day window is
+// selected, since "achieved" naturally accumulates over the whole window
+// but the configured target is only ever a single day's goal.
+export function daysInRange(bounds: DateBounds | null): number {
+  if (!bounds) return 1;
+  const start = startOfDay(new Date(bounds.from)).getTime();
+  const end = startOfDay(new Date(bounds.to)).getTime();
+  return Math.max(1, Math.round((end - start) / 86_400_000) + 1);
+}

@@ -45,8 +45,14 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
 // `bounds` windows the fetch to just that range instead of the whole tenant
 // table — pass null only when there's genuinely nothing to show yet (e.g.
 // "Custom" range picked but no dates chosen), which skips the fetch entirely
-// rather than falling back to an unbounded one.
-export function useRmActivityEvents(bounds: DateBounds | null) {
+// rather than falling back to an unbounded one. `rmUserId` further narrows
+// to one RM's own rows (e.g. the lead-card "Your Shift" panel) instead of
+// downloading every RM's events and filtering client-side. `refreshToken`
+// forces a refetch on demand even when bounds/rmUserId haven't changed —
+// `bounds` is date-granularity ("today"'s date string is the same all day),
+// so without this a caller that wants periodically-fresh data (rather than
+// a one-shot fetch at mount) has no way to trigger one.
+export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string, refreshToken?: number) {
   const [events, setEvents] = useState<RmActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +74,7 @@ export function useRmActivityEvents(bounds: DateBounds | null) {
     setLoading(true);
     setError(null);
     rmActivityApi
-      .getEvents({ from, to })
+      .getEvents({ from, to, rmUserId })
       .then((rows) => {
         if (!cancelled) setEvents(rows.map(mapDto));
       })
@@ -82,7 +88,7 @@ export function useRmActivityEvents(bounds: DateBounds | null) {
     return () => {
       cancelled = true;
     };
-  }, [hasWindow, from, to]);
+  }, [hasWindow, from, to, rmUserId, refreshToken]);
 
   return { events, loading, error };
 }

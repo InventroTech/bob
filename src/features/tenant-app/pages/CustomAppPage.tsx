@@ -121,7 +121,10 @@ const CustomAppPage: React.FC = () => {
     let isMounted = true;
     redirectingRef.current = false;
 
-    const cacheKey = `${tenantId}-${pageId}`;
+    // userRoleId is part of the key so a spoof/role switch on the same
+    // pageId (see the effect's own deps below) can't serve a stale cache
+    // entry fetched under the previous role
+    const cacheKey = `${tenantId}-${pageId}-${userRoleId}`;
     const cached = pageCache.get(cacheKey);
     const now = Date.now();
 
@@ -210,7 +213,14 @@ const CustomAppPage: React.FC = () => {
         fetchingRef.current = null;
       }
     };
-  }, [pageId, tenantId]);
+    // userRoleId is included deliberately: a spoof/role switch on the same
+    // pageId must refetch (or at least re-check the now-role-scoped cache
+    // above) rather than keep showing the previous role's page. This is
+    // separate from session?.access_token, which stays excluded — a routine
+    // Supabase token refresh must NOT re-run this effect (see the ref comment
+    // above redirectToFirstSidebarPageRef), or every silent token rotation
+    // would flash the page through "Loading page..." for no reason.
+  }, [pageId, tenantId, userRoleId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterByDateRange, resolveDateRange } from './dateRange';
+import { daysInRange, filterByDateRange, resolveDateRange } from './dateRange';
 
 describe('resolveDateRange', () => {
   it('Today spans from local midnight to now', () => {
@@ -27,6 +27,29 @@ describe('resolveDateRange', () => {
 
   it('an unrecognized range returns null', () => {
     expect(resolveDateRange('Not a range', '', '')).toBeNull();
+  });
+});
+
+describe('daysInRange', () => {
+  it('is 1 for Today and Yesterday', () => {
+    expect(daysInRange(resolveDateRange('Today', '', ''))).toBe(1);
+    expect(daysInRange(resolveDateRange('Yesterday', '', ''))).toBe(1);
+  });
+
+  it('is 7 for Last 7 days and 30 for Last 30 days', () => {
+    expect(daysInRange(resolveDateRange('Last 7 days', '', ''))).toBe(7);
+    expect(daysInRange(resolveDateRange('Last 30 days', '', ''))).toBe(30);
+  });
+
+  it('counts a Custom range inclusively', () => {
+    // Sep 1 through Sep 3 is 3 calendar days: 1st, 2nd, 3rd
+    expect(daysInRange(resolveDateRange('Custom', '2026-09-01', '2026-09-03'))).toBe(3);
+    // same day picked for both ends is still 1 day
+    expect(daysInRange(resolveDateRange('Custom', '2026-09-01', '2026-09-01'))).toBe(1);
+  });
+
+  it('is 1 when there are no bounds (nothing to scale)', () => {
+    expect(daysInRange(null)).toBe(1);
   });
 });
 
