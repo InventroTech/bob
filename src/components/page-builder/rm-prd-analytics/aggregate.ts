@@ -101,7 +101,6 @@ function countByDisposition(calls: RmActivityEvent[]): Record<UpdatedStatus, num
 
 interface ShiftTiming {
   loginMinutes: number;
-  breakMinutes: number;
   status: 'On lead' | 'Off lead' | 'Idle';
   statusMinutes: number;
 }
@@ -113,11 +112,6 @@ function calendarDayKey(iso: string): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 const isToday = (iso: string) => calendarDayKey(iso) === calendarDayKey(new Date().toISOString());
-function endOfDayMs(iso: string): number {
-  const d = new Date(iso);
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
-}
 
 function groupByCalendarDay(events: RmActivityEvent[]): RmActivityEvent[][] {
   const byDay = new Map<string, RmActivityEvent[]>();
@@ -134,19 +128,22 @@ function groupByCalendarDay(events: RmActivityEvent[]): RmActivityEvent[][] {
 // across a multi-day range (Last 7/30/Custom) as if it were one continuous
 // shift turns "login hours" into wall-clock time including the overnight
 // gaps between days, which wrecks occupancy (handling ÷ login) too. So each
-// day is timed independently (envelope + break-pairing) and the results are
-// summed; live Status is only ever read off *today's* bucket — a call or
-// break left open on a past day is a data gap, not something still running.
+// day is timed independently and the results are summed; live Status is
+// only ever read off *today's* bucket — a call or break left open on a past
+// day is a data gap, not something still running.
+//
+// Break time itself isn't computed here: BREAK_START/BREAK_END aren't
+// written by any real flow yet (see buildAdherenceRow/computeMyShiftSnapshot,
+// which derive it as loginMinutes − handlingMinutes instead). The BREAK_START/
+// BREAK_END scan below exists only to detect a currently-open break for the
+// live "Off lead" status, in case that flow starts writing them.
 function computeShiftTiming(rmEvents: RmActivityEvent[]): ShiftTiming {
   const now = Date.now();
   let loginMinutes = 0;
-  let breakMinutes = 0;
   let status: ShiftTiming['status'] = 'Idle';
   let statusMinutes = 0;
 
   groupByCalendarDay(rmEvents).forEach((dayEvents) => {
-    const dayIsToday = isToday(dayEvents[0].startedAt);
-
     const timestamps: number[] = [];
     dayEvents.forEach((e) => {
       timestamps.push(new Date(e.startedAt).getTime());
@@ -154,10 +151,11 @@ function computeShiftTiming(rmEvents: RmActivityEvent[]): ShiftTiming {
     });
     loginMinutes += (Math.max(...timestamps) - Math.min(...timestamps)) / 60_000;
 
+    if (!isToday(dayEvents[0].startedAt)) return; // live status only ever comes from today
+
     // sequential pairing, chronological order: a BREAK_END is consumed by
     // the nearest still-open BREAK_START and can't be reused for a second
-    // one — the old .find()-based match let two breaks (or a start with no
-    // end at all) collapse onto the same end
+    // one — just to know whether a break is open right now, not to sum duration
     const chrono = [...dayEvents].sort(
       (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
     );
@@ -166,31 +164,21 @@ function computeShiftTiming(rmEvents: RmActivityEvent[]): ShiftTiming {
       if (e.eventType === 'BREAK_START' && openBreakStartMs === null) {
         openBreakStartMs = new Date(e.startedAt).getTime();
       } else if (e.eventType === 'BREAK_END' && openBreakStartMs !== null) {
-        breakMinutes += (new Date(e.startedAt).getTime() - openBreakStartMs) / 60_000;
         openBreakStartMs = null;
       }
     });
-    if (openBreakStartMs !== null) {
-      // still running today → clock it up to now; left open on a past day
-      // → bound it at that day's end rather than stretching it to "now"
-      // (which could be days away for e.g. a Last 7 days view)
-      const endMs = dayIsToday ? now : endOfDayMs(dayEvents[0].startedAt);
-      breakMinutes += (endMs - openBreakStartMs) / 60_000;
-    }
 
-    if (dayIsToday) {
-      const openCall = dayEvents.find((e) => isCallTouch(e) && e.endedAt === null);
-      if (openCall) {
-        status = 'On lead';
-        statusMinutes = Math.round((now - new Date(openCall.startedAt).getTime()) / 60_000);
-      } else if (openBreakStartMs !== null) {
-        status = 'Off lead';
-        statusMinutes = Math.round((now - openBreakStartMs) / 60_000);
-      }
+    const openCall = dayEvents.find((e) => isCallTouch(e) && e.endedAt === null);
+    if (openCall) {
+      status = 'On lead';
+      statusMinutes = Math.round((now - new Date(openCall.startedAt).getTime()) / 60_000);
+    } else if (openBreakStartMs !== null) {
+      status = 'Off lead';
+      statusMinutes = Math.round((now - openBreakStartMs) / 60_000);
     }
   });
 
-  return { loginMinutes, breakMinutes, status, statusMinutes };
+  return { loginMinutes, status, statusMinutes };
 }
 
 // ---- Performance tab ----
@@ -319,6 +307,11 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
   const handlingSeconds = closedCalls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0);
   const handlingMinutes = handlingSeconds / 60;
   const occupancy = timing.loginMinutes ? Math.round((handlingMinutes / timing.loginMinutes) * 100) : 0;
+  // break = whatever part of the logged-in span wasn't spent handling calls.
+  // BREAK_START/BREAK_END events aren't written by any real flow yet, so
+  // pairing them would always read 0 — this residual is the only signal
+  // actually available for "how much of the shift wasn't active call time"
+  const breakMinutes = Math.max(0, timing.loginMinutes - handlingMinutes);
 
   const secondsFor = (updatedStatus: UpdatedStatus) =>
     closedCalls.filter((c) => c.updatedStatus === updatedStatus).map((c) => c.durationSeconds ?? 0);
@@ -337,7 +330,7 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
     statusMinutes: timing.statusMinutes,
     loginHours: formatHours(timing.loginMinutes),
     handlingHours: formatHours(handlingMinutes),
-    breakTime: formatHours(timing.breakMinutes),
+    breakTime: formatHours(breakMinutes),
     occupancy,
     touches: closedCalls.length, // matches the Performance tab: "touches" means finished calls, "open" is separate
     acht: formatDuration(average(closedCalls.map((c) => c.durationSeconds ?? 0))),
@@ -456,6 +449,9 @@ export function computeMyShiftSnapshot(events: RmActivityEvent[], rmUserId: stri
 
   const handlingMinutes = closedCalls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0) / 60;
   const occupancyFraction = timing.loginMinutes ? handlingMinutes / timing.loginMinutes : 0;
+  // same residual as buildAdherenceRow — BREAK_START/BREAK_END aren't
+  // written yet, so login-minus-handling is the only real break signal
+  const breakMinutes = Math.max(0, timing.loginMinutes - handlingMinutes);
 
   const buildDispositionStat = (
     updatedStatus: UpdatedStatus,
@@ -479,8 +475,8 @@ export function computeMyShiftSnapshot(events: RmActivityEvent[], rmUserId: stri
       paceFraction: Math.min(handlingMinutes / STANDARD_SHIFT_MINUTES, 1),
     },
     breakTime: {
-      value: formatHours(timing.breakMinutes),
-      offLeadPct: timing.loginMinutes ? Math.round((timing.breakMinutes / timing.loginMinutes) * 100) : 0,
+      value: formatHours(breakMinutes),
+      offLeadPct: timing.loginMinutes ? Math.round((breakMinutes / timing.loginMinutes) * 100) : 0,
     },
     notConnected: buildDispositionStat('NOT_CONNECTED', ACHT_THRESHOLDS.notConnected, '≤1m 30s'),
     callBack: buildDispositionStat('CALL_BACK', ACHT_THRESHOLDS.callBack, '≤15m 00s'),
