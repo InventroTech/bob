@@ -18,6 +18,9 @@ export interface RmActivityEvent {
   updatedStatus: UpdatedStatus | null;
   leadBucket: string | null;
   party: string | null;
+  // only ever set for a "Not Interested" disposition (the RM's picked
+  // reason); null for the other 3 dispositions
+  reason: string | null;
   startedAt: string; // ISO timestamp
   endedAt: string | null; // null = still ongoing right now
   durationSeconds: number | null;

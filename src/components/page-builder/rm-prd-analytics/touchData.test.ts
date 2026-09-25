@@ -15,6 +15,7 @@ function callTouch(overrides: Partial<RmActivityEvent> = {}): RmActivityEvent {
     updatedStatus: 'TRIAL_ACTIVATED',
     leadBucket: null,
     party: null,
+    reason: null,
     startedAt: '2026-09-21T04:00:00Z',
     endedAt: '2026-09-21T04:01:00Z',
     durationSeconds: 60,

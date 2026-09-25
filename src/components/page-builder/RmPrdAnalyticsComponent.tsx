@@ -38,10 +38,17 @@ import {
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
 import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
 import { useRmFilterOptions, type RmFilterOptions } from './rm-prd-analytics/useRmFilterOptions';
-import { daysInRange, filterByDateRange, resolveDateRange } from './rm-prd-analytics/dateRange';
+import { filterByDateRange, resolveDateRange } from './rm-prd-analytics/dateRange';
 import { TouchReportSheet } from './rm-prd-analytics/TouchReportSheet';
 import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
+
+// how often the dashboard re-pulls events/targets — without this, anything
+// that changes elsewhere (an RM's call/disposition, a manager editing a
+// target in User Settings) only shows up after a manual page reload, since
+// `dateBounds` alone (day-granularity) doesn't change often enough to
+// trigger a refetch on its own
+const REFRESH_INTERVAL_MS = 60_000;
 
 export interface RmPrdAnalyticsConfig {
   title?: string;
@@ -53,11 +60,10 @@ interface RmPrdAnalyticsComponentProps {
 
 type Tab = 'performance' | 'adherence';
 
-// no leadBucket filter: buckets are pipeline-pull slices, never a field on a
-// lead touch, so there's nothing real for it to match (see RmPrdFilterOptionsView)
 const DEFAULT_FILTERS = {
   manager: 'All managers',
   dateRange: 'Today',
+  leadBucket: 'All buckets',
   state: 'All states',
   party: 'All parties',
   customFrom: '',
@@ -105,11 +111,9 @@ function loadStoredTab(): Tab {
 
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
 // rows fetched from the backend — see useRmActivityEvents + aggregate.ts.
-// Manager/state/party/date-range all filter visibleEvents (see below); there
-// is deliberately no Lead Bucket filter — see DEFAULT_FILTERS.
+// Manager/leadBucket/state/party/date-range all filter visibleEvents (see below).
 export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = ({ config }) => {
   const { options: filterOptions } = useRmFilterOptions();
-  const { targets: dailyTargets } = useRmDailyTargets();
   const [tab, setTab] = useState<Tab>(loadStoredTab);
   const [filters, setFilters] = useState<Filters>(loadStoredFilters);
   const [drill, setDrill] = useState<DrillFilter | null>(null);
@@ -118,6 +122,14 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   const [drillRmUserId, setDrillRmUserId] = useState<string | null>(null);
   const [rmSearch, setRmSearch] = useState('');
   const [selectedRmUserId, setSelectedRmUserId] = useState<string | null>(null);
+
+  // bumped on an interval to force events/targets to refetch periodically —
+  // see REFRESH_INTERVAL_MS
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick((t) => t + 1), REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     try {
@@ -139,19 +151,24 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     () => resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo),
     [filters.dateRange, filters.customFrom, filters.customTo]
   );
-  // a per-RM target is a *daily* goal — scale it up to however many
-  // calendar days the selected range actually covers (1 for Today/Yesterday)
-  const rangeDays = useMemo(() => daysInRange(dateBounds), [dateBounds]);
   // windows the fetch itself to this range (see useRmActivityEvents) — not
-  // just a client-side filter over the whole tenant table anymore
-  const { events, loading, error } = useRmActivityEvents(dateBounds);
+  // just a client-side filter over the whole tenant table anymore;
+  // refreshTick keeps it from going stale between manual page reloads
+  const { events, loading, error } = useRmActivityEvents(dateBounds, undefined, refreshTick);
+  // targets are already summed server-side across dateBounds (day-by-day
+  // overrides where a manager set one, else the RM's standing DAILY_TARGET)
+  const { targets: dailyTargets } = useRmDailyTargets(dateBounds, refreshTick);
   const visibleEvents = useMemo(() => {
     let result = filterByDateRange(events, dateBounds);
     if (filters.manager !== 'All managers') result = result.filter((e) => e.managerName === filters.manager);
-    // state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/BREAK_* rows
-    // don't carry a lead's state/party) — filtering the whole event stream
-    // by them would silently drop real break/login rows and corrupt the
-    // login/break/occupancy numbers whenever a state or party filter is active
+    // leadBucket/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
+    // BREAK_* rows don't carry a lead's bucket/state/party) — filtering the
+    // whole event stream by them would silently drop real break/login rows
+    // and corrupt the login/break/occupancy numbers whenever one of these
+    // filters is active
+    if (filters.leadBucket !== 'All buckets') {
+      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.leadBucket === filters.leadBucket);
+    }
     if (filters.state !== 'All states') {
       result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.state === filters.state);
     }
@@ -159,16 +176,16 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
       result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.party === filters.party);
     }
     return result;
-  }, [events, dateBounds, filters.manager, filters.state, filters.party]);
+  }, [events, dateBounds, filters.manager, filters.leadBucket, filters.state, filters.party]);
 
   const performanceByRm = useMemo(
-    () => computePerformanceByRm(visibleEvents, dailyTargets, rangeDays),
-    [visibleEvents, dailyTargets, rangeDays]
+    () => computePerformanceByRm(visibleEvents, dailyTargets),
+    [visibleEvents, dailyTargets]
   );
   const adherenceByRm = useMemo(() => computeAdherenceByRm(visibleEvents), [visibleEvents]);
   const teamTotals = useMemo(
-    () => computeTeamTotals(visibleEvents, dailyTargets, rangeDays),
-    [visibleEvents, dailyTargets, rangeDays]
+    () => computeTeamTotals(visibleEvents, dailyTargets),
+    [visibleEvents, dailyTargets]
   );
   const shiftTimeAverages = useMemo(
     () => computeShiftTimeAverages(visibleEvents, filters.dateRange),
@@ -200,8 +217,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     [visibleEvents, selectedRmUserId]
   );
   const selectedRmTeamTotals = useMemo(
-    () => computeTeamTotals(selectedRmEvents, dailyTargets, rangeDays),
-    [selectedRmEvents, dailyTargets, rangeDays]
+    () => computeTeamTotals(selectedRmEvents, dailyTargets),
+    [selectedRmEvents, dailyTargets]
   );
   const selectedRmShiftTimeAverages = useMemo(
     () => computeShiftTimeAverages(selectedRmEvents, filters.dateRange),
@@ -320,6 +337,7 @@ const FilterBar: React.FC<{
   const fields: Array<{ key: keyof Filters; label: string; options: string[] }> = [
     { key: 'manager', label: 'Manager', options: filterOptions.managers },
     { key: 'dateRange', label: 'Date Range', options: filterOptions.dateRanges },
+    { key: 'leadBucket', label: 'Lead Bucket', options: filterOptions.leadBuckets },
     { key: 'state', label: 'State', options: filterOptions.states },
     { key: 'party', label: 'Party', options: filterOptions.parties },
   ];
