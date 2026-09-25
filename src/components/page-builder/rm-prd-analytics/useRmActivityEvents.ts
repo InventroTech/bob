@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
 import { rmActivityApi, type RmActivityEventDto } from '@/lib/api/services/rmActivity';
 import type { RmActivityEvent } from './types';
-import type { DateBounds } from './dateRange';
-
-// bounds are epoch ms and may straddle two UTC calendar days (e.g. "Today"
-// in IST); widen to the UTC dates the instants fall in so the backend
-// window is a superset — filterByDateRange does the precise trim afterward.
-const toUtcDateParam = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+import { toUtcDateParam, type DateBounds } from './dateRange';
 
 // The backend's server clock runs in UTC and it sends timestamps like
 // "2026-09-15T12:12:25.948229" — a real UTC instant, but with no "Z" or
@@ -36,6 +31,7 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
     updatedStatus: data.updated_status,
     leadBucket: data.lead_bucket,
     party: data.party,
+    reason: data.reason,
     startedAt: asUtcIso(data.started_at),
     endedAt: data.ended_at ? asUtcIso(data.ended_at) : null,
     durationSeconds: data.duration_seconds,

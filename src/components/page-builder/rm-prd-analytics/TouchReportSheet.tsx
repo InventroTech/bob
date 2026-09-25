@@ -15,6 +15,7 @@ const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | nu
   { header: 'Party', value: (r) => r.party },
   { header: 'Bucket', value: (r) => r.bucket },
   { header: 'Disposition', value: (r) => DISPOSITIONS[r.dispositionKey].full },
+  { header: 'Reason', value: (r) => r.reason },
   { header: 'Start (IST)', value: (r) => r.start },
   { header: 'End (IST)', value: (r) => r.end },
   { header: 'Duration (s)', value: (r) => r.durationSeconds },
@@ -81,6 +82,7 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filt
                 <TableHead className="whitespace-nowrap text-white">Party</TableHead>
                 <TableHead className="whitespace-nowrap text-white">Bucket</TableHead>
                 <TableHead className="whitespace-nowrap text-white">Disposition</TableHead>
+                <TableHead className="text-white">Reason</TableHead>
                 <TableHead className="whitespace-nowrap text-right text-white">Start</TableHead>
                 <TableHead className="whitespace-nowrap text-right text-white">End</TableHead>
                 <TableHead className="whitespace-nowrap text-right text-white">Duration</TableHead>
@@ -110,6 +112,9 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filt
                       >
                         {DISPOSITIONS[row.dispositionKey].full}
                       </span>
+                    </TableCell>
+                    <TableCell className="max-w-[220px] truncate text-stone-500" title={row.reason || undefined}>
+                      {row.reason || '—'}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right font-mono">{row.start}</TableCell>
                     <TableCell className="whitespace-nowrap text-right font-mono">{row.end}</TableCell>

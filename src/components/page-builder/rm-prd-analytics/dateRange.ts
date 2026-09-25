@@ -58,14 +58,9 @@ export function filterByDateRange<T extends { startedAt: string }>(rows: T[], bo
   });
 }
 
-// Inclusive count of calendar days spanned by bounds — Today/Yesterday are
-// always 1, Last 7 days is 7, Custom is however many days were picked. Used
-// to scale a per-RM *daily* target up to whatever multi-day window is
-// selected, since "achieved" naturally accumulates over the whole window
-// but the configured target is only ever a single day's goal.
-export function daysInRange(bounds: DateBounds | null): number {
-  if (!bounds) return 1;
-  const start = startOfDay(new Date(bounds.from)).getTime();
-  const end = startOfDay(new Date(bounds.to)).getTime();
-  return Math.max(1, Math.round((end - start) / 86_400_000) + 1);
-}
+// bounds are epoch ms and may straddle two UTC calendar days (e.g. "Today"
+// in IST); widen to the UTC dates the instants fall in so a `from`/`to`
+// backend window is a superset — filterByDateRange does the precise trim
+// afterward. Shared by useRmActivityEvents and useRmDailyTargets so both
+// windowed fetches use the same date-string convention.
+export const toUtcDateParam = (ms: number) => new Date(ms).toISOString().slice(0, 10);

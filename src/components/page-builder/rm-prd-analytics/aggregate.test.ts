@@ -15,6 +15,7 @@ function callTouch(overrides: Partial<RmActivityEvent> = {}): RmActivityEvent {
     updatedStatus: 'TRIAL_ACTIVATED',
     leadBucket: null,
     party: null,
+    reason: null,
     startedAt: '2026-09-21T04:00:00Z',
     endedAt: '2026-09-21T04:01:00Z',
     durationSeconds: 60,
@@ -39,6 +40,7 @@ function breakEvent(
     updatedStatus: null,
     leadBucket: null,
     party: null,
+    reason: null,
     startedAt,
     endedAt: null,
     durationSeconds: null,
@@ -70,15 +72,12 @@ describe('computePerformanceByRm target', () => {
     expect(rows[0].target).toBe(12);
   });
 
-  it('scales a daily target by daysInRange for multi-day views (Last 7/30/Custom)', () => {
+  it('uses the target as-is — it already arrives pre-summed for the selected range', () => {
+    // the backend sums each RM's real day-by-day targets across whatever
+    // range is selected (see get_rm_daily_targets_sum); this layer must not
+    // re-scale it a second time (e.g. by multiplying by a day count)
     const events = [callTouch({ rmUserId: 'rm-1' })];
-    // target is a single day's goal — a 7-day view's achieved accumulates
-    // over the whole window, so the target must scale to match or every RM
-    // looks like they smashed a one-day goal
-    expect(computePerformanceByRm(events, { 'rm-1': 9 }, 7)[0].target).toBe(63);
-    expect(computePerformanceByRm(events, { 'rm-1': 9 }, 30)[0].target).toBe(270);
-    // Today/Yesterday (daysInRange defaults to 1) leave it unscaled
-    expect(computePerformanceByRm(events, { 'rm-1': 9 })[0].target).toBe(9);
+    expect(computePerformanceByRm(events, { 'rm-1': 63 })[0].target).toBe(63);
   });
 });
 
@@ -91,11 +90,6 @@ describe('computeTeamTotals target', () => {
     // rm-3 has a configured target but never appears in events — must not count
     const targets = { 'rm-1': 9, 'rm-2': 6, 'rm-3': 100 };
     expect(computeTeamTotals(events, targets).target).toBe(15);
-  });
-
-  it('scales team target by daysInRange too', () => {
-    const events = [callTouch({ rmUserId: 'rm-1' })];
-    expect(computeTeamTotals(events, { 'rm-1': 9 }, 7).target).toBe(63);
   });
 
   it('null leadRecordId does not collapse into a single counted unique lead', () => {

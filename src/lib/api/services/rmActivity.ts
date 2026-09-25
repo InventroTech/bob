@@ -21,6 +21,7 @@ export interface RmActivityEventDataDto {
   updated_status: RmActivityUpdatedStatus | null;
   lead_bucket: string | null;
   party: string | null;
+  reason: string | null;
   started_at: string;
   ended_at: string | null;
   duration_seconds: number | null;
@@ -34,14 +35,20 @@ export interface RmActivityEventDto {
 
 export interface RmFilterOptionsDto {
   managers: string[];
+  lead_buckets: string[];
   states: string[];
   parties: string[];
 }
 
-// rm_user_id -> that RM's DAILY_TARGET user setting (same value the Team
-// Dashboard's "Trial Target" sums up). RMs with no target set are simply
-// absent from this map.
+// rm_user_id -> that RM's target, already summed across the requested date
+// range (see rmActivityApi.getDailyTargets). RMs with nothing set at all
+// (no override, no standing DAILY_TARGET) are simply absent from this map.
 export type RmDailyTargetsDto = Record<string, number>;
+
+export interface RmDailyTargetOverrideDto {
+  date: string; // YYYY-MM-DD
+  target: number;
+}
 
 interface RmActivityEventsPage {
   data: RmActivityEventDto[];
@@ -90,9 +97,44 @@ export const rmActivityApi = {
     return response.data;
   },
 
-  /** Per-RM daily trial targets, keyed by rm_user_id. */
-  async getDailyTargets(): Promise<RmDailyTargetsDto> {
-    const response = await apiClient.get<RmDailyTargetsDto>('/analytics/rm-daily-targets/');
+  /**
+   * Per-RM trial targets, keyed by rm_user_id, already summed across
+   * `from`/`to` (YYYY-MM-DD, defaults to today). Each day within the range
+   * uses that RM's explicit per-day override if a manager set one, else
+   * falls back to their standing DAILY_TARGET setting.
+   */
+  async getDailyTargets(params?: { from?: string; to?: string }): Promise<RmDailyTargetsDto> {
+    const response = await apiClient.get<RmDailyTargetsDto>('/analytics/rm-daily-targets/', {
+      params: { from: params?.from, to: params?.to },
+    });
     return response.data;
+  },
+
+  /** List a specific RM's explicit per-day target overrides in a date range. */
+  async getDailyTargetOverrides(
+    tenantMembershipId: number,
+    from: string,
+    to: string
+  ): Promise<RmDailyTargetOverrideDto[]> {
+    const response = await apiClient.get<RmDailyTargetOverrideDto[]>('/user-settings/rm-daily-target-overrides/', {
+      params: { tenant_membership_id: tenantMembershipId, from, to },
+    });
+    return response.data;
+  },
+
+  /** Upsert one day's target override for one RM. */
+  async setDailyTargetOverride(tenantMembershipId: number, date: string, target: number): Promise<void> {
+    await apiClient.post('/user-settings/rm-daily-target-overrides/', {
+      tenant_membership_id: tenantMembershipId,
+      date,
+      target,
+    });
+  },
+
+  /** Remove a day's override — that day falls back to DAILY_TARGET again. */
+  async deleteDailyTargetOverride(tenantMembershipId: number, date: string): Promise<void> {
+    await apiClient.delete('/user-settings/rm-daily-target-overrides/', {
+      params: { tenant_membership_id: tenantMembershipId, date },
+    });
   },
 };

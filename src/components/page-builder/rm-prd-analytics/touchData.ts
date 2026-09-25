@@ -41,6 +41,8 @@ export interface TouchRow {
   state: string;
   party: string;
   bucket: string;
+  /** the RM's picked reason — only ever set on Not Interested rows */
+  reason: string;
   dispositionKey: DispositionKey;
   start: string;
   end: string;
@@ -83,6 +85,7 @@ function toTouchRow(event: RmActivityEvent): TouchRow | null {
     state: event.state,
     party: event.party ?? '',
     bucket: event.leadBucket ?? '',
+    reason: event.reason ?? '',
     dispositionKey: DISPOSITION_TO_KEY[event.updatedStatus],
     start: formatClock(event.startedAt),
     end: formatClock(event.endedAt),
