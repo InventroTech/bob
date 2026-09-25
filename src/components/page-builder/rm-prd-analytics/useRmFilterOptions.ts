@@ -4,6 +4,7 @@ import { rmActivityApi } from '@/lib/api/services/rmActivity';
 export interface RmFilterOptions {
   managers: string[];
   dateRanges: string[];
+  leadBuckets: string[];
   states: string[];
   parties: string[];
 }
@@ -15,6 +16,7 @@ const DATE_RANGES = ['Today', 'Yesterday', 'Last 7 days', 'Last 30 days', 'Custo
 const EMPTY: RmFilterOptions = {
   managers: ['All managers'],
   dateRanges: DATE_RANGES,
+  leadBuckets: ['All buckets'],
   states: ['All states'],
   parties: ['All parties'],
 };
@@ -33,6 +35,7 @@ export function useRmFilterOptions() {
         setOptions({
           managers: ['All managers', ...dto.managers],
           dateRanges: DATE_RANGES,
+          leadBuckets: ['All buckets', ...dto.lead_buckets],
           states: ['All states', ...dto.states],
           parties: ['All parties', ...dto.parties],
         });
