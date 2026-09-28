@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { filterByDateRange, resolveDateRange, toUtcDateParam } from './dateRange';
+import { filterByDateRange, resolveDateRange, toLocalDateParam, toUtcDateParam } from './dateRange';
 
 describe('resolveDateRange', () => {
-  it('Today spans from local midnight to now', () => {
+  it('Today spans from local midnight to end of local day', () => {
+    // `to` must be end-of-day, not `Date.now()` — this bound is captured
+    // once by a useMemo keyed on the filter values, not on the periodic
+    // refreshTick, so a `now` snapshot goes stale the instant the page has
+    // been open a moment: a touch recorded after that snapshot would keep
+    // getting silently filtered back out on every later auto-refresh even
+    // though the events themselves were freshly refetched.
     const bounds = resolveDateRange('Today', '', '');
     expect(bounds).not.toBeNull();
     const from = new Date(bounds!.from);
     expect(from.getHours()).toBe(0);
     expect(from.getMinutes()).toBe(0);
-    expect(bounds!.to).toBeLessThanOrEqual(Date.now());
+    const to = new Date(bounds!.to);
+    expect(to.getHours()).toBe(23);
+    expect(to.getMinutes()).toBe(59);
+    expect(bounds!.to).toBeGreaterThanOrEqual(Date.now());
     expect(bounds!.to).toBeGreaterThanOrEqual(bounds!.from);
   });
 
@@ -33,6 +42,25 @@ describe('resolveDateRange', () => {
 describe('toUtcDateParam', () => {
   it('formats an epoch ms instant as a YYYY-MM-DD UTC date string', () => {
     expect(toUtcDateParam(Date.UTC(2026, 8, 21, 15, 30, 0))).toBe('2026-09-21');
+  });
+});
+
+describe('toLocalDateParam', () => {
+  it('formats an epoch ms instant using local calendar components, not UTC ones', () => {
+    const d = new Date(2026, 8, 21, 1, 30, 0); // local Sep 21 2026, 1:30am
+    expect(toLocalDateParam(d.getTime())).toBe('2026-09-21');
+  });
+
+  it("Today's bounds resolve to the same local date for both from and to", () => {
+    // resolveDateRange builds `from`/`to` from local start/end of day — this
+    // must land on the same local calendar date for both, unlike
+    // toUtcDateParam, which can differ by a UTC calendar day depending on
+    // the browser's offset (e.g. IST). useRmDailyTargets sums server-side
+    // over every day in [from, to] with nothing to trim it back down
+    // afterward, so feeding it a UTC-widened "Today" window double-counts a
+    // day into what should be a single day's target.
+    const bounds = resolveDateRange('Today', '', '')!;
+    expect(toLocalDateParam(bounds.from)).toBe(toLocalDateParam(bounds.to));
   });
 });
 

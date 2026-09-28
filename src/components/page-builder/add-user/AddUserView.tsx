@@ -1,6 +1,6 @@
 /** Presentational JSX for AddUserComponent — columns/fields from tenant config. */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,6 @@ import type { AddUserModel } from './useAddUser';
 import type { User } from './types';
 import { formatResolveRateGoal, isCseRole } from './utils';
 import { useUserManagementConfig } from './useUserManagementConfig';
-import { RmDailyTargetOverridesDialog } from './RmDailyTargetOverridesDialog';
 import {
   getColumnLabel,
   isBoundCustomField,
@@ -196,10 +195,6 @@ export function AddUserView(props: AddUserModel) {
     editPartyOptions,
     catalogLabel,
   } = props;
-
-  // which RM's per-day target overrides dialog is open, if any — local UI
-  // state, not part of the shared AddUserModel
-  const [dailyTargetsDialogUser, setDailyTargetsDialogUser] = useState<User | null>(null);
 
   const { schema, showField } = useUserManagementConfig(config);
   const isUnmannd =
@@ -392,19 +387,7 @@ export function AddUserView(props: AddUserModel) {
           ) : rowIsCse ? (
             formatResolveRateGoal(user.supportResolveRateGoal)
           ) : (
-            <div className="flex items-center gap-2">
-              <span>{boundCustomFieldDisplay(user, 'daily_target')}</span>
-              {user.tenant_membership_id != null && (
-                <button
-                  type="button"
-                  className="text-xs text-blue-600 underline decoration-dotted hover:text-blue-700"
-                  onClick={() => setDailyTargetsDialogUser(user)}
-                  title="Set this RM's target for specific dates — overrides the value above on those days"
-                >
-                  by day
-                </button>
-              )}
-            </div>
+            boundCustomFieldDisplay(user, 'daily_target')
           )}
         </TableCell>
       );
@@ -1635,12 +1618,6 @@ export function AddUserView(props: AddUserModel) {
         </div>
       </CardContent>
     </Card>
-    <RmDailyTargetOverridesDialog
-      tenantMembershipId={dailyTargetsDialogUser?.tenant_membership_id ?? null}
-      rmName={dailyTargetsDialogUser?.name || dailyTargetsDialogUser?.email || ''}
-      open={dailyTargetsDialogUser !== null}
-      onClose={() => setDailyTargetsDialogUser(null)}
-    />
     </div>
   );
 }
