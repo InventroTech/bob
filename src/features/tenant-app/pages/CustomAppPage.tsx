@@ -107,13 +107,24 @@ const CustomAppPage: React.FC = () => {
     }
   }, [tenantSlug, pageId, tenantId, userRoleId, session?.access_token, navigate]);
 
+  // Supabase silently rotates session.access_token every so often, which recreates
+  // redirectToFirstSidebarPage above. Keeping it out of the fetch effect's own deps
+  // (via this ref) stops a routine token refresh from re-running the fetch and
+  // flashing the whole page through "Loading page..." — it still always calls the
+  // latest version when a redirect is actually needed.
+  const redirectToFirstSidebarPageRef = useRef(redirectToFirstSidebarPage);
+  redirectToFirstSidebarPageRef.current = redirectToFirstSidebarPage;
+
   useEffect(() => {
     if (!tenantId || !pageId) return;
 
     let isMounted = true;
     redirectingRef.current = false;
 
-    const cacheKey = `${tenantId}-${pageId}`;
+    // userRoleId is part of the key so a spoof/role switch on the same
+    // pageId (see the effect's own deps below) can't serve a stale cache
+    // entry fetched under the previous role
+    const cacheKey = `${tenantId}-${pageId}-${userRoleId}`;
     const cached = pageCache.get(cacheKey);
     const now = Date.now();
 
@@ -152,7 +163,7 @@ const CustomAppPage: React.FC = () => {
             setLoading(false);
           } else {
             pageCache.delete(cacheKey);
-            await redirectToFirstSidebarPage();
+            await redirectToFirstSidebarPageRef.current();
           }
           return;
         }
@@ -183,7 +194,7 @@ const CustomAppPage: React.FC = () => {
           setLoading(false);
         } else {
           pageCache.delete(cacheKey);
-          await redirectToFirstSidebarPage();
+          await redirectToFirstSidebarPageRef.current();
         }
       } catch (err: any) {
         fetchingRef.current = null;
@@ -202,7 +213,14 @@ const CustomAppPage: React.FC = () => {
         fetchingRef.current = null;
       }
     };
-  }, [pageId, tenantId, redirectToFirstSidebarPage]);
+    // userRoleId is included deliberately: a spoof/role switch on the same
+    // pageId must refetch (or at least re-check the now-role-scoped cache
+    // above) rather than keep showing the previous role's page. This is
+    // separate from session?.access_token, which stays excluded — a routine
+    // Supabase token refresh must NOT re-run this effect (see the ref comment
+    // above redirectToFirstSidebarPageRef), or every silent token rotation
+    // would flash the page through "Loading page..." for no reason.
+  }, [pageId, tenantId, userRoleId]);
 
   if (loading) return <div className="p-4">Loading page...</div>;
   if (error) return <div className="p-4 text-red-600">{error}</div>;
@@ -300,7 +318,10 @@ const CustomAppPage: React.FC = () => {
       {/* Sticky Header Title — mobile, tablet, and desktop */}
       {headerTitle && !hidePageHeader && (
         <div className="sticky top-0 z-40 w-full shrink-0 border-b border-gray-200 bg-white">
-          <div className={isUnmanndApp ? 'px-4 py-3' : 'px-4 py-1.5'}>
+          {/* non-unmannd padding is tuned to vertically center the title
+              against the sidebar's Pyro logo (see CustomAppLayout's
+              pt-6 pb-4 logo row) — don't shrink this back to py-1.5 */}
+          <div className={isUnmanndApp ? 'px-4 py-3' : 'px-4 pt-[36px] pb-[18px]'}>
             <h2
               className={
                 isUnmanndApp

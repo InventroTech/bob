@@ -113,6 +113,57 @@ export const restoreActionButtonsState = (leadId: string | number | undefined): 
   }
 };
 
+const LEAD_START_TIME_KEY = 'leadCardCarousel_leadStartTime';
+
+// Reuses the persisted start time for this lead if one exists — survives a
+// page refresh (the exact "fetch current assigned lead on refresh" flow in
+// useLeadCardCarousel) and a same-lead realtime re-fetch, both of which used
+// to stamp a fresh `new Date()` and silently turn duration_seconds (sent on
+// disposition, feeds RM PRD's ACHT) into "how long has this tab been open"
+// instead of real time-on-lead. Falls back to "now" only for a genuinely new
+// lead id.
+export const getOrCreateLeadStartTime = (leadId: string | number | undefined): Date => {
+  if (!leadId) return new Date();
+  try {
+    const stored = sessionStorage.getItem(LEAD_START_TIME_KEY);
+    if (stored) {
+      const { leadId: storedLeadId, startedAt } = JSON.parse(stored);
+      if (String(storedLeadId) === String(leadId)) {
+        const restored = new Date(startedAt);
+        if (!Number.isNaN(restored.getTime())) return restored;
+      }
+    }
+  } catch {
+    // fall through to a fresh start time
+  }
+  const now = new Date();
+  try {
+    sessionStorage.setItem(
+      LEAD_START_TIME_KEY,
+      JSON.stringify({ leadId: String(leadId), startedAt: now.toISOString() })
+    );
+  } catch (e) {
+    console.warn('[LeadCardCarousel] Failed to persist lead start time:', e);
+  }
+  return now;
+};
+
+// Called once a lead has been dispositioned (duration_seconds already sent)
+// so a later, genuinely new visit to the same lead id (e.g. re-queued after
+// Call Back Later) starts its own fresh timer instead of inheriting this one.
+export const clearLeadStartTime = (leadId: string | number | undefined) => {
+  try {
+    const stored = sessionStorage.getItem(LEAD_START_TIME_KEY);
+    if (!stored) return;
+    const { leadId: storedLeadId } = JSON.parse(stored);
+    if (String(storedLeadId) === String(leadId)) {
+      sessionStorage.removeItem(LEAD_START_TIME_KEY);
+    }
+  } catch {
+    // best-effort cleanup — a leftover entry just gets overwritten next visit
+  }
+};
+
 export const getTodayDateString = (): string => {
   const now = new Date();
   return now.toISOString().split('T')[0];

@@ -30,6 +30,8 @@ import { CallBackModal } from "../CallBackModal";
 import { WhatsAppTemplateModal } from "../WhatsAppTemplateModal";
 import type { TaskStep } from "./types";
 import { formatRecallAtLabel, formatPhoneForDisplay, getLeadName } from "./utils";
+import { LeadTimerBadge } from "./LeadTimerBadge";
+import { YourShiftPanel } from "./YourShiftPanel";
 import type { LeadCardCarouselModel } from "./useLeadCardCarousel";
 
 const TaskProgressList: React.FC<{ steps: TaskStep[]; rejectReason?: string }> = ({ steps, rejectReason }) => {
@@ -157,6 +159,8 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
     updating,
     fetchingNext,
     currentLead,
+    elapsedSeconds,
+    activeUserId,
     actionButtonsVisible,
     processingAction,
     imageError,
@@ -588,6 +592,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                         {currentLead.status}
                       </span>
                     )}
+                    {currentLead && <LeadTimerBadge seconds={elapsedSeconds} />}
                   </div>
                 </div>
               </div>
@@ -614,16 +619,16 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
               </div>
             </div>
           </div>
-          
+
           {/* Task Progress Section */}
           <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-32 md:pb-28' : 'pb-4'}`} style={bodyFont}>
             <div
               className={cn(
                 "grid gap-6",
-                currentLead?.location && "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+                (!isInModal || currentLead?.location) && "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
               )}
             >
-              <div className="rounded-2xl border border-slate-200 p-5 w-full">
+              <div className="h-full rounded-2xl border border-slate-200 p-5 w-full">
                 <div className="mb-4 flex items-center justify-between pl-2">
                   <h5>Task Progress</h5>
                 </div>
@@ -635,11 +640,16 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                   <p className="text-sm text-slate-500">No tasks available.</p>
                 )}
               </div>
-              {currentLead?.location ? (
-                <div className="space-y-3">
-                  <LeadInfoTile icon={AlertCircle} label="Location" value={currentLead.location} />
+              {(!isInModal || currentLead?.location) && (
+                <div className="h-full rounded-2xl border border-slate-200 p-5 w-full">
+                  {!isInModal && <YourShiftPanel activeUserId={activeUserId} elapsedSecondsOnLead={elapsedSeconds} />}
+                  {currentLead?.location && (
+                    <div className={cn("space-y-3", !isInModal && "mt-4")}>
+                      <LeadInfoTile icon={AlertCircle} label="Location" value={currentLead.location} />
+                    </div>
+                  )}
                 </div>
-              ) : null}
+              )}
             </div>
           </CardContent>
         </Card>

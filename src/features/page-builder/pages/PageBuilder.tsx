@@ -173,7 +173,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'myRequestTable', 'pendingApprovalTable', 'rejectedTable', 'vendorIdentifiedTable', 'procurementDashboard', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','zohoMail','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'myRequestTable', 'pendingApprovalTable', 'rejectedTable', 'vendorIdentifiedTable', 'procurementDashboard', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','zohoMail','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy','rmPrdAnalytics'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -1000,6 +1000,11 @@ useEffect(() => {
                           id="userHierarchy"
                           label="User Hierarchy"
                           icon={<Users className="h-8 w-8 mb-1 text-primary" />}
+                        />
+                        <DraggableSidebarItem
+                          id="rmPrdAnalytics"
+                          label="RM PRD Analytics"
+                          icon={<TrendingUp className="h-8 w-8 mb-1 text-foreground" />}
                         />
                       </div>
                     </div>
