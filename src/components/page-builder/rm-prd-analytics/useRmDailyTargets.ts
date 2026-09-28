@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { rmActivityApi, type RmDailyTargetsDto } from '@/lib/api/services/rmActivity';
-import { toUtcDateParam, type DateBounds } from './dateRange';
+import { toLocalDateParam, type DateBounds } from './dateRange';
 
 const EMPTY: RmDailyTargetsDto = {};
 
@@ -16,8 +16,12 @@ export function useRmDailyTargets(bounds: DateBounds | null, refreshToken?: numb
   const [targets, setTargets] = useState<RmDailyTargetsDto>(EMPTY);
   const [loading, setLoading] = useState(true);
 
-  const from = bounds ? toUtcDateParam(bounds.from) : undefined;
-  const to = bounds ? toUtcDateParam(bounds.to) : undefined;
+  // local calendar dates, not toUtcDateParam's UTC-widened window — the
+  // backend sums every day in [from, to] with nothing to trim it back down
+  // afterward, so a widened window here double-counts a day (e.g. "Today"
+  // in IST would pull in yesterday's target too). See toLocalDateParam.
+  const from = bounds ? toLocalDateParam(bounds.from) : undefined;
+  const to = bounds ? toLocalDateParam(bounds.to) : undefined;
   const hasWindow = bounds !== null;
 
   useEffect(() => {

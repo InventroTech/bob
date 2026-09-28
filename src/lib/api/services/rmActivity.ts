@@ -45,11 +45,6 @@ export interface RmFilterOptionsDto {
 // (no override, no standing DAILY_TARGET) are simply absent from this map.
 export type RmDailyTargetsDto = Record<string, number>;
 
-export interface RmDailyTargetOverrideDto {
-  date: string; // YYYY-MM-DD
-  target: number;
-}
-
 interface RmActivityEventsPage {
   data: RmActivityEventDto[];
   page_meta: { next_page_link: string | null };
@@ -99,42 +94,12 @@ export const rmActivityApi = {
 
   /**
    * Per-RM trial targets, keyed by rm_user_id, already summed across
-   * `from`/`to` (YYYY-MM-DD, defaults to today). Each day within the range
-   * uses that RM's explicit per-day override if a manager set one, else
-   * falls back to their standing DAILY_TARGET setting.
+   * `from`/`to` (YYYY-MM-DD, defaults to today).
    */
   async getDailyTargets(params?: { from?: string; to?: string }): Promise<RmDailyTargetsDto> {
     const response = await apiClient.get<RmDailyTargetsDto>('/analytics/rm-daily-targets/', {
       params: { from: params?.from, to: params?.to },
     });
     return response.data;
-  },
-
-  /** List a specific RM's explicit per-day target overrides in a date range. */
-  async getDailyTargetOverrides(
-    tenantMembershipId: number,
-    from: string,
-    to: string
-  ): Promise<RmDailyTargetOverrideDto[]> {
-    const response = await apiClient.get<RmDailyTargetOverrideDto[]>('/user-settings/rm-daily-target-overrides/', {
-      params: { tenant_membership_id: tenantMembershipId, from, to },
-    });
-    return response.data;
-  },
-
-  /** Upsert one day's target override for one RM. */
-  async setDailyTargetOverride(tenantMembershipId: number, date: string, target: number): Promise<void> {
-    await apiClient.post('/user-settings/rm-daily-target-overrides/', {
-      tenant_membership_id: tenantMembershipId,
-      date,
-      target,
-    });
-  },
-
-  /** Remove a day's override — that day falls back to DAILY_TARGET again. */
-  async deleteDailyTargetOverride(tenantMembershipId: number, date: string): Promise<void> {
-    await apiClient.delete('/user-settings/rm-daily-target-overrides/', {
-      params: { tenant_membership_id: tenantMembershipId, date },
-    });
   },
 };
