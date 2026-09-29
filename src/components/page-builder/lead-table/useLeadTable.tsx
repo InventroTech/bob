@@ -82,6 +82,7 @@ import {
   applyPlaceholderTemplate,
   transformLeadData,
   formatBulkActionLabel,
+  isInventoryLikeTableConfig,
 } from './utils';
 import {
   applyInventoryCartStatusSideEffects,
@@ -124,6 +125,56 @@ const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_STATUS_CHIP_SHAPE} w-auto min-w-
 const INVENTORY_SHIPMENT_CHIP_SHAPE =
   '!rounded-full inline-flex h-7 shrink-0 items-center justify-center px-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap border';
 const INVENTORY_SHIPMENT_CHIP_SIZE = `${INVENTORY_SHIPMENT_CHIP_SHAPE} w-auto min-w-[6.5rem]`;
+
+/**
+ * Backend default search only covers lead fields (name, phone, …), so inventory
+ * tables without a configured `searchFields` would never match request rows.
+ */
+const INVENTORY_DEFAULT_SEARCH_FIELDS = [
+  'item_name_freeform',
+  'item_name',
+  'vendor',
+  'vendor_name',
+  'requester_name',
+  'project_purpose',
+  'department',
+  'specifications',
+  'category',
+  'status',
+  'shipment_status',
+  'urgency_level',
+  'priority_label',
+  'estimated_cost',
+  'quantity_required',
+  'request_date',
+  'comments',
+  'delivery_pincode',
+  'delivery_address',
+  'courier_name',
+  'tracking_number',
+].join(',');
+
+/**
+ * Table shows `1,129.00` and `16/09/2026`, but records store `1129` and
+ * `2026-09-16` — rewrite typed numbers/dates to the stored form.
+ */
+function normalizeInventorySearchTerm(term: string): string {
+  const t = term.trim();
+  const fullDate = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (fullDate) {
+    const [, d, m, y] = fullDate;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  const dayMonth = t.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (dayMonth) {
+    const [, d, m] = dayMonth;
+    return `${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  if (/^[₹$]?\s*\d[\d,]*(\.\d+)?$/.test(t)) {
+    return t.replace(/[₹$,\s]/g, '').replace(/\.0+$/, '');
+  }
+  return t;
+}
 
 const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
@@ -387,6 +438,46 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     );
   }, [config?.entityType, config?.apiEndpoint, effectiveApiEndpoint]);
 
+  // Inventory search covers every request field plus whatever columns the page shows.
+  const visibleColumnSearchFields = useMemo(() => {
+    const skip = new Set([
+      'product_link',
+      'additional_link',
+      'link',
+      'tracking_link',
+      'edit',
+      '__edit',
+      'actions',
+      REQUESTER_EDIT_COLUMN_ACCESSOR,
+    ]);
+    const keys = (config?.columns ?? [])
+      .map((col) => String(col?.key || '').trim())
+      .filter((key) => key && !skip.has(key.toLowerCase()));
+    return Array.from(new Set([...keys, ...INVENTORY_DEFAULT_SEARCH_FIELDS.split(',')])).join(',');
+  }, [config?.columns]);
+
+  // Unmannd pages may set the entity type via forceQueryParams or only via columns.
+  const isInventorySearchTable =
+    isInventoryRequestTable ||
+    Boolean((config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind) ||
+    isInventoryLikeTableConfig(config as Record<string, unknown> | undefined);
+
+  const effectiveSearchFields = useMemo(() => {
+    const configured = String(config?.searchFields ?? '').trim();
+    if (!isInventorySearchTable) return configured;
+    if (!configured) return visibleColumnSearchFields;
+    const fields = [...configured.split(','), ...visibleColumnSearchFields.split(',')]
+      .map((f) => f.trim())
+      .filter(Boolean);
+    return Array.from(new Set(fields)).join(',');
+  }, [config?.searchFields, isInventorySearchTable, visibleColumnSearchFields]);
+
+  const toApiSearchTerm = useCallback(
+    (term: string) =>
+      isInventorySearchTable ? normalizeInventorySearchTerm(term) : term.trim(),
+    [isInventorySearchTable]
+  );
+
   // Helper: for GM users, remove assigned_to only when it came from endpoint/default, not when user explicitly set "Assigned to" filter
   const removeAssignedToForGM = useCallback(
     (
@@ -541,7 +632,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         apiEndpoint: effectiveApiEndpoint,
         entityType: config?.entityType,
         pageSize: config?.filterOptions?.pageSize || 10,
-        searchFields: config?.searchFields,
+        searchFields: effectiveSearchFields || undefined,
         defaultParams: {
           ...(config?.defaultFilters?.lead_status?.length && { lead_status: config.defaultFilters.lead_status }),
           ...(config?.defaultFilters?.lead_stage?.length && { lead_stage: config.defaultFilters.lead_stage }),
@@ -560,7 +651,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       return service;
     }
     return null;
-  }, [effectiveFilters, effectiveApiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, config?.searchFields]);
+  }, [effectiveFilters, effectiveApiEndpoint, config?.entityType, config?.filterOptions?.pageSize, config?.defaultFilters, config?.showFallbackOnly, effectiveSearchFields]);
 
   filterServiceRef.current = filterService;
 
@@ -585,11 +676,15 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [location.pathname, navigate]);
 
   // Parse URL parameters and restore filter state for deep links/bookmarks
+  // Read through a ref: the table rewrites the URL on every search/page change, and
+  // re-parsing on those writes resets filter state and refires the initial fetch.
+  const locationSearchRef = useRef(location.search);
+  locationSearchRef.current = location.search;
   const parseURLFilters = useCallback((filters: FilterConfig[]): Record<string, any> => {
-    return parseFilterValuesFromUrl(filters, new URLSearchParams(location.search));
-  }, [location.search]);
+    return parseFilterValuesFromUrl(filters, new URLSearchParams(locationSearchRef.current));
+  }, []);
 
-  // Initialize filters from URL on component mount and reset when no filters
+  // Initialize filters from URL on mount / page change and reset when no filters
   useEffect(() => {
     if (normalizedFilters.length > 0 && !config?.showFallbackOnly) {
       const urlFilterValues = parseURLFilters(normalizedFilters);
@@ -601,7 +696,22 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       const currentPath = location.pathname;
       navigate(currentPath, { replace: true });
     }
-  }, [normalizedFilters, config?.showFallbackOnly, parseURLFilters, setFilterValues, clearFilters, navigate, location.pathname, location.search]);
+  }, [normalizedFilters, config?.showFallbackOnly, parseURLFilters, setFilterValues, clearFilters, navigate, location.pathname]);
+
+  // Same table instance reused for another page: drop the previous page's search.
+  const searchScopeKey = `${location.pathname}|${config?.apiEndpoint ?? ''}|${config?.entityType ?? ''}`;
+  const searchScopeKeyRef = useRef(searchScopeKey);
+  useEffect(() => {
+    if (searchScopeKeyRef.current === searchScopeKey) return;
+    searchScopeKeyRef.current = searchScopeKey;
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    latestSearchValueRef.current = '';
+    setSearchTerm('');
+    setDisplaySearchTerm('');
+  }, [searchScopeKey]);
 
   // Additional effect to ensure filter state is completely reset when no filters are configured
   useEffect(() => {
@@ -1599,11 +1709,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       } else {
         params = new URLSearchParams();
       }
-      const currentSearch = (latestSearchValueRef.current || searchTerm).trim();
+      const currentSearch = latestSearchValueRef.current.trim();
       if (currentSearch) {
-        params.set('search', currentSearch);
-        if (config?.searchFields) {
-          params.set('search_fields', config.searchFields);
+        params.set('search', toApiSearchTerm(currentSearch));
+        if (effectiveSearchFields) {
+          params.set('search_fields', effectiveSearchFields);
         }
       }
       removeAssignedToForGM(params, {
@@ -1653,7 +1763,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     effectiveApiEndpoint,
     config?.entityType,
     config?.showFallbackOnly,
-    config?.searchFields,
+    effectiveSearchFields,
+    toApiSearchTerm,
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams,
     stageCountsTick,
     normalizedFilters.length,
@@ -2303,14 +2414,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         ? String(paginationRef.current.currentPage || 1)
         : '1';
       const pageSize = String(paginationRef.current.pageSize || 10);
-      const currentSearch = (latestSearchValueRef.current || searchTerm).trim();
+      const currentSearch = latestSearchValueRef.current.trim();
 
       if (queryParams) {
         params = queryParams;
       } else if (hasActiveFilters) {
         const filterValues = { ...filterState.values };
         if (currentSearch) {
-          filterValues.search = currentSearch;
+          filterValues.search = toApiSearchTerm(currentSearch);
         } else {
           delete filterValues.search;
         }
@@ -2360,9 +2471,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
         // Include search and search_fields even when dynamic filters are not configured
         if (currentSearch) {
-          params.append('search', currentSearch);
-          if (config?.searchFields) {
-            params.append('search_fields', config.searchFields);
+          params.append('search', toApiSearchTerm(currentSearch));
+          if (effectiveSearchFields) {
+            params.append('search_fields', effectiveSearchFields);
           }
         }
         
@@ -2500,7 +2611,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       params.append('page_size', '10');
 
       // Only add entity_type if using generic records endpoint and entityType is configured
-      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+      if (
+        endpoint.includes('/crm-records/records') &&
+        config?.entityType &&
+        !/[?&]entity_type=/.test(endpoint)
+      ) {
         params.append('entity_type', config.entityType);
       }
 
@@ -2516,7 +2631,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       setTableLoading(true);
       const params = new URLSearchParams();
 
-      if (endpoint.includes('/crm-records/records') && config?.entityType) {
+      if (
+        endpoint.includes('/crm-records/records') &&
+        config?.entityType &&
+        !/[?&]entity_type=/.test(endpoint)
+      ) {
         params.append('entity_type', config.entityType);
       }
 
@@ -2586,7 +2705,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
       if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
         const remainingWait = MIN_TIME_BETWEEN_CALLS - timeSinceLastCall;
-        setTimeout(() => {
+        searchTimeoutRef.current = setTimeout(() => {
+          searchTimeoutRef.current = null;
           makeApiCall(finalSearchValue);
         }, remainingWait);
       } else {
@@ -2604,7 +2724,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         if (hasActiveFilters) {
           const currentFilters = { ...filterState.values };
           if (searchValue.trim()) {
-            currentFilters.search = searchValue.trim();
+            currentFilters.search = toApiSearchTerm(searchValue);
           } else {
             delete currentFilters.search;
           }
@@ -2614,7 +2734,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           params.append('page_size', '10');
 
           // Only add entity_type if using generic records endpoint and entityType is configured
-          if (endpointForEntityCheck.includes('/crm-records/records') && config?.entityType) {
+          if (
+            endpointForEntityCheck.includes('/crm-records/records') &&
+            config?.entityType &&
+            !/[?&]entity_type=/.test(endpointForEntityCheck)
+          ) {
             params.append('entity_type', config.entityType);
           }
 
@@ -2623,9 +2747,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           // No dynamic filters configured: still send search and search_fields
           params = new URLSearchParams();
           if (searchValue.trim()) {
-            params.append('search', searchValue.trim());
-            if (config?.searchFields) {
-              params.append('search_fields', config.searchFields);
+            params.append('search', toApiSearchTerm(searchValue));
+            if (effectiveSearchFields) {
+              params.append('search_fields', effectiveSearchFields);
             }
           }
           // Add pagination parameters for complete URL state
@@ -2633,7 +2757,11 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           params.append('page_size', '10');
 
           // Only add entity_type if using generic records endpoint and entityType is configured
-          if (endpointForEntityCheck.includes('/crm-records/records') && config?.entityType) {
+          if (
+            endpointForEntityCheck.includes('/crm-records/records') &&
+            config?.entityType &&
+            !/[?&]entity_type=/.test(endpointForEntityCheck)
+          ) {
             params.append('entity_type', config.entityType);
           }
 
@@ -2645,7 +2773,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         fetchFilteredData(apiSequence, params);
       }
     }, 1000);
-  }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, updateURL, displaySearchTerm]);
+  }, [fetchFilteredData, data, leadStatusFilter, sourceFilter, dateRangeFilter, hasActiveFilters, filterState.values, filterService, effectiveApiEndpoint, config?.entityType, effectiveSearchFields, toApiSearchTerm, updateURL, displaySearchTerm]);
 
   useRecordUpdated(
     (payload: RecordUpdatedPayload) => {
@@ -3348,6 +3476,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
     }
 
+    const activeSearch = latestSearchValueRef.current.trim();
+    if (activeSearch) {
+      params.set('search', toApiSearchTerm(activeSearch));
+      if (effectiveSearchFields) {
+        params.set('search_fields', effectiveSearchFields);
+      }
+    }
     params.append('page', '1');
     params.append('page_size', '10');
     removeAssignedToForGM(params, { effectiveFilters, filterStateValues: filterState.values });
@@ -3361,6 +3496,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     filterState.values,
     effectiveFilters,
     removeAssignedToForGM,
+    toApiSearchTerm,
+    effectiveSearchFields,
   ]);
 
   /** Jump to an absolute page number (typed in the pagination input). */
@@ -3404,9 +3541,9 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           built.params.set('page', String(target));
           built.params.set('page_size', String(pagination.pageSize || 10));
           if (searchTerm && searchTerm.trim() !== '') {
-            built.params.set('search', searchTerm.trim());
-            if (config?.searchFields) {
-              built.params.set('search_fields', config.searchFields);
+            built.params.set('search', toApiSearchTerm(searchTerm));
+            if (effectiveSearchFields) {
+              built.params.set('search_fields', effectiveSearchFields);
             }
           }
           url = buildUrlWithParams(built.endpoint, built.params);
@@ -3453,6 +3590,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       pagination.previousPageLink,
       pagination.totalCount,
       searchTerm,
+      effectiveSearchFields,
+      toApiSearchTerm,
       toast,
       updateURL,
     ]
@@ -3504,6 +3643,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     }
 
     if (lastInitialFetchKeyRef.current === initialRecordsFetchKey) {
+      // A cancelled re-run may have left the spinner on for data we already have.
+      setLoading(false);
       return;
     }
     if (initialFetchInFlightKeyRef.current === initialRecordsFetchKey) {
