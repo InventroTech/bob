@@ -37,11 +37,18 @@ import {
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
 import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
-import { useRmFilterOptions, type RmFilterOptions } from './rm-prd-analytics/useRmFilterOptions';
+import {
+  stateNameLookup,
+  useRmFilterOptions,
+  type RmFilterOptions,
+  type RmStateFilterOption,
+} from './rm-prd-analytics/useRmFilterOptions';
 import { filterByDateRange, resolveDateRange } from './rm-prd-analytics/dateRange';
 import { TouchReportSheet } from './rm-prd-analytics/TouchReportSheet';
 import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
+import { useAuth } from '@/hooks/useAuth';
+import { useSpoofUserId } from '@/lib/auth/spoof';
 
 // how often the dashboard re-pulls events/targets — without this, anything
 // that changes elsewhere (an RM's call/disposition, a manager editing a
@@ -50,20 +57,58 @@ import type { RmActivityEvent } from './rm-prd-analytics/types';
 // trigger a refetch on its own
 const REFRESH_INTERVAL_MS = 60_000;
 
+// The filter-bar controls a manager can individually show/hide via config —
+// keyed the same as Filters below so FilterBar can look visibility up directly.
+export type RmPrdFilterKey = 'manager' | 'dateRange' | 'leadGroup' | 'state' | 'party';
+
+export type RmPrdViewMode = 'manager' | 'rm';
+
 export interface RmPrdAnalyticsConfig {
   title?: string;
+  /**
+   * Which filter-bar controls to show. A key missing from this map (not
+   * explicitly `false`) defaults to visible — so a page saved before this
+   * option existed, or a config that only mentions the filter it wants
+   * hidden, still shows every other filter it always has.
+   */
+  visibleFilters?: Partial<Record<RmPrdFilterKey, boolean>>;
+  /**
+   * 'manager' (default, missing = 'manager') is today's whole-team
+   * dashboard. 'rm' scopes everything to the signed-in RM's own data only
+   * — the fetch itself is narrowed server-side to their rm_user_id (not
+   * just a client-side filter over the team), the Manager filter and the
+   * "By RM" table are hidden (both are meaningless for a one-person view),
+   * and the numbers you see are already just yours. Meant for a page an RM
+   * themselves is given access to, not a manager's team view.
+   */
+  viewMode?: RmPrdViewMode;
 }
 
 interface RmPrdAnalyticsComponentProps {
   config?: RmPrdAnalyticsConfig;
 }
 
+export const isFilterVisible = (config: RmPrdAnalyticsConfig | undefined, key: RmPrdFilterKey): boolean =>
+  config?.visibleFilters?.[key] !== false;
+
+// Manager is force-hidden in RM view regardless of visibleFilters — the
+// fetch there is already narrowed to one RM, so filtering by manager name
+// is meaningless, not a matter of visual preference.
+export const shouldShowFilter = (
+  config: RmPrdAnalyticsConfig | undefined,
+  key: RmPrdFilterKey,
+  isRmView: boolean
+): boolean => {
+  if (key === 'manager' && isRmView) return false;
+  return isFilterVisible(config, key);
+};
+
 type Tab = 'performance' | 'adherence';
 
 const DEFAULT_FILTERS = {
   manager: 'All managers',
   dateRange: 'Today',
-  leadBucket: 'All buckets',
+  leadGroup: 'All groups',
   state: 'All states',
   party: 'All parties',
   customFrom: '',
@@ -111,9 +156,19 @@ function loadStoredTab(): Tab {
 
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
 // rows fetched from the backend — see useRmActivityEvents + aggregate.ts.
-// Manager/leadBucket/state/party/date-range all filter visibleEvents (see below).
+// Manager/leadGroup/state/party/date-range all filter visibleEvents (see below).
 export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = ({ config }) => {
   const { options: filterOptions } = useRmFilterOptions();
+  // raw Circle state ID -> resolved name, for the "By RM" tables and RM
+  // detail header — anywhere besides the filter dropdown itself that
+  // displays an RmActivityEvent's own `state` field as text
+  const stateNameById = useMemo(() => stateNameLookup(filterOptions.states), [filterOptions.states]);
+  const { session } = useAuth();
+  const spoofUserId = useSpoofUserId();
+  // spoofUserId lets an admin preview another RM's own view while testing —
+  // same precedent as LeadProgressBar/useLeadCardCarousel
+  const activeUserId = spoofUserId ?? session?.user?.id ?? null;
+  const isRmView = config?.viewMode === 'rm';
   const [tab, setTab] = useState<Tab>(loadStoredTab);
   const [filters, setFilters] = useState<Filters>(loadStoredFilters);
   const [drill, setDrill] = useState<DrillFilter | null>(null);
@@ -147,27 +202,36 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     }
   }, [tab]);
 
-  const dateBounds = useMemo(
-    () => resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo),
-    [filters.dateRange, filters.customFrom, filters.customTo]
-  );
+  const dateBounds = useMemo(() => {
+    // RM view with no signed-in user resolved yet — bounds=null skips the
+    // fetch entirely (see useRmActivityEvents) rather than briefly fetching
+    // and showing the whole team's data before activeUserId loads in
+    if (isRmView && !activeUserId) return null;
+    return resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo);
+  }, [filters.dateRange, filters.customFrom, filters.customTo, isRmView, activeUserId]);
   // windows the fetch itself to this range (see useRmActivityEvents) — not
   // just a client-side filter over the whole tenant table anymore;
-  // refreshTick keeps it from going stale between manual page reloads
-  const { events, loading, error } = useRmActivityEvents(dateBounds, undefined, refreshTick);
+  // refreshTick keeps it from going stale between manual page reloads.
+  // In RM view the fetch itself is narrowed server-side to activeUserId —
+  // not a client-side filter over every RM's rows.
+  const { events, loading, error } = useRmActivityEvents(
+    dateBounds,
+    isRmView ? activeUserId ?? undefined : undefined,
+    refreshTick
+  );
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
   const { targets: dailyTargets } = useRmDailyTargets(dateBounds, refreshTick);
   const visibleEvents = useMemo(() => {
     let result = filterByDateRange(events, dateBounds);
     if (filters.manager !== 'All managers') result = result.filter((e) => e.managerName === filters.manager);
-    // leadBucket/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
-    // BREAK_* rows don't carry a lead's bucket/state/party) — filtering the
+    // leadGroup/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
+    // BREAK_* rows don't carry a lead's group/state/party) — filtering the
     // whole event stream by them would silently drop real break/login rows
     // and corrupt the login/break/occupancy numbers whenever one of these
     // filters is active
-    if (filters.leadBucket !== 'All buckets') {
-      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.leadBucket === filters.leadBucket);
+    if (filters.leadGroup !== 'All groups') {
+      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.leadGroup === filters.leadGroup);
     }
     if (filters.state !== 'All states') {
       result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.state === filters.state);
@@ -176,7 +240,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
       result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.party === filters.party);
     }
     return result;
-  }, [events, dateBounds, filters.manager, filters.leadBucket, filters.state, filters.party]);
+  }, [events, dateBounds, filters.manager, filters.leadGroup, filters.state, filters.party]);
 
   const performanceByRm = useMemo(
     () => computePerformanceByRm(visibleEvents, dailyTargets),
@@ -267,6 +331,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         filterOptions={filterOptions}
         onChange={setFilter}
         onReset={() => setFilters(DEFAULT_FILTERS)}
+        config={config}
+        isRmView={isRmView}
       />
 
       <div className="mt-5 inline-flex rounded-lg border border-stone-200 bg-white p-1">
@@ -287,6 +353,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             rmSearch={rmSearch}
             onRmSearchChange={setRmSearch}
             onSelectRm={setSelectedRmUserId}
+            showByRmTable={!isRmView}
+            stateNameById={stateNameById}
           />
         ) : (
           <AdherenceView
@@ -297,6 +365,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             rmSearch={rmSearch}
             onRmSearchChange={setRmSearch}
             onSelectRm={setSelectedRmUserId}
+            showByRmTable={!isRmView}
+            stateNameById={stateNameById}
           />
         )}
       </div>
@@ -309,6 +379,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         shiftTimeAverages={selectedRmShiftTimeAverages}
         achtOverall={selectedRmAchtOverall}
         onDrill={openRmDrill}
+        stateNameById={stateNameById}
       />
 
       <TouchReportSheet
@@ -319,6 +390,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
           setDrill(null);
           setDrillRmUserId(null);
         }}
+        stateNameById={stateNameById}
       />
     </div>
   );
@@ -333,14 +405,27 @@ const FilterBar: React.FC<{
   filterOptions: RmFilterOptions;
   onChange: (key: keyof Filters, value: string) => void;
   onReset: () => void;
-}> = ({ filters, filterOptions, onChange, onReset }) => {
-  const fields: Array<{ key: keyof Filters; label: string; options: string[] }> = [
-    { key: 'manager', label: 'Manager', options: filterOptions.managers },
-    { key: 'dateRange', label: 'Date Range', options: filterOptions.dateRanges },
-    { key: 'leadBucket', label: 'Lead Bucket', options: filterOptions.leadBuckets },
+  config?: RmPrdAnalyticsConfig;
+  isRmView: boolean;
+}> = ({ filters, filterOptions, onChange, onReset, config, isRmView }) => {
+  // most fields are plain strings where the value shown IS the filter value
+  // — only "state" has a separate display label (Circle name) from its
+  // underlying filter value (Circle ID, to match RmActivityEvent.state)
+  const asOptions = (values: string[]): RmStateFilterOption[] =>
+    values.map((value) => ({ value, label: value }));
+  const allFields: Array<{ key: RmPrdFilterKey; label: string; options: RmStateFilterOption[] }> = [
+    { key: 'manager', label: 'Manager', options: asOptions(filterOptions.managers) },
+    { key: 'dateRange', label: 'Date Range', options: asOptions(filterOptions.dateRanges) },
+    { key: 'leadGroup', label: 'Lead Group', options: asOptions(filterOptions.leadGroups) },
     { key: 'state', label: 'State', options: filterOptions.states },
-    { key: 'party', label: 'Party', options: filterOptions.parties },
+    { key: 'party', label: 'Party', options: asOptions(filterOptions.parties) },
   ];
+  // hidden filters keep their current value (e.g. a hidden Date Range still
+  // defaults to "Today") — this only controls whether the control renders.
+  // Manager is always dropped in RM view regardless of visibleFilters — the
+  // fetch is already narrowed to one RM, so filtering by manager is
+  // meaningless there, not a matter of visual preference.
+  const fields = allFields.filter((field) => shouldShowFilter(config, field.key, isRmView));
 
   return (
     <div className="flex flex-wrap items-end gap-4 rounded-xl border border-stone-200 bg-white p-4">
@@ -355,8 +440,8 @@ const FilterBar: React.FC<{
             </SelectTrigger>
             <SelectContent>
               {field.options.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -512,7 +597,19 @@ const PerformanceView: React.FC<{
   rmSearch: string;
   onRmSearchChange: (value: string) => void;
   onSelectRm: (rmUserId: string) => void;
-}> = ({ onDrill, teamTotals, performanceByRm, rmSearch, onRmSearchChange, onSelectRm }) => {
+  /** false in RM view — a one-row "By RM" table of just yourself is redundant with the cards above */
+  showByRmTable: boolean;
+  stateNameById: Record<string, string>;
+}> = ({
+  onDrill,
+  teamTotals,
+  performanceByRm,
+  rmSearch,
+  onRmSearchChange,
+  onSelectRm,
+  showByRmTable,
+  stateNameById,
+}) => {
   const achievedPct = teamTotals.target ? (teamTotals.achieved / teamTotals.target) * 100 : 0;
 
   return (
@@ -592,10 +689,12 @@ const PerformanceView: React.FC<{
         Attempts per lead counts every touch, which is why it sits well above 1.
       </p>
 
-      <section>
-        <RmTableHeader label="By RM" search={rmSearch} onSearchChange={onRmSearchChange} />
-        <PerformanceTable rows={performanceByRm} onSelectRm={onSelectRm} />
-      </section>
+      {showByRmTable && (
+        <section>
+          <RmTableHeader label="By RM" search={rmSearch} onSearchChange={onRmSearchChange} />
+          <PerformanceTable rows={performanceByRm} onSelectRm={onSelectRm} stateNameById={stateNameById} />
+        </section>
+      )}
     </div>
   );
 };
@@ -620,10 +719,11 @@ function useStableMinHeight(deps: React.DependencyList) {
   return { ref, minHeight };
 }
 
-const PerformanceTable: React.FC<{ rows: RmPerformanceRow[]; onSelectRm: (rmUserId: string) => void }> = ({
-  rows,
-  onSelectRm,
-}) => {
+const PerformanceTable: React.FC<{
+  rows: RmPerformanceRow[];
+  onSelectRm: (rmUserId: string) => void;
+  stateNameById: Record<string, string>;
+}> = ({ rows, onSelectRm, stateNameById }) => {
   const { ref, minHeight } = useStableMinHeight([rows.length]);
   return (
   <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
@@ -653,7 +753,7 @@ const PerformanceTable: React.FC<{ rows: RmPerformanceRow[]; onSelectRm: (rmUser
             <TableCell className="whitespace-nowrap">
               <div className="font-semibold text-stone-900">{row.name}</div>
               <div className="text-xs text-stone-400">
-                {row.manager} · {row.team} · {row.state}
+                {row.manager} · {row.team} · {stateNameById[row.state] || row.state}
               </div>
             </TableCell>
             <TableCell className="whitespace-nowrap text-right font-mono underline decoration-stone-300">
@@ -696,7 +796,20 @@ const AdherenceView: React.FC<{
   rmSearch: string;
   onRmSearchChange: (value: string) => void;
   onSelectRm: (rmUserId: string) => void;
-}> = ({ onDrill, shiftTimeAverages, achtOverall, adherenceByRm, rmSearch, onRmSearchChange, onSelectRm }) => (
+  /** false in RM view — a one-row "By RM" table of just yourself is redundant with the cards above */
+  showByRmTable: boolean;
+  stateNameById: Record<string, string>;
+}> = ({
+  onDrill,
+  shiftTimeAverages,
+  achtOverall,
+  adherenceByRm,
+  rmSearch,
+  onRmSearchChange,
+  onSelectRm,
+  showByRmTable,
+  stateNameById,
+}) => (
   <div className="space-y-6">
     <section>
       <SectionLabel>Shift Time · Average per RM</SectionLabel>
@@ -775,17 +888,20 @@ const AdherenceView: React.FC<{
       </div>
     </section>
 
-    <section>
-      <RmTableHeader label="By RM" search={rmSearch} onSearchChange={onRmSearchChange} />
-      <AdherenceTable rows={adherenceByRm} onSelectRm={onSelectRm} />
-    </section>
+    {showByRmTable && (
+      <section>
+        <RmTableHeader label="By RM" search={rmSearch} onSearchChange={onRmSearchChange} />
+        <AdherenceTable rows={adherenceByRm} onSelectRm={onSelectRm} stateNameById={stateNameById} />
+      </section>
+    )}
   </div>
 );
 
-const AdherenceTable: React.FC<{ rows: RmAdherenceRow[]; onSelectRm: (rmUserId: string) => void }> = ({
-  rows,
-  onSelectRm,
-}) => {
+const AdherenceTable: React.FC<{
+  rows: RmAdherenceRow[];
+  onSelectRm: (rmUserId: string) => void;
+  stateNameById: Record<string, string>;
+}> = ({ rows, onSelectRm, stateNameById }) => {
   const { ref, minHeight } = useStableMinHeight([rows.length]);
   return (
   <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
@@ -817,7 +933,7 @@ const AdherenceTable: React.FC<{ rows: RmAdherenceRow[]; onSelectRm: (rmUserId: 
             <TableCell className="whitespace-nowrap">
               <div className="font-semibold text-stone-900">{row.name}</div>
               <div className="text-xs text-stone-400">
-                {row.manager} · {row.team} · {row.state}
+                {row.manager} · {row.team} · {stateNameById[row.state] || row.state}
               </div>
             </TableCell>
             <TableCell className="whitespace-nowrap">
@@ -897,8 +1013,10 @@ const RmDetailModal: React.FC<{
   shiftTimeAverages: ReturnType<typeof computeShiftTimeAverages>;
   achtOverall: ReturnType<typeof computeAchtOverall>;
   onDrill: (filter: DrillFilter) => void;
-}> = ({ open, onClose, profile, teamTotals, shiftTimeAverages, achtOverall, onDrill }) => {
+  stateNameById: Record<string, string>;
+}> = ({ open, onClose, profile, teamTotals, shiftTimeAverages, achtOverall, onDrill, stateNameById }) => {
   const achievedPct = teamTotals.target ? (teamTotals.achieved / teamTotals.target) * 100 : 0;
+  const stateName = profile ? stateNameById[profile.state] || profile.state : '';
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -906,7 +1024,7 @@ const RmDetailModal: React.FC<{
         <DialogHeader>
           <DialogTitle>{profile?.rmName ?? 'RM'}</DialogTitle>
           <DialogDescription>
-            {profile ? `${profile.managerName} · ${profile.team} · ${profile.state}` : 'No activity in this date range'}
+            {profile ? `${profile.managerName} · ${profile.team} · ${stateName}` : 'No activity in this date range'}
           </DialogDescription>
         </DialogHeader>
 

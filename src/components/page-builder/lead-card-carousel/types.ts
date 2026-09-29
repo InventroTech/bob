@@ -26,6 +26,17 @@ export interface LeadCardCarouselProps {
   onActionButtonsVisibilityChange?: (visible: boolean) => void;
   onCallBackModalChange?: (open: boolean) => void;
   onActionComplete?: (leadId: number | string, action?: string) => void;
+  /**
+   * Fires whenever `updating` changes — lets a caller with `hideActionBar`
+   * set (e.g. LeadTableView's modal, which renders its own action buttons
+   * driven through the imperative handle) disable those buttons for the
+   * duration of the request, the same way the carousel's own built-in
+   * action bar already disables itself. Reading `ref.current.updating`
+   * directly wouldn't work here: mutating a ref never triggers a
+   * re-render, so the caller's disabled= prop would stay stuck on
+   * whatever `updating` was at the caller's last unrelated re-render.
+   */
+  onUpdatingChange?: (updating: boolean) => void;
 }
 
 export interface LeadTask {
