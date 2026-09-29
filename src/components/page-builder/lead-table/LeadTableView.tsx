@@ -96,6 +96,8 @@ export function LeadTableView(props: LeadTableModel) {
     actionButtonsVisible,
     isCallBackModalOpen,
     setIsCallBackModalOpen,
+    isLeadActionSubmitting,
+    setIsLeadActionSubmitting,
     isRecordDetailModalOpen,
     setIsRecordDetailModalOpen,
     setSelectedRecord,
@@ -844,6 +846,7 @@ export function LeadTableView(props: LeadTableModel) {
         if (!open) {
           setSelectedLead(null);
           setActionButtonsVisible(false);
+          setIsLeadActionSubmitting(false);
           // Reset the leadCardRef to ensure clean state on next open
           leadCardRef.current = null;
         }
@@ -927,6 +930,7 @@ export function LeadTableView(props: LeadTableModel) {
                     onLeadUpdate={handleModalLeadUpdate}
                     onActionButtonsVisibilityChange={setActionButtonsVisible}
                     onCallBackModalChange={setIsCallBackModalOpen}
+                    onUpdatingChange={setIsLeadActionSubmitting}
                     onActionComplete={(leadId, action) => {
                       // Remove the lead from the table only when it's NOT "Call Back Later" (callback leads stay in list)
                       if (action !== "Call Back Later") {
@@ -940,6 +944,7 @@ export function LeadTableView(props: LeadTableModel) {
                       setIsLeadModalOpen(false);
                       setSelectedLead(null);
                       setActionButtonsVisible(false);
+                      setIsLeadActionSubmitting(false);
                     }}
                   />
                 </div>
@@ -950,6 +955,7 @@ export function LeadTableView(props: LeadTableModel) {
                     type="button"
                     variant="outline"
                     className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
+                    disabled={isLeadActionSubmitting}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -968,6 +974,7 @@ export function LeadTableView(props: LeadTableModel) {
                     type="button"
                     variant="outline"
                     className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
+                    disabled={isLeadActionSubmitting}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -986,6 +993,7 @@ export function LeadTableView(props: LeadTableModel) {
                     type="button"
                     variant="outline"
                     className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
+                    disabled={isLeadActionSubmitting}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -1004,6 +1012,7 @@ export function LeadTableView(props: LeadTableModel) {
                     type="button"
                     variant="outline"
                     className="w-full max-w-full min-w-0 h-auto min-h-12 rounded-xl gap-1.5 md:gap-2 px-2 md:px-2.5 lg:px-3 py-2.5 text-xs md:text-sm !whitespace-normal leading-tight hover:bg-slate-100 hover:text-slate-900"
+                    disabled={isLeadActionSubmitting}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();

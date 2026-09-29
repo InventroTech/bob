@@ -18,8 +18,12 @@ export interface RmActivityEventDataDto {
   team: string;
   state: string;
   lead_record_id: number | null;
+  // the human-facing id shown on the lead in the app (e.g. "1793876") —
+  // lead_record_id above is only the internal DB row id, never shown to a
+  // manager reading this dashboard
+  praja_id: string | null;
   updated_status: RmActivityUpdatedStatus | null;
-  lead_bucket: string | null;
+  lead_group: string | null;
   party: string | null;
   reason: string | null;
   started_at: string;
@@ -33,10 +37,18 @@ export interface RmActivityEventDto {
   event_data: RmActivityEventDataDto;
 }
 
+// value is the raw Circle ID (matches event_data.state); label is the
+// resolved Circle name for display, falling back to the raw ID server-side
+// for any value geo_party_catalog doesn't recognize.
+export interface RmStateFilterOptionDto {
+  value: string;
+  label: string;
+}
+
 export interface RmFilterOptionsDto {
   managers: string[];
-  lead_buckets: string[];
-  states: string[];
+  lead_groups: string[];
+  states: RmStateFilterOptionDto[];
   parties: string[];
 }
 
@@ -85,8 +97,8 @@ export const rmActivityApi = {
     return rows;
   },
 
-  /** Real filter-bar values — managers from TenantMembership, buckets from
-   * crm_records.Bucket, states/parties from what's actually on real leads. */
+  /** Real filter-bar values — managers from TenantMembership, groups from
+   * user_settings.Group, states/parties from what's actually on real leads. */
   async getFilterOptions(): Promise<RmFilterOptionsDto> {
     const response = await apiClient.get<RmFilterOptionsDto>('/analytics/rm-filter-options/');
     return response.data;

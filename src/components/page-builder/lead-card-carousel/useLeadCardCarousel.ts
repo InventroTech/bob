@@ -31,6 +31,7 @@ import {
   clearLeadStartTime,
 } from "./utils";
 import { useLeadTimer } from "./useLeadTimer";
+import { setLeadCallActive } from "@/lib/realtime/shiftCallActivityBus";
 
 export function useLeadCardCarousel(
   {
@@ -42,6 +43,7 @@ export function useLeadCardCarousel(
     onActionButtonsVisibilityChange,
     onCallBackModalChange,
     onActionComplete,
+    onUpdatingChange,
   }: LeadCardCarouselProps,
   ref: React.ForwardedRef<LeadCardCarouselHandle>,
 ) {
@@ -143,6 +145,16 @@ export function useLeadCardCarousel(
         onActionButtonsVisibilityChange(actionButtonsVisible);
       }
     }, [actionButtonsVisible, onActionButtonsVisibilityChange]);
+
+    // Sync updating to parent when it changes (for modal mode, hideActionBar
+    // callers) — lets a caller-rendered action bar disable its own buttons
+    // for the duration of the request, same as this component's built-in
+    // action bar already does via disabled={updating}
+    useEffect(() => {
+      if (onUpdatingChange) {
+        onUpdatingChange(updating);
+      }
+    }, [updating, onUpdatingChange]);
   // Store latest handlers in ref so useImperativeHandle always calls current versions
   const handlersRef = useRef<{
     handleActionButton: (action: "Trial Activated" | "Not Interested" | "Call Not Connected" | "Call Back Later", extra?: any) => Promise<any>;
@@ -264,7 +276,21 @@ export function useLeadCardCarousel(
     }
   }, [currentLead?.id, onLeadUpdate]);
 
+  // Publishes "RM is mid-call" for useShiftAutoLogout, which must never
+  // interrupt an active call — only the RM's own live queue counts (a modal
+  // opened on an arbitrary lead, e.g. from a notification, isn't a call).
+  // Two effects, not one with a cleanup: switching from lead A straight to
+  // lead B must stay "active" throughout with no flicker to false in
+  // between (setLeadCallActive no-ops when the value is unchanged).
+  useEffect(() => {
+    if (isInModal) return;
+    setLeadCallActive(currentLead != null);
+  }, [isInModal, currentLead]);
 
+  useEffect(() => {
+    if (isInModal) return;
+    return () => setLeadCallActive(false);
+  }, [isInModal]);
 
 
 

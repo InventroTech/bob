@@ -188,6 +188,13 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [actionButtonsVisible, setActionButtonsVisible] = useState(false);
   const [isCallBackModalOpen, setIsCallBackModalOpen] = useState(false);
+  // true while a disposition click (Trial Activated / Not Interested / Not
+  // Connected / Call Back Later) is in flight — disables the modal's action
+  // bar so a second click before the first request finishes can't fire a
+  // duplicate disposition. Synced from the embedded LeadCardCarousel's own
+  // `updating` via onUpdatingChange (see types.ts for why a plain ref read
+  // wouldn't re-render this).
+  const [isLeadActionSubmitting, setIsLeadActionSubmitting] = useState(false);
   const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(null);
   const [highlightedPrajaId, setHighlightedPrajaId] = useState<string | null>(null);
   const [highlightedLeadLabel, setHighlightedLeadLabel] = useState<string | null>(null);
@@ -3678,6 +3685,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     actionButtonsVisible,
     isCallBackModalOpen,
     setIsCallBackModalOpen,
+    isLeadActionSubmitting,
+    setIsLeadActionSubmitting,
     isRecordDetailModalOpen,
     setIsRecordDetailModalOpen,
     setSelectedRecord,

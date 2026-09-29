@@ -12,8 +12,9 @@ function callTouch(overrides: Partial<RmActivityEvent> = {}): RmActivityEvent {
     state: '1',
     eventType: 'CALL_TOUCH',
     leadRecordId: 101,
+    prajaId: '1793876',
     updatedStatus: 'TRIAL_ACTIVATED',
-    leadBucket: null,
+    leadGroup: null,
     party: null,
     reason: null,
     startedAt: '2026-09-21T04:00:00Z',
@@ -59,5 +60,27 @@ describe('generateTouches', () => {
     ];
     expect(generateTouches(events, 'trial').map((r) => r.touchId)).toEqual([1]);
     expect(generateTouches(events, 'notConnected').map((r) => r.touchId)).toEqual([2]);
+  });
+
+  it('shows the human-facing praja_id, not the internal lead record id', () => {
+    const rows = generateTouches([callTouch({ leadRecordId: 999, prajaId: '1793876' })], 'all');
+    expect(rows[0].prajaId).toBe('1793876');
+  });
+
+  describe('state name resolution', () => {
+    it('resolves the raw Circle ID to a display name when a lookup is given', () => {
+      const rows = generateTouches([callTouch({ state: '72631' })], 'all', { '72631': 'Tamil Nadu' });
+      expect(rows[0].state).toBe('Tamil Nadu');
+    });
+
+    it('falls back to the raw ID when it has no entry in the lookup', () => {
+      const rows = generateTouches([callTouch({ state: '999999' })], 'all', { '72631': 'Tamil Nadu' });
+      expect(rows[0].state).toBe('999999');
+    });
+
+    it('falls back to the raw ID when no lookup is given at all', () => {
+      const rows = generateTouches([callTouch({ state: '72631' })], 'all');
+      expect(rows[0].state).toBe('72631');
+    });
   });
 });
