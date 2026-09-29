@@ -35,12 +35,12 @@ export const DRILL_TITLES: Record<DrillFilter, string> = {
 
 export interface TouchRow {
   touchId: number;
-  leadId: number | null;
+  prajaId: string | null;
   rmName: string;
   manager: string;
   state: string;
   party: string;
-  bucket: string;
+  group: string;
   /** the RM's picked reason — only ever set on Not Interested rows */
   reason: string;
   dispositionKey: DispositionKey;
@@ -71,7 +71,7 @@ const formatDuration = (seconds: number) => {
   return `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
 };
 
-function toTouchRow(event: RmActivityEvent): TouchRow | null {
+function toTouchRow(event: RmActivityEvent, stateNameById: Record<string, string>): TouchRow | null {
   // skip anything that isn't a finished call (open calls have no end time yet)
   if (event.eventType !== 'CALL_TOUCH' || event.endedAt === null) return null;
   if (!event.updatedStatus) return null;
@@ -79,12 +79,15 @@ function toTouchRow(event: RmActivityEvent): TouchRow | null {
   const durationSeconds = event.durationSeconds ?? 0;
   return {
     touchId: event.id,
-    leadId: event.leadRecordId,
+    prajaId: event.prajaId,
     rmName: event.rmName,
     manager: event.managerName,
-    state: event.state,
+    // event.state is the RM's own raw Circle ID — resolve to a display
+    // name, falling back to the raw ID for any value not in the lookup
+    // (e.g. no state set, or an ID the catalog doesn't recognize)
+    state: stateNameById[event.state] || event.state,
     party: event.party ?? '',
-    bucket: event.leadBucket ?? '',
+    group: event.leadGroup ?? '',
     reason: event.reason ?? '',
     dispositionKey: DISPOSITION_TO_KEY[event.updatedStatus],
     start: formatClock(event.startedAt),
@@ -95,9 +98,13 @@ function toTouchRow(event: RmActivityEvent): TouchRow | null {
   };
 }
 
-export function generateTouches(events: RmActivityEvent[], filter: DrillFilter): TouchRow[] {
+export function generateTouches(
+  events: RmActivityEvent[],
+  filter: DrillFilter,
+  stateNameById: Record<string, string> = {}
+): TouchRow[] {
   const rows = events
-    .map(toTouchRow)
+    .map((event) => toTouchRow(event, stateNameById))
     .filter((row): row is TouchRow => row !== null);
 
   const filtered =
