@@ -171,7 +171,12 @@ export class FilterService {
     });
 
     // Handle global search if present in filterValues but not as a configured filter
-    if (filterValues.search && !this.filters.some(f => f.key === 'search' || f.type === 'search')) {
+    if (
+      filterValues.search &&
+      !this.filters.some(
+        (f) => f.key === 'search' || (f.type === 'search' && !this.isEmpty(filterValues[f.key]))
+      )
+    ) {
         this.addSearchParam(params, filterValues.search);
     }
     
