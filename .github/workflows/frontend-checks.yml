@@ -33,6 +33,15 @@ jobs:
       # If you haven't installed tests yet, this step will fail initially!
       # We will address that in Step 3.
       - name: Run Tests
+        env:
+          # Dummy Vite env so modules that import the Supabase client (e.g.
+          # via lib/auth/authSessionService, pulled in transitively by any
+          # unit test that touches useAuth or the API client) can load at
+          # import time — these are unit tests of pure logic, none of them
+          # actually reach Supabase. Same values the Playwright job below
+          # already uses for the same reason.
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder-anon-key
         run: npm run test
 
   playwright:
