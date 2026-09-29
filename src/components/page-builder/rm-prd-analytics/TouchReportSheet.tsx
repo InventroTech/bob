@@ -8,12 +8,12 @@ import type { RmActivityEvent } from './types';
 
 const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | number }> = [
   { header: 'Touch ID', value: (r) => r.touchId },
-  { header: 'Lead ID', value: (r) => r.leadId ?? '' },
+  { header: 'Praja ID', value: (r) => r.prajaId ?? '' },
   { header: 'RM', value: (r) => r.rmName },
   { header: 'Manager', value: (r) => r.manager },
   { header: 'State', value: (r) => r.state },
   { header: 'Party', value: (r) => r.party },
-  { header: 'Bucket', value: (r) => r.bucket },
+  { header: 'Group', value: (r) => r.group },
   { header: 'Disposition', value: (r) => DISPOSITIONS[r.dispositionKey].full },
   { header: 'Reason', value: (r) => r.reason },
   { header: 'Start (IST)', value: (r) => r.start },
@@ -52,12 +52,23 @@ interface TouchReportSheetProps {
    * instead of the default "All visible RMs" description. */
   scopeLabel?: string;
   onClose: () => void;
+  /** raw Circle state ID -> resolved name, for the "State" column/CSV export */
+  stateNameById: Record<string, string>;
 }
 
 // Drill-down table opened by clicking a stat card — one row per touch,
 // scoped to whichever disposition (or breach) the card represents.
-export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filter, scopeLabel, onClose }) => {
-  const rows = useMemo(() => (filter ? generateTouches(events, filter) : []), [events, filter]);
+export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
+  events,
+  filter,
+  scopeLabel,
+  onClose,
+  stateNameById,
+}) => {
+  const rows = useMemo(
+    () => (filter ? generateTouches(events, filter, stateNameById) : []),
+    [events, filter, stateNameById]
+  );
 
   return (
     <Sheet open={filter !== null} onOpenChange={(open) => !open && onClose()}>
@@ -75,12 +86,12 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filt
             <TableHeader>
               <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
                 <TableHead className="whitespace-nowrap text-white">Touch ID</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Lead ID</TableHead>
+                <TableHead className="whitespace-nowrap text-white">Praja ID</TableHead>
                 <TableHead className="whitespace-nowrap text-white">RM</TableHead>
                 <TableHead className="whitespace-nowrap text-white">Manager</TableHead>
                 <TableHead className="whitespace-nowrap text-white">State</TableHead>
                 <TableHead className="whitespace-nowrap text-white">Party</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Bucket</TableHead>
+                <TableHead className="whitespace-nowrap text-white">Group</TableHead>
                 <TableHead className="whitespace-nowrap text-white">Disposition</TableHead>
                 <TableHead className="text-white">Reason</TableHead>
                 <TableHead className="whitespace-nowrap text-right text-white">Start</TableHead>
@@ -95,13 +106,13 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({ events, filt
                 return (
                   <TableRow key={row.touchId}>
                     <TableCell className="whitespace-nowrap font-mono">{row.touchId}</TableCell>
-                    <TableCell className="whitespace-nowrap font-mono">{row.leadId ?? '—'}</TableCell>
+                    <TableCell className="whitespace-nowrap font-mono">{row.prajaId ?? '—'}</TableCell>
                     <TableCell className="whitespace-nowrap font-medium text-stone-900">{row.rmName}</TableCell>
                     <TableCell className="whitespace-nowrap text-stone-500">{row.manager}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.state}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.party}</TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-600">{row.bucket}</span>
+                      <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-600">{row.group}</span>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span

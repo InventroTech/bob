@@ -15,8 +15,12 @@ export interface RmActivityEvent {
   eventType: EventType;
   // the fields below only apply to CALL_TOUCH rows — null everywhere else
   leadRecordId: number | null;
+  // the human-facing id shown on the lead in the app (e.g. "1793876") —
+  // leadRecordId above is only the internal DB row id, never shown to a
+  // manager reading this dashboard
+  prajaId: string | null;
   updatedStatus: UpdatedStatus | null;
-  leadBucket: string | null;
+  leadGroup: string | null;
   party: string | null;
   // only ever set for a "Not Interested" disposition (the RM's picked
   // reason); null for the other 3 dispositions

@@ -26,6 +26,8 @@ import { FollowUpIcon, WIPTicketIcon, RoutingSettingsIcon, LeadScoreIcon, Analyt
 import { SparkySidebarButton } from '@/components/chatbot/ChatWidget';
 import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-notification/LeadCalledBackNotificationsMenu';
 import { clearRegisteredAllLeadsPath, registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
+import { useShiftAutoLogout } from '@/hooks/useShiftAutoLogout';
+import { ShiftEndedOverlay } from '@/components/ShiftEndedOverlay';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -119,6 +121,7 @@ const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
   const { user, logout, session } = useAuth();
+  const { showShiftEndedOverlay } = useShiftAutoLogout();
   const [pages, setPages] = useState<{ id: string; name: string; icon_name: string; display_order?: number }[]>([]);
   const [customIcons, setCustomIcons] = useState<CustomIconRow[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
@@ -661,6 +664,7 @@ const CustomAppLayout: React.FC = () => {
           <Outlet context={{ tenantId, userRoleId, pages, isUnmanndApp }} />
         </div>
       </main>
+      {showShiftEndedOverlay && <ShiftEndedOverlay />}
     </div>
   );
 };
