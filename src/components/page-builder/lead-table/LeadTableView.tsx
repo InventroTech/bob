@@ -178,6 +178,39 @@ export function LeadTableView(props: LeadTableModel) {
     setBulkTargetValue('');
   }, [clearBulkSelection]);
 
+  const exitBulkEdit = useCallback(() => {
+    setBulkEditMode(false);
+    setBulkTargetValue('');
+    clearBulkSelection();
+  }, [clearBulkSelection]);
+
+  // No Cancel button: clicking anywhere outside the table / bulk controls (or Esc) exits.
+  useEffect(() => {
+    if (!bulkEditMode) return;
+    const keepOpenSelector = [
+      '[data-bulk-edit-keep]',
+      '[data-radix-popper-content-wrapper]',
+      '[role="listbox"]',
+      '[role="dialog"]',
+    ].join(',');
+    const onPointerDown = (event: PointerEvent) => {
+      if (bulkApplying != null) return;
+      const target = event.target as Element | null;
+      if (!target || !target.isConnected) return;
+      if (target.closest(keepOpenSelector)) return;
+      exitBulkEdit();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && bulkApplying == null) exitBulkEdit();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [bulkEditMode, bulkApplying, exitBulkEdit]);
+
   /** Bulk Edit → Save: apply catalogs then return to Bulk Edit. */
   const handleBulkSave = useCallback(async () => {
     if (!bulkTargetValue || selectedRowCount === 0) return;
@@ -243,7 +276,9 @@ export function LeadTableView(props: LeadTableModel) {
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
   const procurementHeaderBg = 'bg-[#0E3777]';
-  const procurementTableFrame = 'mb-3';
+  // Side borders on body cells (not the wrapper) so they line up with the navy header edges.
+  const procurementTableFrame =
+    'mb-3 [&_tbody_td:first-child]:border-l [&_tbody_td:last-child]:border-r [&_tbody_td]:border-gray-200';
   const pageChromeTitle = usePageDisplayTitle().trim();
   const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
   const inventoryTableKindForTitle =
@@ -340,7 +375,8 @@ export function LeadTableView(props: LeadTableModel) {
         <div
           className={cn(
             'mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3',
-            'sm:flex-row sm:flex-nowrap sm:items-center sm:gap-3',
+            'sm:flex-row sm:flex-nowrap sm:gap-3',
+            isProcurementStyleTable ? 'sm:items-start' : 'sm:items-center',
             pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
           )}
         >
@@ -348,7 +384,7 @@ export function LeadTableView(props: LeadTableModel) {
             <h1
               className={
                 isProcurementStyleTable
-                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900 max-sm:text-2xl'
+                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] sm:!mt-2 sm:leading-none tracking-normal text-gray-900 max-sm:text-2xl'
                   : '!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900'
               }
             >
@@ -360,14 +396,14 @@ export function LeadTableView(props: LeadTableModel) {
             className={cn(
               'flex w-full shrink-0 flex-nowrap items-center gap-2',
               isMyRequestPageChrome
-                ? 'ml-auto w-auto shrink-0 justify-end'
+                ? 'ml-auto w-auto shrink-0 justify-end sm:mt-9'
                 : pageTitleDisplay
                   ? 'sm:mt-0 sm:w-auto sm:justify-end'
                   : 'sm:justify-end'
             )}
           >
             {bulkSelectionEnabled && bulkEditMode ? (
-              <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+              <div data-bulk-edit-keep className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
                 <Select
                   value={bulkTargetAttribute}
                   onValueChange={setBulkTargetAttribute}
@@ -404,6 +440,7 @@ export function LeadTableView(props: LeadTableModel) {
               </div>
             ) : null}
             {bulkSelectionEnabled ? (
+              <span data-bulk-edit-keep className="contents">
               <CustomButton
                 variant="default"
                 size="sm"
@@ -439,6 +476,7 @@ export function LeadTableView(props: LeadTableModel) {
                   'Bulk Edit'
                 )}
               </CustomButton>
+              </span>
             ) : null}
             <div
               className={cn(
@@ -692,6 +730,7 @@ export function LeadTableView(props: LeadTableModel) {
             </div>
           )}
 
+          <div data-bulk-edit-keep className="contents">
           <CustomTable
             columns={tableColumns.map((col) => ({
               header: col.header,
@@ -738,6 +777,7 @@ export function LeadTableView(props: LeadTableModel) {
                 : undefined
             }
           />
+          </div>
         </div>
 
         {/* Server-side pagination — editable page + Previous/Next */}

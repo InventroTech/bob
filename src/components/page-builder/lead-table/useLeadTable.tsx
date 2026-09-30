@@ -188,15 +188,16 @@ function procurementColumnLayout(
 ): { width?: string; minWidth?: string; maxWidth?: string } | undefined {
   const key = String(accessor || '').trim().toLowerCase();
   // Keep chip cols near the chip width so Item Name isn't crushed in table-fixed layout.
-  const chipCol = { width: '10.5rem', minWidth: '9.5rem', maxWidth: '11.5rem' };
+  const chipCol = { width: '9.25rem', minWidth: '9rem', maxWidth: '9.5rem' };
   const priorityCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '5.75rem' };
-  const dateCol = { width: '5rem', minWidth: '4.75rem', maxWidth: '5.25rem' };
+  const dateCol = { width: '6rem', minWidth: '5.75rem', maxWidth: '6.25rem' };
   const costCol = { width: '6.25rem', minWidth: '6.25rem', maxWidth: '6.5rem' };
   // Keep Vendor tight next to Request Date (long names truncate).
   const vendorCol = { width: '6.5rem', minWidth: '5.75rem', maxWidth: '7rem' };
   const requesterCol = { width: '7rem', minWidth: '7rem', maxWidth: '8rem' };
-  const shipmentCol = { width: '10.5rem', minWidth: '10rem', maxWidth: '11rem' };
-  const linkCol = { width: '3.5rem', minWidth: '3.5rem', maxWidth: '3.75rem' };
+  const shipmentCol = { width: '9.5rem', minWidth: '9.25rem', maxWidth: '9.75rem' };
+  // Wide enough for the uppercase, letter-spaced "LINK" header so it centers over the cells.
+  const linkCol = { width: '3.5rem', minWidth: '3.5rem', maxWidth: '3.5rem' };
   const editCol = { width: '4.5rem', minWidth: '4.5rem', maxWidth: '4.75rem' };
   // Flexible filler — absorbs leftover width so Link stays flush with Filters (no h-scroll).
   const itemNameCol = { minWidth: '8rem' };
@@ -1266,13 +1267,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Default link rendering
       if (isTrackingCol || isProcurementLink) {
         return (
-          <div
-            className={
-              isProcurementLink
-                ? 'flex w-full items-center justify-end pr-0.5'
-                : 'flex w-full items-center justify-center'
-            }
-          >
+          <div className="flex w-full items-center justify-center">
             <a
               href={href}
               target="_blank"
@@ -1434,7 +1429,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           options.unshift(cur as typeof options[number]);
         }
         return (
-          <div className="min-w-[10rem] max-w-[11rem]" onClick={(e) => e.stopPropagation()}>
+          <div className="min-w-[8.75rem] max-w-[9.25rem]" onClick={(e) => e.stopPropagation()}>
             <Select
               value={String(current || 'N/A')}
               disabled={opsRowSavingId === row.id}
@@ -2321,7 +2316,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           accessor: 'product_link',
           type: 'link',
           linkField: 'product_link',
-          align: 'right',
+          align: 'center',
           ...procurementColumnLayout('product_link'),
         });
       } else {
@@ -2334,7 +2329,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           ) {
             col.header = 'Link';
             col.type = 'link';
-            col.align = 'right';
+            col.align = 'center';
             col.accessor = accessor === 'link' ? 'product_link' : col.accessor;
             col.linkField = col.linkField || (accessor === 'link' ? 'product_link' : accessor);
             Object.assign(col, procurementColumnLayout('product_link'));
