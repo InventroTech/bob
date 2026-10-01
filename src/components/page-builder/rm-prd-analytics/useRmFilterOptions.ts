@@ -31,15 +31,22 @@ const EMPTY: RmFilterOptions = {
   parties: ['All parties'],
 };
 
-export function useRmFilterOptions() {
+// `managerRoleKeys` is the RM PRD config's managerRoles (Role.key values) —
+// which tenant roles count as "manager" for the Manager filter. Empty/unset
+// leaves the choice to the backend's own fallback (see RmPrdFilterOptionsView).
+export function useRmFilterOptions(managerRoleKeys?: string[]) {
   const [options, setOptions] = useState<RmFilterOptions>(EMPTY);
   const [loading, setLoading] = useState(true);
+  // array identity changes every render even for the same contents (a new
+  // config object/array each time) — join to a primitive so the effect
+  // below only refetches when the actual set of roles changes
+  const managerRoleKeysKey = (managerRoleKeys ?? []).join(',');
 
   useEffect(() => {
     let cancelled = false;
 
     rmActivityApi
-      .getFilterOptions()
+      .getFilterOptions({ managerRoleKeys: managerRoleKeysKey ? managerRoleKeysKey.split(',') : undefined })
       .then((dto) => {
         if (cancelled) return;
         setOptions({
@@ -61,7 +68,7 @@ export function useRmFilterOptions() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [managerRoleKeysKey]);
 
   return { options, loading };
 }

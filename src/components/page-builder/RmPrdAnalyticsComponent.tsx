@@ -49,13 +49,7 @@ import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useSpoofUserId } from '@/lib/auth/spoof';
-
-// how often the dashboard re-pulls events/targets — without this, anything
-// that changes elsewhere (an RM's call/disposition, a manager editing a
-// target in User Settings) only shows up after a manual page reload, since
-// `dateBounds` alone (day-granularity) doesn't change often enough to
-// trigger a refetch on its own
-const REFRESH_INTERVAL_MS = 60_000;
+import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
 
 // The filter-bar controls a manager can individually show/hide via config —
 // keyed the same as Filters below so FilterBar can look visibility up directly.
@@ -82,6 +76,16 @@ export interface RmPrdAnalyticsConfig {
    * themselves is given access to, not a manager's team view.
    */
   viewMode?: RmPrdViewMode;
+  /**
+   * Which tenant roles (Role.key) count as "manager" for the Manager
+   * filter dropdown. Tenants often have several manager-shaped roles (Team
+   * Lead, Zonal Head, GM, ...), so this is picked explicitly rather than
+   * inferred — the old behavior (anyone with a direct report) pulled in
+   * wrong/unexpected names whenever an RM happened to have a report for
+   * some unrelated reason. Empty/unset falls back to that old heuristic,
+   * so existing pages don't suddenly show an empty filter.
+   */
+  managerRoles?: string[];
 }
 
 interface RmPrdAnalyticsComponentProps {
@@ -158,7 +162,7 @@ function loadStoredTab(): Tab {
 // rows fetched from the backend — see useRmActivityEvents + aggregate.ts.
 // Manager/leadGroup/state/party/date-range all filter visibleEvents (see below).
 export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = ({ config }) => {
-  const { options: filterOptions } = useRmFilterOptions();
+  const { options: filterOptions } = useRmFilterOptions(config?.managerRoles);
   // raw Circle state ID -> resolved name, for the "By RM" tables and RM
   // detail header — anywhere besides the filter dropdown itself that
   // displays an RmActivityEvent's own `state` field as text
@@ -178,12 +182,19 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   const [rmSearch, setRmSearch] = useState('');
   const [selectedRmUserId, setSelectedRmUserId] = useState<string | null>(null);
 
-  // bumped on an interval to force events/targets to refetch periodically —
-  // see REFRESH_INTERVAL_MS
+  // bumped to force events/targets to refetch: on returning to this tab
+  // (switching back from another tab/app — a blind interval kept refetching
+  // underneath a manager mid-read and was disruptive) or via the manual
+  // Refresh button below.
   const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setRefreshTick((t) => t + 1), REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setRefreshTick((t) => t + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
   useEffect(() => {
@@ -322,9 +333,22 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
 
   return (
     <div className="min-h-full bg-stone-50 p-6">
-      {config?.title && (
-        <h2 className="mb-4 text-lg font-semibold text-stone-900">{config.title}</h2>
-      )}
+      <div className="mb-4 flex items-center justify-between">
+        {config?.title ? (
+          <h2 className="text-lg font-semibold text-stone-900">{config.title}</h2>
+        ) : (
+          <div />
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setRefreshTick((t) => t + 1)}
+          className="gap-1.5"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </Button>
+      </div>
 
       <FilterBar
         filters={filters}
@@ -719,32 +743,141 @@ function useStableMinHeight(deps: React.DependencyList) {
   return { ref, minHeight };
 }
 
+// ---- "By RM" table column sorting (shared by the Performance and Adherence tables) ----
+
+type SortDir = 'asc' | 'desc';
+interface ColumnSort<K extends string> {
+  key: K;
+  dir: SortDir;
+}
+
+// `getValue` must be a stable (module-level, not inline-closure) function —
+// it's a useMemo dep, and an inline closure would be a new reference every
+// render, defeating the memo on every keystroke/re-render.
+function useTableSort<T, K extends string>(rows: T[], getValue: (row: T, key: K) => string | number) {
+  const [sort, setSort] = useState<ColumnSort<K> | null>(null);
+  const sortedRows = useMemo(() => {
+    if (!sort) return rows;
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = getValue(a, sort.key);
+      const bv = getValue(b, sort.key);
+      if (typeof av === 'string' || typeof bv === 'string') {
+        return String(av).localeCompare(String(bv)) * dir;
+      }
+      return ((av as number) - (bv as number)) * dir;
+    });
+  }, [rows, sort, getValue]);
+  const toggleSort = (key: K) => {
+    setSort((prev) => (!prev || prev.key !== key ? { key, dir: 'asc' } : { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }));
+  };
+  return { sortedRows, sort, toggleSort };
+}
+
+// Clickable column header: click to sort ascending, click again to flip to
+// descending, click a different column to switch to it (ascending). Shows a
+// muted up/down icon on every sortable column (discoverability — "this is
+// clickable") and a solid arrow on whichever column is actually active.
+function SortableHeader<K extends string>({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  align = 'left',
+}: {
+  label: string;
+  sortKey: K;
+  sort: ColumnSort<K> | null;
+  onSort: (key: K) => void;
+  align?: 'left' | 'right';
+}) {
+  const isActive = sort?.key === sortKey;
+  return (
+    <TableHead
+      role="columnheader"
+      aria-sort={isActive ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      tabIndex={0}
+      onClick={() => onSort(sortKey)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSort(sortKey);
+        }
+      }}
+      className={cn(
+        'whitespace-nowrap text-white cursor-pointer select-none outline-none transition-colors hover:bg-white/10 focus-visible:bg-white/10',
+        align === 'right' && 'text-right'
+      )}
+    >
+      <span className={cn('inline-flex items-center gap-1', align === 'right' && 'flex-row-reverse')}>
+        {label}
+        {isActive ? (
+          sort!.dir === 'asc' ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ChevronsUpDown className="h-3 w-3 text-stone-500" />
+        )}
+      </span>
+    </TableHead>
+  );
+}
+
+type PerfSortKey =
+  | 'name'
+  | 'uniqueLeads'
+  | 'touches'
+  | 'attemptsPerLead'
+  | 'notConnectedRate'
+  | 'callBackRate'
+  | 'notInterestedRate'
+  | 'trialRate'
+  | 'achieved'
+  | 'target'
+  | 'vsTarget';
+
+function performanceSortValue(row: RmPerformanceRow, key: PerfSortKey): string | number {
+  switch (key) {
+    case 'name':
+      return row.name.toLowerCase();
+    // no target set reads as "—", not 0% — sorts below every real ratio on
+    // both asc and desc so it never masquerades as a 0% (missed) result
+    case 'vsTarget':
+      return row.target ? row.achieved / row.target : -Infinity;
+    default:
+      return row[key];
+  }
+}
+
 const PerformanceTable: React.FC<{
   rows: RmPerformanceRow[];
   onSelectRm: (rmUserId: string) => void;
   stateNameById: Record<string, string>;
 }> = ({ rows, onSelectRm, stateNameById }) => {
   const { ref, minHeight } = useStableMinHeight([rows.length]);
+  const { sortedRows, sort, toggleSort } = useTableSort(rows, performanceSortValue);
   return (
   <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
     <Table ref={ref} className="min-w-[920px]">
       <TableHeader>
         <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
-          <TableHead className="whitespace-nowrap text-white">RM</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Unique Leads</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Touches</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Att / Lead</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Not Conn</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Call Back</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Not Int</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Trial</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Achieved</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Target</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">vs Target</TableHead>
+          <SortableHeader label="RM" sortKey="name" sort={sort} onSort={toggleSort} />
+          <SortableHeader label="Unique Leads" sortKey="uniqueLeads" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Touches" sortKey="touches" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Att / Lead" sortKey="attemptsPerLead" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Not Conn" sortKey="notConnectedRate" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Call Back" sortKey="callBackRate" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Not Int" sortKey="notInterestedRate" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Trial" sortKey="trialRate" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Achieved" sortKey="achieved" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Target" sortKey="target" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="vs Target" sortKey="vsTarget" sort={sort} onSort={toggleSort} align="right" />
         </TableRow>
       </TableHeader>
       <TableBody className="bg-white">
-        {rows.map((row) => (
+        {sortedRows.map((row) => (
           <TableRow
             key={row.rmUserId}
             className="cursor-pointer hover:bg-stone-50"
@@ -897,34 +1030,61 @@ const AdherenceView: React.FC<{
   </div>
 );
 
+type AdherenceSortKey =
+  | 'name'
+  | 'status'
+  | 'loginMinutes'
+  | 'handlingMinutes'
+  | 'breakMinutes'
+  | 'occupancy'
+  | 'touches'
+  | 'achtSeconds'
+  | 'notConnectedTime'
+  | 'callBackTime'
+  | 'notInterestedTime'
+  | 'trialTime'
+  | 'breaches';
+
+function adherenceSortValue(row: RmAdherenceRow, key: AdherenceSortKey): string | number {
+  switch (key) {
+    case 'name':
+      return row.name.toLowerCase();
+    case 'status':
+      return row.status;
+    default:
+      return row[key];
+  }
+}
+
 const AdherenceTable: React.FC<{
   rows: RmAdherenceRow[];
   onSelectRm: (rmUserId: string) => void;
   stateNameById: Record<string, string>;
 }> = ({ rows, onSelectRm, stateNameById }) => {
   const { ref, minHeight } = useStableMinHeight([rows.length]);
+  const { sortedRows, sort, toggleSort } = useTableSort(rows, adherenceSortValue);
   return (
   <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
     <Table ref={ref} className="min-w-[1180px]">
       <TableHeader>
         <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
-          <TableHead className="whitespace-nowrap text-white">RM</TableHead>
-          <TableHead className="whitespace-nowrap text-white">Status</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Login</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Handling</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Break</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Occ</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Touches</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">ACHT</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Not Conn</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Call Back</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Not Int</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Trial</TableHead>
-          <TableHead className="whitespace-nowrap text-right text-white">Breach</TableHead>
+          <SortableHeader label="RM" sortKey="name" sort={sort} onSort={toggleSort} />
+          <SortableHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+          <SortableHeader label="Login" sortKey="loginMinutes" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Handling" sortKey="handlingMinutes" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Break" sortKey="breakMinutes" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Occ" sortKey="occupancy" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Touches" sortKey="touches" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="ACHT" sortKey="achtSeconds" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Not Conn" sortKey="notConnectedTime" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Call Back" sortKey="callBackTime" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Not Int" sortKey="notInterestedTime" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Trial" sortKey="trialTime" sort={sort} onSort={toggleSort} align="right" />
+          <SortableHeader label="Breach" sortKey="breaches" sort={sort} onSort={toggleSort} align="right" />
         </TableRow>
       </TableHeader>
       <TableBody className="bg-white">
-        {rows.map((row) => (
+        {sortedRows.map((row) => (
           <TableRow
             key={row.rmUserId}
             className={cn('cursor-pointer hover:bg-stone-50', row.breaches > 0 && 'border-l-2 border-l-red-500')}

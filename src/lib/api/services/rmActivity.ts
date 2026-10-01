@@ -98,9 +98,16 @@ export const rmActivityApi = {
   },
 
   /** Real filter-bar values — managers from TenantMembership, groups from
-   * user_settings.Group, states/parties from what's actually on real leads. */
-  async getFilterOptions(): Promise<RmFilterOptionsDto> {
-    const response = await apiClient.get<RmFilterOptionsDto>('/analytics/rm-filter-options/');
+   * user_settings.Group, states/parties from what's actually on real leads.
+   * `managerRoleKeys` scopes the `managers` list to specific tenant roles
+   * (RM PRD config's managerRoles) — omit/empty to use the backend's own
+   * fallback (anyone with a direct report). */
+  async getFilterOptions(params?: { managerRoleKeys?: string[] }): Promise<RmFilterOptionsDto> {
+    const response = await apiClient.get<RmFilterOptionsDto>('/analytics/rm-filter-options/', {
+      params: {
+        manager_role_keys: params?.managerRoleKeys?.length ? params.managerRoleKeys.join(',') : undefined,
+      },
+    });
     return response.data;
   },
 
