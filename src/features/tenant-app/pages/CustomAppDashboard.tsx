@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { pageService } from '@/lib/api';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
-import { getEffectiveToken, isSpoofing, getSpoofUserLabel, fetchPagesForRole } from '@/lib/auth/spoof';
+import { getEffectiveToken, isSpoofing, getSpoofUserLabel } from '@/lib/auth/spoof';
 
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -64,23 +64,12 @@ const CustomAppDashboard: React.FC = () => {
 
         console.log('Tenant ID:', tenantId, 'Role ID:', roleId);
 
-        const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
-        let pages: { id: string; name: string }[] | null = null;
-
-        if (spoofToken) {
-          const navPages = await fetchPagesForRole(tenantId, roleId, spoofToken);
-          pages = navPages.map((p) => ({ id: p.id, name: p.name }));
-        } else {
-          const { data: pagesData, error: pagesError } = await supabase
-            .from('pages')
-            .select('id, name')
-            .eq('tenant_id', tenantId)
-            .eq('role', roleId)
-            .eq('is_deleted', false)
-            .order('display_order', { ascending: true });
-          if (pagesError) throw pagesError;
-          pages = pagesData;
-        }
+        const navPages = await pageService.getPagesForRole(tenantId, roleId, {
+          rolePreview: isSpoofing(),
+        });
+        const pages = [...navPages].sort(
+          (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
+        );
 
         console.log('Pages query result:', { pages });
 

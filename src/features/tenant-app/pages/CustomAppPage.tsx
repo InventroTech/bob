@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, type ComponentType } from 'react';
 import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { componentMap as staticComponentMap } from '@/features/page-builder/componentMap';
 import {
@@ -10,12 +9,8 @@ import {
   TABLE_COMPONENT_KIND_MAP,
 } from '@/components/page-builder/lead-table/utils';
 import { InventoryTablePageProvider } from '@/components/page-builder/lead-table/InventoryTablePageContext';
-import {
-  fetchPageConfig,
-  fetchPagesForRole,
-  getEffectiveToken,
-} from '@/lib/auth/spoof';
-import { useAuth } from '@/hooks/useAuth';
+import { NotFoundError, pageService } from '@/lib/api';
+import { isSpoofing } from '@/lib/auth/spoof';
 
 // Module-level cache to prevent duplicate page fetches across component remounts
 const pageCache = new Map<string, { data: any; timestamp: number }>();
@@ -47,7 +42,6 @@ interface CustomAppOutletContext {
 const CustomAppPage: React.FC = () => {
   const { tenantSlug, pageId } = useParams<{ tenantSlug: string; pageId: string }>();
   const navigate = useNavigate();
-  const { session } = useAuth();
   const {
     tenantId: contextTenantId,
     userRoleId,
@@ -80,23 +74,13 @@ const CustomAppPage: React.FC = () => {
         navigate(`/app/${tenantSlug}`, { replace: true });
         return;
       }
-      const token = await getEffectiveToken(session?.access_token ?? null);
-      let firstId: string | null = null;
-      if (token) {
-        const navPages = await fetchPagesForRole(tenantId, userRoleId, token);
-        firstId = navPages.find((p) => p.id && p.id !== pageId)?.id ?? null;
-      }
-      if (!firstId) {
-        const { data } = await supabase
-          .from('pages')
-          .select('id')
-          .eq('tenant_id', tenantId)
-          .eq('role', userRoleId)
-          .eq('is_deleted', false)
-          .order('display_order', { ascending: true })
-          .limit(1);
-        firstId = data?.[0]?.id ?? null;
-      }
+      const navPages = await pageService.getPagesForRole(tenantId, userRoleId, {
+        rolePreview: isSpoofing(),
+      });
+      const firstId =
+        [...navPages]
+          .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+          .find((p) => p.id && p.id !== pageId)?.id ?? null;
       if (firstId) {
         navigate(`/app/${tenantSlug}/pages/${firstId}`, { replace: true });
       } else {
@@ -105,7 +89,7 @@ const CustomAppPage: React.FC = () => {
     } catch {
       navigate(`/app/${tenantSlug}`, { replace: true });
     }
-  }, [tenantSlug, pageId, tenantId, userRoleId, session?.access_token, navigate]);
+  }, [tenantSlug, pageId, tenantId, userRoleId, navigate]);
 
   // Supabase silently rotates session.access_token every so often, which recreates
   // redirectToFirstSidebarPage above. Keeping it out of the fetch effect's own deps
@@ -148,44 +132,16 @@ const CustomAppPage: React.FC = () => {
       setPage(null);
     }
 
-    const spoofToken =
-      typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
-
     const fetchPage = async () => {
       try {
-        if (spoofToken && tenantId) {
-          const pageData = await fetchPageConfig(pageId, tenantId, spoofToken);
-          if (!isMounted) return;
-          fetchingRef.current = null;
-          if (pageData) {
-            setPage(pageData);
-            setPageCache(cacheKey, { data: pageData, timestamp: now });
-            setLoading(false);
-          } else {
-            pageCache.delete(cacheKey);
-            await redirectToFirstSidebarPageRef.current();
-          }
-          return;
-        }
-
-        const { data, error: fetchError } = await supabase
-          .from('pages')
-          .select('name, config, header_title')
-          .eq('id', pageId)
-          .eq('tenant_id', tenantId)
-          .eq('is_deleted', false)
-          .maybeSingle();
+        const data = await pageService.getPageById(pageId, tenantId);
 
         if (!isMounted) return;
         fetchingRef.current = null;
 
-        if (fetchError) {
-          setError(fetchError.message);
-          toast.error('Failed to load page');
-          setLoading(false);
-        } else if (data) {
+        if (data) {
           const pageData = {
-            name: data.name,
+            name: data.name ?? '',
             config: data.config,
             header_title: data.header_title,
           };
@@ -200,7 +156,13 @@ const CustomAppPage: React.FC = () => {
         fetchingRef.current = null;
         if (!isMounted) return;
         if (err.name === 'AbortError' || err.message?.includes('aborted')) return;
+        if (err instanceof NotFoundError || err.status === 404) {
+          pageCache.delete(cacheKey);
+          await redirectToFirstSidebarPageRef.current();
+          return;
+        }
         setError(err.message);
+        toast.error('Failed to load page');
         setLoading(false);
       }
     };

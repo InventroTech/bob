@@ -125,7 +125,7 @@ export async function fetchPagesForRole(
 }[]> {
   // First try the backend Pages API (preferred path).
   try {
-    const pages = await pageService.getPagesForRole(tenantId, roleId);
+    const pages = await pageService.getPagesForRole(tenantId, roleId, { rolePreview: true });
     return pages ?? [];
   } catch (err) {
     console.warn('pageService.getPagesForRole failed, falling back to Supabase REST:', err);
