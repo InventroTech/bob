@@ -230,6 +230,14 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     /** Show "See request history" button in record modals. */
     showHistoryButton?: boolean;
     modalFlags?: import('@/component-config').ModalFlagConfig[];
+    /** Lead table: lock the lead-detail modal (View Profile) until a disposition button is clicked. */
+    lockLeadModal?: boolean;
+    /** RM PRD Analytics: which filter-bar controls to show. */
+    visibleFilters?: Partial<Record<string, boolean>>;
+    /** RM PRD Analytics: 'manager' (whole team) or 'rm' (signed-in RM only). */
+    viewMode?: 'manager' | 'rm';
+    /** RM PRD Analytics: Role.key values that count as "manager" for the Manager filter. */
+    managerRoles?: string[];
   };
 
   // Local state for all input fields
@@ -310,6 +318,10 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
     showHistoryButton: (initialConfig as any).showHistoryButton ?? false,
     modalFlags: (initialConfig as any).modalFlags ?? [],
+    lockLeadModal: (initialConfig as any).lockLeadModal ?? false,
+    visibleFilters: (initialConfig as any).visibleFilters ?? undefined,
+    viewMode: (initialConfig as any).viewMode ?? 'manager',
+    managerRoles: (initialConfig as any).managerRoles ?? undefined,
   });
 
   // Separate state for columns
