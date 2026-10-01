@@ -2029,6 +2029,18 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     selectedRowIds,
   ]);
 
+  const selectedBulkRows = useMemo(
+    () =>
+      Array.from(selectedRowIds)
+        .map(
+          (id) =>
+            selectedBulkRowsById[id] ??
+            stageFilteredData.find((row) => normalizeBulkRowId(row?.id) === id)
+        )
+        .filter((row): row is any => row != null),
+    [selectedRowIds, selectedBulkRowsById, stageFilteredData]
+  );
+
   const patchInventoryRowStatus = useCallback(
     async (
       row: any,
@@ -2062,16 +2074,21 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   );
 
   const handleBulkStatusAction = useCallback(
-    async (button: {
-      label: string;
-      statusValue: string;
-      targetAttribute?: string;
-      statusText?: string;
-    }): Promise<boolean> => {
+    async (
+      button: {
+        label: string;
+        statusValue: string;
+        targetAttribute?: string;
+        statusText?: string;
+      },
+      options?: { rowIds?: string[] }
+    ): Promise<boolean> => {
       if (!bulkSelectionEnabled || selectedRowIds.size === 0) return false;
       const applyingKey = bulkActionButtonKey(button);
+      const onlyRowIds = options?.rowIds ? new Set(options.rowIds) : null;
       // Prefer cached rows so selections from other stage tabs / pages still apply.
       const selectedRows = Array.from(selectedRowIds)
+        .filter((id) => !onlyRowIds || onlyRowIds.has(id))
         .map((id) => {
           const cached = selectedBulkRowsById[id];
           if (cached) return cached;
@@ -3834,6 +3851,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     bulkSelectionEnabled,
     selectedRowIds,
     selectedRowCount,
+    selectedBulkRows,
     bulkSelectionStatus,
     bulkActionButtons,
     bulkApplying,
