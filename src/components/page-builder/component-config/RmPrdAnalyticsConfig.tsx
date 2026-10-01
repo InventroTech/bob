@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { RmPrdFilterKey, RmPrdViewMode } from "@/components/page-builder/RmPrdAnalyticsComponent";
+import { membershipService, type Role } from "@/lib/api/services/membership";
 
 const FILTER_OPTIONS: { key: RmPrdFilterKey; label: string }[] = [
   { key: "manager", label: "Manager" },
@@ -25,8 +27,9 @@ interface RmPrdAnalyticsConfigProps {
     title?: string;
     visibleFilters?: Partial<Record<RmPrdFilterKey, boolean>>;
     viewMode?: RmPrdViewMode;
+    managerRoles?: string[];
   };
-  handleInputChange: (field: string, value: string | number | boolean | Record<string, boolean>) => void;
+  handleInputChange: (field: string, value: string | number | boolean | Record<string, boolean> | string[]) => void;
 }
 
 export const RmPrdAnalyticsConfig: React.FC<RmPrdAnalyticsConfigProps> = ({
@@ -39,6 +42,38 @@ export const RmPrdAnalyticsConfig: React.FC<RmPrdAnalyticsConfigProps> = ({
 
   const setVisible = (key: RmPrdFilterKey, next: boolean) => {
     handleInputChange("visibleFilters", { ...localConfig.visibleFilters, [key]: next });
+  };
+
+  // every role the tenant has defined (Team Lead, Zonal Head, GM, ...) —
+  // the manager picks which of these actually count as "manager" for the
+  // Manager filter dropdown, since "anyone with a direct report" pulls in
+  // wrong/unexpected names
+  const [allRoles, setAllRoles] = useState<Role[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    membershipService
+      .getRoles()
+      .then((roles) => {
+        if (!cancelled) setAllRoles(roles);
+      })
+      .catch(() => {
+        // picker just shows nothing to check — existing managerRoles value is untouched
+      })
+      .finally(() => {
+        if (!cancelled) setRolesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedManagerRoleKeys = new Set(localConfig.managerRoles ?? []);
+  const toggleManagerRole = (roleKey: string, checked: boolean) => {
+    const next = new Set(selectedManagerRoleKeys);
+    if (checked) next.add(roleKey);
+    else next.delete(roleKey);
+    handleInputChange("managerRoles", Array.from(next));
   };
 
   return (
@@ -97,6 +132,42 @@ export const RmPrdAnalyticsConfig: React.FC<RmPrdAnalyticsConfigProps> = ({
             ))}
           </div>
         </div>
+
+        {localConfig.viewMode !== "rm" && (
+          <div className="space-y-2">
+            <Label>Manager Roles</Label>
+            <p className="text-xs text-muted-foreground">
+              Which roles count as "manager" for the Manager filter dropdown. Tenants often have several
+              manager-shaped roles (Team Lead, Zonal Head, GM, ...) — pick the ones that should show up.
+              None selected falls back to "anyone with a direct report."
+            </p>
+            <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border border-border p-3">
+              {rolesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading roles…</p>
+              ) : allRoles.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No roles found for this tenant.</p>
+              ) : (
+                allRoles
+                  .filter((role) => Boolean(role.key))
+                  .map((role) => {
+                  const roleKey = role.key as string;
+                  return (
+                    <div key={role.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`manager-role-${role.id}`}
+                        checked={selectedManagerRoleKeys.has(roleKey)}
+                        onCheckedChange={(next) => toggleManagerRole(roleKey, next === true)}
+                      />
+                      <Label htmlFor={`manager-role-${role.id}`} className="text-sm font-normal">
+                        {role.name}
+                      </Label>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

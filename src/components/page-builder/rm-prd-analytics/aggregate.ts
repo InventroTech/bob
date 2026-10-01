@@ -273,11 +273,18 @@ export interface RmAdherenceRow {
   status: 'On lead' | 'Off lead' | 'Idle';
   statusMinutes: number;
   loginHours: string;
+  // raw minutes/seconds behind the formatted *Hours/acht strings above —
+  // "2h 05m" vs "10h 02m" sorts wrong as text, so the By RM table's column
+  // sort needs these numeric values instead
+  loginMinutes: number;
   handlingHours: string;
+  handlingMinutes: number;
   breakTime: string;
+  breakMinutes: number;
   occupancy: number;
   touches: number;
   acht: string;
+  achtSeconds: number;
   notConnectedTime: number;
   notConnectedLabel: string;
   callBackTime: number;
@@ -321,11 +328,15 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
     status: timing.status,
     statusMinutes: timing.statusMinutes,
     loginHours: formatHours(timing.loginMinutes),
+    loginMinutes: timing.loginMinutes,
     handlingHours: formatHours(handlingMinutes),
+    handlingMinutes,
     breakTime: formatHours(breakMinutes),
+    breakMinutes,
     occupancy,
     touches: closedCalls.length, // matches the Performance tab: "touches" means finished calls, "open" is separate
     acht: formatDuration(average(closedCalls.map((c) => c.durationSeconds ?? 0))),
+    achtSeconds: average(closedCalls.map((c) => c.durationSeconds ?? 0)),
     notConnectedTime,
     notConnectedLabel: formatDuration(notConnectedTime),
     callBackTime,

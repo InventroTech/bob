@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { CustomButton } from "@/components/ui/CustomButton";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -61,6 +62,64 @@ interface ConfigurationPanelProps {
   setCanvasComponents: React.Dispatch<React.SetStateAction<CanvasComponentData[]>>;
   onClose: () => void;
 }
+
+// Same friendly names shown in the left sidebar's drag palette (see
+// PageBuilder.tsx's DraggableSidebarItem list) — surfaced here too as a chip
+// so it's obvious which component you're configuring. There are several
+// similar-looking tables (Lead Table, Records Table (API), Procurement
+// Table, OE Leads Table, Ticket Table, ...) that are easy to mix up once
+// they're sitting on the canvas with no label.
+const COMPONENT_TYPE_LABELS: Record<string, string> = {
+  container: 'Container',
+  split: 'Split View',
+  collapseCard: 'Collapse Card',
+  leadCarousel: 'Lead Carousel',
+  ticketCarousel: 'Ticket Carousel',
+  ticketBarGraph: 'Ticket Bar Graph',
+  progressBar: 'Progress Bar',
+  leadProgressBar: 'Lead Progress Bar',
+  cseProgressBar: 'CSE Progress Bar',
+  leadAssignment: 'Lead Groups',
+  callAttemptMatrix: 'Call Attempt Matrix',
+  temporaryLogout: 'Temporary Logout',
+  form: 'Form',
+  table: 'Table',
+  dataCard: 'Data Card',
+  leadTable: 'Lead Table',
+  inventoryTable: 'Records Table (API)',
+  procurementTable: 'Procurement Table',
+  myRequestTable: 'My Request Table',
+  pendingApprovalTable: 'Pending Approval Table',
+  rejectedTable: 'Rejected Table',
+  vendorIdentifiedTable: 'Vendor Identified Table',
+  procurementDashboard: 'Procurement Dashboard',
+  dispatchCardList: 'Dispatch Card List',
+  dispatchDashboard: 'Dispatch Dashboard',
+  inventoryRequestForm: 'Inventory Request Form',
+  procurementRequestForm: 'Procurement Request Form',
+  oeLeadsTable: 'OE Leads Table',
+  ticketTable: 'Ticket Table',
+  addUser: 'Add User',
+  openModalButton: 'Modal Button',
+  jobManager: 'Job Manager',
+  jobsPage: 'Jobs Board',
+  applicantTable: 'Applicant Table',
+  fileUpload: 'File Upload',
+  dynamicScoring: 'Dynamic Scoring',
+  whatsappTemplate: 'WhatsApp Template',
+  zohoMail: 'Zoho Mail Parsing',
+  stackedBarChart: 'Stacked Bar Chart',
+  lineChart: 'Line Chart',
+  barGraph: 'Bar Graph',
+  text: 'Text',
+  button: 'Button',
+  image: 'Image',
+  teamDashboard: 'Team Dashboard',
+  analyticsBoard: 'Analytics Board',
+  operationsPrograms: 'Operations & Programs',
+  userHierarchy: 'User Hierarchy',
+  rmPrdAnalytics: 'RM PRD Analytics',
+};
 
 export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selectedComponent, setCanvasComponents, onClose }) => {
   const { id: selectedComponentId, config: initialConfig = {}, type: selectedComponentType } = selectedComponent;
@@ -1012,12 +1071,15 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
 
   return (
     <aside className="fixed right-0 top-0 h-full w-80 bg-background border-l border-border p-4 shadow-lg z-50 overflow-y-auto">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-2">
         <h5 className="text-sm font-semibold text-foreground">Component Configuration</h5>
         <CustomButton variant="outline" size="sm" onClick={onClose} className="border-border text-foreground hover:bg-muted">
           Close
         </CustomButton>
       </div>
+      <Badge variant="secondary" className="mb-4">
+        {COMPONENT_TYPE_LABELS[selectedComponentType] ?? selectedComponentType}
+      </Badge>
       <Separator className="mb-4" />
       {renderConfigFields()}
     </aside>
