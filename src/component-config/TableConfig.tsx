@@ -110,6 +110,8 @@ interface TableConfigProps {
     showHistoryButton?: boolean;
     /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
     modalFlags?: ModalFlagConfig[];
+    /** Lead card modal: block outside-click/Escape/X close and reopen the same lead on refresh — only a disposition button can close it. Default off. */
+    lockLeadModal?: boolean;
   };
   localColumns: ColumnConfig[];
   numColumns: number;
@@ -717,6 +719,27 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             </Select>
             <p className="text-xs text-gray-500 mt-1">
               What happens when a row is clicked. Use Record form modal for All Requests (built-in Approve / Order use existing statuses).
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Lock lead modal (View Profile)</Label>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="lock-lead-modal"
+                checked={localConfig.lockLeadModal === true}
+                onCheckedChange={(checked) => handleInputChange('lockLeadModal', checked)}
+              />
+              <Label htmlFor="lock-lead-modal" className="text-sm font-normal cursor-pointer">
+                Only a disposition button can close it
+              </Label>
+            </div>
+            <p className="text-xs text-gray-500">
+              Only applies when Detail Mode opens the lead card (Auto or "Lead card (lead modal)" above —
+              other Detail Modes ignore this). Default is off. When enabled, the lead card opened from
+              View Profile can't be closed by clicking outside, Escape, or the X — only Trial Activated /
+              Not Interested / etc. A page refresh re-opens the same lead instead of losing it. Prevents an
+              accidentally-closed lead from inflating its recorded time-on-lead.
             </p>
           </div>
 

@@ -9,6 +9,8 @@ import { formatClientErrorDetail, isExpectedAuthWall } from '../errors';
 export interface Role {
   id: string;
   name: string;
+  /** Role.key — the stable per-tenant identifier (e.g. for RM PRD's managerRoles config), unlike `name` which is just display text. */
+  key?: string;
 }
 
 export interface GetRolesResponse {
