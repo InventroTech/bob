@@ -527,6 +527,9 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
   if (!record) return null;
 
   const isUnmannd = uiVariant === 'unmannd';
+  const requesterDisplayName = String(
+    (record?.data as any)?.requester_name ?? (record as any)?.requester_name ?? ''
+  ).trim();
   const orderedFields = isUnmannd ? sortUnmanndFormFields(formModalFields) : formModalFields;
   const productImageSrc = String(
     formData.product_image ??
@@ -646,6 +649,16 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
           data-modal-scroll
           className={cn('flex-1 min-h-0 overflow-y-auto space-y-4', isUnmannd ? 'bg-white px-5 py-5 sm:px-6' : 'px-1 py-4')}
         >
+          {isUnmannd && requesterDisplayName ? (
+            <div className="flex justify-end">
+              <p className="!m-0 text-sm">
+                <span className="font-bold uppercase tracking-wide" style={{ color: '#1A44A1' }}>
+                  Requestor :
+                </span>{' '}
+                <span className="text-gray-600">{requesterDisplayName}</span>
+              </p>
+            </div>
+          ) : null}
           {orderedFields.length === 0 ? (
             <p className="text-sm text-muted-foreground">No fields configured. Add fields in table config.</p>
           ) : (
@@ -783,9 +796,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                   <Label
                     className={cn(
                       'font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap leading-none',
-                      isUnmannd && isItemField
-                        ? 'text-sm sm:text-base'
-                        : 'text-xs'
+                      isUnmannd && isItemField ? 'text-[14px]' : 'text-xs'
                     )}
                   >
                     {fieldLabel}

@@ -1,6 +1,6 @@
 /** Presentational JSX for the lead table. */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Filter, MessageCircle, CheckCircle2, Clock, AlertCircle, Search, X, Loader2 } from 'lucide-react';
@@ -19,6 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { DynamicFilterBuilder } from '@/components/DynamicFilterBuilder';
 import { CustomButton } from '@/components/ui/CustomButton';
 import { CustomTable, type CustomTableColumn } from '@/components/ui/CustomTable';
@@ -41,6 +51,8 @@ import {
   getInventoryStatusChipLabel,
   getShipmentStatusLabel,
 } from '@/lib/inventory/statusStyles';
+
+const BULK_SKIP_VALUE = '__bulk_skip__';
 
 export function LeadTableView(props: LeadTableModel) {
   const {
@@ -109,6 +121,7 @@ export function LeadTableView(props: LeadTableModel) {
     bulkSelectionEnabled,
     selectedRowIds,
     selectedRowCount,
+    selectedBulkRows,
     bulkApplying,
     canSelectBulkRow,
     toggleBulkRowSelection,
@@ -178,24 +191,131 @@ export function LeadTableView(props: LeadTableModel) {
     setBulkTargetValue('');
   }, [clearBulkSelection]);
 
-  /** Bulk Edit → Save: apply catalogs then return to Bulk Edit. */
-  const handleBulkSave = useCallback(async () => {
-    if (!bulkTargetValue || selectedRowCount === 0) return;
-    const match = bulkValueOptions.find((opt) => opt.value === bulkTargetValue);
-    if (!match) return;
-    const ok = await handleBulkStatusAction({
-      label: match.label,
-      statusValue: match.value,
-      targetAttribute: bulkTargetAttribute,
-      statusText: match.label,
+  const exitBulkEdit = useCallback(() => {
+    setBulkEditMode(false);
+    setBulkTargetValue('');
+    clearBulkSelection();
+  }, [clearBulkSelection]);
+
+  const [confirmExitBulkOpen, setConfirmExitBulkOpen] = useState(false);
+  const confirmExitBulkOpenRef = useRef(false);
+  confirmExitBulkOpenRef.current = confirmExitBulkOpen;
+
+  // No Cancel button: clicking outside the table / bulk controls (or Esc) asks to keep editing or cancel.
+  useEffect(() => {
+    if (!bulkEditMode) {
+      setConfirmExitBulkOpen(false);
+      return;
+    }
+    const keepOpenSelector = [
+      '[data-bulk-edit-keep]',
+      '[data-radix-popper-content-wrapper]',
+      '[role="listbox"]',
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+    ].join(',');
+    const onPointerDown = (event: PointerEvent) => {
+      if (bulkApplying != null || confirmExitBulkOpenRef.current) return;
+      const target = event.target as Element | null;
+      if (!target || !target.isConnected) return;
+      if (target.closest(keepOpenSelector)) return;
+      setConfirmExitBulkOpen(true);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || bulkApplying != null || confirmExitBulkOpenRef.current) return;
+      setConfirmExitBulkOpen(true);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [bulkEditMode, bulkApplying]);
+
+  const [bulkPreviewOpen, setBulkPreviewOpen] = useState(false);
+  /** Review popup: per-row value overrides (row id → value, or BULK_SKIP_VALUE). */
+  const [bulkRowOverrides, setBulkRowOverrides] = useState<Record<string, string>>({});
+
+  const openBulkPreview = useCallback(() => {
+    setBulkRowOverrides({});
+    setBulkPreviewOpen(true);
+  }, []);
+
+  const formatBulkValue = useCallback(
+    (value: unknown) => {
+      const raw = String(value ?? '').trim();
+      if (!raw || raw === 'N/A') return bulkTargetAttribute === 'shipment_status' ? 'N/A' : '—';
+      return bulkTargetAttribute === 'shipment_status'
+        ? getShipmentStatusLabel(raw)
+        : getInventoryStatusChipLabel(raw);
+    },
+    [bulkTargetAttribute]
+  );
+
+  const bulkPreviewRows = useMemo(() => {
+    if (!bulkPreviewOpen) return [];
+    const attr = (bulkTargetAttribute || 'status').trim() || 'status';
+    return (selectedBulkRows ?? []).map((row: any) => {
+      const data = (row?.data as Record<string, unknown>) || {};
+      const itemName = String(
+        data.item_name_freeform ?? row?.item_name_freeform ?? data.item_name ?? row?.item_name ?? ''
+      ).trim();
+      const id = String(row?.id ?? '');
+      const nextValue = bulkRowOverrides[id] ?? bulkTargetValue;
+      const currentLabel = formatBulkValue(data[attr] ?? row?.[attr]);
+      const skipped = nextValue === BULK_SKIP_VALUE;
+      return {
+        id,
+        itemName: itemName || `Request #${row?.id ?? ''}`,
+        currentLabel,
+        nextValue,
+        skipped,
+        unchanged: !skipped && currentLabel === formatBulkValue(nextValue),
+      };
     });
-    if (ok) {
+  }, [
+    bulkPreviewOpen,
+    bulkTargetAttribute,
+    bulkTargetValue,
+    bulkRowOverrides,
+    selectedBulkRows,
+    formatBulkValue,
+  ]);
+
+  const bulkPreviewChangeCount = bulkPreviewRows.filter((r) => !r.skipped).length;
+
+  /** Review popup → Confirm & Save: apply each row's chosen value, then leave Bulk Edit. */
+  const handleBulkSave = useCallback(async () => {
+    setBulkPreviewOpen(false);
+    if (selectedRowCount === 0) return;
+    const rowIdsByValue = new Map<string, string[]>();
+    for (const row of bulkPreviewRows) {
+      if (row.skipped || !row.nextValue) continue;
+      rowIdsByValue.set(row.nextValue, [...(rowIdsByValue.get(row.nextValue) ?? []), row.id]);
+    }
+    let anyOk = false;
+    for (const [value, rowIds] of rowIdsByValue) {
+      const match = bulkValueOptions.find((opt) => opt.value === value);
+      if (!match) continue;
+      const ok = await handleBulkStatusAction(
+        {
+          label: match.label,
+          statusValue: match.value,
+          targetAttribute: bulkTargetAttribute,
+          statusText: match.label,
+        },
+        { rowIds }
+      );
+      anyOk = anyOk || ok;
+    }
+    if (anyOk) {
       setBulkEditMode(false);
       setBulkTargetValue('');
     }
   }, [
+    bulkPreviewRows,
     bulkTargetAttribute,
-    bulkTargetValue,
     bulkValueOptions,
     handleBulkStatusAction,
     selectedRowCount,
@@ -243,7 +363,9 @@ export function LeadTableView(props: LeadTableModel) {
   const isProcurementStyleTable =
     config?.tableType === 'itemsTable' || isInventoryLikeForTitle;
   const procurementHeaderBg = 'bg-[#0E3777]';
-  const procurementTableFrame = 'mb-3';
+  // Side borders on body cells (not the wrapper) so they line up with the navy header edges.
+  const procurementTableFrame =
+    'mb-3 [&_tbody_td:first-child]:border-l [&_tbody_td:last-child]:border-r [&_tbody_td]:border-gray-200';
   const pageChromeTitle = usePageDisplayTitle().trim();
   const pageComponentType = (config as { pageComponentType?: string } | undefined)?.pageComponentType;
   const inventoryTableKindForTitle =
@@ -340,7 +462,8 @@ export function LeadTableView(props: LeadTableModel) {
         <div
           className={cn(
             'mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3',
-            'sm:flex-row sm:flex-nowrap sm:items-center sm:gap-3',
+            'sm:flex-row sm:flex-nowrap sm:gap-3',
+            isProcurementStyleTable ? 'sm:items-start' : 'sm:items-center',
             pageTitleDisplay ? 'sm:justify-between' : 'sm:justify-end'
           )}
         >
@@ -348,7 +471,7 @@ export function LeadTableView(props: LeadTableModel) {
             <h1
               className={
                 isProcurementStyleTable
-                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] tracking-normal text-gray-900 max-sm:text-2xl'
+                  ? '!m-0 min-w-0 truncate font-[Helvetica,Arial,sans-serif] text-[28px] font-bold uppercase leading-[32px] sm:!mt-2 sm:leading-none tracking-normal text-gray-900 max-sm:text-2xl'
                   : '!m-0 min-w-0 truncate text-2xl font-bold leading-tight text-gray-900'
               }
             >
@@ -360,14 +483,14 @@ export function LeadTableView(props: LeadTableModel) {
             className={cn(
               'flex w-full shrink-0 flex-nowrap items-center gap-2',
               isMyRequestPageChrome
-                ? 'ml-auto w-auto shrink-0 justify-end'
+                ? 'ml-auto w-auto shrink-0 justify-end sm:mt-9'
                 : pageTitleDisplay
                   ? 'sm:mt-0 sm:w-auto sm:justify-end'
                   : 'sm:justify-end'
             )}
           >
             {bulkSelectionEnabled && bulkEditMode ? (
-              <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+              <div data-bulk-edit-keep className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
                 <Select
                   value={bulkTargetAttribute}
                   onValueChange={setBulkTargetAttribute}
@@ -404,6 +527,7 @@ export function LeadTableView(props: LeadTableModel) {
               </div>
             ) : null}
             {bulkSelectionEnabled ? (
+              <span data-bulk-edit-keep className="contents">
               <CustomButton
                 variant="default"
                 size="sm"
@@ -417,7 +541,7 @@ export function LeadTableView(props: LeadTableModel) {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (bulkEditMode) {
-                    void handleBulkSave();
+                    openBulkPreview();
                   } else {
                     handleStartBulkEdit();
                   }
@@ -439,6 +563,7 @@ export function LeadTableView(props: LeadTableModel) {
                   'Bulk Edit'
                 )}
               </CustomButton>
+              </span>
             ) : null}
             <div
               className={cn(
@@ -489,6 +614,116 @@ export function LeadTableView(props: LeadTableModel) {
             </CustomButton>
           </div>
         </div>
+
+        <AlertDialog open={bulkPreviewOpen} onOpenChange={setBulkPreviewOpen}>
+          <AlertDialogContent className="w-[calc(100vw-2rem)] max-w-3xl overflow-hidden border-0 p-0">
+            <AlertDialogHeader className="space-y-0 bg-[#0E3777] px-6 py-4 text-left">
+              <AlertDialogTitle className="text-lg font-bold uppercase tracking-wide text-white">
+                Review changes
+              </AlertDialogTitle>
+            </AlertDialogHeader>
+            <div className="space-y-3 px-6 pt-1">
+              <AlertDialogDescription className="text-sm text-gray-700">
+                {`${bulkPreviewChangeCount} of ${bulkPreviewRows.length} request${bulkPreviewRows.length === 1 ? '' : 's'} — `}
+                <span className="font-semibold text-[#0E3777]">
+                  {bulkTargetAttribute === 'shipment_status' ? 'Shipment status' : 'Status'}
+                </span>
+                {' will change as below. Use the New column to change a single request.'}
+              </AlertDialogDescription>
+              <div className="max-h-[50vh] overflow-y-auto rounded-md border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-[#0E3777] text-left text-xs uppercase tracking-wide text-white">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Item</th>
+                      <th className="px-3 py-2 font-semibold">Current</th>
+                      <th className="px-3 py-2 font-semibold" aria-label="changes to" />
+                      <th className="px-3 py-2 font-semibold">New</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkPreviewRows.map((row) => (
+                      <tr key={row.id} className="border-t border-gray-200">
+                        <td className="max-w-[18rem] truncate px-3 py-2 text-gray-800" title={row.itemName}>
+                          {row.itemName}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-gray-600">{row.currentLabel}</td>
+                        <td className="px-1 py-2 text-gray-400">→</td>
+                        <td className="px-3 py-1.5">
+                          <Select
+                            value={row.nextValue || undefined}
+                            onValueChange={(value) =>
+                              setBulkRowOverrides((prev) => ({ ...prev, [row.id]: value }))
+                            }
+                          >
+                            <SelectTrigger
+                              className={cn(
+                                'h-8 w-[11rem] rounded-[6px] border-gray-200 bg-white text-sm font-semibold shadow-sm',
+                                row.skipped || row.unchanged ? 'text-gray-400' : 'text-[#1B6FE8]'
+                              )}
+                            >
+                              <SelectValue placeholder="Choose value" />
+                            </SelectTrigger>
+                            <SelectContent className="z-[100]">
+                              <SelectItem value={BULK_SKIP_VALUE}>Don&apos;t change</SelectItem>
+                              {bulkValueOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {row.unchanged ? (
+                            <span className="ml-2 text-xs text-gray-400">no change</span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <AlertDialogFooter className="gap-2 px-6 pb-5">
+              <AlertDialogCancel className="h-9 rounded-[6px] border border-[#0E3777] bg-white px-4 font-semibold text-[#0E3777] hover:bg-[#0E3777]/5 hover:text-[#0E3777]">
+                Back
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={bulkPreviewChangeCount === 0}
+                onClick={() => void handleBulkSave()}
+                className="h-9 rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-4 font-semibold text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)]"
+              >
+                Confirm &amp; Save
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={confirmExitBulkOpen} onOpenChange={setConfirmExitBulkOpen}>
+          <AlertDialogContent className="overflow-hidden border-0 p-0">
+            <AlertDialogHeader className="space-y-0 bg-[#0E3777] px-6 py-4 text-left">
+              <AlertDialogTitle className="text-lg font-bold uppercase tracking-wide text-white">
+                Leave Bulk Edit?
+              </AlertDialogTitle>
+            </AlertDialogHeader>
+            <div className="px-6 pt-1">
+              <AlertDialogDescription className="text-sm text-gray-700">
+                {selectedRowCount > 0
+                  ? `You have ${selectedRowCount} row${selectedRowCount === 1 ? '' : 's'} selected. Do you want to keep editing or cancel Bulk Edit?`
+                  : 'Do you want to keep editing or cancel Bulk Edit?'}
+              </AlertDialogDescription>
+            </div>
+            <AlertDialogFooter className="gap-2 px-6 pb-5">
+              <AlertDialogCancel className="h-9 rounded-[6px] border border-[#0E3777] bg-white px-4 font-semibold text-[#0E3777] hover:bg-[#0E3777]/5 hover:text-[#0E3777]">
+                Keep editing
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={exitBulkEdit}
+                className="h-9 rounded-[6px] border-0 bg-[linear-gradient(104.92deg,#1B6FE8_39.48%,#0A4CB8_93.66%)] px-4 font-semibold text-white shadow-[0_4px_12px_rgba(8,71,184,0.4)] hover:bg-[linear-gradient(104.92deg,#4BA3FF_0%,#2885FF_45%,#1A7AE8_100%)]"
+              >
+                Cancel Bulk Edit
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {bulkSelectionEnabled && bulkEditMode && selectedRowCount === 0 ? (
           <div className="mb-2 shrink-0 text-sm text-gray-600">
@@ -692,6 +927,7 @@ export function LeadTableView(props: LeadTableModel) {
             </div>
           )}
 
+          <div data-bulk-edit-keep className="contents">
           <CustomTable
             columns={tableColumns.map((col) => ({
               header: col.header,
@@ -738,6 +974,7 @@ export function LeadTableView(props: LeadTableModel) {
                 : undefined
             }
           />
+          </div>
         </div>
 
         {/* Server-side pagination — editable page + Previous/Next */}
