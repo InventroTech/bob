@@ -68,7 +68,23 @@ const PAGE_LIST = Object.values(CUSTOMER_PAGES).map((page) => ({
   name: page.name,
   display_order: page.display_order,
   icon_name: page.icon_name,
+  header_title: page.header_title,
+  is_deleted: false,
 }));
+
+function isViteRequest(url: URL): boolean {
+  return url.port === '8080';
+}
+
+/** Backend pages API used by the custom app (`GET /pages/` and `GET /pages/{id}/`). */
+function backendPagesKind(url: URL): 'list' | 'one' | null {
+  if (isViteRequest(url) || url.pathname.includes('/rest/v1/')) return null;
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+  if (path.endsWith('/pages/custom-icons')) return null;
+  if (path.endsWith('/pages')) return 'list';
+  if (/\/pages\/[^/]+$/.test(path)) return 'one';
+  return null;
+}
 
 export const SAMPLE_LEAD = {
   id: 9001,
@@ -85,6 +101,35 @@ export const SAMPLE_LEAD = {
 };
 
 export async function mockCustomerFacingPages(page: Page) {
+  // Registered after the generic backend mock so the custom app gets these
+  // pages on first paint, instead of the empty `/pages/` list.
+  await page.route((url) => backendPagesKind(url) !== null, async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: JSON_HEADERS });
+      return;
+    }
+
+    const url = new URL(route.request().url());
+    const kind = backendPagesKind(url);
+    if (kind === 'list') {
+      await fulfillJson(route, PAGE_LIST);
+      return;
+    }
+
+    const id = url.pathname.replace(/\/+$/, '').split('/').pop();
+    const found = Object.values(CUSTOMER_PAGES).find((item) => item.id === id);
+    if (!found) {
+      await fulfillJson(route, { message: 'not found' }, 404);
+      return;
+    }
+    await fulfillJson(route, {
+      ...found,
+      tenant_id: QA_TENANT.id,
+      role: QA_TENANT.roleId,
+      is_deleted: false,
+    });
+  });
+
   await page.route((url) => url.pathname.includes('/rest/v1/pages'), async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: JSON_HEADERS });

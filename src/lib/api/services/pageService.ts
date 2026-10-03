@@ -11,6 +11,11 @@ export interface PageRecord {
   header_title?: string; // The title shown in the app
   tenant_id?: string;
   user_id?: string;
+  is_deleted?: boolean;
+}
+
+function isDeletedPage(page: { is_deleted?: boolean | string | null }): boolean {
+  return page?.is_deleted === true || page?.is_deleted === 'true';
 }
 
 export const pageService = {
@@ -42,12 +47,15 @@ export const pageService = {
   },
 
   /**
-   * Get pages for a specific tenant and role (used by custom app/spoof flows)
-   * Maps to: GET /pages/?tenant_id=&role_id=&role_preview=1
+   * Get pages for a specific tenant and role (used by custom app/spoof flows).
+   * Live app: GET /pages/?tenant_id=&role_id=
+   * Spoof only: also sends role_preview=1 so the backend evaluates the spoofed role.
+   * Soft-deleted pages are dropped so a delete in My Pages leaves the custom app.
    */
   async getPagesForRole(
     tenantId: string,
-    roleId: string
+    roleId: string,
+    options?: { rolePreview?: boolean }
   ): Promise<{
     id: string;
     name: string;
@@ -57,7 +65,11 @@ export const pageService = {
   }[]> {
     try {
       const response = await apiClient.get(`/pages/`, {
-        params: { tenant_id: tenantId, role_id: roleId, role_preview: '1' },
+        params: {
+          tenant_id: tenantId,
+          role_id: roleId,
+          ...(options?.rolePreview ? { role_preview: '1' } : {}),
+        },
       });
 
       const responseData = response.data;
@@ -73,13 +85,15 @@ export const pageService = {
             : []
           : [];
 
-      return items.map((page) => ({
-        id: page.id,
-        name: page.name,
-        display_order: page.display_order ?? 0,
-        icon_name: page.icon_name ?? 'Sparkles',
-        header_title: page.header_title ?? '',
-      }));
+      return items
+        .filter((page) => !isDeletedPage(page))
+        .map((page) => ({
+          id: page.id,
+          name: page.name,
+          display_order: page.display_order ?? 0,
+          icon_name: page.icon_name ?? 'Sparkles',
+          header_title: page.header_title ?? '',
+        }));
     } catch (error) {
       console.error('Error fetching pages by role from API:', error);
       throw error;
@@ -125,6 +139,7 @@ export const pageService = {
 
       // Handle both direct objects and nested .data objects
       const pageData = data.data || data;
+      if (!pageData || isDeletedPage(pageData)) return null;
 
       // Return the FULL object so the PageBuilder gets icon_name, display_order, etc.
       return {

@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { Outlet, NavLink, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Bell, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers, ChevronLeft } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/useAuth';
-import { apiClient } from '@/lib/api';
+import { apiClient, pageService } from '@/lib/api';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
 import {
   SPOOF_CHANGED_EVENT,
@@ -15,7 +14,6 @@ import {
   SPOOF_LABEL_KEY,
   clearSpoofLocalStorage,
   dispatchSpoofChanged,
-  fetchPagesForRole,
   getEffectiveToken,
   getSpoofUserLabel,
   isSpoofing,
@@ -119,6 +117,7 @@ function NavIcon({
 
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, session } = useAuth();
   const { showShiftEndedOverlay } = useShiftAutoLogout();
@@ -132,6 +131,8 @@ const CustomAppLayout: React.FC = () => {
   const [spoofBannerVisible, setSpoofBannerVisible] = useState(() => isSpoofing());
   const [spoofVersion, setSpoofVersion] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [pagesRefreshKey, setPagesRefreshKey] = useState(0);
+  const [pagesLoaded, setPagesLoaded] = useState(false);
   const isMobile = useIsMobile();
 
   // Detect mobile landscape orientation smoothly
@@ -246,60 +247,71 @@ const CustomAppLayout: React.FC = () => {
     };
   }, []);
 
+  // Don't treat the previous role's list as loaded while a new role's pages are in flight.
+  useEffect(() => {
+    setPagesLoaded(false);
+  }, [tenantId, userRoleId, spoofVersion]);
+
+  // Refetch after a delete/create in My Pages when this tab becomes visible again.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        setPagesRefreshKey((n) => n + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   // Step 2: Fetch pages AND custom icons
   useEffect(() => {
+    let cancelled = false;
+
     const fetchPagesAndIcons = async () => {
       if (!tenantId || !userRoleId) return;
 
       try {
         const iconResponse = await apiClient.get('/pages/custom-icons/');
-        setCustomIcons(iconResponse.data || []);
+        if (!cancelled) setCustomIcons(iconResponse.data || []);
       } catch (err) {
         console.error('Failed to fetch custom icons:', err);
       }
 
-      const token = await getEffectiveToken(session?.access_token ?? null);
-
-      const spoofToken =
-        typeof window !== 'undefined' ? window.localStorage.getItem(SPOOF_JWT_KEY) : null;
-      if (spoofToken && token) {
-        // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
-        try {
-          const pagesData = await fetchPagesForRole(tenantId, userRoleId, token);
-          const sortedPages = (pagesData || []).sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0));
-          setPages(sortedPages);
-        } catch (err) {
-          console.error('Pages fetch error (spoof):', err);
-          toast.error('Failed to load pages');
-          setPages([]);
-        }
-        return;
-      }
-
-      const { data: pagesData, error } = await supabase
-        .from('pages')
-        .select('id, name, display_order, icon_name')
-        .eq('tenant_id', tenantId)
-        .eq('role', userRoleId)
-        .eq('is_deleted', false)
-        .order('display_order', { ascending: true });
-
-      if (error) {
-        toast.error('Failed to load pages');
-        const pg = error as { message?: string; code?: string; details?: string; hint?: string };
-        console.error(
-          'Pages fetch error:',
-          pg.message ?? 'unknown',
-          pg.code ? `code=${pg.code}` : '',
-          pg.details || pg.hint || ''
+      try {
+        const pagesData = await pageService.getPagesForRole(tenantId, userRoleId, {
+          rolePreview: isSpoofing(),
+        });
+        if (cancelled) return;
+        const sortedPages = (pagesData || []).sort(
+          (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
         );
-      } else {
-        setPages(pagesData || []);
+        setPages(sortedPages);
+        setPagesLoaded(true);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Pages fetch error:', err);
+        toast.error('Failed to load pages');
+        setPages([]);
       }
     };
 
     fetchPagesAndIcons();
-  }, [tenantId, userRoleId, session?.access_token, spoofVersion]);
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, userRoleId, session?.access_token, spoofVersion, pagesRefreshKey]);
+
+  // Leave a deleted page (it stays in the URL until the live list comes back without it).
+  useEffect(() => {
+    if (!pagesLoaded || !tenantSlug) return;
+    const openPageId = location.pathname.match(/\/pages\/([^/]+)/)?.[1];
+    if (!openPageId || pages.some((page) => page.id === openPageId)) return;
+    const firstPage = pages[0];
+    navigate(
+      firstPage ? `/app/${tenantSlug}/pages/${firstPage.id}` : `/app/${tenantSlug}`,
+      { replace: true }
+    );
+  }, [pagesLoaded, pages, location.pathname, tenantSlug, navigate]);
 
   const handleStopSpoofing = () => {
     try {

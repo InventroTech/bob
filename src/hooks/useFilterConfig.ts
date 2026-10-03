@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/hooks/useTenant';
+import { pageService } from '@/lib/api';
 import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { toast } from 'sonner';
 
@@ -33,7 +33,7 @@ export interface UseFilterConfigReturn {
   validateFilterConfig: (filters: FilterConfig[]) => { isValid: boolean; errors: string[] };
 }
 
-// Manages reading/writing filter (and component) configuration to Supabase `pages` table
+// Manages reading/writing filter (and component) configuration via the pages API
 export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
@@ -54,17 +54,7 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('pages')
-        .select('config')
-        .eq('id', targetPageId)
-        .eq('tenant_id', tenantId)
-        .single();
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
+      const data = await pageService.getPageById(targetPageId, tenantId);
       const pageConfig: PageConfig = data?.config || { components: [] };
       setComponentConfigs(pageConfig.components || []);
       return pageConfig;
@@ -79,7 +69,7 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
   }, [user, tenantId]);
 
   // Save page configuration
-  // Persist the provided config JSON into the `pages` row; returns success boolean
+  // Persist the provided config JSON via PATCH /pages/{id}/; returns success boolean
   const savePageConfig = useCallback(async (targetPageId: string, config: PageConfig): Promise<boolean> => {
     if (!user || !tenantId) {
       setError('User or tenant not available');
@@ -90,18 +80,7 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
     setError(null);
 
     try {
-      const { error: updateError } = await supabase
-        .from('pages')
-        .update({
-          config: config as any,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', targetPageId)
-        .eq('tenant_id', tenantId);
-
-      if (updateError) {
-        throw updateError;
-      }
+      await pageService.updatePage(targetPageId, { config });
 
       setComponentConfigs(config.components || []);
       toast.success('Page configuration saved successfully');
