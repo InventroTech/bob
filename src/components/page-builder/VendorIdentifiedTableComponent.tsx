@@ -50,10 +50,10 @@ export const DEFAULT_VENDOR_IDENTIFIED_TABLE_COLUMNS: VendorIdentifiedTableColum
 ];
 
 /**
- * Suggested status for Pending Orders / Vendor Identified page (not forced in code).
- * Put it on the API endpoint, e.g. `?status=VENDOR_IDENTIFIED`.
+ * Suggested status for Pending Orders / Approved page (not forced in code).
+ * Put it on the API endpoint, e.g. `?status=APPROVED`.
  */
-export const VENDOR_IDENTIFIED_TABLE_STATUSES = ['VENDOR_IDENTIFIED'] as const;
+export const VENDOR_IDENTIFIED_TABLE_STATUSES = ['APPROVED'] as const;
 
 /** Defaults applied when the component is first dropped in Page Builder. */
 export const DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG = {

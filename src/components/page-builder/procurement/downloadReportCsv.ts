@@ -1,4 +1,5 @@
 import {
+  ORDERED_STATUSES,
   formatDisplayDate,
   type ProcurementRequestRow,
 } from './fetchProcurementDashboardData';
@@ -113,13 +114,8 @@ export function downloadReportCsv(reportId: ReportId, rows: ProcurementRequestRo
       return 'Department Spending';
     }
     case 'po': {
-      // Closest to "PO" in current data: vendor identified / in shipping requests.
-      const poRows = rows.filter(
-        (r) =>
-          r.status === 'VENDOR_IDENTIFIED' ||
-          r.status === 'IN_CART' ||
-          r.status === 'IN_SHIPPING'
-      );
+      // Closest to "PO" in current data: approved onwards (incl. ordered / delivered).
+      const poRows = rows.filter((r) => ORDERED_STATUSES.has(r.status));
       downloadCsv(`purchase-orders-${date}.csv`, DETAIL_HEADER, detailLines(poRows));
       return 'Purchase Order';
     }

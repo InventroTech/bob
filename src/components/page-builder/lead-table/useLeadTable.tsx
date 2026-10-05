@@ -58,7 +58,7 @@ import {
   normalizeInventoryPriorityLevel,
 } from '@/lib/inventory/priority';
 import {
-  REQUEST_STAGE_TABS,
+  getRequestStageTabs,
   applyRequestStageFiltersToParams,
   buildRequestStageListUrl,
   emptyRequestStageCounts,
@@ -92,7 +92,16 @@ import {
   isInventoryOpsEditorRole,
   isInventoryRequestRowRequester,
 } from '@/lib/inventory/workflow';
-import { advanceShipmentStatusForTracking, excludeInventoryTrackColumn, SHIPMENT_STATUSES } from '@/lib/inventory/shipmentTracking';
+import { excludeInventoryTrackColumn } from '@/lib/inventory/shipmentTracking';
+import {
+  findRequestStatusOption,
+  getRequestStatusDropdownOptions,
+  getRequestStatusLabel,
+  isRequestOnlyStatusCode,
+  isRequestStatusTransitionAllowed,
+  normalizeRequestStatus,
+} from '@/lib/inventory/requestStatus';
+import { useRequestStatusConfig } from '@/hooks/useRequestStatusConfig';
 
 /** Pill chips for All Requests priority / status / shipment (match design mock). */
 const INVENTORY_CHIP_SHAPE =
@@ -111,16 +120,13 @@ function getBulkRowStatus(row: any): string {
   const raw =
     (row?.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>).status : undefined) ??
     row?.status;
-  return String(raw ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, '_');
+  return normalizeRequestStatus(raw);
 }
 
 const INVENTORY_PRIORITY_CHIP_SIZE = `${INVENTORY_CHIP_SHAPE} w-[5rem] min-w-[4.5rem]`;
-// Auto-width so long statuses (VENDOR IDENTIFIED) and shipment labels fully show.
+// Auto-width so long status labels fully show.
 const INVENTORY_STATUS_CHIP_SHAPE =
-  '!rounded-full inline-flex h-7 shrink-0 items-center justify-center px-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap border';
+  '!rounded-full inline-flex h-7 shrink-0 items-center justify-center px-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap border';
 const INVENTORY_STATUS_CHIP_SIZE = `${INVENTORY_STATUS_CHIP_SHAPE} w-auto min-w-[5.5rem]`;
 const INVENTORY_SHIPMENT_CHIP_SHAPE =
   '!rounded-full inline-flex h-7 shrink-0 items-center justify-center px-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap border';
@@ -176,7 +182,6 @@ function normalizeInventorySearchTerm(term: string): string {
   return t;
 }
 
-const OPS_SHIPMENT_OPTIONS = ['N/A', ...SHIPMENT_STATUSES] as const;
 const OPS_EDIT_BTN =
   'h-[23px] w-[55px] min-w-[55px] justify-center rounded-[6px] border-0 bg-[linear-gradient(180deg,#2885FF_0%,#0A5ECD_100%)] px-0 text-xs font-semibold text-white hover:brightness-105 hover:text-white';
 const OPS_SAVE_BTN =
@@ -188,15 +193,16 @@ function procurementColumnLayout(
 ): { width?: string; minWidth?: string; maxWidth?: string } | undefined {
   const key = String(accessor || '').trim().toLowerCase();
   // Keep chip cols near the chip width so Item Name isn't crushed in table-fixed layout.
-  const chipCol = { width: '10.5rem', minWidth: '9.5rem', maxWidth: '11.5rem' };
+  const chipCol = { width: '9.25rem', minWidth: '9rem', maxWidth: '9.5rem' };
   const priorityCol = { width: '5.75rem', minWidth: '5.75rem', maxWidth: '5.75rem' };
-  const dateCol = { width: '5rem', minWidth: '4.75rem', maxWidth: '5.25rem' };
+  const dateCol = { width: '6rem', minWidth: '5.75rem', maxWidth: '6.25rem' };
   const costCol = { width: '6.25rem', minWidth: '6.25rem', maxWidth: '6.5rem' };
   // Keep Vendor tight next to Request Date (long names truncate).
   const vendorCol = { width: '6.5rem', minWidth: '5.75rem', maxWidth: '7rem' };
   const requesterCol = { width: '7rem', minWidth: '7rem', maxWidth: '8rem' };
-  const shipmentCol = { width: '10.5rem', minWidth: '10rem', maxWidth: '11rem' };
-  const linkCol = { width: '3.5rem', minWidth: '3.5rem', maxWidth: '3.75rem' };
+  const shipmentCol = { width: '9.5rem', minWidth: '9.25rem', maxWidth: '9.75rem' };
+  // Wide enough for the uppercase, letter-spaced "LINK" header so it centers over the cells.
+  const linkCol = { width: '3.5rem', minWidth: '3.5rem', maxWidth: '3.5rem' };
   const editCol = { width: '4.5rem', minWidth: '4.5rem', maxWidth: '4.75rem' };
   // Flexible filler — absorbs leftover width so Link stays flush with Filters (no h-scroll).
   const itemNameCol = { minWidth: '8rem' };
@@ -444,6 +450,16 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       /[?&]entity_type=(?:unmannd_request|inventory_request)(?:&|$)/i.test(endpoint)
     );
   }, [config?.entityType, config?.apiEndpoint, effectiveApiEndpoint]);
+
+  // Endpoint entity_type wins: saved pages pair entityType=inventory_request with unmannd endpoints.
+  const requestStatusEntityType = useMemo(() => {
+    const endpoint = String(config?.apiEndpoint || effectiveApiEndpoint || '');
+    const match = endpoint.match(/[?&]entity_type=(unmannd_request|inventory_request)(?:&|$)/i);
+    if (match) return match[1].toLowerCase();
+    const et = String(config?.entityType || '').trim();
+    return et === 'inventory_request' || et === 'unmannd_request' ? et : null;
+  }, [config?.entityType, config?.apiEndpoint, effectiveApiEndpoint]);
+  const requestStatusConfig = useRequestStatusConfig(requestStatusEntityType);
 
   // Inventory search covers every request field plus whatever columns the page shows.
   const visibleColumnSearchFields = useMemo(() => {
@@ -755,7 +771,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   });
   const [inlineCellDrafts, setInlineCellDrafts] = useState<Record<string, string>>({});
   const [inlineSavingCell, setInlineSavingCell] = useState<string | null>(null);
-  /** Ops (PM / TL / Admin): inline Shipment column edit — status stays workflow-only in the modal. */
+  /** Ops (PM / TL / Admin): inline Status edit from the configured status list. */
   const [opsEditingRowId, setOpsEditingRowId] = useState<string | number | null>(null);
   const [opsShipmentDrafts, setOpsShipmentDrafts] = useState<Record<string, string>>({});
   const [opsRowSavingId, setOpsRowSavingId] = useState<string | number | null>(null);
@@ -898,11 +914,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
   const startOpsShipmentEdit = useCallback((row: any) => {
     if (row?.id == null) return;
-    const rawShipment = String(row?.shipment_status ?? row?.data?.shipment_status ?? '').trim().toUpperCase();
-    const shipment_status =
-      !rawShipment || rawShipment === 'N/A' || rawShipment === '—' ? 'N/A' : rawShipment;
     setOpsEditingRowId(row.id);
-    setOpsShipmentDrafts((prev) => ({ ...prev, [String(row.id)]: shipment_status }));
+    setOpsShipmentDrafts((prev) => ({ ...prev, [String(row.id)]: getBulkRowStatus(row) }));
   }, []);
 
   const cancelOpsShipmentEdit = useCallback((rowId: string | number) => {
@@ -917,46 +930,57 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const saveOpsShipmentEdit = useCallback(
     async (row: any) => {
       if (!canOpsInlineEditShipment || !row?.id || !effectiveApiEndpoint) return;
-      const draft = opsShipmentDrafts[String(row.id)];
-      if (!draft) return;
+      const draft = normalizeRequestStatus(opsShipmentDrafts[String(row.id)]);
+      if (!draft) {
+        cancelOpsShipmentEdit(row.id);
+        return;
+      }
+      if (draft === getBulkRowStatus(row)) {
+        toast({
+          title: 'No change',
+          description: `Status is already ${getRequestStatusLabel(draft, requestStatusEntityType)}.`,
+        });
+        cancelOpsShipmentEdit(row.id);
+        return;
+      }
       try {
         setOpsRowSavingId(row.id);
         const base = effectiveApiEndpoint.split('?')[0].replace(/\/$/, '');
         const url = `${base}/${row.id}/`;
         const existingData = (row.data as Record<string, unknown>) || {};
-        const shipmentValue =
-          draft === 'N/A' || draft === '' ? '' : draft;
-        const prevShipment = String(
-          existingData.shipment_status ?? row.shipment_status ?? ''
-        ).trim();
         const nextData: Record<string, unknown> = {
           ...existingData,
-          shipment_status: shipmentValue,
+          status: draft,
+          status_text: getRequestStatusLabel(draft, requestStatusEntityType),
         };
-        if (String(shipmentValue) !== prevShipment) {
-          nextData.tracking_updated_at = new Date().toISOString();
-        }
+        applyInventoryCartStatusSideEffects({
+          previousStatus: existingData.status ?? row.status,
+          nextStatus: draft,
+          data: nextData,
+        });
         const response = await apiClient.patch(url, { data: nextData });
         const updated = response.data;
+        const savedData = (updated?.data as Record<string, unknown>) ?? nextData;
         const updateRow = (r: any) =>
           r.id === row.id
             ? {
                 ...r,
                 ...updated,
-                shipment_status: shipmentValue || 'N/A',
-                data: updated?.data ?? nextData,
+                status: savedData.status ?? draft,
+                shipment_status: savedData.shipment_status ?? r.shipment_status,
+                data: savedData,
               }
             : r;
         setData((prev) => prev.map(updateRow));
         setFilteredData((prev) => {
           const next = prev.map(updateRow);
           if (showRequestStageTabs && requestStageTabRef.current !== 'all') {
-            return filterRowsByRequestStage(next, requestStageTabRef.current);
+            return filterRowsByRequestStage(next, requestStageTabRef.current, requestStatusEntityType);
           }
           return next;
         });
         cancelOpsShipmentEdit(row.id);
-        toast({ title: 'Saved', description: 'Shipment updated.' });
+        toast({ title: 'Saved', description: 'Status updated.' });
         setStageCountsTick((n) => n + 1);
         try {
           await fetchFilteredDataRef.current?.(undefined, undefined, {
@@ -969,7 +993,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       } catch (e: any) {
         toast({
           title: 'Update failed',
-          description: e?.message || 'Could not save shipment.',
+          description: e?.message || 'Could not save status.',
           variant: 'destructive',
         });
       } finally {
@@ -982,6 +1006,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       opsShipmentDrafts,
       cancelOpsShipmentEdit,
       toast,
+      requestStatusEntityType,
     ]
   );
 
@@ -1266,13 +1291,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       // Default link rendering
       if (isTrackingCol || isProcurementLink) {
         return (
-          <div
-            className={
-              isProcurementLink
-                ? 'flex w-full items-center justify-end pr-0.5'
-                : 'flex w-full items-center justify-center'
-            }
-          >
+          <div className="flex w-full items-center justify-center">
             <a
               href={href}
               target="_blank"
@@ -1408,35 +1427,32 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     // Render chip/badge for chip type columns
     if (column.type === 'chip') {
       const accessorLower = String(column.accessor || '').toLowerCase();
-      const useShipmentTone =
-        (config?.entityType === 'inventory_request' ||
-          config?.entityType === 'unmannd_request' ||
-          config?.tableType === 'itemsTable') &&
-        accessorLower === 'shipment_status';
-      const useInventoryStatusTone =
-        (config?.tableType === 'itemsTable' ||
-          config?.entityType === 'inventory_request' ||
-          config?.entityType === 'unmannd_request') &&
-        accessorLower === 'status';
+      const isRequestStatusTable = isInventoryRequestTable || config?.tableType === 'itemsTable';
+      const useShipmentTone = isRequestStatusTable && accessorLower === 'shipment_status';
       const usePriorityTone =
         accessorLower === 'urgency_level' || accessorLower === 'priority';
+      const isStatusColumn = isRequestStatusTable && accessorLower === 'status';
+      // Saved page configs may use another accessor or carry old statusColors; request
+      // statuses always use the configured tones.
+      const useInventoryStatusTone =
+        !useShipmentTone &&
+        !usePriorityTone &&
+        (isStatusColumn ||
+          (isRequestStatusTable && !!findRequestStatusOption(displayValue, requestStatusEntityType)) ||
+          isRequestOnlyStatusCode(displayValue));
 
-      // Ops row edit: Shipment becomes a dropdown; Status stays read-only (workflow modal).
-      const isOpsEditingShipment =
-        canOpsInlineEditShipment && opsEditingRowId === row.id && useShipmentTone;
-      if (isOpsEditingShipment) {
-        const current =
-          opsShipmentDrafts[String(row.id)] ??
-          getShipmentStatusLabel(row?.shipment_status ?? row?.data?.shipment_status);
-        const options = [...OPS_SHIPMENT_OPTIONS];
-        const cur = String(current || '').toUpperCase();
-        if (cur && cur !== 'N/A' && !options.includes(cur as typeof options[number])) {
-          options.unshift(cur as typeof options[number]);
-        }
+      // Ops row edit: Status becomes a dropdown of the configured request statuses.
+      const isOpsEditingStatus =
+        canOpsInlineEditShipment && opsEditingRowId === row.id && isStatusColumn;
+      if (isOpsEditingStatus) {
+        const current = opsShipmentDrafts[String(row.id)] ?? getBulkRowStatus(row);
+        const options = getRequestStatusDropdownOptions(requestStatusEntityType, getBulkRowStatus(row), {
+          stepsOnly: true,
+        });
         return (
-          <div className="min-w-[10rem] max-w-[11rem]" onClick={(e) => e.stopPropagation()}>
+          <div className="min-w-[8.75rem] max-w-[9.25rem]" onClick={(e) => e.stopPropagation()}>
             <Select
-              value={String(current || 'N/A')}
+              value={current || undefined}
               disabled={opsRowSavingId === row.id}
               onValueChange={(v) => {
                 setOpsShipmentDrafts((prev) => ({
@@ -1446,12 +1462,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
               }}
             >
               <SelectTrigger className="h-8 w-full text-xs font-semibold">
-                <SelectValue />
+                <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
                 {options.map((opt) => (
-                  <SelectItem key={opt} value={opt} className="text-xs">
-                    {opt}
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1463,14 +1479,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       const chipToneClass = useShipmentTone
         ? getShipmentStatusToneClass(displayValue)
         : useInventoryStatusTone
-          ? getInventoryStatusToneClass(displayValue)
+          ? getInventoryStatusToneClass(displayValue, requestStatusEntityType)
           : usePriorityTone
             ? inventoryPriorityChipClassName(displayValue)
             : getStatusColor(displayValue, config?.statusColors);
       const chipLabel = useShipmentTone
         ? getShipmentStatusLabel(displayValue)
         : useInventoryStatusTone
-          ? getInventoryStatusChipLabel(displayValue)
+          ? getInventoryStatusChipLabel(displayValue, requestStatusEntityType)
           : usePriorityTone
             ? formatInventoryPriorityShortLabel(displayValue)
             : displayValue;
@@ -1657,7 +1673,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       );
     }
     return <span className="text-sm block" title={displayValue}>{truncateText(displayValue, columnIndex)}</span>;
-  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit, highlightedLeadId, highlightedPrajaId]);
+  }, [config?.statusColors, config?.tableType, canInlineEditRows, getInlineCellKey, handleActionClick, handleInlineCellSave, handleStatusButtonClick, inlineCellDrafts, inlineSavingCell, canRequesterEditRow, effectiveDetailMode, isInventoryRequestTable, activeUserId, membershipId, canOpsInlineEditShipment, opsEditingRowId, opsShipmentDrafts, opsRowSavingId, saveOpsShipmentEdit, startOpsShipmentEdit, highlightedLeadId, highlightedPrajaId, requestStatusEntityType, requestStatusConfig]);
 
   // Status action buttons (for modals and, if added to columns, for table). Not used to auto-append a column.
   const effectiveStatusButtons = useMemo(() => {
@@ -1680,7 +1696,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const [bulkApplying, setBulkApplying] = useState<string | null>(null);
   const [requestStageCounts, setRequestStageCounts] = useState<
     Record<RequestStageTabId, number>
-  >(() => emptyRequestStageCounts());
+  >(() => emptyRequestStageCounts(requestStatusEntityType));
   const [stageCountsTick, setStageCountsTick] = useState(0);
 
   useEffect(() => {
@@ -1697,7 +1713,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   // Server-side totals per stage (page_size=1 + include_count) — same search/filters as the table.
   useEffect(() => {
     if (!showRequestStageTabs || !effectiveApiEndpoint) {
-      setRequestStageCounts(emptyRequestStageCounts());
+      setRequestStageCounts(emptyRequestStageCounts(requestStatusEntityType));
       return;
     }
 
@@ -1734,7 +1750,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       try {
         const extraParams = buildExtraParams();
         const results = await Promise.all(
-          REQUEST_STAGE_TABS.map(async (tab) => {
+          getRequestStageTabs(requestStatusEntityType).map(async (tab) => {
             const url = buildRequestStageListUrl(effectiveApiEndpoint, {
               stage: tab.id,
               entityType: config?.entityType,
@@ -1749,7 +1765,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           })
         );
         if (cancelled) return;
-        const next = emptyRequestStageCounts();
+        const next = emptyRequestStageCounts(requestStatusEntityType);
         for (const [id, total] of results) {
           next[id] = total;
         }
@@ -1774,6 +1790,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     toApiSearchTerm,
     (config as { forceQueryParams?: Record<string, string> } | undefined)?.forceQueryParams,
     stageCountsTick,
+    requestStatusEntityType,
+    requestStatusConfig,
     normalizedFilters.length,
     filterState.values,
     searchTerm,
@@ -1785,8 +1803,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   // updates immediately move a row out of the wrong stage tab.
   const stageFilteredData = useMemo(() => {
     if (!showRequestStageTabs || requestStageTab === 'all') return filteredData;
-    return filterRowsByRequestStage(filteredData, requestStageTab);
-  }, [filteredData, requestStageTab, showRequestStageTabs]);
+    return filterRowsByRequestStage(filteredData, requestStageTab, requestStatusEntityType);
+  }, [filteredData, requestStageTab, showRequestStageTabs, requestStatusEntityType, requestStatusConfig]);
 
   // Bulk Edit on every inventory request table page (not New Request form).
   const bulkSelectionEnabled = !isInPageBuilder && isInventoryRequestTable;
@@ -1996,8 +2014,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const rowSupportsBulkAction = useCallback(
     (row: any, button: { statusValue: string; targetAttribute?: string }) => {
       const attr = (button.targetAttribute || 'status').trim() || 'status';
-      // Free Status / Shipment catalogs — any selected row can be updated.
-      if (attr === 'status' || attr === 'shipment_status') return true;
+      if (attr === 'status') return isRequestStatusTransitionAllowed(getBulkRowStatus(row), button.statusValue);
+      if (attr === 'shipment_status') return true;
       const key = bulkActionButtonKey(button);
       const workflowMatch = getRowWorkflowButtons(row).some(
         (btn) => bulkActionButtonKey(btn) === key
@@ -2034,6 +2052,30 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     selectedRowIds,
   ]);
 
+  const bulkEditActor = useMemo(
+    () => ({
+      id: activeUserId,
+      email: activeUser?.email ?? null,
+      name:
+        (activeUserMetadata?.full_name as string | undefined) ??
+        (activeUserMetadata?.name as string | undefined) ??
+        null,
+    }),
+    [activeUserId, activeUser?.email, activeUserMetadata]
+  );
+
+  const selectedBulkRows = useMemo(
+    () =>
+      Array.from(selectedRowIds)
+        .map(
+          (id) =>
+            selectedBulkRowsById[id] ??
+            stageFilteredData.find((row) => normalizeBulkRowId(row?.id) === id)
+        )
+        .filter((row): row is any => row != null),
+    [selectedRowIds, selectedBulkRowsById, stageFilteredData]
+  );
+
   const patchInventoryRowStatus = useCallback(
     async (
       row: any,
@@ -2047,36 +2089,38 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       const dataToSend: Record<string, unknown> = { ...existingData };
       dataToSend[targetAttribute] = button.statusValue;
       if (targetAttribute === 'status') {
-        dataToSend.status_text = (button.statusText ?? button.label ?? button.statusValue).trim();
+        dataToSend.status = normalizeRequestStatus(button.statusValue) || button.statusValue;
+        dataToSend.status_text = (
+          button.statusText ?? getRequestStatusLabel(dataToSend.status, requestStatusEntityType)
+        ).trim();
         applyInventoryCartStatusSideEffects({
           previousStatus: existingData.status,
-          nextStatus: button.statusValue,
+          nextStatus: dataToSend.status,
           data: dataToSend,
         });
-        if (String(button.statusValue).toUpperCase().replace(/\s+/g, '_') === 'IN_SHIPPING') {
-          dataToSend.shipment_status = advanceShipmentStatusForTracking(
-            dataToSend.shipment_status,
-            true
-          );
-        }
       }
       const response = await apiClient.patch(url, { data: dataToSend });
       return response.data;
     },
-    [effectiveApiEndpoint]
+    [effectiveApiEndpoint, requestStatusEntityType]
   );
 
   const handleBulkStatusAction = useCallback(
-    async (button: {
-      label: string;
-      statusValue: string;
-      targetAttribute?: string;
-      statusText?: string;
-    }): Promise<boolean> => {
+    async (
+      button: {
+        label: string;
+        statusValue: string;
+        targetAttribute?: string;
+        statusText?: string;
+      },
+      options?: { rowIds?: string[] }
+    ): Promise<boolean> => {
       if (!bulkSelectionEnabled || selectedRowIds.size === 0) return false;
       const applyingKey = bulkActionButtonKey(button);
+      const onlyRowIds = options?.rowIds ? new Set(options.rowIds) : null;
       // Prefer cached rows so selections from other stage tabs / pages still apply.
       const selectedRows = Array.from(selectedRowIds)
+        .filter((id) => !onlyRowIds || onlyRowIds.has(id))
         .map((id) => {
           const cached = selectedBulkRowsById[id];
           if (cached) return cached;
@@ -2233,12 +2277,14 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         const key = String(col.key || '').trim().toLowerCase();
         const label = String(col.label || '').trim().toLowerCase();
         // Hide ETA / requirement date from inventory request tables.
+        // Shipment is folded into the combined Status column.
         if (
           isInventoryRequestTable &&
           (key === 'eta' ||
             key === 'required_date' ||
             key === 'requirement_date' ||
-            label === 'eta')
+            label === 'eta' ||
+            key === 'shipment_status')
         ) {
           return false;
         }
@@ -2321,7 +2367,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           accessor: 'product_link',
           type: 'link',
           linkField: 'product_link',
-          align: 'right',
+          align: 'center',
           ...procurementColumnLayout('product_link'),
         });
       } else {
@@ -2334,7 +2380,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           ) {
             col.header = 'Link';
             col.type = 'link';
-            col.align = 'right';
+            col.align = 'center';
             col.accessor = accessor === 'link' ? 'product_link' : col.accessor;
             col.linkField = col.linkField || (accessor === 'link' ? 'product_link' : accessor);
             Object.assign(col, procurementColumnLayout('product_link'));
@@ -3839,6 +3885,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     bulkSelectionEnabled,
     selectedRowIds,
     selectedRowCount,
+    selectedBulkRows,
+    bulkEditActor,
     bulkSelectionStatus,
     bulkActionButtons,
     bulkApplying,
@@ -3855,6 +3903,8 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     requestStageTab,
     setRequestStageTab,
     requestStageCounts,
+    requestStatusEntityType,
+    requestStatusConfig,
   };
 }
 
