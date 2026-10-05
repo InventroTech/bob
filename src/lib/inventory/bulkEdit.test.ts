@@ -5,7 +5,7 @@ import {
   countBulkChanges,
   groupBulkRowIdsByValue,
 } from './bulkEdit';
-import { getRequestStatusLabel } from './requestStatus';
+import { getRequestStatusLabel, getRequestStatusValues } from './requestStatus';
 
 const formatValue = (value: unknown) => {
   const raw = String(value ?? '').trim();
@@ -21,94 +21,53 @@ const row = (id: number, status: string, itemName = `Item ${id}`) => ({
 const build = (rows: any[], targetValue: string, overrides?: Record<string, string>) =>
   buildBulkPreviewRows({ rows, targetValue, overrides, formatValue });
 
-/** Every status and the statuses Bulk Edit may move it to. */
-const ALLOWED_MOVES: Record<string, string[]> = {
-  NEW_REQUEST: ['REQ_TO_VERIFY', 'ON_HOLD', 'REJECTED'],
-  REQ_TO_VERIFY: ['APPROVED', 'ON_HOLD', 'REJECTED'],
-  APPROVED: ['IN_CART', 'ON_HOLD', 'REJECTED'],
-  IN_CART: ['ON_HOLD', 'REJECTED', 'ORDERED'],
-  ON_HOLD: ['NEW_REQUEST', 'REQ_TO_VERIFY', 'APPROVED', 'IN_CART', 'REJECTED'],
-  REJECTED: [],
-  ORDERED: ['DELIVERED', 'EXCEPTION'],
-  EXCEPTION: ['ORDERED', 'DELIVERED'],
-  DELIVERED: [],
-};
-const ALL_STATUSES = Object.keys(ALLOWED_MOVES);
+const ALL_STATUSES = getRequestStatusValues();
+const [FIRST, SECOND, THIRD] = ALL_STATUSES;
+const LAST = ALL_STATUSES[ALL_STATUSES.length - 1];
 
-describe('bulk edit rules — allowed moves per status', () => {
-  it.each(Object.entries(ALLOWED_MOVES))('%s can only move to its next steps', (from, expected) => {
-    const [preview] = build([row(1, from)], '');
-    expect([...preview.allowedValues].sort()).toEqual([...expected].sort());
+describe('bulk edit — no step-order conditions', () => {
+  it('has statuses from the status config to test with', () => {
+    expect(ALL_STATUSES.length).toBeGreaterThanOrEqual(3);
   });
 
-  it.each(ALL_STATUSES)('%s never lists its own status as an option', (status) => {
+  it.each(ALL_STATUSES)('%s can move to every other active status', (status) => {
     const [preview] = build([row(1, status)], '');
-    expect(preview.allowedValues.has(status)).toBe(false);
+    expect([...preview.allowedValues].sort()).toEqual(ALL_STATUSES.filter((s) => s !== status).sort());
   });
 
-  it('treats Rejected and Delivered as final', () => {
-    for (const status of ['REJECTED', 'DELIVERED']) {
-      for (const target of ALL_STATUSES) {
-        const [preview] = build([row(1, status)], target);
-        expect(preview.blocked).toBe(true);
-        expect(preview.skipped).toBe(true);
-      }
-    }
-  });
-
-  it('matches every from → to pair against the rule table', () => {
+  it('applies every different from → to pair', () => {
     for (const from of ALL_STATUSES) {
       for (const to of ALL_STATUSES) {
+        if (from === to) continue;
         const [preview] = build([row(1, from)], to);
-        const allowed = ALLOWED_MOVES[from].includes(to);
-        expect({ from, to, applies: !preview.skipped }).toEqual({ from, to, applies: allowed });
+        expect({ from, to, nextValue: preview.nextValue, blocked: preview.blocked }).toEqual({
+          from,
+          to,
+          nextValue: to,
+          blocked: false,
+        });
       }
     }
+  });
+
+  it('lets a row jump forward and backward through the list', () => {
+    expect(build([row(1, FIRST)], LAST)[0].skipped).toBe(false);
+    expect(build([row(1, LAST)], FIRST)[0].skipped).toBe(false);
+  });
+
+  it('lets a row with an unknown status move anywhere', () => {
+    const [preview] = build([row(1, 'CUSTOM_STEP')], FIRST);
+    expect(preview).toMatchObject({ blocked: false, nextValue: FIRST, skipped: false });
+  });
+
+  it('lets a row with no status move anywhere', () => {
+    const [preview] = build([{ id: 1, data: {} }], FIRST);
+    expect(preview).toMatchObject({ blocked: false, nextValue: FIRST, skipped: false });
   });
 });
 
-describe('bulk edit rules — toolbar status applied to selected rows', () => {
-  it('applies an allowed next step', () => {
-    const [preview] = build([row(1, 'NEW_REQUEST')], 'REQ_TO_VERIFY');
-    expect(preview).toMatchObject({
-      blocked: false,
-      alreadyAtTarget: false,
-      nextValue: 'REQ_TO_VERIFY',
-      skipped: false,
-      unchanged: false,
-    });
-  });
-
-  it('skips a row that would jump ahead a step', () => {
-    const [preview] = build([row(1, 'NEW_REQUEST')], 'APPROVED');
-    expect(preview).toMatchObject({
-      blocked: true,
-      alreadyAtTarget: false,
-      nextValue: BULK_SKIP_VALUE,
-      skipped: true,
-    });
-  });
-
-  it('skips a row that would go backwards', () => {
-    const [preview] = build([row(1, 'ORDERED')], 'IN_CART');
-    expect(preview).toMatchObject({ blocked: true, alreadyAtTarget: false, skipped: true });
-  });
-
-  it('does not allow On Hold or Rejected once ordered', () => {
-    expect(build([row(1, 'ORDERED')], 'ON_HOLD')[0].skipped).toBe(true);
-    expect(build([row(1, 'ORDERED')], 'REJECTED')[0].skipped).toBe(true);
-  });
-
-  it('lets On Hold return to an earlier step', () => {
-    expect(build([row(1, 'ON_HOLD')], 'NEW_REQUEST')[0].skipped).toBe(false);
-    expect(build([row(1, 'ON_HOLD')], 'IN_CART')[0].skipped).toBe(false);
-  });
-
-  it('lets Exception go back to Ordered', () => {
-    expect(build([row(1, 'EXCEPTION')], 'ORDERED')[0].skipped).toBe(false);
-  });
-
-  it.each(ALL_STATUSES)('blocks %s → %s (same status) and marks it already at target', (status) => {
+describe('bulk edit — same status is not a change', () => {
+  it.each(ALL_STATUSES)('%s → %s is skipped and marked already at target', (status) => {
     const [preview] = build([row(1, status)], status);
     expect(preview).toMatchObject({
       blocked: true,
@@ -118,78 +77,62 @@ describe('bulk edit rules — toolbar status applied to selected rows', () => {
     });
   });
 
-  it('treats differently-cased current status as the same status', () => {
-    const [preview] = build([row(1, 'delivered')], 'DELIVERED');
-    expect(preview.currentValue).toBe('DELIVERED');
+  it.each(ALL_STATUSES)('%s never lists its own status as an option', (status) => {
+    const [preview] = build([row(1, status)], '');
+    expect(preview.allowedValues.has(status)).toBe(false);
+  });
+
+  it('treats a differently-cased current status as the same status', () => {
+    const [preview] = build([row(1, FIRST.toLowerCase())], FIRST);
+    expect(preview.currentValue).toBe(FIRST);
     expect(preview.alreadyAtTarget).toBe(true);
-    expect(preview.skipped).toBe(true);
   });
 
   it('decides each row on its own in a mixed selection', () => {
-    const previews = build(
-      [row(1, 'IN_CART'), row(2, 'APPROVED'), row(3, 'ORDERED'), row(4, 'ON_HOLD')],
-      'ORDERED'
-    );
+    const previews = build([row(1, FIRST), row(2, SECOND), row(3, THIRD)], SECOND);
     expect(previews.map((p) => [p.id, p.skipped, p.alreadyAtTarget])).toEqual([
       ['1', false, false],
-      ['2', true, false],
-      ['3', true, true],
-      ['4', true, false],
+      ['2', true, true],
+      ['3', false, false],
     ]);
   });
 
   it('marks nothing blocked before a toolbar status is chosen', () => {
-    const [preview] = build([row(1, 'NEW_REQUEST')], '');
+    const [preview] = build([row(1, FIRST)], '');
     expect(preview.blocked).toBe(false);
     expect(preview.alreadyAtTarget).toBe(false);
   });
 });
 
-describe('bulk edit rules — per-row overrides in the review popup', () => {
-  it('lets the user pick a different allowed status for a blocked row', () => {
-    const [preview] = build([row(1, 'NEW_REQUEST')], 'APPROVED', { '1': 'REQ_TO_VERIFY' });
-    expect(preview).toMatchObject({ blocked: false, nextValue: 'REQ_TO_VERIFY', skipped: false });
+describe('bulk edit — per-row overrides in the review popup', () => {
+  it('lets the user pick a different status for a same-status row', () => {
+    const [preview] = build([row(1, FIRST)], FIRST, { '1': SECOND });
+    expect(preview).toMatchObject({ blocked: false, nextValue: SECOND, skipped: false });
   });
 
-  it('lets the user choose "Don\'t change" for an allowed row', () => {
-    const [preview] = build([row(1, 'NEW_REQUEST')], 'REQ_TO_VERIFY', { '1': BULK_SKIP_VALUE });
+  it('lets the user choose "Don\'t change" for a row', () => {
+    const [preview] = build([row(1, FIRST)], SECOND, { '1': BULK_SKIP_VALUE });
     expect(preview).toMatchObject({ blocked: false, nextValue: BULK_SKIP_VALUE, skipped: true });
   });
 
-  it('keeps the "already" note on an overridden same-status row but clears blocked', () => {
-    const [preview] = build([row(1, 'DELIVERED')], 'DELIVERED', { '1': BULK_SKIP_VALUE });
-    expect(preview.blocked).toBe(false);
-    expect(preview.alreadyAtTarget).toBe(true);
-    expect(preview.skipped).toBe(true);
-  });
-
   it('flags an override equal to the current status as unchanged', () => {
-    const [preview] = build([row(1, 'IN_CART')], 'ORDERED', { '1': 'IN_CART' });
+    const [preview] = build([row(1, FIRST)], SECOND, { '1': FIRST });
     expect(preview.skipped).toBe(false);
     expect(preview.unchanged).toBe(true);
   });
 
   it('only applies an override to its own row', () => {
-    const previews = build([row(1, 'NEW_REQUEST'), row(2, 'NEW_REQUEST')], 'REQ_TO_VERIFY', {
-      '1': BULK_SKIP_VALUE,
-    });
-    expect(previews.map((p) => p.nextValue)).toEqual([BULK_SKIP_VALUE, 'REQ_TO_VERIFY']);
+    const previews = build([row(1, FIRST), row(2, FIRST)], SECOND, { '1': BULK_SKIP_VALUE });
+    expect(previews.map((p) => p.nextValue)).toEqual([BULK_SKIP_VALUE, SECOND]);
   });
 });
 
-describe('bulk edit rules — what gets saved', () => {
+describe('bulk edit — what gets saved', () => {
   const previews = () =>
     build(
-      [
-        row(1, 'IN_CART'),
-        row(2, 'IN_CART'),
-        row(3, 'ORDERED'),
-        row(4, 'APPROVED'),
-        row(5, 'NEW_REQUEST'),
-        row(6, 'EXCEPTION'),
-      ],
-      'ORDERED',
-      { '5': 'REQ_TO_VERIFY', '6': 'EXCEPTION' }
+      [row(1, FIRST), row(2, FIRST), row(3, SECOND), row(4, THIRD), row(5, THIRD)],
+      SECOND,
+      { '4': FIRST, '5': THIRD }
     );
 
   it('counts only rows that will change', () => {
@@ -197,15 +140,14 @@ describe('bulk edit rules — what gets saved', () => {
   });
 
   it('groups saved rows by their new status and leaves out skipped / unchanged rows', () => {
-    const grouped = groupBulkRowIdsByValue(previews());
-    expect(Object.fromEntries(grouped)).toEqual({
-      ORDERED: ['1', '2'],
-      REQ_TO_VERIFY: ['5'],
+    expect(Object.fromEntries(groupBulkRowIdsByValue(previews()))).toEqual({
+      [SECOND]: ['1', '2'],
+      [FIRST]: ['4'],
     });
   });
 
-  it('saves nothing when every row is skipped', () => {
-    const all = build([row(1, 'DELIVERED'), row(2, 'REJECTED')], 'ORDERED');
+  it('saves nothing when every row is already at the chosen status', () => {
+    const all = build([row(1, FIRST), row(2, FIRST)], FIRST);
     expect(countBulkChanges(all)).toBe(0);
     expect(groupBulkRowIdsByValue(all).size).toBe(0);
   });
@@ -215,9 +157,9 @@ describe('bulk edit preview rows — display fields', () => {
   it('uses the freeform item name first, then the item name, then a fallback', () => {
     const previews = build(
       [
-        { id: 1, data: { status: 'NEW_REQUEST', item_name_freeform: 'Drill', item_name: 'X' } },
-        { id: 2, data: { status: 'NEW_REQUEST', item_name: 'Hammer' } },
-        { id: 3, data: { status: 'NEW_REQUEST' } },
+        { id: 1, data: { status: FIRST, item_name_freeform: 'Drill', item_name: 'X' } },
+        { id: 2, data: { status: FIRST, item_name: 'Hammer' } },
+        { id: 3, data: { status: FIRST } },
       ],
       ''
     );
@@ -225,13 +167,13 @@ describe('bulk edit preview rows — display fields', () => {
   });
 
   it('reads the status from the row when data has none', () => {
-    const [preview] = build([{ id: 1, status: 'APPROVED', data: {} }], 'IN_CART');
-    expect(preview.currentValue).toBe('APPROVED');
+    const [preview] = build([{ id: 1, status: FIRST, data: {} }], SECOND);
+    expect(preview.currentValue).toBe(FIRST);
     expect(preview.skipped).toBe(false);
   });
 
   it('shows the current status label', () => {
-    const [preview] = build([row(1, 'IN_CART')], '');
-    expect(preview.currentLabel).toBe(getRequestStatusLabel('IN_CART'));
+    const [preview] = build([row(1, FIRST)], '');
+    expect(preview.currentLabel).toBe(getRequestStatusLabel(FIRST));
   });
 });

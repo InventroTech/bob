@@ -98,7 +98,6 @@ import {
   getRequestStatusDropdownOptions,
   getRequestStatusLabel,
   isRequestOnlyStatusCode,
-  isRequestStatusTransitionAllowed,
   normalizeRequestStatus,
 } from '@/lib/inventory/requestStatus';
 import { useRequestStatusConfig } from '@/hooks/useRequestStatusConfig';
@@ -2014,7 +2013,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const rowSupportsBulkAction = useCallback(
     (row: any, button: { statusValue: string; targetAttribute?: string }) => {
       const attr = (button.targetAttribute || 'status').trim() || 'status';
-      if (attr === 'status') return isRequestStatusTransitionAllowed(getBulkRowStatus(row), button.statusValue);
+      if (attr === 'status') {
+        const target = normalizeRequestStatus(button.statusValue);
+        return !!target && target !== getBulkRowStatus(row);
+      }
       if (attr === 'shipment_status') return true;
       const key = bulkActionButtonKey(button);
       const workflowMatch = getRowWorkflowButtons(row).some(

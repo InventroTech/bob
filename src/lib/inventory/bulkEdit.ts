@@ -1,4 +1,4 @@
-import { getAllowedNextRequestStatuses, normalizeRequestStatus } from './requestStatus';
+import { getRequestStatusValues, normalizeRequestStatus } from './requestStatus';
 
 /** Per-row "Don't change" value in the Bulk Edit review popup. */
 export const BULK_SKIP_VALUE = '__bulk_skip__';
@@ -8,9 +8,9 @@ export interface BulkPreviewRow {
   itemName: string;
   currentValue: string;
   currentLabel: string;
-  /** Statuses this row may move to (never its current status). */
+  /** Every active status except the row's current one. */
   allowedValues: Set<string>;
-  /** The toolbar status isn't a valid next step for this row and the user hasn't overridden it. */
+  /** The row is already at the toolbar status and the user hasn't overridden it. */
   blocked: boolean;
   /** The row is already at the toolbar status. */
   alreadyAtTarget: boolean;
@@ -45,11 +45,9 @@ export function buildBulkPreviewRows({
     ).trim();
     const id = String(row?.id ?? '');
     const currentValue = normalizeRequestStatus(data[attr] ?? row?.[attr]);
-    const allowedValues = new Set(
-      getAllowedNextRequestStatuses(currentValue, entityType).filter((v) => v !== currentValue)
-    );
-    const blocked = !!targetValue && !allowedValues.has(targetValue);
-    const alreadyAtTarget = blocked && targetValue === currentValue;
+    const allowedValues = new Set(getRequestStatusValues(entityType).filter((v) => v !== currentValue));
+    const alreadyAtTarget = !!targetValue && targetValue === currentValue;
+    const blocked = alreadyAtTarget;
     const nextValue = overrides[id] ?? (blocked ? BULK_SKIP_VALUE : targetValue);
     const currentLabel = formatValue(currentValue);
     const skipped = nextValue === BULK_SKIP_VALUE;

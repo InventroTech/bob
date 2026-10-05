@@ -684,9 +684,7 @@ export function LeadTableView(props: LeadTableModel) {
                           ) : null}
                           {row.blocked ? (
                             <span className="mt-1 block text-xs text-amber-700">
-                              {row.alreadyAtTarget
-                                ? `Already ${row.currentLabel}`
-                                : `Can't move from ${row.currentLabel} to ${formatBulkValue(bulkTargetValue)} — not the next step`}
+                              Already {row.currentLabel}
                             </span>
                           ) : null}
                         </td>
