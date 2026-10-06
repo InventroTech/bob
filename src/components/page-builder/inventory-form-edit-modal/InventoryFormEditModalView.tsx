@@ -63,12 +63,22 @@ import { getRecordModalTitleParts } from '@/lib/utils/recordModalHeader';
 
 /** Unmannd modal chrome — popup navy (#1A44A1); dashboard pages keep #0E3777. */
 const UNMANND_NAVY = '#1A44A1';
+/** Inventory request form palette — blue buttons, black text. */
+const FORM_BLUE = '#1A3673';
+const FORM_BLACK = '#0B1F4D';
 const UNMANND_ID_BG = '#FFFFFF';
-const UNMANND_ID_TEXT = '#1A44A1';
 const UNMANND_SQUARE_BTN =
   'rounded-[8px] border-white/40 bg-white px-4 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
+const INVENTORY_SQUARE_BTN =
+  'rounded-[8px] border-white/40 bg-white px-4 text-[#0B1F4D] hover:bg-white/90 hover:text-[#0B1F4D]';
 const UNMANND_SAVE_BTN =
   'h-9 rounded-[8px] border-white/40 bg-white px-4 text-sm font-semibold text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
+const INVENTORY_SAVE_BTN =
+  'h-9 rounded-[8px] border-white/40 bg-white px-4 text-sm font-semibold text-[#0B1F4D] hover:bg-white/90 hover:text-[#0B1F4D]';
+const UNMANND_HISTORY_BTN =
+  'h-8 gap-1.5 rounded-full border-transparent bg-white px-3 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]';
+const INVENTORY_HISTORY_BTN =
+  'h-8 gap-1.5 rounded-full border-transparent bg-white px-3 text-[#0B1F4D] hover:bg-white/90 hover:text-[#0B1F4D]';
 const UNMANND_CONTROL = 'bg-white border-[#E5E7EB]';
 const UNMANND_ITEM_NAME_STYLE: React.CSSProperties = {
   fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif",
@@ -220,6 +230,9 @@ function UnmanndModalHeader({
   applyingStatusValue,
   saving,
   onHistory,
+  navy,
+  ink,
+  historyBtnClass,
 }: {
   record: any;
   formModalTitle?: string;
@@ -228,6 +241,9 @@ function UnmanndModalHeader({
   applyingStatusValue: string | null;
   saving: boolean;
   onHistory: () => void;
+  navy: string;
+  ink: string;
+  historyBtnClass: string;
 }) {
   const parts = getRecordModalTitleParts(record);
   const href = (productLink ?? '').trim();
@@ -236,7 +252,7 @@ function UnmanndModalHeader({
   return (
     <div
       className="flex min-h-[4.75rem] items-stretch overflow-hidden text-white"
-      style={{ backgroundColor: UNMANND_NAVY }}
+      style={{ backgroundColor: navy }}
     >
       {/* ID badge — flush left; thin border like the mock */}
       {parts ? (
@@ -244,7 +260,7 @@ function UnmanndModalHeader({
           className="flex w-[5.75rem] shrink-0 items-center justify-center self-stretch border border-[#C8C8C8] border-r-0 px-1.5 font-mono text-sm font-extrabold tabular-nums tracking-tight sm:w-[6.5rem] sm:text-base rounded-tl-[0.75rem]"
           style={{
             backgroundColor: UNMANND_ID_BG,
-            color: UNMANND_ID_TEXT,
+            color: ink,
           }}
           title="Request Number"
         >
@@ -299,7 +315,7 @@ function UnmanndModalHeader({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 rounded-full border-transparent bg-white px-3 text-[#1A44A1] hover:bg-white/90 hover:text-[#1A44A1]"
+                className={historyBtnClass}
                 disabled={applyingStatusValue != null || saving}
                 onClick={onHistory}
               >
@@ -526,7 +542,13 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
 
   if (!record) return null;
 
-  const isUnmannd = uiVariant === 'unmannd';
+  const isInventory = uiVariant === 'inventory';
+  const isUnmannd = uiVariant === 'unmannd' || isInventory;
+  const chromeNavy = isInventory ? FORM_BLUE : UNMANND_NAVY;
+  const chromeInk = isInventory ? FORM_BLACK : UNMANND_NAVY;
+  const chromeSquareBtn = isInventory ? INVENTORY_SQUARE_BTN : UNMANND_SQUARE_BTN;
+  const chromeSaveBtn = isInventory ? INVENTORY_SAVE_BTN : UNMANND_SAVE_BTN;
+  const chromeHistoryBtn = isInventory ? INVENTORY_HISTORY_BTN : UNMANND_HISTORY_BTN;
   const orderedFields = isUnmannd ? sortUnmanndFormFields(formModalFields) : formModalFields;
   const productImageSrc = String(
     formData.product_image ??
@@ -600,6 +622,9 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 applyingStatusValue={applyingStatusValue}
                 saving={saving}
                 onHistory={handleOpenHistory}
+                navy={chromeNavy}
+                ink={chromeInk}
+                historyBtnClass={chromeHistoryBtn}
               />
               <DialogDescription className="sr-only">
                 {_formModalDescription ??
@@ -1475,7 +1500,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
               ? 'mt-0 min-h-[4.25rem] border-0 px-4 py-3 sm:justify-end sm:px-5'
               : 'border-t pt-4'
           )}
-          style={isUnmannd ? { backgroundColor: UNMANND_NAVY } : undefined}
+          style={isUnmannd ? { backgroundColor: chromeNavy } : undefined}
         >
           <div className="flex flex-wrap gap-2 items-center">
             {canShowDeleteRequestButton ? (
@@ -1547,7 +1572,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                     className={cn(
                       'gap-2 h-9 rounded-md',
                       isUnmannd
-                        ? UNMANND_SQUARE_BTN
+                        ? chromeSquareBtn
                         : urgencyToneButtonClassName(btn.statusValue, urgencyHighlighted),
                     )}
                     disabled={!!applyingStatusValue}
@@ -1575,7 +1600,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
                 size="default"
                 className={cn(
                   'gap-2',
-                  isUnmannd ? UNMANND_SAVE_BTN : 'h-9 rounded-md'
+                  isUnmannd ? chromeSaveBtn : 'h-9 rounded-md'
                 )}
                 disabled={saving || applyingStatusValue != null}
                 onClick={handleSaveAll}
@@ -1652,7 +1677,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
         <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-full [&>button]:right-4 [&>button]:top-4 [&>button]:text-white [&>button]:opacity-90 [&>button]:hover:opacity-100">
           <DialogHeader
             className="space-y-1 px-5 py-4 pr-12 text-left text-white"
-            style={{ backgroundColor: UNMANND_NAVY }}
+            style={{ backgroundColor: chromeNavy }}
           >
             <DialogTitle className="text-white">Request history</DialogTitle>
             <DialogDescription className="text-white/80">
@@ -1663,7 +1688,7 @@ export function InventoryFormEditModalView(props: InventoryFormEditModalModel) {
             loading={historyLoading}
             error={historyError}
             entries={historyEntries}
-            accentColor={UNMANND_NAVY}
+            accentColor={chromeNavy}
           />
         </DialogContent>
       </Dialog>
