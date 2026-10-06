@@ -28,11 +28,13 @@ import {
   achtThresholds,
   computeAchtOverall,
   computeAdherenceByRm,
+  computeLeaderboardByRm,
   computePerformanceByRm,
   computeShiftTimeAverages,
   computeTeamTotals,
   formatVsTarget,
   type RmAdherenceRow,
+  type RmLeaderboardRow,
   type RmPerformanceRow,
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
@@ -49,7 +51,7 @@ import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useSpoofUserId } from '@/lib/auth/spoof';
-import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown, Trophy } from 'lucide-react';
 
 // The filter-bar controls a manager can individually show/hide via config —
 // keyed the same as Filters below so FilterBar can look visibility up directly.
@@ -107,7 +109,7 @@ export const shouldShowFilter = (
   return isFilterVisible(config, key);
 };
 
-type Tab = 'performance' | 'adherence';
+type Tab = 'performance' | 'adherence' | 'leaderboard';
 
 const DEFAULT_FILTERS = {
   manager: 'All managers',
@@ -155,7 +157,8 @@ function loadStoredFilters(): Filters {
 
 function loadStoredTab(): Tab {
   if (typeof window === 'undefined') return 'performance';
-  return window.localStorage.getItem(tabStorageKey()) === 'adherence' ? 'adherence' : 'performance';
+  const stored = window.localStorage.getItem(tabStorageKey());
+  return stored === 'adherence' || stored === 'leaderboard' ? stored : 'performance';
 }
 
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
@@ -213,6 +216,15 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     }
   }, [tab]);
 
+  // RM view's fetch is narrowed server-side to just the signed-in RM's own
+  // events (see useRmActivityEvents below), so there's nothing to rank them
+  // against — a stored 'leaderboard' tab from a manager page this same
+  // browser profile also visits must not strand an RM view on a tab that's
+  // about to render hidden/empty.
+  useEffect(() => {
+    if (isRmView && tab === 'leaderboard') setTab('performance');
+  }, [isRmView, tab]);
+
   const dateBounds = useMemo(() => {
     // RM view with no signed-in user resolved yet — bounds=null skips the
     // fetch entirely (see useRmActivityEvents) rather than briefly fetching
@@ -258,6 +270,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     [visibleEvents, dailyTargets]
   );
   const adherenceByRm = useMemo(() => computeAdherenceByRm(visibleEvents), [visibleEvents]);
+  const leaderboardByRm = useMemo(
+    () => computeLeaderboardByRm(visibleEvents, dailyTargets),
+    [visibleEvents, dailyTargets]
+  );
   const teamTotals = useMemo(
     () => computeTeamTotals(visibleEvents, dailyTargets),
     [visibleEvents, dailyTargets]
@@ -278,6 +294,13 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   const filteredAdherenceByRm = useMemo(
     () => (rmSearchTerm ? adherenceByRm.filter((row) => row.name.toLowerCase().includes(rmSearchTerm)) : adherenceByRm),
     [adherenceByRm, rmSearchTerm]
+  );
+  // rank is computed against the full team above, then just narrowed here —
+  // searching for one RM must show their real team rank, not re-rank them
+  // against only the other search matches
+  const filteredLeaderboardByRm = useMemo(
+    () => (rmSearchTerm ? leaderboardByRm.filter((row) => row.name.toLowerCase().includes(rmSearchTerm)) : leaderboardByRm),
+    [leaderboardByRm, rmSearchTerm]
   );
 
   const setFilter = (key: keyof Filters, value: string) => {
@@ -366,10 +389,20 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <TabButton active={tab === 'performance'} onClick={() => setTab('performance')}>
           Performance
         </TabButton>
+        {/* hidden in RM view — the fetch there is already narrowed to just this
+            RM's own events, so there's no team to rank them against */}
+        {!isRmView && (
+          <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')}>
+            <span className="inline-flex items-center gap-1.5">
+              <Trophy className="h-3.5 w-3.5" />
+              Leaderboard
+            </span>
+          </TabButton>
+        )}
       </div>
 
       <div className="mt-6">
-        {tab === 'performance' ? (
+        {tab === 'performance' && (
           <PerformanceView
             onDrill={openTeamDrill}
             teamTotals={teamTotals}
@@ -380,7 +413,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             showByRmTable={!isRmView}
             stateNameById={stateNameById}
           />
-        ) : (
+        )}
+        {tab === 'adherence' && (
           <AdherenceView
             onDrill={openTeamDrill}
             shiftTimeAverages={shiftTimeAverages}
@@ -390,6 +424,15 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             onRmSearchChange={setRmSearch}
             onSelectRm={setSelectedRmUserId}
             showByRmTable={!isRmView}
+            stateNameById={stateNameById}
+          />
+        )}
+        {tab === 'leaderboard' && !isRmView && (
+          <LeaderboardView
+            leaderboardByRm={filteredLeaderboardByRm}
+            rmSearch={rmSearch}
+            onRmSearchChange={setRmSearch}
+            onSelectRm={setSelectedRmUserId}
             stateNameById={stateNameById}
           />
         )}
@@ -1157,6 +1200,141 @@ const AdherenceTable: React.FC<{
       </TableBody>
     </Table>
   </div>
+  );
+};
+
+// ---- Leaderboard tab ----
+// Ranks RMs by vs-target % — trials achieved ÷ their own daily target, same
+// number the Performance tab's Achieved vs Target card tracks, just as a
+// ratio instead of a raw count (see computeLeaderboardByRm for the tie-break
+// order, and why an unset target sorts last instead of reading as 0%). Top 3
+// get a podium call-out above the full ranked table; clicking any row opens
+// the same RmDetailModal as the other two tables.
+
+const RANK_MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+const PodiumCard: React.FC<{ row: RmLeaderboardRow; onClick: () => void }> = ({ row, onClick }) => (
+  <CardShell
+    onClick={onClick}
+    className={cn(
+      row.rank === 1 && 'border-amber-300 bg-amber-50/60',
+      row.rank === 2 && 'border-stone-300 bg-stone-100/60',
+      row.rank === 3 && 'border-orange-200 bg-orange-50/60'
+    )}
+  >
+    <div className="flex items-center justify-between">
+      <SectionLabel>Rank {row.rank}</SectionLabel>
+      <span className="text-xl leading-none">{RANK_MEDAL[row.rank]}</span>
+    </div>
+    <div className="font-semibold text-stone-900">{row.name}</div>
+    <div className="text-xs text-stone-400">
+      {row.manager} · {row.team}
+    </div>
+    <div className="mt-2 font-mono text-3xl font-semibold text-emerald-700">
+      {formatVsTarget(row.achieved, row.target)}
+    </div>
+    <div className="mt-1 text-xs text-stone-400">
+      {row.achieved} / {row.target} trials · {row.uniqueLeads} unique leads
+    </div>
+  </CardShell>
+);
+
+const LeaderboardView: React.FC<{
+  leaderboardByRm: RmLeaderboardRow[];
+  rmSearch: string;
+  onRmSearchChange: (value: string) => void;
+  onSelectRm: (rmUserId: string) => void;
+  stateNameById: Record<string, string>;
+}> = ({ leaderboardByRm, rmSearch, onRmSearchChange, onSelectRm, stateNameById }) => {
+  const topThree = leaderboardByRm.filter((row) => row.rank <= 3);
+
+  return (
+    <div className="space-y-6">
+      {topThree.length > 0 && (
+        <section>
+          <SectionLabel>Today's Top Performers</SectionLabel>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {topThree.map((row) => (
+              <PodiumCard key={row.rmUserId} row={row} onClick={() => onSelectRm(row.rmUserId)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <RmTableHeader label="Full Ranking" search={rmSearch} onSearchChange={onRmSearchChange} />
+        <LeaderboardTable rows={leaderboardByRm} onSelectRm={onSelectRm} stateNameById={stateNameById} />
+      </section>
+    </div>
+  );
+};
+
+type LeaderboardSortKey = 'rank' | 'name' | 'vsTargetPct' | 'achieved' | 'target' | 'trialRate' | 'uniqueLeads' | 'touches';
+
+function leaderboardSortValue(row: RmLeaderboardRow, key: LeaderboardSortKey): string | number {
+  switch (key) {
+    case 'name':
+      return row.name.toLowerCase();
+    default:
+      return row[key];
+  }
+}
+
+const LeaderboardTable: React.FC<{
+  rows: RmLeaderboardRow[];
+  onSelectRm: (rmUserId: string) => void;
+  stateNameById: Record<string, string>;
+}> = ({ rows, onSelectRm, stateNameById }) => {
+  const { ref, minHeight } = useStableMinHeight([rows.length]);
+  const { sortedRows, sort, toggleSort } = useTableSort(rows, leaderboardSortValue);
+  return (
+    <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
+      <Table ref={ref} className="min-w-[860px]">
+        <TableHeader>
+          <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
+            <SortableHeader label="Rank" sortKey="rank" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="RM" sortKey="name" sort={sort} onSort={toggleSort} />
+            <SortableHeader label="vs Target" sortKey="vsTargetPct" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Trials" sortKey="achieved" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Target" sortKey="target" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Trial Rate" sortKey="trialRate" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Unique Leads" sortKey="uniqueLeads" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Touches" sortKey="touches" sort={sort} onSort={toggleSort} align="right" />
+          </TableRow>
+        </TableHeader>
+        <TableBody className="bg-white">
+          {sortedRows.map((row) => (
+            <TableRow
+              key={row.rmUserId}
+              className={cn('cursor-pointer hover:bg-stone-50', row.rank <= 3 && 'bg-amber-50/40')}
+              onClick={() => onSelectRm(row.rmUserId)}
+            >
+              <TableCell className="whitespace-nowrap text-right font-mono text-stone-500">
+                {RANK_MEDAL[row.rank] ?? row.rank}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                <div className="font-semibold text-stone-900">{row.name}</div>
+                <div className="text-xs text-stone-400">
+                  {row.manager} · {row.team} · {stateNameById[row.state] || row.state}
+                </div>
+              </TableCell>
+              <TableCell
+                className={cn('whitespace-nowrap text-right font-mono font-semibold', vsTargetColor(row.achieved, row.target))}
+              >
+                {formatVsTarget(row.achieved, row.target)}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono text-emerald-700">{row.achieved}</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono text-stone-400">{row.target}</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono">{row.trialRate}%</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono underline decoration-stone-300">
+                {row.uniqueLeads}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono">{row.touches}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 };
 

@@ -32,6 +32,7 @@ import type { TaskStep } from "./types";
 import { formatRecallAtLabel, formatPhoneForDisplay, getLeadName } from "./utils";
 import { LeadTimerBadge } from "./LeadTimerBadge";
 import { YourShiftPanel } from "./YourShiftPanel";
+import { LeaderboardPanel } from "./LeaderboardPanel";
 import { AssignedRmPerformancePanel } from "./AssignedRmPerformancePanel";
 import type { LeadCardCarouselModel } from "./useLeadCardCarousel";
 
@@ -399,6 +400,8 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                 </div>
               </div>
             </div>
+
+            <LeaderboardPanel activeUserId={activeUserId} />
 
             <div className="flex justify-center items-center w-full">
               <CustomButton

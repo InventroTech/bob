@@ -262,6 +262,42 @@ export function computeTeamTotals(events: RmActivityEvent[], targetsByRm: DailyT
   };
 }
 
+// ---- Leaderboard tab ----
+// Ranks RMs by vs-target % — trials achieved ÷ their own daily target — not
+// raw trial count, so an RM with a smaller target isn't structurally stuck
+// behind one with a bigger book. An RM with no target configured at all
+// sorts last (vsTargetPct -Infinity, same "unset ≠ 0%" rule formatVsTarget
+// already uses) rather than reading as a 0% last-place finisher. Ties fall
+// back to raw trials achieved, then unique leads handled (volume).
+
+export interface RmLeaderboardRow extends RmPerformanceRow {
+  rank: number;
+  // achieved ÷ target as a 0–100+ percentage, 1 decimal place; -1 when no
+  // target is set (mirrors formatVsTarget's "—" — never a false 0%)
+  vsTargetPct: number;
+}
+
+function vsTargetRatio(row: RmPerformanceRow): number {
+  return row.target ? row.achieved / row.target : -Infinity;
+}
+
+export function computeLeaderboardByRm(
+  events: RmActivityEvent[],
+  targetsByRm: DailyTargetsByRm = {}
+): RmLeaderboardRow[] {
+  const ranked = computePerformanceByRm(events, targetsByRm).sort((a, b) => {
+    const ratioDiff = vsTargetRatio(b) - vsTargetRatio(a);
+    if (ratioDiff !== 0) return ratioDiff;
+    if (b.achieved !== a.achieved) return b.achieved - a.achieved;
+    return b.uniqueLeads - a.uniqueLeads;
+  });
+  return ranked.map((row, index) => ({
+    ...row,
+    rank: index + 1,
+    vsTargetPct: row.target ? Math.round((row.achieved / row.target) * 1000) / 10 : -1,
+  }));
+}
+
 // ---- Adherence tab ----
 
 export interface RmAdherenceRow {
