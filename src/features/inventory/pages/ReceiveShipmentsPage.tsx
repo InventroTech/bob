@@ -15,25 +15,24 @@ const ReceiveShipmentsPage: React.FC = () => {
 
         <InventoryTableComponent
           config={{
-            title: 'In shipping',
+            title: 'Ordered',
             entityType: 'inventory_request',
             detailMode: 'receive_shipments',
             apiEndpoint:
-              '/crm-records/records/?entity_type=inventory_request&status=IN_SHIPPING',
+              '/crm-records/records/?entity_type=inventory_request&stage=ordered',
             columns: [
               { key: 'status', label: 'Status', type: 'chip' },
               { key: 'item_name_freeform', label: 'Item', type: 'text' },
               { key: 'part_number_or_sku', label: 'Part / SKU', type: 'text' },
               { key: 'quantity_required', label: 'Quantity', type: 'number' },
               { key: 'vendor_name', label: 'Vendor', type: 'text' },
-              { key: 'shipment_status', label: 'Shipment', type: 'chip' },
               { key: 'tracking_link', label: 'Track', type: 'link' },
               { key: 'tracking_number', label: 'Tracking no', type: 'text' },
               { key: 'courier_name', label: 'Courier', type: 'text' },
               { key: 'eta', label: 'ETA', type: 'date' },
               { key: 'created_at', label: 'Created', type: 'date' },
             ],
-            emptyMessage: 'No requests in shipping.',
+            emptyMessage: 'No ordered requests.',
             showFallbackOnly: false,
           }}
         />

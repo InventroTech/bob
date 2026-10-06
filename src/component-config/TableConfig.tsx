@@ -108,6 +108,8 @@ interface TableConfigProps {
     showDeleteRequestButton?: boolean;
     /** Show request history button in record modals. */
     showHistoryButton?: boolean;
+    /** Show Bulk Edit and Bulk Edit History on request tables. */
+    showBulkEdit?: boolean;
     /** Checkboxes shown beside action buttons; each saves data[key] = true/false. */
     modalFlags?: ModalFlagConfig[];
     /** Lead card modal: block outside-click/Escape/X close and reopen the same lead on refresh — only a disposition button can close it. Default off. */
@@ -722,6 +724,24 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             </p>
           </div>
 
+          {isInventoryProfile && (
+            <div className="space-y-2">
+              <Label>Bulk Edit</Label>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-bulk-edit"
+                  checked={localConfig.showBulkEdit === true}
+                  onCheckedChange={(checked) => handleInputChange('showBulkEdit', checked)}
+                />
+                <Label htmlFor="show-bulk-edit" className="text-sm font-normal cursor-pointer">
+                  Show &quot;Bulk Edit&quot; and &quot;Bulk Edit History&quot;
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500">
+                On by default for the Procurement Table, off for other tables.
+              </p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Lock lead modal (View Profile)</Label>
             <div className="flex items-center gap-2">

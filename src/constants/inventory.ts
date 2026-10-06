@@ -1,12 +1,17 @@
-/** Canonical inventory request statuses used in all dropdowns and filters. */
+/**
+ * Built-in request statuses (fallback order). Live options come from the backend
+ * status config — use getRequestStatusDropdownOptions / useRequestStatusConfig.
+ */
 export const INVENTORY_REQUEST_STATUSES = [
   'NEW_REQUEST',
   'REQ_TO_VERIFY',
-  'VENDOR_IDENTIFIED',
+  'APPROVED',
   'IN_CART',
-  'IN_SHIPPING',
   'ON_HOLD',
   'REJECTED',
+  'ORDERED',
+  'DELIVERED',
+  'EXCEPTION',
 ] as const;
 
 export type InventoryRequestStatus = (typeof INVENTORY_REQUEST_STATUSES)[number];

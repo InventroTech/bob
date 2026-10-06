@@ -135,6 +135,8 @@ export interface LeadTableProps {
     showDeleteRequestButton?: boolean;
     /** Show "See request history" button in record modals. */
     showHistoryButton?: boolean;
+    /** Show Bulk Edit and Bulk Edit History. Page Builder switch; Procurement Table defaults it on. */
+    showBulkEdit?: boolean;
     /**
      * When true, the lead-detail modal (View Profile) can't be closed by
      * clicking outside it, pressing Escape, or the X button — only by
