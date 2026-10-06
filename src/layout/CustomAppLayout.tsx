@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Bell, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers, ChevronLeft } from 'lucide-react';
@@ -8,7 +7,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
-import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
+import { resolveTenantAndRole } from '@/lib/auth/resolveTenantRole';
 import {
   SPOOF_CHANGED_EVENT,
   SPOOF_JWT_KEY,
@@ -201,19 +200,16 @@ const CustomAppLayout: React.FC = () => {
         return;
       }
 
-      // Extract tenant_id and role_id from JWT token (spoof or real)
-      const extractedTenantId = getTenantIdFromJWT(token);
-      const extractedRoleId = getRoleIdFromJWT(token);
+      const resolved = await resolveTenantAndRole(token, tenantSlug);
 
-      if (extractedTenantId && extractedRoleId) {
-        console.log('Extracted from JWT - tenantId:', extractedTenantId, 'roleId:', extractedRoleId);
-        setTenantId(extractedTenantId);
-        setUserRoleId(extractedRoleId);
-        localStorage.setItem('tenant_id', extractedTenantId);
+      if (resolved) {
+        console.log('Resolved tenantId:', resolved.tenantId, 'roleId:', resolved.roleId);
+        setTenantId(resolved.tenantId);
+        setUserRoleId(resolved.roleId);
+        localStorage.setItem('tenant_id', resolved.tenantId);
         dataExtractedRef.current = true;
       } else {
-        console.warn('Could not extract tenant_id or role_id from JWT');
-        // Fallback: try to get from localStorage if available
+        console.warn('Could not resolve tenant_id or role_id from JWT or membership');
         const cachedTenantId = localStorage.getItem('tenant_id');
         if (cachedTenantId) {
           setTenantId(cachedTenantId);
@@ -222,7 +218,7 @@ const CustomAppLayout: React.FC = () => {
     };
 
     extractUserDataFromJWT();
-  }, [user, session?.access_token, spoofVersion]);
+  }, [user, session?.access_token, spoofVersion, tenantSlug]);
 
   // Re-extract and update UI when spoof state changes (same tab or other tab)
   useEffect(() => {
@@ -259,42 +255,19 @@ const CustomAppLayout: React.FC = () => {
       }
 
       const token = await getEffectiveToken(session?.access_token ?? null);
-
-      const spoofToken =
-        typeof window !== 'undefined' ? window.localStorage.getItem(SPOOF_JWT_KEY) : null;
-      if (spoofToken && token) {
-        // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
-        try {
-          const pagesData = await fetchPagesForRole(tenantId, userRoleId, token);
-          const sortedPages = (pagesData || []).sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0));
-          setPages(sortedPages);
-        } catch (err) {
-          console.error('Pages fetch error (spoof):', err);
-          toast.error('Failed to load pages');
-          setPages([]);
-        }
+      if (!token) {
+        setPages([]);
         return;
       }
 
-      const { data: pagesData, error } = await supabase
-        .from('pages')
-        .select('id, name, display_order, icon_name')
-        .eq('tenant_id', tenantId)
-        .eq('role', userRoleId)
-        .eq('is_deleted', false)
-        .order('display_order', { ascending: true });
-
-      if (error) {
+      try {
+        const pagesData = await fetchPagesForRole(tenantId, userRoleId, token);
+        const sortedPages = (pagesData || []).sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0));
+        setPages(sortedPages);
+      } catch (err) {
+        console.error('Pages fetch error:', err);
         toast.error('Failed to load pages');
-        const pg = error as { message?: string; code?: string; details?: string; hint?: string };
-        console.error(
-          'Pages fetch error:',
-          pg.message ?? 'unknown',
-          pg.code ? `code=${pg.code}` : '',
-          pg.details || pg.hint || ''
-        );
-      } else {
-        setPages(pagesData || []);
+        setPages([]);
       }
     };
 

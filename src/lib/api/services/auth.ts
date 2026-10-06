@@ -44,6 +44,12 @@ export interface SetupNewTenantResponse {
   error?: string;
 }
 
+export interface TenantBySlugResponse {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export const authService = {
   /**
    * Request a 6-digit OTP by email (stored server-side with 5-minute TTL). No Supabase recovery email.
@@ -131,6 +137,26 @@ export const authService = {
    * Create tenant, PYRO_ADMIN role, and TenantMembership (signup flow).
    * Requires Supabase JWT. Path is excluded from tenant resolution.
    */
+  /**
+   * Resolve a tenant id from the application database (AWS) by slug.
+   * Returns null when the slug does not exist.
+   */
+  async getTenantBySlug(slug: string): Promise<TenantBySlugResponse | null> {
+    const trimmed = slug.trim();
+    if (!trimmed) return null;
+    try {
+      const response = await apiClient.get<TenantBySlugResponse>('/accounts/tenant-by-slug/', {
+        params: { slug: trimmed },
+      });
+      if (!response.data?.id) return null;
+      return response.data;
+    } catch (error: unknown) {
+      const status = (error as { status?: number })?.status;
+      if (status === 404) return null;
+      throw error;
+    }
+  },
+
   async setupNewTenant(data: SetupNewTenantRequest): Promise<SetupNewTenantResponse> {
     const response = await apiClient.post<SetupNewTenantResponse>(
       '/accounts/setup-new-tenant/',

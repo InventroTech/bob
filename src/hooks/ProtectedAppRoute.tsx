@@ -29,12 +29,7 @@ const UnauthorizedPage: React.FC<{
     // Fetch public pages for this tenant
     const fetchPublicPages = async () => {
       try {
-        // Get tenant_id from slug
-        const { data: tenant } = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('slug', tenantSlug)
-          .single();
+        const tenant = await authService.getTenantBySlug(tenantSlug);
 
         if (tenant) {
           // Get the public role via membership API (Django authz at /membership/roles)
@@ -257,15 +252,11 @@ const ProtectedAppRoute: React.FC = () => {
           }
         }
 
-        // Validate tenant slug matches JWT tenant_id
-        const { data: tenant, error: tenantError } = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('slug', tenantSlug)
-          .single();
+        // Validate tenant slug against the application database (AWS).
+        const tenant = await authService.getTenantBySlug(tenantSlug);
 
-        if (tenantError || !tenant) {
-          denyAccess(`Tenant not found for slug "${tenantSlug}" (error: ${tenantError?.message})`);
+        if (!tenant) {
+          denyAccess(`Tenant not found for slug "${tenantSlug}"`);
           return;
         }
 
