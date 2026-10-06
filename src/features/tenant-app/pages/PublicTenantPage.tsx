@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { membershipService } from '@/lib/api';
+import { authService, membershipService } from '@/lib/api';
 import { componentMap } from '@/features/page-builder/componentMap';
 
 interface PageData {
@@ -32,14 +32,9 @@ const PublicTenantPage: React.FC = () => {
     
     const fetchPublicPage = async () => {
       try {
-        // First, get the tenant_id from the slug
-        const { data: tenant, error: tenantError } = await supabase
-          .from('tenants')
-          .select('id')
-          .eq('slug', tenantSlug)
-          .single();
+        const tenant = await authService.getTenantBySlug(tenantSlug);
 
-        if (tenantError || !tenant) {
+        if (!tenant) {
           setError('Tenant not found');
           toast.error('Tenant not found');
           return;
