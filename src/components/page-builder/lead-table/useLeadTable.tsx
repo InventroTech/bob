@@ -1806,7 +1806,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [filteredData, requestStageTab, showRequestStageTabs, requestStatusEntityType, requestStatusConfig]);
 
   // Bulk Edit on every inventory request table page (not New Request form).
-  const bulkSelectionEnabled = !isInPageBuilder && isInventoryRequestTable;
+  const bulkSelectionEnabled = !isInPageBuilder && isInventoryRequestTable && config?.showBulkEdit === true;
 
   const getRowWorkflowButtons = useCallback(
     (row: any) => {

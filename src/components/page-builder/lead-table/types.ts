@@ -135,6 +135,8 @@ export interface LeadTableProps {
     showDeleteRequestButton?: boolean;
     /** Show "See request history" button in record modals. */
     showHistoryButton?: boolean;
+    /** Show Bulk Edit and Bulk Edit History. Page Builder switch; Procurement Table defaults it on. */
+    showBulkEdit?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;
