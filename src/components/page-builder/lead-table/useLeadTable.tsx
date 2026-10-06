@@ -334,7 +334,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const filterServiceRef = useRef<FilterService | null>(null);
   const { session, user } = useAuth();
   const spoofUserId = useSpoofUserId();
-  const { customRole, membershipLoaded, membershipId } = useTenant();
+  const { customRole, membershipLoaded, membershipId, tenantSlug } = useTenant();
   const sessionUser = session?.user ?? null;
   const activeUser = user ?? sessionUser ?? null;
   // Spoof JWT `sub` when active; otherwise Supabase user id (aligns with API `{{current_user}}`).
@@ -343,6 +343,69 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   const activeAppMetadata = activeUser?.app_metadata ?? null;
   // Check if user is GM (General Manager) - GM should see all leads
   const isGM = customRole === 'GM' || customRole === 'gm' || customRole?.toUpperCase() === 'GM';
+
+  // config.lockLeadModal: persist which lead is open so a browser refresh
+  // re-opens the same one instead of silently losing it (see the
+  // outside-click/Escape block wired onto the modal's DialogContent in
+  // LeadTableView, and getOrCreateLeadStartTime in lead-card-carousel/utils
+  // for why a lost-and-reopened lead needs a stable id to resume its timer
+  // from). localStorage, not sessionStorage — sessionStorage is cleared the
+  // moment the tab closes, and a refresh can come from a full browser
+  // relaunch (crash, accidental close), not just F5 in the same tab.
+  // Keyed by tenant + this RM + page path — never just path — so
+  // localStorage's cross-tab/cross-session lifetime can't leak one RM's
+  // open lead to a different RM signing into the same shared/kiosk machine.
+  const lockedLeadStorageKey =
+    typeof window !== 'undefined' && activeUserId
+      ? `leadTable_lockedLead.${tenantSlug ?? 'unknown'}.${activeUserId}.${window.location.pathname}`
+      : '';
+  const lockRestoreAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!config?.lockLeadModal || !lockedLeadStorageKey) return;
+    // On mount — before the restore effect below has had a chance to read
+    // the table's data and re-open the saved lead — isLeadModalOpen/
+    // selectedLead still hold their default closed/null state. Without this
+    // guard, this effect's own "no lead open" branch would wipe the saved
+    // id out of storage on every single refresh, a split second before the
+    // restore effect could ever read it back — the modal was never actually
+    // reopening, this was clobbering it before it got the chance to.
+    if (!lockRestoreAttemptedRef.current) return;
+    try {
+      if (isLeadModalOpen && selectedLead?.id != null) {
+        localStorage.setItem(lockedLeadStorageKey, String(selectedLead.id));
+      } else {
+        localStorage.removeItem(lockedLeadStorageKey);
+      }
+    } catch {
+      // best-effort — losing this just means a refresh won't restore the lead
+    }
+  }, [config?.lockLeadModal, lockedLeadStorageKey, isLeadModalOpen, selectedLead]);
+
+  useEffect(() => {
+    if (!config?.lockLeadModal || !lockedLeadStorageKey) return;
+    if (lockRestoreAttemptedRef.current) return;
+    if (loading || tableLoading) return; // wait for the initial fetch to settle
+    lockRestoreAttemptedRef.current = true;
+    let storedId: string | null = null;
+    try {
+      storedId = localStorage.getItem(lockedLeadStorageKey);
+    } catch {
+      return;
+    }
+    if (!storedId) return;
+    const row = data.find((r: any) => String(r?.id) === storedId);
+    if (row) {
+      setSelectedLead(row);
+      setIsLeadModalOpen(true);
+    } else {
+      try {
+        localStorage.removeItem(lockedLeadStorageKey);
+      } catch {
+        // nothing to clean up if this fails
+      }
+    }
+  }, [config?.lockLeadModal, lockedLeadStorageKey, loading, tableLoading, data]);
 
   const runtimeContext = useMemo(() => ({
     session,

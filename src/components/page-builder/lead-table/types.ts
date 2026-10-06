@@ -137,6 +137,17 @@ export interface LeadTableProps {
     showHistoryButton?: boolean;
     /** Show Bulk Edit and Bulk Edit History. Page Builder switch; Procurement Table defaults it on. */
     showBulkEdit?: boolean;
+    /**
+     * When true, the lead-detail modal (View Profile) can't be closed by
+     * clicking outside it, pressing Escape, or the X button — only by
+     * clicking one of the disposition buttons (Trial Activated, Not
+     * Interested, etc). Also survives a page refresh: whichever lead was
+     * open re-opens automatically. Prevents the "RM accidentally closes
+     * the lead, comes back later, clicks a button" gap that inflates the
+     * recorded time-on-lead with idle time. Default false (current/unlocked
+     * behavior).
+     */
+    lockLeadModal?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;

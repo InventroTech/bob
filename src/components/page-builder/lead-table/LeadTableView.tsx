@@ -1097,6 +1097,13 @@ export function LeadTableView(props: LeadTableModel) {
 
       {/* Lead Modal with LeadCard */}
       <Dialog open={isLeadModalOpen} onOpenChange={(open) => {
+        // Locked: closing only via a disposition button (handled below in
+        // onActionComplete), not outside click / Escape / the X button —
+        // all three close attempts arrive here as the same open=false, so
+        // blocking it in one place covers all of them.
+        if (!open && config?.lockLeadModal) {
+          return;
+        }
         setIsLeadModalOpen(open);
         // Reset selected lead when dialog closes to prevent stale state
         if (!open) {
@@ -1107,7 +1114,10 @@ export function LeadTableView(props: LeadTableModel) {
           leadCardRef.current = null;
         }
       }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0"
+          hideCloseButton={Boolean(config?.lockLeadModal)}
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>
               {selectedLead?.name || (selectedLead as any)?.data?.name || 'Lead Details'}

@@ -32,6 +32,7 @@ import type { TaskStep } from "./types";
 import { formatRecallAtLabel, formatPhoneForDisplay, getLeadName } from "./utils";
 import { LeadTimerBadge } from "./LeadTimerBadge";
 import { YourShiftPanel } from "./YourShiftPanel";
+import { AssignedRmPerformancePanel } from "./AssignedRmPerformancePanel";
 import type { LeadCardCarouselModel } from "./useLeadCardCarousel";
 
 const TaskProgressList: React.FC<{ steps: TaskStep[]; rejectReason?: string }> = ({ steps, rejectReason }) => {
@@ -200,6 +201,13 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
     onCallBackModalChange,
     onClose,
   } = props;
+
+  // The RM this lead is currently assigned to (data.assigned_to is their
+  // auth user id — same id rm_activity_events rows are keyed by as
+  // rm_user_id) — used to show that RM's own performance when the card is
+  // opened from the table view, instead of the viewer's own shift.
+  const assignedToRaw = (currentLead as any)?.data?.assigned_to;
+  const assignedRmUserId = assignedToRaw ? String(assignedToRaw) : null;
 
   // Pending card
   if (showPendingCard) {
@@ -622,12 +630,7 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
 
           {/* Task Progress Section */}
           <CardContent className={`flex flex-col gap-8 p-4 bg-white ${actionButtonsVisible && postCallActions.length > 0 ? 'pb-32 md:pb-28' : 'pb-4'}`} style={bodyFont}>
-            <div
-              className={cn(
-                "grid gap-6",
-                (!isInModal || currentLead?.location) && "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
-              )}
-            >
+            <div className={cn("grid gap-6", "xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]")}>
               <div className="h-full rounded-2xl border border-slate-200 p-5 w-full">
                 <div className="mb-4 flex items-center justify-between pl-2">
                   <h5>Task Progress</h5>
@@ -640,16 +643,20 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                   <p className="text-sm text-slate-500">No tasks available.</p>
                 )}
               </div>
-              {(!isInModal || currentLead?.location) && (
-                <div className="h-full rounded-2xl border border-slate-200 p-5 w-full">
-                  {!isInModal && <YourShiftPanel activeUserId={activeUserId} elapsedSecondsOnLead={elapsedSeconds} />}
-                  {currentLead?.location && (
-                    <div className={cn("space-y-3", !isInModal && "mt-4")}>
-                      <LeadInfoTile icon={AlertCircle} label="Location" value={currentLead.location} />
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Right column always renders now, in both modes —
+                  AssignedRmPerformancePanel shows its own "no RM assigned"
+                  state rather than disappearing, which otherwise looked like
+                  a bug ("shows for some leads, not others") when a lead
+                  legitimately has no assigned_to right now. */}
+              <div className="h-full rounded-2xl border border-slate-200 p-5 w-full">
+                {!isInModal && <YourShiftPanel activeUserId={activeUserId} elapsedSecondsOnLead={elapsedSeconds} />}
+                {isInModal && <AssignedRmPerformancePanel rmUserId={assignedRmUserId} />}
+                {currentLead?.location && (
+                  <div className="mt-4 space-y-3">
+                    <LeadInfoTile icon={AlertCircle} label="Location" value={currentLead.location} />
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
