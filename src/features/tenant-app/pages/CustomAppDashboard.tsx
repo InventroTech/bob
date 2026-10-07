@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { pickOpenRequestPage, withCurrentSearch } from '@/features/tenant-app/openRequestPage';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,6 +10,7 @@ import { getEffectiveToken, isSpoofing, getSpoofUserLabel, fetchPagesForRole } f
 const CustomAppDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
@@ -86,9 +88,12 @@ const CustomAppDashboard: React.FC = () => {
 
         if (pages && pages.length > 0) {
           console.log('Found pages:', pages);
-          const firstPage = pages[0];
+          const firstPage = pickOpenRequestPage(pages, { search: location.search }) || pages[0];
           console.log('Redirecting to first page:', firstPage);
-          navigate(`/app/${tenantSlug}/pages/${firstPage.id}`, { replace: true });
+          navigate(
+            withCurrentSearch(`/app/${tenantSlug}/pages/${firstPage.id}`, location.search),
+            { replace: true },
+          );
         } else {
           console.log('No pages found for tenant and role');
           setLoading(false);
@@ -100,7 +105,7 @@ const CustomAppDashboard: React.FC = () => {
     };
 
     fetchFirstPage();
-  }, [user, tenantSlug, navigate]);
+  }, [user, tenantSlug, navigate, location.search]);
 
   // Add a timeout to prevent infinite loading
   useEffect(() => {
