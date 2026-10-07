@@ -30,6 +30,22 @@ export { default as RmPrdAnalyticsComponent } from './RmPrdAnalyticsComponent';
 export { RmPrdAnalyticsConfig } from './component-config/RmPrdAnalyticsConfig';
 export { InventoryTableComponent } from './InventoryTableComponent';
 export { ProcurementTableComponent, DEFAULT_PROCUREMENT_TABLE_COLUMNS } from './ProcurementTableComponent';
+export { MyRequestTableComponent } from './MyRequestTableComponent';
+export {
+  PendingApprovalTableComponent,
+  DEFAULT_PENDING_APPROVAL_TABLE_COLUMNS,
+  DEFAULT_PENDING_APPROVAL_TABLE_CONFIG,
+} from './PendingApprovalTableComponent';
+export {
+  RejectedTableComponent,
+  DEFAULT_REJECTED_TABLE_COLUMNS,
+  DEFAULT_REJECTED_TABLE_CONFIG,
+} from './RejectedTableComponent';
+export {
+  VendorIdentifiedTableComponent,
+  DEFAULT_VENDOR_IDENTIFIED_TABLE_COLUMNS,
+  DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG,
+} from './VendorIdentifiedTableComponent';
 export {
   ProcurementDashboardComponent,
   DEFAULT_PROCUREMENT_DASHBOARD_CONFIG,

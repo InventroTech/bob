@@ -69,10 +69,10 @@ export interface InventoryFormEditModalProps {
   /** Called after a successful delete (e.g. refresh table). */
   onDeleted?: (recordId: number) => void;
   /**
-   * `unmannd` — Unmannd chrome (#1A44A1).
-   * `inventory` — same layout, form blue (#1A3673) and black (#0B1F4D).
+   * Visual chrome for Unmannd “All Requests” redesign (dark header/footer).
+   * Default keeps the classic light modal used by inventory_request.
    */
-  uiVariant?: 'default' | 'unmannd' | 'inventory';
+  uiVariant?: 'default' | 'unmannd';
   /** Move to the previous/next row without closing the modal (e.g. table row navigation). */
   onNavigate?: (direction: 'prev' | 'next') => void;
   /** Whether a previous record exists relative to the current one. */

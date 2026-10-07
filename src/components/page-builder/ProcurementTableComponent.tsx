@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { LeadTableComponent } from './lead-table';
 import { resolvePriorityFromRow } from '@/lib/inventory/priority';
+import { mergeInventoryTrackingColumns, excludeInventoryTrackColumn } from '@/lib/inventory/shipmentTracking';
 import { resolveInventoryTableDisplayTitle } from './lead-table/utils';
 
 export type ProcurementTableColumn = {
@@ -199,11 +200,13 @@ export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ con
     const isInventoryLike =
       entityType === 'inventory_request' || entityType === 'unmannd_request';
     const columns = withPriorityTransform(
-      (config?.columns?.length
-        ? config.columns
-        : isInventoryLike
-          ? DEFAULT_PROCUREMENT_TABLE_COLUMNS
-          : []) as ProcurementTableColumn[]
+      excludeInventoryTrackColumn(
+        (isInventoryLike
+          ? mergeInventoryTrackingColumns(config?.columns || DEFAULT_PROCUREMENT_TABLE_COLUMNS, {
+              includeTrack: false,
+            })
+          : config?.columns || []) as ProcurementTableColumn[]
+      )
     );
     const detailMode = resolveProcurementDetailMode(config?.detailMode, isInventoryLike);
 

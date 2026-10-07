@@ -360,6 +360,10 @@ export function resolveInventoryTableDisplayTitle(options: {
 /** Map Page Builder table widget types to inventory page kinds. */
 export const TABLE_COMPONENT_KIND_MAP: Record<string, InventoryTableKind> = {
   procurementTable: 'procurement',
+  myRequestTable: 'my_request',
+  pendingApprovalTable: 'pending_approval',
+  vendorIdentifiedTable: 'vendor_identified',
+  rejectedTable: 'rejected',
   inventoryTable: 'inventory',
 };
 

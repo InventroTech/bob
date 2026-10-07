@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, type ComponentType } from 'react';
-import { useParams, useOutletContext, useNavigate, useLocation } from 'react-router-dom';
-import { pickOpenRequestPage, withCurrentSearch } from '@/features/tenant-app/openRequestPage';
+import { useParams, useOutletContext, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { componentMap as staticComponentMap } from '@/features/page-builder/componentMap';
@@ -48,7 +47,6 @@ interface CustomAppOutletContext {
 const CustomAppPage: React.FC = () => {
   const { tenantSlug, pageId } = useParams<{ tenantSlug: string; pageId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { session } = useAuth();
   const {
     tenantId: contextTenantId,
@@ -71,55 +69,43 @@ const CustomAppPage: React.FC = () => {
     if (redirectingRef.current || !tenantSlug) return;
     redirectingRef.current = true;
 
-    const fromSidebar = pickOpenRequestPage(sidebarPagesRef.current, {
-      search: location.search,
-      excludeId: pageId,
-    });
+    const fromSidebar = sidebarPagesRef.current.find((p) => p.id && p.id !== pageId);
     if (fromSidebar?.id) {
-      navigate(
-        withCurrentSearch(`/app/${tenantSlug}/pages/${fromSidebar.id}`, location.search),
-        { replace: true },
-      );
+      navigate(`/app/${tenantSlug}/pages/${fromSidebar.id}`, { replace: true });
       return;
     }
 
     try {
       if (!tenantId || !userRoleId) {
-        navigate(withCurrentSearch(`/app/${tenantSlug}`, location.search), { replace: true });
+        navigate(`/app/${tenantSlug}`, { replace: true });
         return;
       }
       const token = await getEffectiveToken(session?.access_token ?? null);
       let firstId: string | null = null;
       if (token) {
         const navPages = await fetchPagesForRole(tenantId, userRoleId, token);
-        firstId =
-          pickOpenRequestPage(navPages, { search: location.search, excludeId: pageId })?.id ??
-          null;
+        firstId = navPages.find((p) => p.id && p.id !== pageId)?.id ?? null;
       }
       if (!firstId) {
         const { data } = await supabase
           .from('pages')
-          .select('id, name')
+          .select('id')
           .eq('tenant_id', tenantId)
           .eq('role', userRoleId)
           .eq('is_deleted', false)
-          .order('display_order', { ascending: true });
-        firstId =
-          pickOpenRequestPage(data || [], { search: location.search, excludeId: pageId })?.id ??
-          null;
+          .order('display_order', { ascending: true })
+          .limit(1);
+        firstId = data?.[0]?.id ?? null;
       }
       if (firstId) {
-        navigate(
-          withCurrentSearch(`/app/${tenantSlug}/pages/${firstId}`, location.search),
-          { replace: true },
-        );
+        navigate(`/app/${tenantSlug}/pages/${firstId}`, { replace: true });
       } else {
-        navigate(withCurrentSearch(`/app/${tenantSlug}`, location.search), { replace: true });
+        navigate(`/app/${tenantSlug}`, { replace: true });
       }
     } catch {
-      navigate(withCurrentSearch(`/app/${tenantSlug}`, location.search), { replace: true });
+      navigate(`/app/${tenantSlug}`, { replace: true });
     }
-  }, [tenantSlug, pageId, tenantId, userRoleId, session?.access_token, navigate, location.search]);
+  }, [tenantSlug, pageId, tenantId, userRoleId, session?.access_token, navigate]);
 
   // Supabase silently rotates session.access_token every so often, which recreates
   // redirectToFirstSidebarPage above. Keeping it out of the fetch effect's own deps
