@@ -73,6 +73,8 @@ export interface LeadTableProps {
      */
     forceQueryParams?: Record<string, string>;
     entityType?: string;
+    /** Which inventory page this table is. Procurement columns follow saved config only. */
+    inventoryTableKind?: string;
     /** When set, row click opens lead card / record detail / nothing. Use 'auto' or leave unset to infer from entityType. */
     detailMode?: 'lead_card' | 'inventory_request' | 'record_form_modal' | 'inventory_payment_modal' | 'receive_shipments' | 'lead_assignment_modal' | 'none' | 'auto';
     statusOptions?: string[];
