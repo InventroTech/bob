@@ -2286,13 +2286,16 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       'department',
       'project_purpose',
     ]);
-    // My Request layout on every inventory table page (not the New Request form).
-    const useMyRequestTableLayout = isInventoryRequestTable;
+    // Procurement tables show the columns saved in Page Builder. Other inventory
+    // tables still drop Track and rewrite a few columns in code.
+    const columnsFollowConfig = config?.inventoryTableKind === 'procurement';
+    const useMyRequestTableLayout = isInventoryRequestTable && !columnsFollowConfig;
     const configuredColumns = useMyRequestTableLayout
       ? excludeInventoryTrackColumn(config?.columns)
       : config?.columns;
     const mapped = (configuredColumns ?? [])
       .filter((col) => {
+        if (columnsFollowConfig) return true;
         const key = String(col.key || '').trim().toLowerCase();
         const label = String(col.label || '').trim().toLowerCase();
         // Hide ETA / requirement date from inventory request tables.
@@ -2342,7 +2345,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
     // Every inventory request table page: product Link column (not Edit).
     // New Request is a separate form page and does not use this table.
-    if (!isInPageBuilder && isInventoryRequestTable) {
+    if (!isInPageBuilder && isInventoryRequestTable && !columnsFollowConfig) {
       for (const col of base) {
         const accessor = String(col.accessor || '').trim().toLowerCase();
         const header = String(col.header || '').trim().toLowerCase();
@@ -2418,7 +2421,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       }
     }
     return base;
-  }, [config?.columns, config?.tableType, effectiveStatusButtons, isInPageBuilder, isInventoryRequestTable]);
+  }, [config?.columns, config?.inventoryTableKind, config?.tableType, effectiveStatusButtons, isInPageBuilder, isInventoryRequestTable]);
 
   // Get unique values for filters
   const getUniqueLeadStatuses = () => {
@@ -3387,6 +3390,55 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     setSelectedRecord(row);
     setIsRecordDetailModalOpen(true);
   }, [effectiveDetailMode]);
+
+  // Email "Open Request" links land here with ?record_id=. Open that row's modal.
+  const openedRecordFromUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isInPageBuilder || !isInventoryRequestTable || !effectiveApiEndpoint) return;
+    if (effectiveDetailMode === 'none' || effectiveDetailMode === 'lead_card') return;
+    const params = new URLSearchParams(location.search);
+    const recordId = params.get('record_id')?.trim();
+    if (!recordId || openedRecordFromUrlRef.current === recordId) return;
+
+    let cancelled = false;
+    const openRecordFromUrl = async () => {
+      const base = String(effectiveApiEndpoint || '/crm-records/records/')
+        .split('?')[0]
+        .replace(/\/$/, '');
+      try {
+        const response = await apiClient.get(`${base}/${recordId}/`);
+        if (cancelled || !response?.data) return;
+        openedRecordFromUrlRef.current = recordId;
+        if (effectiveDetailMode === 'lead_assignment_modal') {
+          setSelectedRecord(response.data);
+          setIsCustomModalOpen(true);
+        } else {
+          setSelectedRecord(response.data);
+          setIsRecordDetailModalOpen(true);
+        }
+        params.delete('record_id');
+        const nextSearch = params.toString();
+        navigate(
+          { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' },
+          { replace: true },
+        );
+      } catch {
+        if (!cancelled) openedRecordFromUrlRef.current = recordId;
+      }
+    };
+    void openRecordFromUrl();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isInPageBuilder,
+    isInventoryRequestTable,
+    effectiveDetailMode,
+    effectiveApiEndpoint,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const getLeadRowId = useCallback((row: any) => {
     if (row?.id != null) return String(row.id);

@@ -88,10 +88,6 @@ const COMPONENT_TYPE_LABELS: Record<string, string> = {
   leadTable: 'Lead Table',
   inventoryTable: 'Records Table (API)',
   procurementTable: 'Procurement Table',
-  myRequestTable: 'My Request Table',
-  pendingApprovalTable: 'Pending Approval Table',
-  rejectedTable: 'Rejected Table',
-  vendorIdentifiedTable: 'Vendor Identified Table',
   procurementDashboard: 'Procurement Dashboard',
   dispatchCardList: 'Dispatch Card List',
   dispatchDashboard: 'Dispatch Dashboard',
@@ -699,10 +695,6 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
 
       case 'inventoryTable':
       case 'procurementTable':
-      case 'myRequestTable':
-      case 'pendingApprovalTable':
-      case 'rejectedTable':
-      case 'vendorIdentifiedTable':
         return (
           <TableConfig
             profile="inventory"
