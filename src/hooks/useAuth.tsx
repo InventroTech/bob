@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { setSentryUser, clearSentryUser } from '@/lib/sentry';
@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth
+    authClient
       .getSession()
       .then(({ data: { session } }) => {
         if (cancelled) return;
@@ -117,9 +117,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (!cancelled) setLoading(false);
       });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
+    const { data: authListener } = authClient.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
-        console.log('Supabase auth state changed:', event);
+        console.log('Auth state changed:', event);
 
         if (event === 'SIGNED_OUT') {
           const reason = consumeSignedOutReason();

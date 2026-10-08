@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, type ComponentType } f
 import { useParams, useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import { pickOpenRequestPage, withCurrentSearch } from '@/features/tenant-app/openRequestPage';
 import { supabase } from '@/lib/supabase';
+import { usesDjangoAuth } from '@/lib/auth/provider';
 import { toast } from 'sonner';
 import { componentMap as staticComponentMap } from '@/features/page-builder/componentMap';
 import {
@@ -96,7 +97,8 @@ const CustomAppPage: React.FC = () => {
           pickOpenRequestPage(navPages, { search: location.search, excludeId: pageId })?.id ??
           null;
       }
-      if (!firstId) {
+      // Django auth signs the Supabase session out locally, so this table read has no session.
+      if (!firstId && !usesDjangoAuth) {
         const { data } = await supabase
           .from('pages')
           .select('id, name')
