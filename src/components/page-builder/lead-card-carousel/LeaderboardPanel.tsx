@@ -21,15 +21,20 @@ interface LeaderboardPanelProps {
 // Leaderboard tab uses) condensed to a top-3 + "your rank" card, so an RM can
 // see where they stand without leaving the lead carousel.
 //
-// Scoped server-side to activeUserId's own manager's team (siblings under
-// the same manager, resolved via TenantMembership.user_parent_id) — the
-// events/targets fetch itself only ever requests this team's rows (via
-// rmUserIds), it never downloads the whole tenant and filters client-side.
-// Resolved against activeUserId (not the real signed-in user), so an admin
-// spoofing a specific RM's view ranks against *that RM's* team, matching the
-// "(You)" highlight below. If the team can't be resolved — the hierarchy
-// lookup failed, or this user has no manager to scope against — the card
-// simply doesn't render rather than falling back to an unscoped fetch.
+// Scoped server-side to the caller's own manager's team (siblings under the
+// same manager — see membershipService.getMyTeamRmUserIds, which returns
+// only that sibling group, not the full tenant directory). The events/
+// targets fetch itself only ever requests this team's rows (via rmUserIds),
+// it never downloads the whole tenant and filters client-side — and the
+// fetched events are still re-filtered against the resolved team below
+// (defense in depth: don't trust the response alone if that param were ever
+// ignored). Spoofing swaps the JWT identity every request carries (see
+// lib/auth/accessTokenProvider.ts), so "my team" already resolves to the
+// spoofed RM's own team during a spoofed session — the effect below still
+// keys off activeUserId purely to re-resolve if an admin switches who
+// they're spoofing mid-session. If the team can't be resolved — the lookup
+// failed, or this user has no manager to scope against — the card simply
+// doesn't render rather than falling back to an unscoped fetch.
 export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId }) => {
   const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
@@ -37,9 +42,9 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId
     return () => clearInterval(id);
   }, []);
 
-  // teamRmUserIds: null while activeUserId/the hierarchy lookup isn't
-  // resolved yet, undefined once resolution finished with nothing to scope
-  // to (lookup failed, or this user has no manager) — both terminal states
+  // teamRmUserIds: null while activeUserId/the team lookup isn't resolved
+  // yet, undefined once resolution finished with nothing to scope to
+  // (lookup failed, or this user has no manager) — both terminal states
   // below mean "don't render," never "fetch everyone instead."
   const [teamRmUserIds, setTeamRmUserIds] = useState<Set<string> | null | undefined>(null);
   useEffect(() => {
@@ -49,18 +54,9 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId
     }
     let cancelled = false;
     membershipService
-      .getUsersForHierarchy()
-      .then((allUsers) => {
-        if (cancelled) return;
-        const myParentId = allUsers.find((u) => u.user_id === activeUserId)?.user_parent_id;
-        if (myParentId == null) {
-          setTeamRmUserIds(undefined);
-          return;
-        }
-        const ids = allUsers
-          .filter((u) => u.user_parent_id === myParentId && u.user_id)
-          .map((u) => u.user_id as string);
-        setTeamRmUserIds(new Set(ids));
+      .getMyTeamRmUserIds()
+      .then((ids) => {
+        if (!cancelled) setTeamRmUserIds(ids.length > 0 ? new Set(ids) : undefined);
       })
       .catch(() => {
         if (!cancelled) setTeamRmUserIds(undefined);
@@ -88,10 +84,15 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId
   const loading = teamRmUserIds === null || (hasResolvedTeam && (eventsLoading || targetsLoading));
 
   const leaderboard = useMemo(() => {
-    if (!hasResolvedTeam) return [];
-    const todaysEvents = filterByDateRange(events, todayBounds);
+    if (!hasResolvedTeam || !teamRmUserIds) return [];
+    let todaysEvents = filterByDateRange(events, todayBounds);
+    // defense in depth: the fetch above already requests only this team's
+    // rows via rmUserIds, but don't blindly trust the response — if that
+    // param were ever ignored or mishandled server-side, this still never
+    // shows anyone outside the resolved team
+    todaysEvents = todaysEvents.filter((e) => teamRmUserIds.has(e.rmUserId));
     return computeLeaderboardByRm(todaysEvents, targets);
-  }, [events, targets, todayBounds, hasResolvedTeam]);
+  }, [events, targets, todayBounds, hasResolvedTeam, teamRmUserIds]);
 
   const topRows = leaderboard.slice(0, TOP_N);
   const myRow = activeUserId ? leaderboard.find((row) => row.rmUserId === activeUserId) : undefined;

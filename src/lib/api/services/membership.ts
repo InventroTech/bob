@@ -412,6 +412,34 @@ export const membershipService = {
   },
 
   /**
+   * The caller's own sibling group — every active member sharing the
+   * caller's manager, including the caller — not the full tenant directory.
+   * Spoofing swaps the JWT identity every apiClient request sends (see
+   * lib/auth/accessTokenProvider.ts), so this already resolves the spoofed
+   * user's own team during a spoofed session, same as getMyMembership.
+   * Returns an empty array (not an error) when the caller has no manager
+   * to scope against, or the lookup fails — "nothing to scope to," not
+   * "everyone."
+   */
+  async getMyTeamRmUserIds(): Promise<string[]> {
+    try {
+      const response = await apiClient.get<{ rm_user_ids: string[] }>('/membership/me/team/');
+      return Array.isArray(response.data?.rm_user_ids) ? response.data.rm_user_ids : [];
+    } catch (error: unknown) {
+      if (isExpectedAuthWall(error)) {
+        console.warn(
+          `[membershipService] getMyTeamRmUserIds: not available (auth): ${formatClientErrorDetail(error)}`
+        );
+        return [];
+      }
+      console.error(
+        `[membershipService] getMyTeamRmUserIds: unexpected failure: ${formatClientErrorDetail(error)}`
+      );
+      return [];
+    }
+  },
+
+  /**
    * Generate a spoofing JWT for a specific tenant membership.
    * Used by admin tools to temporarily act as another user.
    */
