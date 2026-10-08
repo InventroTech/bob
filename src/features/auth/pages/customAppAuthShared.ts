@@ -1,7 +1,7 @@
 import { Session } from '@supabase/supabase-js';
 import type { Provider } from '@supabase/supabase-js';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { authService } from '@/lib/api/services/auth';
 
 export type AppOAuthProvider = 'google' | 'custom:zoho';
@@ -12,7 +12,7 @@ export async function signInWithAppOAuth(
 ): Promise<string | null> {
   const redirectTo = `${window.location.origin}/app/${tenantSlug}/auth/callback`;
 
-  const { error } = await supabase.auth.signInWithOAuth({
+  const { error } = await authClient.signInWithOAuth({
     // Custom providers (e.g. custom:zoho) work at runtime; auth-js Provider union lags behind.
     provider: provider as Provider,
     options: { redirectTo },
@@ -21,7 +21,7 @@ export async function signInWithAppOAuth(
   return error?.message ?? null;
 }
 
-/** Decode OAuth error params returned by Supabase after a failed provider redirect. */
+/** Decode OAuth error params returned after a failed provider redirect. */
 export function readOAuthCallbackError(): string | null {
   const searchParams = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -97,7 +97,7 @@ export async function linkCustomAppUserIfNeeded(
       return null;
     }
 
-    const { error: refreshError } = await supabase.auth.refreshSession();
+    const { error: refreshError } = await authClient.refreshSession();
     if (refreshError) {
       console.warn('[CustomAppAuth] Session refresh failed after linking:', refreshError);
     }

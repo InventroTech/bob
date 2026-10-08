@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Outlet, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { toast } from 'sonner';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
 import { authService, membershipService } from '@/lib/api';
@@ -218,7 +219,7 @@ const ProtectedAppRoute: React.FC = () => {
 
           // Strategy 1: Force session refresh
           try {
-            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            const { data: refreshData, error: refreshError } = await authClient.refreshSession();
             if (!refreshError && refreshData?.session?.access_token) {
               const refreshedTenantId = getTenantIdFromJWT(refreshData.session.access_token);
               const refreshedRoleId = getRoleIdFromJWT(refreshData.session.access_token);

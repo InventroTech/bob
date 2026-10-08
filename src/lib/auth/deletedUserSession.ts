@@ -10,7 +10,7 @@
 import { toast } from 'sonner';
 import { authService, membershipService } from '@/lib/api';
 import { markExpectingSignedOut, signOutAndClearSession } from '@/lib/auth/authSessionService';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import type { User } from '@supabase/supabase-js';
 import { clearAllInventoryRequestFormDrafts } from '@/components/page-builder/inventory-request-form/draftStorage';
 
@@ -67,7 +67,7 @@ async function linkMembershipIfNeeded(user: User, tenantSlug?: string | null): P
       if (code === 'NO_TENANT_MEMBERSHIP') return;
       return;
     }
-    await supabase.auth.refreshSession();
+    await authClient.refreshSession();
   } catch (err) {
     console.warn('[deletedUserSession] link-user-uid during validation failed:', err);
   }
@@ -89,7 +89,7 @@ export async function validateServerSession(
 ): Promise<SessionValidity> {
   const slug = tenantSlug ?? getTenantSlugFromPath();
 
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const { data: userData, error: userError } = await authClient.getUser();
   if (userError) {
     // Network/transient errors (fetch failed, Supabase timeout) should NOT log out
     // an otherwise valid session. Only genuine auth rejections (401 from Supabase)
@@ -149,7 +149,7 @@ export async function forceSignOutRevokedUser(
     // Use 'local' scope: for genuine deletions the backend already revoked sessions
     // globally via revoke_supabase_sessions_globally(). Using 'global' here races
     // with any active OAuth callback in another tab and causes AuthCallBackPage failures.
-    await supabase.auth.signOut({ scope: 'local' });
+    await authClient.signOut({ scope: 'local' });
   } catch {
     await signOutAndClearSession({ reason: 'intentional' });
   }
