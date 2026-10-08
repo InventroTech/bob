@@ -45,6 +45,8 @@ export interface MembershipUser {
 export interface HierarchyUser {
   membershipId: number;
   user_parent_id: number | null;
+  /** auth.users UUID — the join key RM PRD events use (RmActivityEvent.rmUserId), not the membership id above. */
+  user_id?: string;
   name: string;
   email: string;
   role: { name: string } | null;
@@ -329,6 +331,7 @@ export const membershipService = {
       .map((u) => ({
         membershipId: u.membershipId,
         user_parent_id: u.user.user_parent_id ?? null,
+        user_id: u.user.user_id || u.user.uid || undefined,
         name: u.user.name || u.user.full_name || 'Unnamed User',
         email: u.user.email || 'No Email',
         role: toRoleInfo(u.user),
@@ -405,6 +408,34 @@ export const membershipService = {
         `[membershipService] getMyMembership: unexpected failure: ${formatClientErrorDetail(error)}`
       );
       return null;
+    }
+  },
+
+  /**
+   * The caller's own sibling group — every active member sharing the
+   * caller's manager, including the caller — not the full tenant directory.
+   * Spoofing swaps the JWT identity every apiClient request sends (see
+   * lib/auth/accessTokenProvider.ts), so this already resolves the spoofed
+   * user's own team during a spoofed session, same as getMyMembership.
+   * Returns an empty array (not an error) when the caller has no manager
+   * to scope against, or the lookup fails — "nothing to scope to," not
+   * "everyone."
+   */
+  async getMyTeamRmUserIds(): Promise<string[]> {
+    try {
+      const response = await apiClient.get<{ rm_user_ids: string[] }>('/membership/me/team/');
+      return Array.isArray(response.data?.rm_user_ids) ? response.data.rm_user_ids : [];
+    } catch (error: unknown) {
+      if (isExpectedAuthWall(error)) {
+        console.warn(
+          `[membershipService] getMyTeamRmUserIds: not available (auth): ${formatClientErrorDetail(error)}`
+        );
+        return [];
+      }
+      console.error(
+        `[membershipService] getMyTeamRmUserIds: unexpected failure: ${formatClientErrorDetail(error)}`
+      );
+      return [];
     }
   },
 

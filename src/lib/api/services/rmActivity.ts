@@ -66,11 +66,19 @@ export const rmActivityApi = {
   /**
    * `from`/`to` are "YYYY-MM-DD" — omit both to get the backend's default
    * (today only), never the whole tenant table. `rmUserId` narrows to one
-   * RM's own rows (e.g. the lead-card "Your Shift" panel), omit for every
-   * RM. Pages through the response until exhausted; a date/RM-windowed
-   * query is almost always a single page.
+   * RM's own rows (e.g. the lead-card "Your Shift" panel). `rmUserIds`
+   * narrows to a known set of RMs (e.g. the lead-card leaderboard's "my
+   * manager's team" — a sibling group, not just one RM) — the backend does
+   * this filtering, not a client-side slice of everyone's rows. Omit both
+   * for every RM. Pages through the response until exhausted; a date/RM-
+   * windowed query is almost always a single page.
    */
-  async getEvents(params?: { from?: string; to?: string; rmUserId?: string }): Promise<RmActivityEventDto[]> {
+  async getEvents(params?: {
+    from?: string;
+    to?: string;
+    rmUserId?: string;
+    rmUserIds?: string[];
+  }): Promise<RmActivityEventDto[]> {
     const rows: RmActivityEventDto[] = [];
     let page = 1;
     // date/RM-windowed queries are small; this is just a backstop against a
@@ -82,6 +90,7 @@ export const rmActivityApi = {
           from: params?.from,
           to: params?.to,
           rm_user_id: params?.rmUserId,
+          rm_user_ids: params?.rmUserIds?.length ? params.rmUserIds.join(',') : undefined,
           page,
           page_size: 2000,
           include_count: false,
@@ -113,11 +122,21 @@ export const rmActivityApi = {
 
   /**
    * Per-RM trial targets, keyed by rm_user_id, already summed across
-   * `from`/`to` (YYYY-MM-DD, defaults to today).
+   * `from`/`to` (YYYY-MM-DD, defaults to today). `rmUserIds` scopes the
+   * response to a known set of RMs instead of every active member in the
+   * tenant — same precedent as getEvents' `rmUserIds`.
    */
-  async getDailyTargets(params?: { from?: string; to?: string }): Promise<RmDailyTargetsDto> {
+  async getDailyTargets(params?: {
+    from?: string;
+    to?: string;
+    rmUserIds?: string[];
+  }): Promise<RmDailyTargetsDto> {
     const response = await apiClient.get<RmDailyTargetsDto>('/analytics/rm-daily-targets/', {
-      params: { from: params?.from, to: params?.to },
+      params: {
+        from: params?.from,
+        to: params?.to,
+        rm_user_ids: params?.rmUserIds?.length ? params.rmUserIds.join(',') : undefined,
+      },
     });
     return response.data;
   },

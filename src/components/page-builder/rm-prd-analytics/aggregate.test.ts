@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { computeAdherenceByRm, computePerformanceByRm, computeTeamTotals, formatVsTarget } from './aggregate';
+import {
+  computeAdherenceByRm,
+  computeLeaderboardByManager,
+  computeLeaderboardByRm,
+  computePerformanceByRm,
+  computeTeamTotals,
+  formatVsTarget,
+} from './aggregate';
 import type { RmActivityEvent } from './types';
 
 function callTouch(overrides: Partial<RmActivityEvent> = {}): RmActivityEvent {
@@ -105,6 +112,98 @@ describe('computeTeamTotals target', () => {
     // register as "1 unique lead" that then makes the disposition rates
     // fail to sum to 100%
     expect(totals.uniqueLeadsHandled).toBe(1);
+  });
+});
+
+describe('computeLeaderboardByRm ranking', () => {
+  it('ranks by vs-target ratio, not raw achieved count', () => {
+    const events = [
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 1, updatedStatus: 'TRIAL_ACTIVATED' }),
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 2, id: 2, updatedStatus: 'TRIAL_ACTIVATED' }),
+      callTouch({ rmUserId: 'rm-2', leadRecordId: 3, id: 3, updatedStatus: 'TRIAL_ACTIVATED' }),
+    ];
+    // rm-1: 2 achieved / 10 target = 20%; rm-2: 1 achieved / 2 target = 50%
+    const targets = { 'rm-1': 10, 'rm-2': 2 };
+    const rows = computeLeaderboardByRm(events, targets);
+    expect(rows[0].rmUserId).toBe('rm-2'); // higher ratio wins despite fewer raw trials
+    expect(rows[0].rank).toBe(1);
+    expect(rows[1].rmUserId).toBe('rm-1');
+  });
+
+  it('breaks a tied vs-target ratio by raw achieved, then unique leads', () => {
+    const events = [
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 1, updatedStatus: 'TRIAL_ACTIVATED' }),
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 2, id: 2, updatedStatus: 'NOT_CONNECTED' }),
+      callTouch({ rmUserId: 'rm-2', leadRecordId: 3, id: 3, updatedStatus: 'TRIAL_ACTIVATED' }),
+    ];
+    // both rm-1 and rm-2 land on a 1/1 = 100% ratio and 1 achieved — rm-1
+    // worked more unique leads (2 vs 1), so it wins the tie-break
+    const targets = { 'rm-1': 1, 'rm-2': 1 };
+    const rows = computeLeaderboardByRm(events, targets);
+    expect(rows[0].rmUserId).toBe('rm-1');
+  });
+
+  it('sorts an RM with no configured target after an RM with a real 0% result', () => {
+    const events = [
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 1, updatedStatus: 'NOT_CONNECTED' }), // 0 achieved, has a target -> real 0%
+      callTouch({ rmUserId: 'rm-2', leadRecordId: 2, id: 2, updatedStatus: 'NOT_CONNECTED' }), // 0 achieved, no target -> unset
+    ];
+    const targets = { 'rm-1': 10 };
+    const rows = computeLeaderboardByRm(events, targets);
+    expect(rows[0].rmUserId).toBe('rm-1'); // a real 0% ranks above "no target at all"
+    expect(rows[1].rmUserId).toBe('rm-2');
+    expect(rows[1].vsTargetPct).toBe(-1); // "—", never a false 0%
+  });
+});
+
+describe('computeLeaderboardByManager', () => {
+  it("rolls each manager's whole team into one row and ranks by team vs-target ratio", () => {
+    const events = [
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 1, updatedStatus: 'TRIAL_ACTIVATED' }),
+      callTouch({ rmUserId: 'rm-2', leadRecordId: 2, id: 2, updatedStatus: 'TRIAL_ACTIVATED' }),
+      callTouch({ rmUserId: 'rm-3', leadRecordId: 3, id: 3, updatedStatus: 'TRIAL_ACTIVATED' }),
+    ];
+    // mgr-a's team (rm-1, rm-2): 2 achieved / 10 target = 20%
+    // mgr-b's team (rm-3): 1 achieved / 1 target = 100%
+    const targets = { 'rm-1': 5, 'rm-2': 5, 'rm-3': 1 };
+    const rmToManagerUserId = { 'rm-1': 'mgr-a', 'rm-2': 'mgr-a', 'rm-3': 'mgr-b' };
+    const managerNameByUserId = { 'mgr-a': 'Manager A', 'mgr-b': 'Manager B' };
+    const rows = computeLeaderboardByManager(events, targets, rmToManagerUserId, managerNameByUserId);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].managerUserId).toBe('mgr-b'); // higher team ratio ranks first
+    expect(rows[0].rank).toBe(1);
+    expect(rows[1].managerUserId).toBe('mgr-a');
+  });
+
+  it('excludes RMs with no resolved manager instead of mis-bucketing them', () => {
+    const events = [
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 1, updatedStatus: 'TRIAL_ACTIVATED' }),
+      callTouch({ rmUserId: 'rm-unmapped', leadRecordId: 2, id: 2, updatedStatus: 'TRIAL_ACTIVATED' }),
+    ];
+    const targets = { 'rm-1': 2 };
+    const rmToManagerUserId = { 'rm-1': 'mgr-a' }; // rm-unmapped intentionally absent
+    const managerNameByUserId = { 'mgr-a': 'Manager A' };
+    const rows = computeLeaderboardByManager(events, targets, rmToManagerUserId, managerNameByUserId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].managerUserId).toBe('mgr-a');
+    expect(rows[0].achieved).toBe(1); // only rm-1's event counted, not rm-unmapped's
+  });
+
+  it("counts an idle RM's target toward the team total even with zero events today", () => {
+    const events = [
+      callTouch({ rmUserId: 'rm-1', leadRecordId: 1, updatedStatus: 'TRIAL_ACTIVATED' }),
+      // rm-2 is on mgr-a's team but has no events in this range at all
+    ];
+    const targets = { 'rm-1': 5, 'rm-2': 5 };
+    const rmToManagerUserId = { 'rm-1': 'mgr-a', 'rm-2': 'mgr-a' };
+    const managerNameByUserId = { 'mgr-a': 'Manager A' };
+    const rows = computeLeaderboardByManager(events, targets, rmToManagerUserId, managerNameByUserId);
+    expect(rows).toHaveLength(1);
+    // target must be rm-1's 5 PLUS idle rm-2's 5 = 10, not just rm-1's 5 —
+    // an idle RM with a real target must not silently drop out of the
+    // denominator and make the team's vs-target % look artificially high
+    expect(rows[0].target).toBe(10);
+    expect(rows[0].rmCount).toBe(2);
   });
 });
 

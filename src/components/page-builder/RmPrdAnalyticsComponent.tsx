@@ -28,11 +28,15 @@ import {
   achtThresholds,
   computeAchtOverall,
   computeAdherenceByRm,
+  computeLeaderboardByManager,
+  computeLeaderboardByRm,
   computePerformanceByRm,
   computeShiftTimeAverages,
   computeTeamTotals,
   formatVsTarget,
   type RmAdherenceRow,
+  type RmLeaderboardRow,
+  type RmManagerLeaderboardRow,
   type RmPerformanceRow,
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
@@ -49,7 +53,8 @@ import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useSpoofUserId } from '@/lib/auth/spoof';
-import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { membershipService, type HierarchyUser } from '@/lib/api/services/membership';
+import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown, Trophy } from 'lucide-react';
 
 // The filter-bar controls a manager can individually show/hide via config —
 // keyed the same as Filters below so FilterBar can look visibility up directly.
@@ -86,6 +91,22 @@ export interface RmPrdAnalyticsConfig {
    * so existing pages don't suddenly show an empty filter.
    */
   managerRoles?: string[];
+  /**
+   * 'all' (default, missing = 'all') ranks every RM visible to this page in
+   * the Leaderboard tab, same as today. 'under_me' narrows the Leaderboard
+   * tab only (not Performance/Adherence) to just the RMs who directly
+   * report to the signed-in user — same precedent as Add User's
+   * `userScope: 'under_me'`.
+   */
+  leaderboardScope?: 'all' | 'under_me';
+  /**
+   * Adds a second "Manager Leaderboard" sub-view inside the Leaderboard tab
+   * — each manager's whole team rolled into one row and ranked by that
+   * team's combined vs-target %, e.g. for a GM comparing ASMs against each
+   * other. Off by default so existing pages keep showing just the RM board.
+   * Clicking a manager row opens that manager's own RM leaderboard.
+   */
+  showManagerLeaderboard?: boolean;
 }
 
 interface RmPrdAnalyticsComponentProps {
@@ -107,7 +128,7 @@ export const shouldShowFilter = (
   return isFilterVisible(config, key);
 };
 
-type Tab = 'performance' | 'adherence';
+type Tab = 'performance' | 'adherence' | 'leaderboard';
 
 const DEFAULT_FILTERS = {
   manager: 'All managers',
@@ -155,7 +176,8 @@ function loadStoredFilters(): Filters {
 
 function loadStoredTab(): Tab {
   if (typeof window === 'undefined') return 'performance';
-  return window.localStorage.getItem(tabStorageKey()) === 'adherence' ? 'adherence' : 'performance';
+  const stored = window.localStorage.getItem(tabStorageKey());
+  return stored === 'adherence' || stored === 'leaderboard' ? stored : 'performance';
 }
 
 // The RM PRD analytics dashboard. Every number comes from rm_activity_events
@@ -181,15 +203,30 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   const [drillRmUserId, setDrillRmUserId] = useState<string | null>(null);
   const [rmSearch, setRmSearch] = useState('');
   const [selectedRmUserId, setSelectedRmUserId] = useState<string | null>(null);
+  // which Leaderboard sub-view is active — only meaningful (and only shown)
+  // when config.showManagerLeaderboard is on; otherwise the tab always just
+  // renders the RM board directly, same as before this feature existed
+  const [leaderboardSubView, setLeaderboardSubView] = useState<'rm' | 'manager'>('rm');
+  const [selectedManagerUserId, setSelectedManagerUserId] = useState<string | null>(null);
 
   // bumped to force events/targets to refetch: on returning to this tab
   // (switching back from another tab/app — a blind interval kept refetching
   // underneath a manager mid-read and was disruptive) or via the manual
   // Refresh button below.
   const [refreshTick, setRefreshTick] = useState(0);
+  // minimum gap between visibility-triggered refetches — alt-tabbing back
+  // and forth (checking another app repeatedly) must not retrigger the full
+  // events+targets fetch (and everything downstream of it) every single
+  // time; a manual Refresh click always goes through regardless, see below
+  const MIN_VISIBILITY_REFRESH_GAP_MS = 60_000;
+  const lastRefreshAtRef = useRef(Date.now());
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (
+        document.visibilityState === 'visible' &&
+        Date.now() - lastRefreshAtRef.current > MIN_VISIBILITY_REFRESH_GAP_MS
+      ) {
+        lastRefreshAtRef.current = Date.now();
         setRefreshTick((t) => t + 1);
       }
     };
@@ -213,6 +250,15 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     }
   }, [tab]);
 
+  // RM view's fetch is narrowed server-side to just the signed-in RM's own
+  // events (see useRmActivityEvents below), so there's nothing to rank them
+  // against — a stored 'leaderboard' tab from a manager page this same
+  // browser profile also visits must not strand an RM view on a tab that's
+  // about to render hidden/empty.
+  useEffect(() => {
+    if (isRmView && tab === 'leaderboard') setTab('performance');
+  }, [isRmView, tab]);
+
   const dateBounds = useMemo(() => {
     // RM view with no signed-in user resolved yet — bounds=null skips the
     // fetch entirely (see useRmActivityEvents) rather than briefly fetching
@@ -233,40 +279,148 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
   const { targets: dailyTargets } = useRmDailyTargets(dateBounds, refreshTick);
+  // leadGroup/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
+  // BREAK_* rows don't carry a lead's group/state/party) — filtering the
+  // whole event stream by them would silently drop real break/login rows
+  // and corrupt the login/break/occupancy numbers whenever one of these
+  // filters is active. One combined .filter() pass instead of up to 4
+  // chained ones — same semantics, fewer full-array passes/intermediate
+  // arrays over what can be a large events list.
   const visibleEvents = useMemo(() => {
-    let result = filterByDateRange(events, dateBounds);
-    if (filters.manager !== 'All managers') result = result.filter((e) => e.managerName === filters.manager);
-    // leadGroup/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
-    // BREAK_* rows don't carry a lead's group/state/party) — filtering the
-    // whole event stream by them would silently drop real break/login rows
-    // and corrupt the login/break/occupancy numbers whenever one of these
-    // filters is active
-    if (filters.leadGroup !== 'All groups') {
-      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.leadGroup === filters.leadGroup);
-    }
-    if (filters.state !== 'All states') {
-      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.state === filters.state);
-    }
-    if (filters.party !== 'All parties') {
-      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.party === filters.party);
-    }
-    return result;
+    const dateFiltered = filterByDateRange(events, dateBounds);
+    return dateFiltered.filter((e) => {
+      if (filters.manager !== 'All managers' && e.managerName !== filters.manager) return false;
+      if (e.eventType !== 'CALL_TOUCH') return true;
+      if (filters.leadGroup !== 'All groups' && e.leadGroup !== filters.leadGroup) return false;
+      if (filters.state !== 'All states' && e.state !== filters.state) return false;
+      if (filters.party !== 'All parties' && e.party !== filters.party) return false;
+      return true;
+    });
   }, [events, dateBounds, filters.manager, filters.leadGroup, filters.state, filters.party]);
 
+  // Every aggregate below is gated to the active tab (and, for the manager
+  // board, the active Leaderboard sub-view) — these are full O(n) passes
+  // over visibleEvents, and computing all of them unconditionally on every
+  // render (old behavior) did ~5x the necessary work since only one tab is
+  // ever visible at a time. computeLeaderboardByRm internally re-derives
+  // computePerformanceByRm, and computeShiftTimeAverages internally
+  // re-derives computeAdherenceByRm (see aggregate.ts) — gating by tab means
+  // those two redundant internal passes simply never run in the same render
+  // as their already-computed counterpart anymore.
   const performanceByRm = useMemo(
-    () => computePerformanceByRm(visibleEvents, dailyTargets),
-    [visibleEvents, dailyTargets]
+    () => (tab === 'performance' ? computePerformanceByRm(visibleEvents, dailyTargets) : []),
+    [tab, visibleEvents, dailyTargets]
   );
-  const adherenceByRm = useMemo(() => computeAdherenceByRm(visibleEvents), [visibleEvents]);
+  const adherenceByRm = useMemo(
+    () => (tab === 'adherence' ? computeAdherenceByRm(visibleEvents) : []),
+    [tab, visibleEvents]
+  );
+
+  // Shared hierarchy fetch backing two Leaderboard-tab-only features:
+  // config.leaderboardScope === 'under_me' (RM board scoped to direct
+  // reports) and config.showManagerLeaderboard (manager-rollup board, needs
+  // each RM's real manager). One fetch feeds both so neither hits the API
+  // twice. Performance/Adherence above intentionally keep reading
+  // visibleEvents, untouched by either feature.
+  const needsHierarchy = config?.leaderboardScope === 'under_me' || !!config?.showManagerLeaderboard;
+  const [hierarchyRaw, setHierarchyRaw] = useState<{
+    myMembershipId: number | null;
+    users: HierarchyUser[];
+  } | null>(null);
+  useEffect(() => {
+    if (!needsHierarchy) {
+      setHierarchyRaw(null);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([membershipService.getMyMembership(), membershipService.getUsersForHierarchy()])
+      .then(([myMembership, users]) => {
+        if (cancelled) return;
+        setHierarchyRaw({ myMembershipId: myMembership?.tenant_membership_id ?? null, users });
+      })
+      .catch(() => {
+        if (!cancelled) setHierarchyRaw({ myMembershipId: null, users: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsHierarchy]);
+
+  // config.leaderboardScope === 'under_me' — the RMs who directly report to
+  // whoever is signed in. Same mechanism as Add User's userScope: 'under_me'
+  // (compare each member's user_parent_id against my own
+  // tenant_membership_id), not a recursive team resolve.
+  const underMeRmUserIds = useMemo(() => {
+    if (config?.leaderboardScope !== 'under_me') return null;
+    if (!hierarchyRaw) return null; // still loading
+    if (hierarchyRaw.myMembershipId == null) return new Set<string>();
+    const ids = hierarchyRaw.users
+      .filter((u) => u.user_parent_id === hierarchyRaw.myMembershipId && u.user_id)
+      .map((u) => u.user_id as string);
+    return new Set(ids);
+  }, [config?.leaderboardScope, hierarchyRaw]);
+
+  // config.showManagerLeaderboard — rmToManagerUserId resolves each RM's
+  // real manager via TenantMembership.user_parent_id (membershipId ->
+  // that member's own user_id, one hop up), not the free-text managerName
+  // copied onto events — see computeLeaderboardByManager's doc comment.
+  const managerHierarchy = useMemo(() => {
+    if (!config?.showManagerLeaderboard || !hierarchyRaw) return null;
+    const membershipIdToUserId = new Map<number, string>();
+    hierarchyRaw.users.forEach((u) => {
+      if (u.user_id) membershipIdToUserId.set(u.membershipId, u.user_id);
+    });
+    const rmToManagerUserId: Record<string, string> = {};
+    const managerNameByUserId: Record<string, string> = {};
+    hierarchyRaw.users.forEach((u) => {
+      if (!u.user_id) return;
+      managerNameByUserId[u.user_id] = u.name;
+      if (u.user_parent_id == null) return;
+      const managerUserId = membershipIdToUserId.get(u.user_parent_id);
+      if (managerUserId) rmToManagerUserId[u.user_id] = managerUserId;
+    });
+    return { rmToManagerUserId, managerNameByUserId };
+  }, [config?.showManagerLeaderboard, hierarchyRaw]);
+
+  const leaderboardEvents = useMemo(() => {
+    if (config?.leaderboardScope !== 'under_me') return visibleEvents;
+    // still loading — show nothing rather than flash the whole visible team
+    if (!underMeRmUserIds) return [];
+    return visibleEvents.filter((e) => underMeRmUserIds.has(e.rmUserId));
+  }, [visibleEvents, config?.leaderboardScope, underMeRmUserIds]);
+
+  const showingRmBoard = tab === 'leaderboard' && (!config?.showManagerLeaderboard || leaderboardSubView === 'rm');
+  const showingManagerBoard = tab === 'leaderboard' && !!config?.showManagerLeaderboard && leaderboardSubView === 'manager';
+  const leaderboardByRm = useMemo(
+    () => (showingRmBoard ? computeLeaderboardByRm(leaderboardEvents, dailyTargets) : []),
+    [showingRmBoard, leaderboardEvents, dailyTargets]
+  );
+  // Manager Leaderboard sub-view — always from visibleEvents (the page's
+  // normal filters), independent of the RM board's own leaderboardScope:
+  // 'under_me' is a one-level "my direct reports" rule that means something
+  // different for an RM-level board than a manager-level one, so each board
+  // owns its own scope rather than sharing leaderboardEvents.
+  const leaderboardByManager = useMemo<RmManagerLeaderboardRow[]>(() => {
+    if (!showingManagerBoard || !managerHierarchy) return [];
+    return computeLeaderboardByManager(
+      visibleEvents,
+      dailyTargets,
+      managerHierarchy.rmToManagerUserId,
+      managerHierarchy.managerNameByUserId
+    );
+  }, [showingManagerBoard, managerHierarchy, visibleEvents, dailyTargets]);
   const teamTotals = useMemo(
-    () => computeTeamTotals(visibleEvents, dailyTargets),
-    [visibleEvents, dailyTargets]
+    () => (tab === 'performance' ? computeTeamTotals(visibleEvents, dailyTargets) : computeTeamTotals([], {})),
+    [tab, visibleEvents, dailyTargets]
   );
   const shiftTimeAverages = useMemo(
-    () => computeShiftTimeAverages(visibleEvents, filters.dateRange),
-    [visibleEvents, filters.dateRange]
+    () => (tab === 'adherence' ? computeShiftTimeAverages(visibleEvents, filters.dateRange) : computeShiftTimeAverages([], filters.dateRange)),
+    [tab, visibleEvents, filters.dateRange]
   );
-  const achtOverall = useMemo(() => computeAchtOverall(visibleEvents), [visibleEvents]);
+  const achtOverall = useMemo(
+    () => (tab === 'adherence' ? computeAchtOverall(visibleEvents) : computeAchtOverall([])),
+    [tab, visibleEvents]
+  );
 
   // "By RM" table search — exact-substring match on the RM's name, doesn't
   // touch any of the team-total cards above the table
@@ -278,6 +432,13 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   const filteredAdherenceByRm = useMemo(
     () => (rmSearchTerm ? adherenceByRm.filter((row) => row.name.toLowerCase().includes(rmSearchTerm)) : adherenceByRm),
     [adherenceByRm, rmSearchTerm]
+  );
+  // rank is computed against the full team above, then just narrowed here —
+  // searching for one RM must show their real team rank, not re-rank them
+  // against only the other search matches
+  const filteredLeaderboardByRm = useMemo(
+    () => (rmSearchTerm ? leaderboardByRm.filter((row) => row.name.toLowerCase().includes(rmSearchTerm)) : leaderboardByRm),
+    [leaderboardByRm, rmSearchTerm]
   );
 
   const setFilter = (key: keyof Filters, value: string) => {
@@ -301,6 +462,25 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   );
   const selectedRmAchtOverall = useMemo(() => computeAchtOverall(selectedRmEvents), [selectedRmEvents]);
   const selectedRmProfile: RmActivityEvent | undefined = selectedRmEvents[0];
+
+  // Manager row click opens a modal showing that one manager's own RM
+  // leaderboard (not team-totals cards) — ranked the same way the main RM
+  // board is, just pre-filtered to this manager's reports.
+  const selectedManagerEvents = useMemo(
+    () =>
+      selectedManagerUserId && managerHierarchy
+        ? visibleEvents.filter((e) => managerHierarchy.rmToManagerUserId[e.rmUserId] === selectedManagerUserId)
+        : [],
+    [visibleEvents, selectedManagerUserId, managerHierarchy]
+  );
+  const selectedManagerRmLeaderboard = useMemo(
+    () => computeLeaderboardByRm(selectedManagerEvents, dailyTargets),
+    [selectedManagerEvents, dailyTargets]
+  );
+  const selectedManagerName =
+    (selectedManagerUserId && managerHierarchy?.managerNameByUserId[selectedManagerUserId]) ||
+    selectedManagerEvents[0]?.managerName ||
+    'Manager';
 
   const openTeamDrill = (filter: DrillFilter) => {
     setDrillRmUserId(null);
@@ -342,7 +522,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setRefreshTick((t) => t + 1)}
+          onClick={() => {
+            lastRefreshAtRef.current = Date.now();
+            setRefreshTick((t) => t + 1);
+          }}
           className="gap-1.5"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -366,10 +549,20 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <TabButton active={tab === 'performance'} onClick={() => setTab('performance')}>
           Performance
         </TabButton>
+        {/* hidden in RM view — the fetch there is already narrowed to just this
+            RM's own events, so there's no team to rank them against */}
+        {!isRmView && (
+          <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')}>
+            <span className="inline-flex items-center gap-1.5">
+              <Trophy className="h-3.5 w-3.5" />
+              Leaderboard
+            </span>
+          </TabButton>
+        )}
       </div>
 
       <div className="mt-6">
-        {tab === 'performance' ? (
+        {tab === 'performance' && (
           <PerformanceView
             onDrill={openTeamDrill}
             teamTotals={teamTotals}
@@ -380,7 +573,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             showByRmTable={!isRmView}
             stateNameById={stateNameById}
           />
-        ) : (
+        )}
+        {tab === 'adherence' && (
           <AdherenceView
             onDrill={openTeamDrill}
             shiftTimeAverages={shiftTimeAverages}
@@ -393,6 +587,40 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             stateNameById={stateNameById}
           />
         )}
+        {tab === 'leaderboard' && !isRmView && (
+          <div className="space-y-4">
+            {config?.showManagerLeaderboard && (
+              <div className="inline-flex rounded-lg border border-stone-200 bg-white p-1">
+                <TabButton active={leaderboardSubView === 'rm'} onClick={() => setLeaderboardSubView('rm')}>
+                  RM Leaderboard
+                </TabButton>
+                <TabButton
+                  active={leaderboardSubView === 'manager'}
+                  onClick={() => setLeaderboardSubView('manager')}
+                >
+                  Manager Leaderboard
+                </TabButton>
+              </div>
+            )}
+
+            {(!config?.showManagerLeaderboard || leaderboardSubView === 'rm') && (
+              <LeaderboardView
+                leaderboardByRm={filteredLeaderboardByRm}
+                rmSearch={rmSearch}
+                onRmSearchChange={setRmSearch}
+                onSelectRm={setSelectedRmUserId}
+                stateNameById={stateNameById}
+              />
+            )}
+
+            {config?.showManagerLeaderboard && leaderboardSubView === 'manager' && (
+              <ManagerLeaderboardView
+                leaderboardByManager={leaderboardByManager}
+                onSelectManager={setSelectedManagerUserId}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       <RmDetailModal
@@ -403,6 +631,18 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         shiftTimeAverages={selectedRmShiftTimeAverages}
         achtOverall={selectedRmAchtOverall}
         onDrill={openRmDrill}
+        stateNameById={stateNameById}
+      />
+
+      <ManagerDetailModal
+        open={selectedManagerUserId !== null}
+        onClose={() => setSelectedManagerUserId(null)}
+        managerName={selectedManagerName}
+        rows={selectedManagerRmLeaderboard}
+        onSelectRm={(rmUserId) => {
+          setSelectedManagerUserId(null);
+          setSelectedRmUserId(rmUserId);
+        }}
         stateNameById={stateNameById}
       />
 
@@ -1159,6 +1399,294 @@ const AdherenceTable: React.FC<{
   </div>
   );
 };
+
+// ---- Leaderboard tab ----
+// Ranks RMs by vs-target % — trials achieved ÷ their own daily target, same
+// number the Performance tab's Achieved vs Target card tracks, just as a
+// ratio instead of a raw count (see computeLeaderboardByRm for the tie-break
+// order, and why an unset target sorts last instead of reading as 0%). Top 3
+// get a podium call-out above the full ranked table; clicking any row opens
+// the same RmDetailModal as the other two tables.
+
+const RANK_MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+const PodiumCard: React.FC<{ row: RmLeaderboardRow; onClick: () => void }> = ({ row, onClick }) => (
+  <CardShell
+    onClick={onClick}
+    className={cn(
+      row.rank === 1 && 'border-amber-300 bg-amber-50/60',
+      row.rank === 2 && 'border-stone-300 bg-stone-100/60',
+      row.rank === 3 && 'border-orange-200 bg-orange-50/60'
+    )}
+  >
+    <div className="flex items-center justify-between">
+      <SectionLabel>Rank {row.rank}</SectionLabel>
+      <span className="text-xl leading-none">{RANK_MEDAL[row.rank]}</span>
+    </div>
+    <div className="font-semibold text-stone-900">{row.name}</div>
+    <div className="text-xs text-stone-400">
+      {row.manager} · {row.team}
+    </div>
+    <div className="mt-2 font-mono text-3xl font-semibold text-emerald-700">
+      {formatVsTarget(row.achieved, row.target)}
+    </div>
+    <div className="mt-1 text-xs text-stone-400">
+      {row.achieved} / {row.target} trials · {row.uniqueLeads} unique leads
+    </div>
+  </CardShell>
+);
+
+const LeaderboardView: React.FC<{
+  leaderboardByRm: RmLeaderboardRow[];
+  rmSearch: string;
+  onRmSearchChange: (value: string) => void;
+  onSelectRm: (rmUserId: string) => void;
+  stateNameById: Record<string, string>;
+}> = ({ leaderboardByRm, rmSearch, onRmSearchChange, onSelectRm, stateNameById }) => {
+  const topThree = leaderboardByRm.filter((row) => row.rank <= 3);
+
+  return (
+    <div className="space-y-6">
+      {topThree.length > 0 && (
+        <section>
+          <SectionLabel>Today's Top Performers</SectionLabel>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {topThree.map((row) => (
+              <PodiumCard key={row.rmUserId} row={row} onClick={() => onSelectRm(row.rmUserId)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <RmTableHeader label="Full Ranking" search={rmSearch} onSearchChange={onRmSearchChange} />
+        <LeaderboardTable rows={leaderboardByRm} onSelectRm={onSelectRm} stateNameById={stateNameById} />
+      </section>
+    </div>
+  );
+};
+
+type LeaderboardSortKey = 'rank' | 'name' | 'vsTargetPct' | 'achieved' | 'target' | 'trialRate' | 'uniqueLeads' | 'touches';
+
+function leaderboardSortValue(row: RmLeaderboardRow, key: LeaderboardSortKey): string | number {
+  switch (key) {
+    case 'name':
+      return row.name.toLowerCase();
+    default:
+      return row[key];
+  }
+}
+
+const LeaderboardTable: React.FC<{
+  rows: RmLeaderboardRow[];
+  onSelectRm: (rmUserId: string) => void;
+  stateNameById: Record<string, string>;
+}> = ({ rows, onSelectRm, stateNameById }) => {
+  const { ref, minHeight } = useStableMinHeight([rows.length]);
+  const { sortedRows, sort, toggleSort } = useTableSort(rows, leaderboardSortValue);
+  return (
+    <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
+      <Table ref={ref} className="min-w-[860px]">
+        <TableHeader>
+          <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
+            <SortableHeader label="Rank" sortKey="rank" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="RM" sortKey="name" sort={sort} onSort={toggleSort} />
+            <SortableHeader label="vs Target" sortKey="vsTargetPct" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Trials" sortKey="achieved" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Target" sortKey="target" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Trial Rate" sortKey="trialRate" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Unique Leads" sortKey="uniqueLeads" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Touches" sortKey="touches" sort={sort} onSort={toggleSort} align="right" />
+          </TableRow>
+        </TableHeader>
+        <TableBody className="bg-white">
+          {sortedRows.map((row) => (
+            <TableRow
+              key={row.rmUserId}
+              className={cn('cursor-pointer hover:bg-stone-50', row.rank <= 3 && 'bg-amber-50/40')}
+              onClick={() => onSelectRm(row.rmUserId)}
+            >
+              <TableCell className="whitespace-nowrap text-right font-mono text-stone-500">
+                {RANK_MEDAL[row.rank] ?? row.rank}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                <div className="font-semibold text-stone-900">{row.name}</div>
+                <div className="text-xs text-stone-400">
+                  {row.manager} · {row.team} · {stateNameById[row.state] || row.state}
+                </div>
+              </TableCell>
+              <TableCell
+                className={cn('whitespace-nowrap text-right font-mono font-semibold', vsTargetColor(row.achieved, row.target))}
+              >
+                {formatVsTarget(row.achieved, row.target)}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono text-emerald-700">{row.achieved}</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono text-stone-400">{row.target}</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono">{row.trialRate}%</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono underline decoration-stone-300">
+                {row.uniqueLeads}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono">{row.touches}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
+// ---- Manager Leaderboard sub-view ----
+// Same shape as the RM leaderboard, one level up: each row is a whole
+// manager's team rolled into one total (computeLeaderboardByManager), ranked
+// by that team's combined vs-target %. Clicking a row opens a modal showing
+// that one manager's own RM leaderboard (ManagerDetailModal below).
+
+const ManagerPodiumCard: React.FC<{ row: RmManagerLeaderboardRow; onClick: () => void }> = ({ row, onClick }) => (
+  <CardShell
+    onClick={onClick}
+    className={cn(
+      row.rank === 1 && 'border-amber-300 bg-amber-50/60',
+      row.rank === 2 && 'border-stone-300 bg-stone-100/60',
+      row.rank === 3 && 'border-orange-200 bg-orange-50/60'
+    )}
+  >
+    <div className="flex items-center justify-between">
+      <SectionLabel>Rank {row.rank}</SectionLabel>
+      <span className="text-xl leading-none">{RANK_MEDAL[row.rank]}</span>
+    </div>
+    <div className="font-semibold text-stone-900">{row.managerName}</div>
+    <div className="text-xs text-stone-400">{row.rmCount} RMs</div>
+    <div className="mt-2 font-mono text-3xl font-semibold text-emerald-700">
+      {formatVsTarget(row.achieved, row.target)}
+    </div>
+    <div className="mt-1 text-xs text-stone-400">
+      {row.achieved} / {row.target} trials · {row.uniqueLeads} unique leads
+    </div>
+  </CardShell>
+);
+
+const ManagerLeaderboardView: React.FC<{
+  leaderboardByManager: RmManagerLeaderboardRow[];
+  onSelectManager: (managerUserId: string) => void;
+}> = ({ leaderboardByManager, onSelectManager }) => {
+  const topThree = leaderboardByManager.filter((row) => row.rank <= 3);
+
+  if (leaderboardByManager.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">
+        No manager hierarchy resolved for the RMs visible here yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {topThree.length > 0 && (
+        <section>
+          <SectionLabel>Today's Top Teams</SectionLabel>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {topThree.map((row) => (
+              <ManagerPodiumCard key={row.managerUserId} row={row} onClick={() => onSelectManager(row.managerUserId)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <SectionLabel>Full Ranking</SectionLabel>
+        <ManagerLeaderboardTable rows={leaderboardByManager} onSelectManager={onSelectManager} />
+      </section>
+    </div>
+  );
+};
+
+type ManagerLeaderboardSortKey = 'rank' | 'managerName' | 'vsTargetPct' | 'achieved' | 'target' | 'trialRate' | 'uniqueLeads' | 'rmCount';
+
+function managerLeaderboardSortValue(row: RmManagerLeaderboardRow, key: ManagerLeaderboardSortKey): string | number {
+  switch (key) {
+    case 'managerName':
+      return row.managerName.toLowerCase();
+    default:
+      return row[key];
+  }
+}
+
+const ManagerLeaderboardTable: React.FC<{
+  rows: RmManagerLeaderboardRow[];
+  onSelectManager: (managerUserId: string) => void;
+}> = ({ rows, onSelectManager }) => {
+  const { ref, minHeight } = useStableMinHeight([rows.length]);
+  const { sortedRows, sort, toggleSort } = useTableSort(rows, managerLeaderboardSortValue);
+  return (
+    <div className="overflow-x-auto rounded-xl border border-stone-200" style={{ minHeight }}>
+      <Table ref={ref} className="min-w-[760px]">
+        <TableHeader>
+          <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
+            <SortableHeader label="Rank" sortKey="rank" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Manager" sortKey="managerName" sort={sort} onSort={toggleSort} />
+            <SortableHeader label="vs Target" sortKey="vsTargetPct" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Trials" sortKey="achieved" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Target" sortKey="target" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Trial Rate" sortKey="trialRate" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="Unique Leads" sortKey="uniqueLeads" sort={sort} onSort={toggleSort} align="right" />
+            <SortableHeader label="RMs" sortKey="rmCount" sort={sort} onSort={toggleSort} align="right" />
+          </TableRow>
+        </TableHeader>
+        <TableBody className="bg-white">
+          {sortedRows.map((row) => (
+            <TableRow
+              key={row.managerUserId}
+              className={cn('cursor-pointer hover:bg-stone-50', row.rank <= 3 && 'bg-amber-50/40')}
+              onClick={() => onSelectManager(row.managerUserId)}
+            >
+              <TableCell className="whitespace-nowrap text-right font-mono text-stone-500">
+                {RANK_MEDAL[row.rank] ?? row.rank}
+              </TableCell>
+              <TableCell className="whitespace-nowrap font-semibold text-stone-900">{row.managerName}</TableCell>
+              <TableCell
+                className={cn('whitespace-nowrap text-right font-mono font-semibold', vsTargetColor(row.achieved, row.target))}
+              >
+                {formatVsTarget(row.achieved, row.target)}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono text-emerald-700">{row.achieved}</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono text-stone-400">{row.target}</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono">{row.trialRate}%</TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono underline decoration-stone-300">
+                {row.uniqueLeads}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-right font-mono">{row.rmCount}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
+
+// Opened by clicking a manager row — that manager's own RM leaderboard
+// (same table/podium the main RM board uses), so a GM can drill from "which
+// team is ahead" straight into "which RM on that team is carrying it".
+// Clicking an RM row here hands off to the normal RmDetailModal.
+const ManagerDetailModal: React.FC<{
+  open: boolean;
+  onClose: () => void;
+  managerName: string;
+  rows: RmLeaderboardRow[];
+  onSelectRm: (rmUserId: string) => void;
+  stateNameById: Record<string, string>;
+}> = ({ open, onClose, managerName, rows, onSelectRm, stateNameById }) => (
+  <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+    <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>{managerName}'s Team</DialogTitle>
+        <DialogDescription>
+          {rows.length > 0 ? `${rows.length} RM${rows.length === 1 ? '' : 's'} ranked by vs-target %` : 'No activity in this date range'}
+        </DialogDescription>
+      </DialogHeader>
+      {rows.length > 0 && <LeaderboardTable rows={rows} onSelectRm={onSelectRm} stateNameById={stateNameById} />}
+    </DialogContent>
+  </Dialog>
+);
 
 // ---- RM detail modal ----
 // Opened by clicking a row in either "By RM" table. Same cards as the team
