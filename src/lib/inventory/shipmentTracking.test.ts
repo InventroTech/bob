@@ -7,14 +7,49 @@ import {
   normalizeCourierLabel,
   filterAftershipCouriers,
   courierValueForTrack,
+  SHIPMENT_TRACKING_VISIBLE_REQUEST_STATUSES,
 } from './shipmentTracking';
 
 describe('shipment tracking visibility + paste', () => {
-  it('shows tracking section from VENDOR_IDENTIFIED / IN_CART / IN_SHIPPING', () => {
+  it('shows tracking section from APPROVED onwards (legacy codes too)', () => {
     expect(shouldShowShipmentTrackingSection('NEW_REQUEST')).toBe(false);
-    expect(shouldShowShipmentTrackingSection('VENDOR_IDENTIFIED')).toBe(true);
+    expect(shouldShowShipmentTrackingSection('APPROVED')).toBe(true);
     expect(shouldShowShipmentTrackingSection('IN_CART')).toBe(true);
+    expect(shouldShowShipmentTrackingSection('ORDERED')).toBe(true);
+    expect(shouldShowShipmentTrackingSection('DELIVERED')).toBe(true);
+    expect(shouldShowShipmentTrackingSection('EXCEPTION')).toBe(true);
+    expect(shouldShowShipmentTrackingSection('VENDOR_IDENTIFIED')).toBe(true);
     expect(shouldShowShipmentTrackingSection('IN_SHIPPING')).toBe(true);
+  });
+
+  it('hides tracking before approval and on hold / rejected', () => {
+    for (const status of ['REQ_TO_VERIFY', 'ON_HOLD', 'REJECTED', '', null, 'PAID']) {
+      expect(shouldShowShipmentTrackingSection(status)).toBe(false);
+      expect(shouldShowShipmentTrackingSection(status, {})).toBe(false);
+    }
+  });
+
+  it('accepts lowercase / spaced statuses', () => {
+    expect(shouldShowShipmentTrackingSection('in cart')).toBe(true);
+    expect(shouldShowShipmentTrackingSection('vendor identified')).toBe(true);
+  });
+
+  it('lists the statuses that show tracking', () => {
+    expect([...SHIPMENT_TRACKING_VISIBLE_REQUEST_STATUSES]).toEqual([
+      'APPROVED',
+      'IN_CART',
+      'ORDERED',
+      'DELIVERED',
+      'EXCEPTION',
+    ]);
+  });
+
+  it('shows tracking on earlier statuses when tracking data exists', () => {
+    expect(shouldShowShipmentTrackingSection('NEW_REQUEST', { tracking_number: 'AWB1' })).toBe(true);
+    expect(shouldShowShipmentTrackingSection('NEW_REQUEST', { courier_name: 'DHL' })).toBe(true);
+    expect(shouldShowShipmentTrackingSection('NEW_REQUEST', { shipment_status: 'IN_TRANSIT' })).toBe(true);
+    expect(shouldShowShipmentTrackingSection('NEW_REQUEST', { shipment_status: 'NOT_SHIPPED' })).toBe(false);
+    expect(shouldShowShipmentTrackingSection('NEW_REQUEST', { tracking_number: '   ' })).toBe(false);
   });
 
   it('shows tracking if data already has a link even on earlier status', () => {

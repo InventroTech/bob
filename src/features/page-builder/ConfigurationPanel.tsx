@@ -225,6 +225,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     showDeleteRequestButton?: boolean;
     /** Show "See request history" button in record modals. */
     showHistoryButton?: boolean;
+    /** Show Bulk Edit and Bulk Edit History on request tables. */
+    showBulkEdit?: boolean;
     modalFlags?: import('@/component-config').ModalFlagConfig[];
     /** Lead table: lock the lead-detail modal (View Profile) until a disposition button is clicked. */
     lockLeadModal?: boolean;
@@ -313,6 +315,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     showFinalPriceSection: (initialConfig as any).showFinalPriceSection ?? undefined,
     showDeleteRequestButton: (initialConfig as any).showDeleteRequestButton ?? false,
     showHistoryButton: (initialConfig as any).showHistoryButton ?? false,
+    showBulkEdit: (initialConfig as any).showBulkEdit ?? selectedComponentType === 'procurementTable',
     modalFlags: (initialConfig as any).modalFlags ?? [],
     lockLeadModal: (initialConfig as any).lockLeadModal ?? false,
     visibleFilters: (initialConfig as any).visibleFilters ?? undefined,

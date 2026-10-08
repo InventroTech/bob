@@ -231,6 +231,7 @@ export const ProcurementTableComponent: React.FC<ProcurementTableProps> = ({ con
           : DEFAULT_PROCUREMENT_TABLE_CONFIG.formModalFields
       ),
       showFinalPriceSection: config?.showFinalPriceSection ?? false,
+      showBulkEdit: config?.showBulkEdit !== false,
       // If someone still uses inventory_request mode, force form_edit.
       ...(detailMode === 'inventory_request'
         ? { recordDetailModalType: config?.recordDetailModalType ?? 'form_edit' }
