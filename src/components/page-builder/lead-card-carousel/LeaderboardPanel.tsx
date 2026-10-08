@@ -19,10 +19,17 @@ interface LeaderboardPanelProps {
 // Today's leaderboard, ranked by trials achieved ÷ target (see
 // computeLeaderboardByRm — same ranking the RM PRD analytics dashboard's own
 // Leaderboard tab uses) condensed to a top-3 + "your rank" card, so an RM can
-// see where they stand without leaving the lead carousel. Scoped to the
-// signed-in RM's own manager's team (their siblings under the same manager,
-// found via TenantMembership.user_parent_id) — not the whole tenant. Falls
-// back to unscoped if the RM has no manager set (nothing to scope against).
+// see where they stand without leaving the lead carousel.
+//
+// Scoped server-side to activeUserId's own manager's team (siblings under
+// the same manager, resolved via TenantMembership.user_parent_id) — the
+// events/targets fetch itself only ever requests this team's rows (via
+// rmUserIds), it never downloads the whole tenant and filters client-side.
+// Resolved against activeUserId (not the real signed-in user), so an admin
+// spoofing a specific RM's view ranks against *that RM's* team, matching the
+// "(You)" highlight below. If the team can't be resolved — the hierarchy
+// lookup failed, or this user has no manager to scope against — the card
+// simply doesn't render rather than falling back to an unscoped fetch.
 export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId }) => {
   const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
@@ -30,23 +37,26 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId
     return () => clearInterval(id);
   }, []);
 
-  // teamRmUserIds: null while loading, undefined (not null) once resolved
-  // with no manager found (fall back to unscoped), Set once resolved with a
-  // manager (scope to that manager's direct reports, including me).
+  // teamRmUserIds: null while activeUserId/the hierarchy lookup isn't
+  // resolved yet, undefined once resolution finished with nothing to scope
+  // to (lookup failed, or this user has no manager) — both terminal states
+  // below mean "don't render," never "fetch everyone instead."
   const [teamRmUserIds, setTeamRmUserIds] = useState<Set<string> | null | undefined>(null);
   useEffect(() => {
+    if (!activeUserId) {
+      setTeamRmUserIds(null);
+      return;
+    }
     let cancelled = false;
     membershipService
-      .getMyMembership()
-      .then(async (my) => {
+      .getUsersForHierarchy()
+      .then((allUsers) => {
         if (cancelled) return;
-        const myParentId = my?.user_parent_id;
+        const myParentId = allUsers.find((u) => u.user_id === activeUserId)?.user_parent_id;
         if (myParentId == null) {
           setTeamRmUserIds(undefined);
           return;
         }
-        const allUsers = await membershipService.getUsersForHierarchy();
-        if (cancelled) return;
         const ids = allUsers
           .filter((u) => u.user_parent_id === myParentId && u.user_id)
           .map((u) => u.user_id as string);
@@ -58,20 +68,30 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeUserId]);
 
-  const todayBounds = useMemo(() => resolveDateRange('Today', '', ''), [refreshTick]);
-  const { events, loading: eventsLoading } = useRmActivityEvents(todayBounds, undefined, refreshTick);
-  const { targets, loading: targetsLoading } = useRmDailyTargets(todayBounds, refreshTick);
-  const loading = eventsLoading || targetsLoading || teamRmUserIds === null;
+  const resolvedTeamIds = useMemo(() => (teamRmUserIds ? Array.from(teamRmUserIds) : undefined), [teamRmUserIds]);
+  const hasResolvedTeam = !!resolvedTeamIds && resolvedTeamIds.length > 0;
+  // bounds stay null — skipping the fetch entirely, see useRmActivityEvents
+  // — until the team resolves to a real, non-empty id list; this is what
+  // keeps the fetch itself server-scoped instead of ever requesting
+  // everyone and filtering afterward
+  const todayBounds = useMemo(
+    () => (hasResolvedTeam ? resolveDateRange('Today', '', '') : null),
+    [hasResolvedTeam, refreshTick]
+  );
+  const { events, loading: eventsLoading } = useRmActivityEvents(todayBounds, undefined, refreshTick, resolvedTeamIds);
+  const { targets, loading: targetsLoading } = useRmDailyTargets(todayBounds, refreshTick, resolvedTeamIds);
+  // still resolving (teamRmUserIds === null) is loading; a resolved
+  // empty/undefined team is NOT loading — it's the "nothing to show" state
+  // handled by the empty-leaderboard check below
+  const loading = teamRmUserIds === null || (hasResolvedTeam && (eventsLoading || targetsLoading));
 
   const leaderboard = useMemo(() => {
-    let todaysEvents = filterByDateRange(events, todayBounds);
-    if (teamRmUserIds) {
-      todaysEvents = todaysEvents.filter((e) => teamRmUserIds.has(e.rmUserId));
-    }
+    if (!hasResolvedTeam) return [];
+    const todaysEvents = filterByDateRange(events, todayBounds);
     return computeLeaderboardByRm(todaysEvents, targets);
-  }, [events, targets, todayBounds, teamRmUserIds]);
+  }, [events, targets, todayBounds, hasResolvedTeam]);
 
   const topRows = leaderboard.slice(0, TOP_N);
   const myRow = activeUserId ? leaderboard.find((row) => row.rmUserId === activeUserId) : undefined;

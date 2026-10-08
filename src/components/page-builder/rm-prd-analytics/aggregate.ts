@@ -235,17 +235,24 @@ export function computePerformanceByRm(
   return [...groupByRm(events)].map(([rmUserId, rmEvents]) => buildPerformanceRow(rmUserId, rmEvents, targetsByRm));
 }
 
-export function computeTeamTotals(events: RmActivityEvent[], targetsByRm: DailyTargetsByRm = {}) {
+export function computeTeamTotals(
+  events: RmActivityEvent[],
+  targetsByRm: DailyTargetsByRm = {},
+  rosterRmIds?: string[]
+) {
   // same rule as the per-RM rows: a call still in progress has no outcome yet
   const calls = events.filter(isClosedCallTouch);
   const uniqueLeads = uniqueLeadCount(calls);
   const touches = calls.length;
   const counts = countByDisposition(latestTouchPerLead(calls));
   const achieved = counts.TRIAL_ACTIVATED;
-  // sum of each RM's own (already range-summed) target, for whichever RMs
-  // were actually active (have events) in this range — not every RM in the tenant
-  const activeRmIds = [...groupByRm(events).keys()];
-  const target = activeRmIds.reduce((sum, rmUserId) => sum + targetFor(targetsByRm, rmUserId), 0);
+  // Target denominator: `rosterRmIds` when the caller supplies one (e.g.
+  // computeLeaderboardByManager passing a manager's whole resolved team, so
+  // an idle RM with a real target doesn't silently vanish from the sum just
+  // because they logged nothing in this range); otherwise whichever RMs
+  // actually have events in this range, not every RM in the tenant.
+  const rmIdsForTarget = rosterRmIds ?? [...groupByRm(events).keys()];
+  const target = rmIdsForTarget.reduce((sum, rmUserId) => sum + targetFor(targetsByRm, rmUserId), 0);
   const pct = (n: number) => (uniqueLeads ? Math.round((n / uniqueLeads) * 1000) / 10 : 0);
 
   return {
@@ -336,6 +343,18 @@ export function computeLeaderboardByManager(
   rmToManagerUserId: Record<string, string>,
   managerNameByUserId: Record<string, string>
 ): RmManagerLeaderboardRow[] {
+  // Full roster per manager (every RM resolved under them, regardless of
+  // whether they have any events in this range) — used below for the
+  // target denominator and RM count, so an idle RM with a real target
+  // doesn't silently vanish from the sum and inflate that manager's
+  // vs-target % just because they logged nothing today.
+  const rosterByManager = new Map<string, string[]>();
+  Object.entries(rmToManagerUserId).forEach(([rmUserId, managerUserId]) => {
+    const list = rosterByManager.get(managerUserId);
+    if (list) list.push(rmUserId);
+    else rosterByManager.set(managerUserId, [rmUserId]);
+  });
+
   const byManager = new Map<string, RmActivityEvent[]>();
   events.forEach((event) => {
     const managerUserId = rmToManagerUserId[event.rmUserId];
@@ -348,11 +367,16 @@ export function computeLeaderboardByManager(
   });
 
   const rows = [...byManager.entries()].map(([managerUserId, managerEvents]) => {
-    const totals = computeTeamTotals(managerEvents, targetsByRm);
+    // roster falls back to just the active-today RMs only if this manager
+    // is somehow absent from rmToManagerUserId's own keys (shouldn't
+    // happen — every RM with events here was already resolved to get into
+    // byManager at all — but keeps this from ever going fully empty)
+    const roster = rosterByManager.get(managerUserId) ?? [...new Set(managerEvents.map((e) => e.rmUserId))];
+    const totals = computeTeamTotals(managerEvents, targetsByRm, roster);
     return {
       managerUserId,
       managerName: managerNameByUserId[managerUserId] || managerEvents[0]?.managerName || 'Unknown',
-      rmCount: new Set(managerEvents.map((e) => e.rmUserId)).size,
+      rmCount: roster.length,
       uniqueLeads: totals.uniqueLeadsHandled,
       touches: totals.touches,
       achieved: totals.achieved,

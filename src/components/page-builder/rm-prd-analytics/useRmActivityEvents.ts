@@ -49,7 +49,12 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
 // `bounds` is date-granularity ("today"'s date string is the same all day),
 // so without this a caller that wants periodically-fresh data (rather than
 // a one-shot fetch at mount) has no way to trigger one.
-export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string, refreshToken?: number) {
+export function useRmActivityEvents(
+  bounds: DateBounds | null,
+  rmUserId?: string,
+  refreshToken?: number,
+  rmUserIds?: string[]
+) {
   const [events, setEvents] = useState<RmActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +62,10 @@ export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string
   const from = bounds ? toUtcDateParam(bounds.from) : undefined;
   const to = bounds ? toUtcDateParam(bounds.to) : undefined;
   const hasWindow = bounds !== null;
+  // array identity changes every render even for the same contents — join
+  // to a primitive so the effect only refetches when the actual id set
+  // changes (same trick as useRmFilterOptions' managerRoleKeysKey)
+  const rmUserIdsKey = (rmUserIds ?? []).join(',');
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +80,7 @@ export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string
     setLoading(true);
     setError(null);
     rmActivityApi
-      .getEvents({ from, to, rmUserId })
+      .getEvents({ from, to, rmUserId, rmUserIds: rmUserIdsKey ? rmUserIdsKey.split(',') : undefined })
       .then((rows) => {
         if (!cancelled) setEvents(rows.map(mapDto));
       })
@@ -85,7 +94,7 @@ export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string
     return () => {
       cancelled = true;
     };
-  }, [hasWindow, from, to, rmUserId, refreshToken]);
+  }, [hasWindow, from, to, rmUserId, rmUserIdsKey, refreshToken]);
 
   return { events, loading, error };
 }
