@@ -6,6 +6,8 @@ import { apiClient, membershipService } from '@/lib/api';
 import { crmRecordsApi } from '@/lib/api/services/crmRecords';
 import { useAuth } from '@/hooks/useAuth';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
+import { useRequestStatusConfig } from '@/hooks/useRequestStatusConfig';
+import { getAllowedNextRequestStatuses } from '@/lib/inventory/requestStatus';
 import { formatCurrencyInputLive, formatPriceForInput, PRICE_FIELD_KEYS } from '@/lib/utils/currencyFormat';
 import { applyInventoryCartStatusSideEffects, canRequesterEditInventoryRequest, getInventoryWorkflowButtons, inventoryRequesterIdFromRecord, isInventoryRequestRowRequester } from '@/lib/inventory/workflow';
 import type { StatusActionWithWarningConfig } from '@/components/config_components/StatusActionWarningModal';
@@ -50,10 +52,22 @@ export function useRecordDetailModal({
   const [myRoleName, setMyRoleName] = useState<string>('');
 
   const displayRows = record ? buildDisplayRows(record, entityType) : [];
-  const statusOptions = entityType ? ALLOWED_STATUSES[entityType] ?? [] : [];
   const canEdit = Boolean(onUpdate && record?.id != null);
   const isInventoryRequest =
     entityType === 'inventory_request' || entityType === 'unmannd_request';
+  const recordEntityType = String(
+    (record as { entity_type?: unknown } | null | undefined)?.entity_type ?? ''
+  ).trim();
+  const statusEntityType = isInventoryRequest ? recordEntityType || entityType || null : null;
+  const requestStatusConfig = useRequestStatusConfig(statusEntityType);
+  const savedRequestStatus =
+    (record?.data as Record<string, unknown> | undefined)?.status ?? (record as { status?: unknown } | null)?.status;
+  const statusOptions = useMemo<readonly string[]>(() => {
+    if (statusEntityType) {
+      return getAllowedNextRequestStatuses(savedRequestStatus, statusEntityType);
+    }
+    return entityType ? ALLOWED_STATUSES[entityType] ?? [] : [];
+  }, [statusEntityType, requestStatusConfig, entityType, savedRequestStatus]);
   const requesterId = inventoryRequesterIdFromRecord(record);
   const [myMembershipId, setMyMembershipId] = useState<number | null>(null);
   const isRequester =
@@ -594,6 +608,7 @@ export function useRecordDetailModal({
     setMyRoleName,
     displayRows,
     statusOptions,
+    statusEntityType,
     canEdit,
     isInventoryRequest,
     requesterId,

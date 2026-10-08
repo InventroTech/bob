@@ -1,14 +1,10 @@
-const STATUS_COLOR_CLASS_MAP: Record<string, string> = {
-  NEW_REQUEST: 'border-amber-300 bg-amber-50 text-amber-900',
-  REQ_TO_VERIFY: 'border-violet-200 bg-violet-50 text-violet-800',
-  VENDOR_IDENTIFIED: 'border-sky-200 bg-sky-50 text-sky-700',
-  IN_CART: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  IN_SHIPPING: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  ON_HOLD: 'border-amber-300 bg-amber-50 text-amber-800',
-  REJECTED: 'border-rose-200 bg-rose-50 text-rose-700',
-};
+import {
+  DEFAULT_STATUS_TONE_CLASS,
+  getRequestStatusLabel,
+  getRequestStatusToneClass,
+} from '@/lib/inventory/requestStatus';
 
-/** shipment_status chip tones (separate from request status). */
+/** shipment_status chip tones (carrier detail; request status is the main chip). */
 const SHIPMENT_STATUS_COLOR_CLASS_MAP: Record<string, string> = {
   NOT_SHIPPED: 'border-sky-200 bg-sky-50 text-sky-800',
   ORDERED: 'border-sky-200 bg-sky-50 text-sky-800',
@@ -19,8 +15,6 @@ const SHIPMENT_STATUS_COLOR_CLASS_MAP: Record<string, string> = {
   'N/A': 'border-orange-200 bg-orange-50 text-orange-800',
 };
 
-const DEFAULT_STATUS_CLASS = 'border-amber-200 bg-amber-50 text-amber-800';
-
 function normalizeStatus(status: unknown): string {
   return String(status ?? '')
     .trim()
@@ -28,23 +22,19 @@ function normalizeStatus(status: unknown): string {
     .replace(/\s+/g, '_');
 }
 
-export function getInventoryStatusToneClass(status: unknown): string {
-  const normalized = normalizeStatus(status);
-  if (!normalized) return DEFAULT_STATUS_CLASS;
-  return STATUS_COLOR_CLASS_MAP[normalized] ?? DEFAULT_STATUS_CLASS;
+export function getInventoryStatusToneClass(status: unknown, entityType?: string | null): string {
+  if (!normalizeStatus(status)) return DEFAULT_STATUS_TONE_CLASS;
+  return getRequestStatusToneClass(status, entityType);
 }
 
 export function getShipmentStatusToneClass(status: unknown): string {
   const normalized = normalizeStatus(status);
   if (!normalized) return SHIPMENT_STATUS_COLOR_CLASS_MAP['N/A'];
-  return SHIPMENT_STATUS_COLOR_CLASS_MAP[normalized] ?? DEFAULT_STATUS_CLASS;
+  return SHIPMENT_STATUS_COLOR_CLASS_MAP[normalized] ?? DEFAULT_STATUS_TONE_CLASS;
 }
 
-export function getInventoryStatusLabel(status: unknown): string {
-  const raw = String(status ?? '').trim();
-  if (!raw) return '—';
-  const normalized = normalizeStatus(raw);
-  return normalized ? normalized.replace(/_/g, ' ') : '—';
+export function getInventoryStatusLabel(status: unknown, entityType?: string | null): string {
+  return getRequestStatusLabel(status, entityType);
 }
 
 export function getShipmentStatusLabel(status: unknown): string {
@@ -54,7 +44,7 @@ export function getShipmentStatusLabel(status: unknown): string {
   return normalized ? normalized.replace(/_/g, ' ') : 'N/A';
 }
 
-/** Table chip label for request status — spaced uppercase (NEW REQUEST, IN CART). */
-export function getInventoryStatusChipLabel(status: unknown): string {
-  return getInventoryStatusLabel(status);
+/** Table chip label for request status (configured label, e.g. "In cart"). */
+export function getInventoryStatusChipLabel(status: unknown, entityType?: string | null): string {
+  return getInventoryStatusLabel(status, entityType);
 }
