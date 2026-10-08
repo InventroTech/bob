@@ -11,6 +11,7 @@ import { fetchProductFromLink, looksLikeProductUrl } from '@/lib/inventory/produ
 import { formatInventoryPriorityLabel } from '@/lib/inventory/priority';
 import { fetchDistinctFieldValues } from '@/components/page-builder/dispatch/fetchDistinctFieldValues';
 import { supabase } from '@/lib/supabase';
+import { usesDjangoAuth } from '@/lib/auth/provider';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
 import { getEffectiveToken, fetchPagesForRole, useSpoofUserId } from '@/lib/auth/spoof';
 
@@ -1005,9 +1006,10 @@ export function useInventoryRequestForm({
               try {
                 pages = await fetchPagesForRole(tenantId, roleId, token);
               } catch (pagesErr) {
-                console.warn('fetchPagesForRole failed after create; trying Supabase', pagesErr);
+                console.warn('fetchPagesForRole failed after create', pagesErr);
               }
-              if (!pages.length) {
+              // Django auth signs the Supabase session out locally, so this table read has no session.
+              if (!pages.length && !usesDjangoAuth) {
                 const { data } = await supabase
                   .from('pages')
                   .select('id, name, header_title, icon_name')

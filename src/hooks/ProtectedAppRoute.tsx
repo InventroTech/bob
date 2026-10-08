@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Outlet, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { usesDjangoAuth } from '@/lib/auth/provider';
 import { authClient } from '@/lib/auth/authClient';
 import { toast } from 'sonner';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
@@ -32,8 +33,8 @@ const UnauthorizedPage: React.FC<{
       try {
         const tenant = await authService.getTenantBySlug(tenantSlug);
 
-        if (tenant) {
-          // Get the public role via membership API (Django authz at /membership/roles)
+        // Django auth signs the Supabase session out locally, so this table read has no session.
+        if (tenant && !usesDjangoAuth) {
           const publicRole = await membershipService.getPublicRole();
 
           // Fetch public and unassigned pages (exclude soft-deleted)
