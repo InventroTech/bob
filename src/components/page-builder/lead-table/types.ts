@@ -148,6 +148,8 @@ export interface LeadTableProps {
      * behavior).
      */
     lockLeadModal?: boolean;
+    /** Show Bulk Edit and Bulk Edit History. Page Builder switch; Procurement Table defaults it on. */
+    showBulkEdit?: boolean;
     /** Checkbox flags shown beside action buttons; each can be conditional. */
     modalFlags?: Array<{
       label: string;

@@ -5,6 +5,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient, membershipService } from '@/lib/api';
 import { ALLOWED_STATUSES } from '@/constants/inventory';
+import { useRequestStatusConfig } from '@/hooks/useRequestStatusConfig';
+import { getAllowedNextRequestStatuses, normalizeRequestStatus } from '@/lib/inventory/requestStatus';
 import { formatCurrencyDisplay, formatCurrencyInputLive, parseCurrencyInput } from '@/lib/utils/currencyFormat';
 import { formatCalendarDate } from '@/lib/utils/timeUtils';
 import {
@@ -121,13 +123,21 @@ export function useInventoryFormEditModal({
   const myName =
     user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || '—';
 
-  const statusOptions = entityType
-    ? (ALLOWED_STATUSES[entityType] ??
-        (entityType === 'unmannd_request' ? ALLOWED_STATUSES.inventory_request : []) ??
-        [])
-    : [];
+  const recordEntityType = String(
+    (record as { entity_type?: unknown } | null | undefined)?.entity_type ?? entityType ?? ''
+  ).trim();
   const isInventoryRequest =
     entityType === 'inventory_request' || entityType === 'unmannd_request';
+  const statusEntityType = isInventoryRequest ? recordEntityType || entityType : null;
+  const requestStatusConfig = useRequestStatusConfig(statusEntityType);
+  const savedRequestStatus =
+    (record?.data as Record<string, unknown> | undefined)?.status ?? (record as { status?: unknown } | null)?.status;
+  const statusOptions = useMemo(() => {
+    if (statusEntityType) {
+      return getAllowedNextRequestStatuses(savedRequestStatus, statusEntityType);
+    }
+    return entityType ? [...(ALLOWED_STATUSES[entityType] ?? [])] : [];
+  }, [statusEntityType, requestStatusConfig, entityType, savedRequestStatus]);
   const requesterId = inventoryRequesterIdFromRecord(record);
   const isRequester =
     isInventoryRequest &&
@@ -891,6 +901,18 @@ export function useInventoryFormEditModal({
         }
       }
 
+      if (
+        ((btn.targetAttribute || 'status').trim() || 'status') === 'status' &&
+        normalizeRequestStatus(btn.statusValue) &&
+        normalizeRequestStatus(btn.statusValue) === normalizeRequestStatus(savedRequestStatus)
+      ) {
+        toast({
+          title: 'No change',
+          description: `Status is already ${btn.statusText ?? btn.label ?? btn.statusValue}.`,
+        });
+        return;
+      }
+
       try {
         setApplyingStatusValue(btn.statusValue);
         const targetAttribute = (btn.targetAttribute || 'status').trim() || 'status';
@@ -911,8 +933,8 @@ export function useInventoryFormEditModal({
             nextStatus: btn.statusValue,
             data: dataToSend,
           });
-          // Order → IN_SHIPPING should start the delivery pipeline at ORDERED.
-          if (String(btn.statusValue).toUpperCase().replace(/\s+/g, '_') === 'IN_SHIPPING') {
+          // Order → ORDERED starts the delivery pipeline at ORDERED (backend does the same).
+          if (normalizeRequestStatus(btn.statusValue) === 'ORDERED') {
             dataToSend.shipment_status = advanceShipmentStatusForTracking(
               dataToSend.shipment_status,
               true
@@ -958,7 +980,7 @@ export function useInventoryFormEditModal({
             : '';
         const previousStatusText =
           previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
-        if (currentStatus && currentStatus !== previousStatusText) {
+        if (currentStatus && normalizeRequestStatus(currentStatus) !== normalizeRequestStatus(previousStatusText)) {
           const existingRaw = (record?.data as any)?.statuses;
           let statusHistory: StatusHistoryEntry[] = [];
           if (Array.isArray(existingRaw)) {
@@ -1014,7 +1036,7 @@ export function useInventoryFormEditModal({
         setApplyingStatusValue(null);
       }
     },
-    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, isPaymentModal, applyShipmentTrackingOnSave]
+    [record?.id, record?.data, entityType, formData, getComputedPriceFields, getComputedFinalAmountFields, paymentButtonConfig, effectiveShowFinalPrice, onUpdate, onRecordUpdated, toast, modalFlags, flagValues, myName, myRoleName, myRoleKey, flagConditionMatches, isPaymentModal, applyShipmentTrackingOnSave, savedRequestStatus]
   );
 
   const handleSaveAll = useCallback(async () => {
@@ -1067,7 +1089,7 @@ export function useInventoryFormEditModal({
         dataToSend.status != null && String(dataToSend.status).trim() ? String(dataToSend.status).trim() : '';
       const previousStatusText =
         previousStatus != null && String(previousStatus).trim() ? String(previousStatus).trim() : '';
-      if (currentStatus && currentStatus !== previousStatusText) {
+      if (currentStatus && normalizeRequestStatus(currentStatus) !== normalizeRequestStatus(previousStatusText)) {
         const existingRaw = (record?.data as any)?.statuses;
         let statusHistory: StatusHistoryEntry[] = [];
         if (Array.isArray(existingRaw)) {
@@ -1379,6 +1401,7 @@ export function useInventoryFormEditModal({
     setTrackingDetails,
     myName,
     statusOptions,
+    statusEntityType,
     isInventoryRequest,
     requesterId,
     isRequester,

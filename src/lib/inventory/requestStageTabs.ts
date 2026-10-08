@@ -1,12 +1,13 @@
-/** All Request page stage strip — filters rows by request / shipment stage (not separate pages). */
+/**
+ * All Request page stage strip — one tab per configured status page.
+ * Pages and the status → page mapping come from the backend status config
+ * (see requestStatus.ts); the server filters with `?stage=<page id>`.
+ */
 
-export type RequestStageTabId =
-  | 'all'
-  | 'pending_approval'
-  | 'in_cart'
-  | 'ordered'
-  | 'delivered'
-  | 'invoiced_closed';
+import { getRequestStatusConfig, getRequestStatusPage } from '@/lib/inventory/requestStatus';
+
+/** 'all' or a configured page id (pending_approval, in_cart, ordered, delivered, closed, …). */
+export type RequestStageTabId = string;
 
 export type RequestStageTabDef = {
   id: RequestStageTabId;
@@ -18,34 +19,36 @@ export type RequestStageTabDef = {
   completeSuffix?: string;
 };
 
-export const REQUEST_STAGE_TABS: RequestStageTabDef[] = [
-  { id: 'all', step: 1, label: 'All Request', labelLines: ['All', 'Request'] },
-  { id: 'pending_approval', step: 2, label: 'Pending Approval', labelLines: ['Pending', 'Approval'] },
-  { id: 'in_cart', step: 3, label: 'In Cart items', labelLines: ['In Cart', 'items'] },
-  { id: 'ordered', step: 4, label: 'Ordered Items', labelLines: ['Ordered', 'Items'] },
-  { id: 'delivered', step: 5, label: 'Delivered Items', labelLines: ['Delivered', 'Items'] },
-  {
-    id: 'invoiced_closed',
-    step: 6,
-    label: 'Invoiced & Closed',
-    completeSuffix: 'Complete',
-  },
-];
+function splitLabel(label: string): [string, string] | undefined {
+  const words = label.trim().split(/\s+/);
+  if (words.length < 2) return undefined;
+  const mid = Math.ceil(words.length / 2);
+  return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+}
 
-const PENDING_STATUSES = new Set(['NEW_REQUEST', 'ON_HOLD', 'REQ_TO_VERIFY']);
+/** Tabs for an entity type: "All Request" first, then the configured pages in order. */
+export function getRequestStageTabs(entityType?: string | null): RequestStageTabDef[] {
+  const pages = getRequestStatusConfig(entityType).pages;
+  return [
+    { id: 'all', step: 1, label: 'All Request', labelLines: ['All', 'Request'] },
+    ...pages.map((page, index) => ({
+      id: page.id,
+      step: index + 2,
+      label: page.label,
+      ...(page.id === 'closed'
+        ? { completeSuffix: 'Complete' }
+        : { labelLines: splitLabel(page.label) }),
+    })),
+  ];
+}
 
-/** Server query filters for each stage (matches dedicated inventory pages). */
-export const REQUEST_STAGE_SERVER_FILTERS: Record<
-  RequestStageTabId,
-  { status?: string; shipment_status?: string } | null
-> = {
-  all: null,
-  pending_approval: { status: 'NEW_REQUEST,ON_HOLD,REQ_TO_VERIFY' },
-  in_cart: { status: 'IN_CART' },
-  ordered: { shipment_status: 'ORDERED' },
-  delivered: { shipment_status: 'DELIVERED' },
-  invoiced_closed: { status: 'REJECTED' },
-};
+/** Default tabs (built-in pages) — prefer getRequestStageTabs(entityType). */
+export const REQUEST_STAGE_TABS: RequestStageTabDef[] = getRequestStageTabs(null);
+
+/** Server query filter for a stage: `stage=<page id>` (none for "all"). */
+export function getRequestStageServerFilter(stage: RequestStageTabId): { stage: string } | null {
+  return stage === 'all' ? null : { stage };
+}
 
 function normalize(value: unknown): string {
   return String(value ?? '')
@@ -66,60 +69,45 @@ export function getRowShipmentStatus(row: Record<string, unknown> | null | undef
   return normalize(data?.shipment_status ?? row?.shipment_status);
 }
 
-/**
- * Assign each row to exactly one stage (priority order) so client filters stay consistent.
- * Rows like VENDOR_IDENTIFIED only appear under "All Request".
- */
+/** The page a row belongs to (from its status), or null when its status is unmapped. */
 export function getRowPrimaryRequestStage(
-  row: Record<string, unknown> | null | undefined
-): Exclude<RequestStageTabId, 'all'> | null {
+  row: Record<string, unknown> | null | undefined,
+  entityType?: string | null
+): RequestStageTabId | null {
   if (!row) return null;
-
-  const status = getRowRequestStatus(row);
-  const shipment = getRowShipmentStatus(row);
-
-  // Closed first — matches server filter status=REJECTED (exclusive primary stage).
-  if (status === 'REJECTED') {
-    return 'invoiced_closed';
-  }
-  // Shipment-driven stages (Ordered / Delivered) take priority over request status.
-  if (shipment === 'DELIVERED') return 'delivered';
-  if (shipment === 'ORDERED') return 'ordered';
-  if (status === 'IN_CART') return 'in_cart';
-  if (PENDING_STATUSES.has(status)) return 'pending_approval';
-  return null;
+  const rowEntity = typeof row.entity_type === 'string' ? row.entity_type : entityType;
+  return getRequestStatusPage(getRowRequestStatus(row), rowEntity);
 }
 
 export function rowMatchesRequestStage(
   row: Record<string, unknown> | null | undefined,
-  stage: RequestStageTabId
+  stage: RequestStageTabId,
+  entityType?: string | null
 ): boolean {
   if (!row || stage === 'all') return true;
-  return getRowPrimaryRequestStage(row) === stage;
+  return getRowPrimaryRequestStage(row, entityType) === stage;
 }
 
-export function emptyRequestStageCounts(): Record<RequestStageTabId, number> {
-  return {
-    all: 0,
-    pending_approval: 0,
-    in_cart: 0,
-    ordered: 0,
-    delivered: 0,
-    invoiced_closed: 0,
-  };
+export function emptyRequestStageCounts(
+  entityType?: string | null
+): Record<RequestStageTabId, number> {
+  const counts: Record<RequestStageTabId, number> = {};
+  for (const tab of getRequestStageTabs(entityType)) counts[tab.id] = 0;
+  return counts;
 }
 
 export function countRowsByRequestStage(
   rows: Array<Record<string, unknown>>,
   /** When known (API total), prefer this for the "all" tab instead of rows.length. */
-  allTotal?: number
+  allTotal?: number,
+  entityType?: string | null
 ): Record<RequestStageTabId, number> {
-  const counts = emptyRequestStageCounts();
+  const counts = emptyRequestStageCounts(entityType);
   counts.all = typeof allTotal === 'number' && allTotal >= 0 ? allTotal : rows.length;
 
   for (const row of rows) {
-    const stage = getRowPrimaryRequestStage(row);
-    if (stage) counts[stage] += 1;
+    const stage = getRowPrimaryRequestStage(row, entityType);
+    if (stage && stage in counts) counts[stage] += 1;
   }
 
   return counts;
@@ -127,10 +115,11 @@ export function countRowsByRequestStage(
 
 export function filterRowsByRequestStage<T extends Record<string, unknown>>(
   rows: T[],
-  stage: RequestStageTabId
+  stage: RequestStageTabId,
+  entityType?: string | null
 ): T[] {
   if (stage === 'all') return rows;
-  return rows.filter((row) => rowMatchesRequestStage(row, stage));
+  return rows.filter((row) => rowMatchesRequestStage(row, stage, entityType));
 }
 
 export function formatStageCount(count: number): string {
@@ -139,26 +128,25 @@ export function formatStageCount(count: number): string {
 
 /**
  * Apply stage filters onto a URLSearchParams.
- * For a concrete stage, overwrites status / shipment_status.
+ * For a concrete stage, replaces status / shipment_status with `stage=<id>`.
  * For "all", leaves any user/endpoint status filters intact.
  */
 export function applyRequestStageFiltersToParams(
   params: URLSearchParams,
   stage: RequestStageTabId
 ): void {
-  const filters = REQUEST_STAGE_SERVER_FILTERS[stage];
-  if (!filters) return;
+  const filter = getRequestStageServerFilter(stage);
+  if (!filter) return;
   params.delete('status');
   params.delete('shipment_status');
-  if (filters.status) params.set('status', filters.status);
-  if (filters.shipment_status) params.set('shipment_status', filters.shipment_status);
+  params.set('stage', filter.stage);
 }
 
 /**
  * Build a list URL for stage count / filtered fetch.
  * Strips pagination from the endpoint so ours win.
- * For concrete stages, also strips status / shipment_status so stage filters win.
- * For "all", preserves status / shipment_status from the endpoint, forceQueryParams, and extraParams.
+ * For concrete stages, also strips status / shipment_status / stage so the stage filter wins.
+ * For "all", preserves status / shipment_status / stage from the endpoint, forceQueryParams, and extraParams.
  */
 export function buildRequestStageListUrl(
   endpoint: string,
@@ -178,7 +166,7 @@ export function buildRequestStageListUrl(
   const existing = new URLSearchParams(qIndex >= 0 ? base.slice(qIndex + 1) : '');
 
   // Drop pagination from the saved endpoint so we control it.
-  // For concrete stages, also drop status / shipment_status so stage filters win.
+  // For concrete stages, also drop status / shipment_status / stage so the stage filter wins.
   // For "all", keep them so count requests match the table's user filters.
   for (const key of ['page', 'page_size', 'include_count']) {
     existing.delete(key);
@@ -187,6 +175,7 @@ export function buildRequestStageListUrl(
   if (!keepUserStatusFilters) {
     existing.delete('status');
     existing.delete('shipment_status');
+    existing.delete('stage');
   }
 
   if (
@@ -200,7 +189,7 @@ export function buildRequestStageListUrl(
   if (options.forceQueryParams) {
     for (const [k, v] of Object.entries(options.forceQueryParams)) {
       if (v == null || String(v).trim() === '') continue;
-      if (!keepUserStatusFilters && (k === 'status' || k === 'shipment_status')) continue;
+      if (!keepUserStatusFilters && (k === 'status' || k === 'shipment_status' || k === 'stage')) continue;
       existing.set(k, String(v));
     }
   }
@@ -208,7 +197,7 @@ export function buildRequestStageListUrl(
   if (options.extraParams) {
     options.extraParams.forEach((v, k) => {
       if (k === 'page' || k === 'page_size') return;
-      if (!keepUserStatusFilters && (k === 'status' || k === 'shipment_status')) return;
+      if (!keepUserStatusFilters && (k === 'status' || k === 'shipment_status' || k === 'stage')) return;
       existing.set(k, v);
     });
   }
