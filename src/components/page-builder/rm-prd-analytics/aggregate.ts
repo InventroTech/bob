@@ -277,15 +277,18 @@ export interface RmLeaderboardRow extends RmPerformanceRow {
   vsTargetPct: number;
 }
 
-function vsTargetRatio(row: RmPerformanceRow): number {
+function vsTargetRatio(row: { achieved: number; target: number }): number {
   return row.target ? row.achieved / row.target : -Infinity;
 }
 
-export function computeLeaderboardByRm(
-  events: RmActivityEvent[],
-  targetsByRm: DailyTargetsByRm = {}
-): RmLeaderboardRow[] {
-  const ranked = computePerformanceByRm(events, targetsByRm).sort((a, b) => {
+// Shared ranking rule for any row shaped like achieved/target/uniqueLeads —
+// RM rows and manager-rollup rows both rank the same way: vs-target ratio
+// desc, ties broken by raw achieved desc, then unique leads desc. An unset
+// target sorts last (-Infinity ratio) rather than reading as a false 0%.
+function rankByVsTarget<T extends { achieved: number; target: number; uniqueLeads: number }>(
+  rows: T[]
+): (T & { rank: number; vsTargetPct: number })[] {
+  const ranked = [...rows].sort((a, b) => {
     const ratioDiff = vsTargetRatio(b) - vsTargetRatio(a);
     if (ratioDiff !== 0) return ratioDiff;
     if (b.achieved !== a.achieved) return b.achieved - a.achieved;
@@ -296,6 +299,69 @@ export function computeLeaderboardByRm(
     rank: index + 1,
     vsTargetPct: row.target ? Math.round((row.achieved / row.target) * 1000) / 10 : -1,
   }));
+}
+
+export function computeLeaderboardByRm(
+  events: RmActivityEvent[],
+  targetsByRm: DailyTargetsByRm = {}
+): RmLeaderboardRow[] {
+  return rankByVsTarget(computePerformanceByRm(events, targetsByRm));
+}
+
+// ---- Manager (ASM) leaderboard ----
+// Same idea as the RM leaderboard, one level up: each manager's whole team
+// is rolled into one row (computeTeamTotals) and ranked by that team's own
+// vs-target ratio — e.g. if m2's team banked the most trials against its
+// combined target, m2 ranks first, same tie-break rule as the RM board.
+// `rmToManagerUserId` must be hierarchy-resolved (RM's real manager via
+// TenantMembership.user_parent_id), not the free-text managerName on the
+// event — see RmPrdAnalyticsComponent's hierarchy fetch.
+
+export interface RmManagerLeaderboardRow {
+  managerUserId: string;
+  managerName: string;
+  rmCount: number;
+  uniqueLeads: number;
+  touches: number;
+  achieved: number;
+  target: number;
+  trialRate: number;
+  rank: number;
+  vsTargetPct: number;
+}
+
+export function computeLeaderboardByManager(
+  events: RmActivityEvent[],
+  targetsByRm: DailyTargetsByRm,
+  rmToManagerUserId: Record<string, string>,
+  managerNameByUserId: Record<string, string>
+): RmManagerLeaderboardRow[] {
+  const byManager = new Map<string, RmActivityEvent[]>();
+  events.forEach((event) => {
+    const managerUserId = rmToManagerUserId[event.rmUserId];
+    // no resolved manager (hierarchy still loading, or this RM has none) —
+    // excluded rather than mis-bucketed under a guessed manager
+    if (!managerUserId) return;
+    const list = byManager.get(managerUserId);
+    if (list) list.push(event);
+    else byManager.set(managerUserId, [event]);
+  });
+
+  const rows = [...byManager.entries()].map(([managerUserId, managerEvents]) => {
+    const totals = computeTeamTotals(managerEvents, targetsByRm);
+    return {
+      managerUserId,
+      managerName: managerNameByUserId[managerUserId] || managerEvents[0]?.managerName || 'Unknown',
+      rmCount: new Set(managerEvents.map((e) => e.rmUserId)).size,
+      uniqueLeads: totals.uniqueLeadsHandled,
+      touches: totals.touches,
+      achieved: totals.achieved,
+      target: totals.target,
+      trialRate: totals.trialActivationRate,
+    };
+  });
+
+  return rankByVsTarget(rows);
 }
 
 // ---- Adherence tab ----

@@ -45,6 +45,8 @@ export interface MembershipUser {
 export interface HierarchyUser {
   membershipId: number;
   user_parent_id: number | null;
+  /** auth.users UUID — the join key RM PRD events use (RmActivityEvent.rmUserId), not the membership id above. */
+  user_id?: string;
   name: string;
   email: string;
   role: { name: string } | null;
@@ -329,6 +331,7 @@ export const membershipService = {
       .map((u) => ({
         membershipId: u.membershipId,
         user_parent_id: u.user.user_parent_id ?? null,
+        user_id: u.user.user_id || u.user.uid || undefined,
         name: u.user.name || u.user.full_name || 'Unnamed User',
         email: u.user.email || 'No Email',
         role: toRoleInfo(u.user),

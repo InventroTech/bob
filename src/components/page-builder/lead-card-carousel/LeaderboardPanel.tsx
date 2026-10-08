@@ -5,6 +5,7 @@ import { useRmActivityEvents } from '../rm-prd-analytics/useRmActivityEvents';
 import { useRmDailyTargets } from '../rm-prd-analytics/useRmDailyTargets';
 import { filterByDateRange, resolveDateRange } from '../rm-prd-analytics/dateRange';
 import { computeLeaderboardByRm, formatVsTarget, type RmLeaderboardRow } from '../rm-prd-analytics/aggregate';
+import { membershipService } from '@/lib/api/services/membership';
 
 // how often the panel re-pulls today's events/targets — same convention as
 // YourShiftPanel, otherwise it freezes at whatever it looked like on mount
@@ -15,12 +16,13 @@ interface LeaderboardPanelProps {
   activeUserId: string | null;
 }
 
-// Today's team-wide leaderboard, ranked by trials achieved ÷ target (see
+// Today's leaderboard, ranked by trials achieved ÷ target (see
 // computeLeaderboardByRm — same ranking the RM PRD analytics dashboard's own
 // Leaderboard tab uses) condensed to a top-3 + "your rank" card, so an RM can
-// see where they stand without leaving the lead carousel. Unlike YourShiftPanel
-// this fetches team-wide (no rmUserId) — the whole point is ranking against
-// everyone else, not just this one RM's own rows.
+// see where they stand without leaving the lead carousel. Scoped to the
+// signed-in RM's own manager's team (their siblings under the same manager,
+// found via TenantMembership.user_parent_id) — not the whole tenant. Falls
+// back to unscoped if the RM has no manager set (nothing to scope against).
 export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId }) => {
   const [refreshTick, setRefreshTick] = useState(0);
   useEffect(() => {
@@ -28,15 +30,48 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ activeUserId
     return () => clearInterval(id);
   }, []);
 
+  // teamRmUserIds: null while loading, undefined (not null) once resolved
+  // with no manager found (fall back to unscoped), Set once resolved with a
+  // manager (scope to that manager's direct reports, including me).
+  const [teamRmUserIds, setTeamRmUserIds] = useState<Set<string> | null | undefined>(null);
+  useEffect(() => {
+    let cancelled = false;
+    membershipService
+      .getMyMembership()
+      .then(async (my) => {
+        if (cancelled) return;
+        const myParentId = my?.user_parent_id;
+        if (myParentId == null) {
+          setTeamRmUserIds(undefined);
+          return;
+        }
+        const allUsers = await membershipService.getUsersForHierarchy();
+        if (cancelled) return;
+        const ids = allUsers
+          .filter((u) => u.user_parent_id === myParentId && u.user_id)
+          .map((u) => u.user_id as string);
+        setTeamRmUserIds(new Set(ids));
+      })
+      .catch(() => {
+        if (!cancelled) setTeamRmUserIds(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const todayBounds = useMemo(() => resolveDateRange('Today', '', ''), [refreshTick]);
   const { events, loading: eventsLoading } = useRmActivityEvents(todayBounds, undefined, refreshTick);
   const { targets, loading: targetsLoading } = useRmDailyTargets(todayBounds, refreshTick);
-  const loading = eventsLoading || targetsLoading;
+  const loading = eventsLoading || targetsLoading || teamRmUserIds === null;
 
   const leaderboard = useMemo(() => {
-    const todaysEvents = filterByDateRange(events, todayBounds);
+    let todaysEvents = filterByDateRange(events, todayBounds);
+    if (teamRmUserIds) {
+      todaysEvents = todaysEvents.filter((e) => teamRmUserIds.has(e.rmUserId));
+    }
     return computeLeaderboardByRm(todaysEvents, targets);
-  }, [events, targets, todayBounds]);
+  }, [events, targets, todayBounds, teamRmUserIds]);
 
   const topRows = leaderboard.slice(0, TOP_N);
   const myRow = activeUserId ? leaderboard.find((row) => row.rmUserId === activeUserId) : undefined;

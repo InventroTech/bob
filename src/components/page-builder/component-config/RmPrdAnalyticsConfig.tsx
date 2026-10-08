@@ -28,6 +28,8 @@ interface RmPrdAnalyticsConfigProps {
     visibleFilters?: Partial<Record<RmPrdFilterKey, boolean>>;
     viewMode?: RmPrdViewMode;
     managerRoles?: string[];
+    leaderboardScope?: 'all' | 'under_me';
+    showManagerLeaderboard?: boolean;
   };
   handleInputChange: (field: string, value: string | number | boolean | Record<string, boolean> | string[]) => void;
 }
@@ -166,6 +168,45 @@ export const RmPrdAnalyticsConfig: React.FC<RmPrdAnalyticsConfigProps> = ({
                 })
               )}
             </div>
+          </div>
+        )}
+
+        {localConfig.viewMode !== "rm" && (
+          <div className="space-y-2">
+            <Label htmlFor="leaderboardScope">Leaderboard Scope</Label>
+            <Select
+              value={localConfig.leaderboardScope ?? "all"}
+              onValueChange={(value) => handleInputChange("leaderboardScope", value)}
+            >
+              <SelectTrigger id="leaderboardScope">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Show all RMs</SelectItem>
+                <SelectItem value="under_me">Show only RMs under me</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Only affects the Leaderboard tab. "Under me" ranks just the RMs who directly report to
+              whoever is signed in — Performance and Adherence keep showing the full visible team.
+            </p>
+          </div>
+        )}
+
+        {localConfig.viewMode !== "rm" && (
+          <div className="flex items-center justify-between gap-2">
+            <div className="space-y-0.5">
+              <Label htmlFor="showManagerLeaderboard">Show Manager Leaderboard</Label>
+              <p className="text-xs text-muted-foreground">
+                Adds a second leaderboard that ranks managers (ASMs) by their whole team's vs-target %,
+                e.g. for a GM comparing teams. Clicking a manager opens that manager's own RM leaderboard.
+              </p>
+            </div>
+            <Switch
+              id="showManagerLeaderboard"
+              checked={localConfig.showManagerLeaderboard ?? false}
+              onCheckedChange={(next) => handleInputChange("showManagerLeaderboard", next)}
+            />
           </div>
         )}
       </CardContent>

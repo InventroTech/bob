@@ -401,8 +401,6 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
               </div>
             </div>
 
-            <LeaderboardPanel activeUserId={activeUserId} />
-
             <div className="flex justify-center items-center w-full">
               <CustomButton
                 onClick={handleGetLeads}
@@ -414,6 +412,8 @@ export function LeadCardCarouselView(props: LeadCardCarouselModel & { onClose?: 
                 Get Leads
               </CustomButton>
             </div>
+
+            <LeaderboardPanel activeUserId={activeUserId} />
           </div>
         </div>
       </div>

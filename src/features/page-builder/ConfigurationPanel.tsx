@@ -238,6 +238,10 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     viewMode?: 'manager' | 'rm';
     /** RM PRD Analytics: Role.key values that count as "manager" for the Manager filter. */
     managerRoles?: string[];
+    /** RM PRD Analytics: 'all' (whole visible team) or 'under_me' (Leaderboard tab only, direct reports). */
+    leaderboardScope?: 'all' | 'under_me';
+    /** RM PRD Analytics: adds a second manager-rollup leaderboard sub-view. */
+    showManagerLeaderboard?: boolean;
   };
 
   // Local state for all input fields
@@ -322,6 +326,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     visibleFilters: (initialConfig as any).visibleFilters ?? undefined,
     viewMode: (initialConfig as any).viewMode ?? 'manager',
     managerRoles: (initialConfig as any).managerRoles ?? undefined,
+    leaderboardScope: (initialConfig as any).leaderboardScope ?? 'all',
+    showManagerLeaderboard: (initialConfig as any).showManagerLeaderboard ?? false,
   });
 
   // Separate state for columns
