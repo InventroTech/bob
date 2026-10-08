@@ -214,9 +214,19 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // underneath a manager mid-read and was disruptive) or via the manual
   // Refresh button below.
   const [refreshTick, setRefreshTick] = useState(0);
+  // minimum gap between visibility-triggered refetches — alt-tabbing back
+  // and forth (checking another app repeatedly) must not retrigger the full
+  // events+targets fetch (and everything downstream of it) every single
+  // time; a manual Refresh click always goes through regardless, see below
+  const MIN_VISIBILITY_REFRESH_GAP_MS = 60_000;
+  const lastRefreshAtRef = useRef(Date.now());
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (
+        document.visibilityState === 'visible' &&
+        Date.now() - lastRefreshAtRef.current > MIN_VISIBILITY_REFRESH_GAP_MS
+      ) {
+        lastRefreshAtRef.current = Date.now();
         setRefreshTick((t) => t + 1);
       }
     };
@@ -269,31 +279,42 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
   const { targets: dailyTargets } = useRmDailyTargets(dateBounds, refreshTick);
+  // leadGroup/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
+  // BREAK_* rows don't carry a lead's group/state/party) — filtering the
+  // whole event stream by them would silently drop real break/login rows
+  // and corrupt the login/break/occupancy numbers whenever one of these
+  // filters is active. One combined .filter() pass instead of up to 4
+  // chained ones — same semantics, fewer full-array passes/intermediate
+  // arrays over what can be a large events list.
   const visibleEvents = useMemo(() => {
-    let result = filterByDateRange(events, dateBounds);
-    if (filters.manager !== 'All managers') result = result.filter((e) => e.managerName === filters.manager);
-    // leadGroup/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
-    // BREAK_* rows don't carry a lead's group/state/party) — filtering the
-    // whole event stream by them would silently drop real break/login rows
-    // and corrupt the login/break/occupancy numbers whenever one of these
-    // filters is active
-    if (filters.leadGroup !== 'All groups') {
-      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.leadGroup === filters.leadGroup);
-    }
-    if (filters.state !== 'All states') {
-      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.state === filters.state);
-    }
-    if (filters.party !== 'All parties') {
-      result = result.filter((e) => e.eventType !== 'CALL_TOUCH' || e.party === filters.party);
-    }
-    return result;
+    const dateFiltered = filterByDateRange(events, dateBounds);
+    return dateFiltered.filter((e) => {
+      if (filters.manager !== 'All managers' && e.managerName !== filters.manager) return false;
+      if (e.eventType !== 'CALL_TOUCH') return true;
+      if (filters.leadGroup !== 'All groups' && e.leadGroup !== filters.leadGroup) return false;
+      if (filters.state !== 'All states' && e.state !== filters.state) return false;
+      if (filters.party !== 'All parties' && e.party !== filters.party) return false;
+      return true;
+    });
   }, [events, dateBounds, filters.manager, filters.leadGroup, filters.state, filters.party]);
 
+  // Every aggregate below is gated to the active tab (and, for the manager
+  // board, the active Leaderboard sub-view) — these are full O(n) passes
+  // over visibleEvents, and computing all of them unconditionally on every
+  // render (old behavior) did ~5x the necessary work since only one tab is
+  // ever visible at a time. computeLeaderboardByRm internally re-derives
+  // computePerformanceByRm, and computeShiftTimeAverages internally
+  // re-derives computeAdherenceByRm (see aggregate.ts) — gating by tab means
+  // those two redundant internal passes simply never run in the same render
+  // as their already-computed counterpart anymore.
   const performanceByRm = useMemo(
-    () => computePerformanceByRm(visibleEvents, dailyTargets),
-    [visibleEvents, dailyTargets]
+    () => (tab === 'performance' ? computePerformanceByRm(visibleEvents, dailyTargets) : []),
+    [tab, visibleEvents, dailyTargets]
   );
-  const adherenceByRm = useMemo(() => computeAdherenceByRm(visibleEvents), [visibleEvents]);
+  const adherenceByRm = useMemo(
+    () => (tab === 'adherence' ? computeAdherenceByRm(visibleEvents) : []),
+    [tab, visibleEvents]
+  );
 
   // Shared hierarchy fetch backing two Leaderboard-tab-only features:
   // config.leaderboardScope === 'under_me' (RM board scoped to direct
@@ -368,9 +389,11 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     return visibleEvents.filter((e) => underMeRmUserIds.has(e.rmUserId));
   }, [visibleEvents, config?.leaderboardScope, underMeRmUserIds]);
 
+  const showingRmBoard = tab === 'leaderboard' && (!config?.showManagerLeaderboard || leaderboardSubView === 'rm');
+  const showingManagerBoard = tab === 'leaderboard' && !!config?.showManagerLeaderboard && leaderboardSubView === 'manager';
   const leaderboardByRm = useMemo(
-    () => computeLeaderboardByRm(leaderboardEvents, dailyTargets),
-    [leaderboardEvents, dailyTargets]
+    () => (showingRmBoard ? computeLeaderboardByRm(leaderboardEvents, dailyTargets) : []),
+    [showingRmBoard, leaderboardEvents, dailyTargets]
   );
   // Manager Leaderboard sub-view — always from visibleEvents (the page's
   // normal filters), independent of the RM board's own leaderboardScope:
@@ -378,23 +401,26 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // different for an RM-level board than a manager-level one, so each board
   // owns its own scope rather than sharing leaderboardEvents.
   const leaderboardByManager = useMemo<RmManagerLeaderboardRow[]>(() => {
-    if (!config?.showManagerLeaderboard || !managerHierarchy) return [];
+    if (!showingManagerBoard || !managerHierarchy) return [];
     return computeLeaderboardByManager(
       visibleEvents,
       dailyTargets,
       managerHierarchy.rmToManagerUserId,
       managerHierarchy.managerNameByUserId
     );
-  }, [config?.showManagerLeaderboard, managerHierarchy, visibleEvents, dailyTargets]);
+  }, [showingManagerBoard, managerHierarchy, visibleEvents, dailyTargets]);
   const teamTotals = useMemo(
-    () => computeTeamTotals(visibleEvents, dailyTargets),
-    [visibleEvents, dailyTargets]
+    () => (tab === 'performance' ? computeTeamTotals(visibleEvents, dailyTargets) : computeTeamTotals([], {})),
+    [tab, visibleEvents, dailyTargets]
   );
   const shiftTimeAverages = useMemo(
-    () => computeShiftTimeAverages(visibleEvents, filters.dateRange),
-    [visibleEvents, filters.dateRange]
+    () => (tab === 'adherence' ? computeShiftTimeAverages(visibleEvents, filters.dateRange) : computeShiftTimeAverages([], filters.dateRange)),
+    [tab, visibleEvents, filters.dateRange]
   );
-  const achtOverall = useMemo(() => computeAchtOverall(visibleEvents), [visibleEvents]);
+  const achtOverall = useMemo(
+    () => (tab === 'adherence' ? computeAchtOverall(visibleEvents) : computeAchtOverall([])),
+    [tab, visibleEvents]
+  );
 
   // "By RM" table search — exact-substring match on the RM's name, doesn't
   // touch any of the team-total cards above the table
@@ -496,7 +522,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setRefreshTick((t) => t + 1)}
+          onClick={() => {
+            lastRefreshAtRef.current = Date.now();
+            setRefreshTick((t) => t + 1);
+          }}
           className="gap-1.5"
         >
           <RefreshCw className="h-3.5 w-3.5" />
