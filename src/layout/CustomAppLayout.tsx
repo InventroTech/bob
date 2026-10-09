@@ -316,15 +316,7 @@ const CustomAppLayout: React.FC = () => {
 
   // Unmannd / procurement apps: navy active nav to match procurement table headers.
   // CRM tenants (e.g. praja) keep black.
-  const isUnmanndApp = (() => {
-    const slug = String(tenantSlug || '').toLowerCase();
-    if (/unman+d/.test(slug)) return true;
-    const names = pages.map((p) => String(p.name || '').toLowerCase());
-    const requestPages = names.filter((n) =>
-      /request|procurement|pending approval|vendor identified/.test(n)
-    );
-    return requestPages.length >= 2;
-  })();
+  const isUnmanndApp = /unman+d/.test(String(tenantSlug || '').toLowerCase());
   const allLeadsPath = useMemo(() => {
     if (!tenantSlug || !pages.length) return null;
     // Exact name only — `includes("all leads")` can bind the wrong page
