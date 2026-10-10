@@ -103,13 +103,16 @@ export const RmPrdAnalyticsConfig: React.FC<RmPrdAnalyticsConfigProps> = ({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="manager">Manager — whole team</SelectItem>
+              <SelectItem value="asm">ASM — only my team</SelectItem>
               <SelectItem value="rm">RM — signed-in RM's own data only</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            RM view narrows every number to whoever is signed in, and hides the Manager filter and the
-            "By RM" table (both meaningless for a one-person view). Use it on a page the RM themselves
-            has access to, not a manager's team dashboard.
+            ASM view narrows every number to whoever is signed in plus everyone under them (direct and
+            indirect reports) — the Manager filter and "By RM" table stay visible since there's still a
+            team to break down. RM view narrows every number to whoever is signed in, and hides the
+            Manager filter and the "By RM" table (both meaningless for a one-person view). Use ASM/RM on
+            a page that person themselves has access to, not a manager-of-managers' whole-team dashboard.
           </p>
         </div>
 

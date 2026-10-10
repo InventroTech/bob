@@ -67,10 +67,17 @@ export const rmActivityApi = {
    * `from`/`to` are "YYYY-MM-DD" — omit both to get the backend's default
    * (today only), never the whole tenant table. `rmUserId` narrows to one
    * RM's own rows (e.g. the lead-card "Your Shift" panel), omit for every
-   * RM. Pages through the response until exhausted; a date/RM-windowed
+   * RM. `managerUserId` narrows to one manager's own hierarchy — direct +
+   * indirect reports (RM PRD's ASM "my team" view) — omit for the whole
+   * tenant. Pages through the response until exhausted; a date/RM-windowed
    * query is almost always a single page.
    */
-  async getEvents(params?: { from?: string; to?: string; rmUserId?: string }): Promise<RmActivityEventDto[]> {
+  async getEvents(params?: {
+    from?: string;
+    to?: string;
+    rmUserId?: string;
+    managerUserId?: string;
+  }): Promise<RmActivityEventDto[]> {
     const rows: RmActivityEventDto[] = [];
     let page = 1;
     // date/RM-windowed queries are small; this is just a backstop against a
@@ -82,6 +89,7 @@ export const rmActivityApi = {
           from: params?.from,
           to: params?.to,
           rm_user_id: params?.rmUserId,
+          manager_user_id: params?.managerUserId,
           page,
           page_size: 2000,
           include_count: false,

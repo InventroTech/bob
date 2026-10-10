@@ -55,7 +55,7 @@ import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
 // keyed the same as Filters below so FilterBar can look visibility up directly.
 export type RmPrdFilterKey = 'manager' | 'dateRange' | 'leadGroup' | 'state' | 'party';
 
-export type RmPrdViewMode = 'manager' | 'rm';
+export type RmPrdViewMode = 'manager' | 'asm' | 'rm';
 
 export interface RmPrdAnalyticsConfig {
   title?: string;
@@ -68,12 +68,17 @@ export interface RmPrdAnalyticsConfig {
   visibleFilters?: Partial<Record<RmPrdFilterKey, boolean>>;
   /**
    * 'manager' (default, missing = 'manager') is today's whole-team
-   * dashboard. 'rm' scopes everything to the signed-in RM's own data only
-   * — the fetch itself is narrowed server-side to their rm_user_id (not
-   * just a client-side filter over the team), the Manager filter and the
-   * "By RM" table are hidden (both are meaningless for a one-person view),
-   * and the numbers you see are already just yours. Meant for a page an RM
-   * themselves is given access to, not a manager's team view.
+   * dashboard — every RM in the tenant. 'asm' scopes everything to the
+   * signed-in manager's own hierarchy (direct + indirect reports) — the
+   * fetch is narrowed server-side to their manager_user_id, same as 'rm'
+   * but at the team level instead of one person, so the Manager filter and
+   * "By RM" table stay meaningful and visible. 'rm' scopes everything to
+   * the signed-in RM's own data only — the fetch itself is narrowed
+   * server-side to their rm_user_id (not just a client-side filter over
+   * the team), the Manager filter and the "By RM" table are hidden (both
+   * are meaningless for a one-person view), and the numbers you see are
+   * already just yours. Meant for a page an RM themselves is given access
+   * to, not a manager's team view.
    */
   viewMode?: RmPrdViewMode;
   /**
@@ -173,6 +178,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // same precedent as LeadProgressBar/useLeadCardCarousel
   const activeUserId = spoofUserId ?? session?.user?.id ?? null;
   const isRmView = config?.viewMode === 'rm';
+  const isAsmView = config?.viewMode === 'asm';
   const [tab, setTab] = useState<Tab>(loadStoredTab);
   const [filters, setFilters] = useState<Filters>(loadStoredFilters);
   const [drill, setDrill] = useState<DrillFilter | null>(null);
@@ -214,21 +220,23 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   }, [tab]);
 
   const dateBounds = useMemo(() => {
-    // RM view with no signed-in user resolved yet — bounds=null skips the
-    // fetch entirely (see useRmActivityEvents) rather than briefly fetching
-    // and showing the whole team's data before activeUserId loads in
-    if (isRmView && !activeUserId) return null;
+    // RM/ASM view with no signed-in user resolved yet — bounds=null skips
+    // the fetch entirely (see useRmActivityEvents) rather than briefly
+    // fetching and showing the whole tenant's data before activeUserId loads in
+    if ((isRmView || isAsmView) && !activeUserId) return null;
     return resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo);
-  }, [filters.dateRange, filters.customFrom, filters.customTo, isRmView, activeUserId]);
+  }, [filters.dateRange, filters.customFrom, filters.customTo, isRmView, isAsmView, activeUserId]);
   // windows the fetch itself to this range (see useRmActivityEvents) — not
   // just a client-side filter over the whole tenant table anymore;
   // refreshTick keeps it from going stale between manual page reloads.
-  // In RM view the fetch itself is narrowed server-side to activeUserId —
-  // not a client-side filter over every RM's rows.
+  // In RM view the fetch itself is narrowed server-side to activeUserId; in
+  // ASM view it's narrowed server-side to activeUserId's own hierarchy —
+  // neither is a client-side filter over every RM's rows.
   const { events, loading, error } = useRmActivityEvents(
     dateBounds,
     isRmView ? activeUserId ?? undefined : undefined,
-    refreshTick
+    refreshTick,
+    isAsmView ? activeUserId ?? undefined : undefined
   );
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
