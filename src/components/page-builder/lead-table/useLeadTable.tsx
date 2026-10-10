@@ -133,34 +133,6 @@ const INVENTORY_SHIPMENT_CHIP_SHAPE =
 const INVENTORY_SHIPMENT_CHIP_SIZE = `${INVENTORY_SHIPMENT_CHIP_SHAPE} w-auto min-w-[6.5rem]`;
 
 /**
- * Backend default search only covers lead fields (name, phone, …), so inventory
- * tables without a configured `searchFields` would never match request rows.
- */
-const INVENTORY_DEFAULT_SEARCH_FIELDS = [
-  'item_name_freeform',
-  'item_name',
-  'vendor',
-  'vendor_name',
-  'requester_name',
-  'project_purpose',
-  'department',
-  'specifications',
-  'category',
-  'status',
-  'shipment_status',
-  'urgency_level',
-  'priority_label',
-  'estimated_cost',
-  'quantity_required',
-  'request_date',
-  'comments',
-  'delivery_pincode',
-  'delivery_address',
-  'courier_name',
-  'tracking_number',
-].join(',');
-
-/**
  * Table shows `1,129.00` and `16/09/2026`, but records store `1129` and
  * `2026-09-16` — rewrite typed numbers/dates to the stored form.
  */
@@ -524,7 +496,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
   }, [config?.entityType, config?.apiEndpoint, effectiveApiEndpoint]);
   const requestStatusConfig = useRequestStatusConfig(requestStatusEntityType);
 
-  // Inventory search covers every request field plus whatever columns the page shows.
+  // Backend default search only covers lead fields, so inventory tables search the columns the page shows.
   const visibleColumnSearchFields = useMemo(() => {
     const skip = new Set([
       'product_link',
@@ -539,7 +511,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     const keys = (config?.columns ?? [])
       .map((col) => String(col?.key || '').trim())
       .filter((key) => key && !skip.has(key.toLowerCase()));
-    return Array.from(new Set([...keys, ...INVENTORY_DEFAULT_SEARCH_FIELDS.split(',')])).join(',');
+    return Array.from(new Set(keys)).join(',');
   }, [config?.columns]);
 
   // Unmannd pages may set the entity type via forceQueryParams or only via columns.
