@@ -976,7 +976,7 @@ const AdherenceView: React.FC<{
         />
         <StatCard label="Occupancy" value={`${shiftTimeAverages.occupancy.value}%`} sub={shiftTimeAverages.occupancy.sub} />
         <StatCard
-          label="Breaches >25m"
+          label="Breaches"
           value={shiftTimeAverages.breaches.value}
           sub={`${shiftTimeAverages.breaches.sub}   Review`}
           highlight="red"
@@ -1287,7 +1287,7 @@ const RmDetailModal: React.FC<{
                 />
                 <StatCard label="Occupancy" value={`${shiftTimeAverages.occupancy.value}%`} sub={shiftTimeAverages.occupancy.sub} />
                 <StatCard
-                  label="Breaches >25m"
+                  label="Breaches"
                   value={shiftTimeAverages.breaches.value}
                   highlight="red"
                   onClick={() => onDrill('breach')}
