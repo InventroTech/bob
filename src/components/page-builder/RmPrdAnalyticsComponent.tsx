@@ -391,6 +391,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         ) : (
           <AdherenceView
             onDrill={openTeamDrill}
+            teamTotals={teamTotals}
+            showOutcomeCards={isAsmView}
             shiftTimeAverages={shiftTimeAverages}
             achtOverall={achtOverall}
             adherenceByRm={filteredAdherenceByRm}
@@ -931,6 +933,13 @@ const PerformanceTable: React.FC<{
 
 const AdherenceView: React.FC<{
   onDrill: (filter: DrillFilter) => void;
+  teamTotals: ReturnType<typeof computeTeamTotals>;
+  /** ASM ("only my team") view only — Attempts per Lead / Achieved vs Target
+   * already live on the Performance tab; repeating them here just saves an
+   * ASM a tab switch while reviewing their team's adherence. Off elsewhere
+   * (whole-team Manager view, single-RM view) so this tab doesn't duplicate
+   * the Performance tab for views where that switch is cheap/meaningless. */
+  showOutcomeCards: boolean;
   shiftTimeAverages: ReturnType<typeof computeShiftTimeAverages>;
   achtOverall: ReturnType<typeof computeAchtOverall>;
   adherenceByRm: RmAdherenceRow[];
@@ -942,6 +951,8 @@ const AdherenceView: React.FC<{
   stateNameById: Record<string, string>;
 }> = ({
   onDrill,
+  teamTotals,
+  showOutcomeCards,
   shiftTimeAverages,
   achtOverall,
   adherenceByRm,
@@ -950,8 +961,37 @@ const AdherenceView: React.FC<{
   onSelectRm,
   showByRmTable,
   stateNameById,
-}) => (
+}) => {
+  const achievedPct = teamTotals.target ? (teamTotals.achieved / teamTotals.target) * 100 : 0;
+
+  return (
   <div className="space-y-6">
+    {showOutcomeCards && (
+      <section>
+        <SectionLabel>Outcome · Team Total</SectionLabel>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <StatCard
+            label="Attempts per Lead"
+            value={teamTotals.attemptsPerLead}
+            sub="Touches ÷ unique"
+            onClick={() => onDrill('all')}
+          />
+          <CardShell className="border-amber-300 bg-amber-50/60" onClick={() => onDrill('trial')}>
+            <SectionLabel>Achieved vs Target</SectionLabel>
+            <div className="font-mono text-3xl font-semibold">
+              <span className="text-amber-700">{teamTotals.achieved}</span>
+              <span className="text-stone-400"> / {teamTotals.target}</span>
+            </div>
+            <Track fraction={achievedPct / 100} className="bg-amber-600" />
+            <div className="mt-1 flex justify-between text-xs text-stone-400">
+              <span>{achievedPct.toFixed(1)}%</span>
+              <span>Goal 100%</span>
+            </div>
+          </CardShell>
+        </div>
+      </section>
+    )}
+
     <section>
       <SectionLabel>Shift Time · Average per RM</SectionLabel>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -1036,7 +1076,8 @@ const AdherenceView: React.FC<{
       </section>
     )}
   </div>
-);
+  );
+};
 
 type AdherenceSortKey =
   | 'name'
