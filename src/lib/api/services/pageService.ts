@@ -54,6 +54,7 @@ export const pageService = {
     display_order: number;
     icon_name: string;
     header_title?: string;
+    config?: unknown;
   }[]> {
     try {
       const response = await apiClient.get(`/pages/`, {
@@ -79,6 +80,7 @@ export const pageService = {
         display_order: page.display_order ?? 0,
         icon_name: page.icon_name ?? 'Sparkles',
         header_title: page.header_title ?? '',
+        config: page.config,
       }));
     } catch (error) {
       console.error('Error fetching pages by role from API:', error);

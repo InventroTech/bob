@@ -122,6 +122,7 @@ export async function fetchPagesForRole(
   display_order: number;
   icon_name: string;
   header_title?: string;
+  config?: unknown;
 }[]> {
   // First try the backend Pages API (preferred path).
   try {
@@ -138,7 +139,7 @@ export async function fetchPagesForRole(
     tenant_id: `eq.${tenantId}`,
     role: `eq.${roleId}`,
     is_deleted: 'eq.false',
-    select: 'id,name,display_order,icon_name,header_title',
+    select: 'id,name,display_order,icon_name,header_title,config',
     order: 'display_order.asc',
   });
   const res = await fetch(`${url}/rest/v1/pages?${params}`, {
