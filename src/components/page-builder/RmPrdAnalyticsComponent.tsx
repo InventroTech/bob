@@ -392,7 +392,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
           <AdherenceView
             onDrill={openTeamDrill}
             teamTotals={teamTotals}
-            showOutcomeCards={isAsmView}
+            showOutcomeCards={isRmView}
             shiftTimeAverages={shiftTimeAverages}
             achtOverall={achtOverall}
             adherenceByRm={filteredAdherenceByRm}
@@ -934,11 +934,12 @@ const PerformanceTable: React.FC<{
 const AdherenceView: React.FC<{
   onDrill: (filter: DrillFilter) => void;
   teamTotals: ReturnType<typeof computeTeamTotals>;
-  /** ASM ("only my team") view only — Attempts per Lead / Achieved vs Target
-   * already live on the Performance tab; repeating them here just saves an
-   * ASM a tab switch while reviewing their team's adherence. Off elsewhere
-   * (whole-team Manager view, single-RM view) so this tab doesn't duplicate
-   * the Performance tab for views where that switch is cheap/meaningless. */
+  /** RM (signed-in RM's own data only) view only — Attempts per Lead /
+   * Achieved vs Target already live on the Performance tab; repeating them
+   * here just saves an RM a tab switch while reviewing their own adherence.
+   * Off elsewhere (whole-team Manager view, ASM "my team" view) so this tab
+   * doesn't duplicate the Performance tab for views where that switch is
+   * cheap/meaningless. */
   showOutcomeCards: boolean;
   shiftTimeAverages: ReturnType<typeof computeShiftTimeAverages>;
   achtOverall: ReturnType<typeof computeAchtOverall>;
