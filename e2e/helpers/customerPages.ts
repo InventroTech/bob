@@ -116,6 +116,17 @@ export async function mockCustomerFacingPages(page: Page) {
 
     await fulfillJson(route, PAGE_LIST);
   });
+
+  await page.route(
+    (url) => !url.pathname.includes('/rest/v1/') && url.pathname.replace(/\/+$/, '').endsWith('/pages'),
+    async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+      await fulfillJson(route, PAGE_LIST);
+    },
+  );
 }
 
 export async function mockNextLead(page: Page, lead: Record<string, unknown> | null = SAMPLE_LEAD) {
