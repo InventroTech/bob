@@ -1,0 +1,107 @@
+import React, { useState } from 'react';
+import { NavLink } from 'react-router-dom';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import type { SidebarPage, SidebarSection } from '@/lib/sidebar/sidebarGroups';
+
+interface SidebarGroupFlyoutProps<P extends SidebarPage> {
+  name: string;
+  sections: SidebarSection<P>[];
+  tenantSlug: string | undefined;
+  collapsed: boolean;
+  /** Expand under the heading; otherwise (icon-only sidebar) open a side panel. */
+  inline?: boolean;
+  activeClass: string;
+  triggerPadClass: string;
+  renderIcon: (iconName: string, isActive: boolean) => React.ReactNode;
+  onNavigate?: () => void;
+}
+
+export function SidebarGroupFlyout<P extends SidebarPage>({
+  name,
+  sections,
+  tenantSlug,
+  collapsed,
+  inline = false,
+  activeClass,
+  triggerPadClass,
+  renderIcon,
+  onNavigate,
+}: SidebarGroupFlyoutProps<P>) {
+  const pagePath = (id: string) => `/app/${tenantSlug}/pages/${id}`;
+  const [open, setOpen] = useState(false);
+  const firstIcon = sections[0]?.pages[0]?.icon_name ?? '';
+
+  const handleNavigate = () => {
+    if (!inline) setOpen(false);
+    onNavigate?.();
+  };
+
+  const trigger = (
+    <button
+      type="button"
+      title={collapsed ? name : undefined}
+      className={`flex w-full items-center rounded-lg text-[15px] font-extrabold uppercase tracking-wide transition ${triggerPadClass} ${
+        open ? activeClass : 'bg-white text-[#1A44A1] hover:bg-gray-50'
+      }`}
+    >
+      {collapsed ? (
+        <span className="flex h-8 w-8 items-center justify-center">{renderIcon(firstIcon, open)}</span>
+      ) : (
+        <span className="flex-1 truncate text-left">{name}</span>
+      )}
+    </button>
+  );
+
+  const sectionList = (
+    <div className="space-y-1">
+      {sections.map((section, idx) => (
+        <div key={section.name || `section-${idx}`} className={idx > 0 ? 'border-t pt-1' : ''}>
+          {section.name && (
+            <p className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              {section.name}
+            </p>
+          )}
+          {section.pages.map((page) => (
+            <NavLink
+              key={page.id}
+              to={pagePath(page.id)}
+              onClick={handleNavigate}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition ${
+                  isActive ? activeClass : 'text-gray-700 hover:bg-gray-50'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    {renderIcon(page.icon_name, isActive)}
+                  </span>
+                  <span className="truncate">{page.name}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+
+  if (inline) {
+    return (
+      <div>
+        <div onClick={() => setOpen((v) => !v)}>{trigger}</div>
+        {open && <div className="mt-1 pl-2">{sectionList}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent side="right" align="start" sideOffset={12} className="w-60 p-2">
+        {sectionList}
+      </PopoverContent>
+    </Popover>
+  );
+}

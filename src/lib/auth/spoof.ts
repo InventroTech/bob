@@ -122,6 +122,7 @@ export async function fetchPagesForRole(
   display_order: number;
   icon_name: string;
   header_title?: string;
+  config?: unknown;
 }[]> {
   const pages = await pageService.getPagesForRole(tenantId, roleId);
   return pages ?? [];
