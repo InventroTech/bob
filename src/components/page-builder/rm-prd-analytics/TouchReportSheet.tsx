@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { BREACH_SECONDS, DISPOSITIONS, DRILL_TITLES, generateTouches, type DrillFilter, type TouchRow } from './touchData';
+import { DISPOSITIONS, DRILL_TITLES, generateTouches, type DrillFilter, type TouchRow } from './touchData';
 import type { RmActivityEvent } from './types';
 
 const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | number }> = [
@@ -19,7 +19,7 @@ const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | nu
   { header: 'Start (IST)', value: (r) => r.start },
   { header: 'End (IST)', value: (r) => r.end },
   { header: 'Duration (s)', value: (r) => r.durationSeconds },
-  { header: 'Over 25m', value: (r) => (r.durationSeconds >= BREACH_SECONDS ? 'Y' : '') },
+  { header: 'Breach', value: (r) => (r.isBreach ? 'Y' : '') },
 ];
 
 // wraps a field in quotes only when it needs escaping, per RFC 4180
@@ -102,7 +102,6 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
             </TableHeader>
             <TableBody className="bg-white">
               {rows.map((row) => {
-                const over25 = row.durationSeconds >= BREACH_SECONDS;
                 return (
                   <TableRow key={row.touchId}>
                     <TableCell className="whitespace-nowrap font-mono">{row.touchId}</TableCell>
@@ -129,13 +128,13 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right font-mono">{row.start}</TableCell>
                     <TableCell className="whitespace-nowrap text-right font-mono">{row.end}</TableCell>
-                    <TableCell className={cn('whitespace-nowrap text-right font-mono', over25 && 'font-semibold text-red-600')}>
+                    <TableCell className={cn('whitespace-nowrap text-right font-mono', row.isBreach && 'font-semibold text-red-600')}>
                       {row.durationLabel}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {over25 && (
+                      {row.isBreach && (
                         <span className="whitespace-nowrap rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
-                          OVER 25m
+                          BREACH · {DISPOSITIONS[row.dispositionKey].label} &gt;{row.breachThresholdLabel}
                         </span>
                       )}
                     </TableCell>
