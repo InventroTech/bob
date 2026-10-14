@@ -468,6 +468,17 @@ export function useLeadCardCarousel(
     if (!forDial) return;
     setActionButtonsVisible(true);
     persistActionButtonsState(currentLead?.id, true);
+    // Stamps the real call start server-side, synchronously, right before
+    // the native Phone app takes over and this tab backgrounds for the
+    // whole call. The backend uses this (not the client-side elapsed
+    // timer) as the call's real duration when the RM later logs a
+    // disposition — a JS clock on this tab resets if the OS reclaims the
+    // backgrounded tab mid-call, which was silently truncating real call
+    // durations down to a few seconds. Fire-and-forget: a failure here
+    // (sendLeadEvent never throws) must never block the actual dial.
+    if (currentLead?.id != null) {
+      void crmLeadsApi.sendLeadEvent('lead.call_started', Number(currentLead.id), {});
+    }
     window.open(`tel:${forDial}`);
   };
 
