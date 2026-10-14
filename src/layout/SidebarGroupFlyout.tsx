@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { NavLink, matchPath, useLocation } from 'react-router-dom';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { SidebarPage, SidebarSection } from '@/lib/sidebar/sidebarGroups';
 
@@ -28,7 +28,18 @@ export function SidebarGroupFlyout<P extends SidebarPage>({
   onNavigate,
 }: SidebarGroupFlyoutProps<P>) {
   const pagePath = (id: string) => `/app/${tenantSlug}/pages/${id}`;
-  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const holdsCurrentPage = sections.some((section) =>
+    section.pages.some((page) => matchPath({ path: pagePath(page.id), end: false }, pathname))
+  );
+
+  // Inline groups open on their own page (refresh, direct link); the collapsed popover never auto-opens.
+  const [open, setOpen] = useState(inline && holdsCurrentPage);
+  useEffect(() => {
+    if (inline && holdsCurrentPage) setOpen(true);
+  }, [inline, holdsCurrentPage]);
+
+  const highlighted = open || holdsCurrentPage;
   const firstIcon = sections[0]?.pages[0]?.icon_name ?? '';
 
   const handleNavigate = () => {
@@ -40,12 +51,15 @@ export function SidebarGroupFlyout<P extends SidebarPage>({
     <button
       type="button"
       title={collapsed ? name : undefined}
+      aria-label={collapsed ? name : undefined}
+      aria-expanded={open}
+      onClick={inline ? () => setOpen((v) => !v) : undefined}
       className={`flex w-full items-center rounded-lg text-[15px] font-extrabold uppercase tracking-wide transition ${triggerPadClass} ${
-        open ? activeClass : 'bg-white text-[#1A44A1] hover:bg-gray-50'
+        highlighted ? activeClass : 'bg-white text-[#1A44A1] hover:bg-gray-50'
       }`}
     >
       {collapsed ? (
-        <span className="flex h-8 w-8 items-center justify-center">{renderIcon(firstIcon, open)}</span>
+        <span className="flex h-8 w-8 items-center justify-center">{renderIcon(firstIcon, highlighted)}</span>
       ) : (
         <span className="flex-1 truncate text-left">{name}</span>
       )}
@@ -90,7 +104,7 @@ export function SidebarGroupFlyout<P extends SidebarPage>({
   if (inline) {
     return (
       <div>
-        <div onClick={() => setOpen((v) => !v)}>{trigger}</div>
+        {trigger}
         {open && <div className="mt-1 pl-2">{sectionList}</div>}
       </div>
     );

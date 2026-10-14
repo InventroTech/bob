@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { authClient } from '@/lib/auth/authClient';
 import { pageService } from '@/lib/api';
+import { stripSidebarMeta } from '@/lib/sidebar/sidebarGroups';
 
 export const SPOOF_JWT_KEY = 'pyro_spoof_jwt';
 export const SPOOF_LABEL_KEY = 'pyro_spoof_user_label';
@@ -140,7 +141,7 @@ export async function fetchPageConfig(
   if (!page) return null;
   return {
     name: page.name ?? '',
-    config: page.config,
+    config: stripSidebarMeta(page.config),
     header_title: page.header_title,
   };
 }
