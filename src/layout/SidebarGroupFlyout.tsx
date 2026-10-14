@@ -36,7 +36,8 @@ export function SidebarGroupFlyout<P extends SidebarPage>({
   // Inline groups open on their own page (refresh, direct link); the collapsed popover never auto-opens.
   const [open, setOpen] = useState(inline && holdsCurrentPage);
   useEffect(() => {
-    if (inline && holdsCurrentPage) setOpen(true);
+    if (!inline) setOpen(false);
+    else if (holdsCurrentPage) setOpen(true);
   }, [inline, holdsCurrentPage]);
 
   const highlighted = open || holdsCurrentPage;
