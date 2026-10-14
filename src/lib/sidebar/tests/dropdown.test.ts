@@ -16,26 +16,29 @@ const sections = [
 
 type FlyoutProps = React.ComponentProps<typeof SidebarGroupFlyout>;
 
-const renderGroup = (props: Partial<FlyoutProps> = {}, initialPath = OUTSIDE_PAGE) =>
-  render(
-    React.createElement(
-      MemoryRouter,
-      { initialEntries: [initialPath] },
-      React.createElement(SidebarGroupFlyout, {
-        name: 'Procurement',
-        sections,
-        tenantSlug: 'acme',
-        collapsed: false,
-        inline: true,
-        activeClass: ACTIVE,
-        triggerPadClass: '',
-        renderIcon: (icon: string) => React.createElement('span', { 'data-testid': 'icon' }, icon),
-        ...props,
-      } as FlyoutProps)
-    )
+const flyout = (props: Partial<FlyoutProps> = {}, initialPath = OUTSIDE_PAGE) =>
+  React.createElement(
+    MemoryRouter,
+    { initialEntries: [initialPath] },
+    React.createElement(SidebarGroupFlyout, {
+      name: 'Procurement',
+      sections,
+      tenantSlug: 'acme',
+      collapsed: false,
+      inline: true,
+      activeClass: ACTIVE,
+      triggerPadClass: '',
+      renderIcon: (icon: string) => React.createElement('span', { 'data-testid': 'icon' }, icon),
+      ...props,
+    } as FlyoutProps)
   );
 
-const renderCollapsed = (initialPath = OUTSIDE_PAGE) => renderGroup({ collapsed: true, inline: false }, initialPath);
+const COLLAPSED: Partial<FlyoutProps> = { collapsed: true, inline: false };
+
+const renderGroup = (props: Partial<FlyoutProps> = {}, initialPath = OUTSIDE_PAGE) =>
+  render(flyout(props, initialPath));
+
+const renderCollapsed = (initialPath = OUTSIDE_PAGE) => renderGroup(COLLAPSED, initialPath);
 
 const heading = (name: RegExp = /procurement/i) => screen.getByRole('button', { name });
 
@@ -131,6 +134,30 @@ describe('SidebarGroupFlyout (dropdown)', () => {
     expect(heading().className).toContain(ACTIVE);
     expect(heading().getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('new-request')).toBeNull();
+  });
+
+  it('collapsing the sidebar while a group is open closes it instead of popping the list out', () => {
+    const { rerender } = renderGroup();
+    fireEvent.click(heading());
+    expect(screen.getByText('new-request')).toBeTruthy();
+
+    rerender(flyout(COLLAPSED));
+    expect(heading().getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('new-request')).toBeNull();
+    expect(heading().className).not.toContain(ACTIVE);
+  });
+
+  it('collapsing the sidebar on one of its pages closes the group but keeps it highlighted', () => {
+    const { rerender } = renderGroup({}, GROUP_PAGE);
+    expect(heading().getAttribute('aria-expanded')).toBe('true');
+
+    rerender(flyout(COLLAPSED, GROUP_PAGE));
+    expect(heading().getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('new-request')).toBeNull();
+    expect(heading().className).toContain(ACTIVE);
+
+    rerender(flyout({}, GROUP_PAGE));
+    expect(heading().getAttribute('aria-expanded')).toBe('true');
   });
 
   it('collapsed: stays highlighted after choosing a page closes the popover', () => {
