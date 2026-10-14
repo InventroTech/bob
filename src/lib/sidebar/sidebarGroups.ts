@@ -1,7 +1,7 @@
 /**
  * Sidebar grouping is stored per page as a non-rendering entry inside `pages.config`,
- * so no database column is needed. CustomAppPage skips it because no component
- * is registered for its type.
+ * so no database column is needed. Readers that render or inspect components must
+ * strip it first (splitSidebarMeta / stripSidebarMeta); it is not a real component.
  */
 export const SIDEBAR_META_TYPE = 'sidebarMeta';
 
@@ -52,6 +52,16 @@ export function splitSidebarMeta<T>(config: unknown): { components: T[]; meta: S
     components: config.filter((entry) => !isMetaEntry(entry)) as T[],
     meta: readSidebarMeta(config),
   };
+}
+
+/** Config without the sidebar entry, for anything that renders or inspects page components. */
+export function stripSidebarMeta<T = unknown>(config: unknown): T[] | unknown {
+  return Array.isArray(config) ? (config.filter((entry) => !isMetaEntry(entry)) as T[]) : config;
+}
+
+/** Only the sidebar entry, so page lists don't hold every page's full canvas in memory. */
+export function sidebarMetaOnly(config: unknown): unknown[] {
+  return Array.isArray(config) ? config.filter(isMetaEntry) : [];
 }
 
 /** Put the sidebar entry back on save; omitted entirely when the page has no group. */

@@ -63,12 +63,35 @@ export const CUSTOMER_PAGES = {
   },
 } as const;
 
-const PAGE_LIST = Object.values(CUSTOMER_PAGES).map((page) => ({
-  id: page.id,
-  name: page.name,
-  display_order: page.display_order,
-  icon_name: page.icon_name,
-}));
+type CustomerPageKey = keyof typeof CUSTOMER_PAGES;
+
+/** Sidebar Group/Section per page, as the page builder saves it inside `config`. */
+export type SidebarGrouping = Partial<Record<CustomerPageKey, { group: string; section?: string }>>;
+
+function pageConfig(key: CustomerPageKey, grouping: SidebarGrouping): unknown[] {
+  const config: unknown[] = [...CUSTOMER_PAGES[key].config];
+  const meta = grouping[key];
+  if (meta) {
+    config.push({
+      id: 'sidebarMeta',
+      type: 'sidebarMeta',
+      props: {},
+      config: { group: meta.group, section: meta.section ?? '' },
+    });
+  }
+  return config;
+}
+
+function pageList(grouping: SidebarGrouping) {
+  return (Object.keys(CUSTOMER_PAGES) as CustomerPageKey[]).map((key) => ({
+    id: CUSTOMER_PAGES[key].id,
+    name: CUSTOMER_PAGES[key].name,
+    display_order: CUSTOMER_PAGES[key].display_order,
+    icon_name: CUSTOMER_PAGES[key].icon_name,
+    header_title: CUSTOMER_PAGES[key].header_title,
+    config: pageConfig(key, grouping),
+  }));
+}
 
 export const SAMPLE_LEAD = {
   id: 9001,
@@ -84,7 +107,9 @@ export const SAMPLE_LEAD = {
   },
 };
 
-export async function mockCustomerFacingPages(page: Page) {
+export async function mockCustomerFacingPages(page: Page, grouping: SidebarGrouping = {}) {
+  const pages = pageList(grouping);
+
   await page.route((url) => url.pathname.includes('/rest/v1/pages'), async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: JSON_HEADERS });
@@ -97,7 +122,7 @@ export async function mockCustomerFacingPages(page: Page) {
     const id = idFilter?.startsWith('eq.') ? idFilter.slice(3) : null;
 
     if (id) {
-      const found = Object.values(CUSTOMER_PAGES).find((item) => item.id === id);
+      const found = pages.find((item) => item.id === id);
       if (!found) {
         await route.fulfill({ status: 406, headers: JSON_HEADERS, json: { message: 'not found' } });
         return;
@@ -114,17 +139,31 @@ export async function mockCustomerFacingPages(page: Page) {
       return;
     }
 
-    await fulfillJson(route, PAGE_LIST);
+    await fulfillJson(route, pages);
   });
 
   await page.route(
-    (url) => !url.pathname.includes('/rest/v1/') && url.pathname.replace(/\/+$/, '').endsWith('/pages'),
+    // Port 8080 is the Vite app itself (e.g. /app/:slug/pages/:id), not the backend API.
+    (url) => url.port !== '8080' && !url.pathname.includes('/rest/v1/') && url.pathname.replace(/\/+$/, '').endsWith('/pages'),
     async (route) => {
       if (route.request().method() !== 'GET') {
         await route.fallback();
         return;
       }
-      await fulfillJson(route, PAGE_LIST);
+      await fulfillJson(route, pages);
+    },
+  );
+
+  await page.route(
+    (url) => url.port !== '8080' && !url.pathname.includes('/rest/v1/') && /\/pages\/[^/]+\/?$/.test(url.pathname),
+    async (route) => {
+      const id = new URL(route.request().url()).pathname.replace(/\/+$/, '').split('/').pop();
+      const found = pages.find((item) => item.id === id);
+      if (route.request().method() !== 'GET' || !found) {
+        await route.fallback();
+        return;
+      }
+      await fulfillJson(route, { ...found, role: null, tenant_id: QA_TENANT.id });
     },
   );
 }
@@ -139,10 +178,14 @@ export function customerPagePath(pageKey: keyof typeof CUSTOMER_PAGES) {
   return `/app/${QA_TENANT.slug}/pages/${CUSTOMER_PAGES[pageKey].id}`;
 }
 
-export async function openCustomerApp(page: Page, path = customerPagePath('pendingLeads')) {
+export async function openCustomerApp(
+  page: Page,
+  path = customerPagePath('pendingLeads'),
+  grouping: SidebarGrouping = {},
+) {
   await mockSupabaseAuth(page, 'accept-login');
   await mockBackendApis(page);
-  await mockCustomerFacingPages(page);
+  await mockCustomerFacingPages(page, grouping);
   await seedBrowserSession(page);
   await page.goto(path);
 }

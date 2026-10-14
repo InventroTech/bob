@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { membershipService } from '@/lib/api';
 import { componentMap } from '@/features/page-builder/componentMap';
+import { stripSidebarMeta } from '@/lib/sidebar/sidebarGroups';
 
 interface PageData {
   name: string;
@@ -68,7 +69,7 @@ const PublicTenantPage: React.FC = () => {
           setError(pageError.message);
           toast.error('Failed to load public page');
         } else if (data) {
-          setPage({ name: data.name, config: data.config, role: data.role });
+          setPage({ name: data.name, config: stripSidebarMeta(data.config) as any[], role: data.role });
         } else {
           setError('Page not found or not accessible');
           toast.error('Page not found or not accessible');

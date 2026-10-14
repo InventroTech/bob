@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, getSupabaseRestConfig } from '@/lib/supabase';
 import { pageService } from '@/lib/api';
+import { sidebarMetaOnly, stripSidebarMeta } from '@/lib/sidebar/sidebarGroups';
 
 export const SPOOF_JWT_KEY = 'pyro_spoof_jwt';
 export const SPOOF_LABEL_KEY = 'pyro_spoof_user_label';
@@ -156,7 +157,7 @@ export async function fetchPagesForRole(
     throw new Error(`Supabase pages fetch failed: ${res.status} ${text}`);
   }
   const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  return Array.isArray(data) ? data.map((page) => ({ ...page, config: sidebarMetaOnly(page.config) })) : [];
 }
 
 /**
@@ -173,7 +174,7 @@ export async function fetchPageConfig(
     if (page) {
       return {
         name: page.name ?? '',
-        config: page.config,
+        config: stripSidebarMeta(page.config),
         header_title: page.header_title,
       };
     }
@@ -203,7 +204,6 @@ export async function fetchPageConfig(
     throw new Error(`Supabase page fetch failed: ${res.status} ${text}`);
   }
   const data = await res.json();
-  if (Array.isArray(data) && data.length > 0) return data[0];
-  if (data && typeof data === 'object' && 'name' in data) return data;
-  return null;
+  const row = Array.isArray(data) ? data[0] : data && typeof data === 'object' && 'name' in data ? data : null;
+  return row ? { ...row, config: stripSidebarMeta(row.config) } : null;
 }

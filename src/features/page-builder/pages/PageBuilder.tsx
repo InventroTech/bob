@@ -533,7 +533,10 @@ useEffect(() => {
                 <Input
                   id="sidebar-group"
                   value={sidebarGroup}
-                  onChange={(e) => setSidebarGroup(e.target.value)}
+                  onChange={(e) => {
+                    setSidebarGroup(e.target.value);
+                    if (!e.target.value.trim()) setSidebarSection('');
+                  }}
                   placeholder="Group name"
                   title="Sidebar group this page opens under. Leave empty to show it as a normal link."
                   className="w-32 h-9 text-sm"
