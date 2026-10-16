@@ -1,6 +1,7 @@
-/** Pure helpers for the lead card carousel module. */
+/** Helpers for the lead card carousel module. */
 
 import type { LeadData } from './types';
+import { crmLeadsApi } from '@/lib/api/services/crmLeads';
 
 /** Format CRM recall timestamp for the pending-dashboard cards */
 export function formatRecallAtLabel(iso: string | null): string {
@@ -146,6 +147,39 @@ export const getOrCreateLeadStartTime = (leadId: string | number | undefined): D
     console.warn('[LeadCardCarousel] Failed to persist lead start time:', e);
   }
   return now;
+};
+
+// Stamps the server-side "lead opened" moment the first time this lead id
+// is seen in this browser session — mirrors getOrCreateLeadStartTime's own
+// sessionStorage guard so a page refresh, a same-lead realtime re-fetch, or
+// a parent re-render never re-fires it for a lead already open. Re-firing
+// would reset RmCallSession.started_at server-side and silently truncate
+// the eventual duration_seconds — the same bug previously fixed for the old
+// "Call tapped" timer, now avoided here since the clock starts at open
+// instead. Call this (not getOrCreateLeadStartTime directly) at every place
+// a lead becomes "the current lead"; it still returns the same Date for
+// leadStartTime. Fire-and-forget: sendLeadEvent never throws, and a failure
+// here must never block the lead card from opening.
+export const markLeadOpened = (leadId: string | number | undefined): Date => {
+  const alreadyStored = (() => {
+    if (!leadId) return false;
+    try {
+      const stored = sessionStorage.getItem(LEAD_START_TIME_KEY);
+      if (!stored) return false;
+      const { leadId: storedLeadId } = JSON.parse(stored);
+      return String(storedLeadId) === String(leadId);
+    } catch {
+      return false;
+    }
+  })();
+
+  const startTime = getOrCreateLeadStartTime(leadId);
+
+  if (!alreadyStored && leadId) {
+    void crmLeadsApi.sendLeadEvent('lead.opened', Number(leadId), {});
+  }
+
+  return startTime;
 };
 
 // Called once a lead has been dispositioned (duration_seconds already sent)
