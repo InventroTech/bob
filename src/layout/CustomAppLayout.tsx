@@ -28,6 +28,8 @@ import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-not
 import { clearRegisteredAllLeadsPath, registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
 import { useShiftAutoLogout } from '@/hooks/useShiftAutoLogout';
 import { ShiftEndedOverlay } from '@/components/ShiftEndedOverlay';
+import { buildSidebarNav } from '@/lib/sidebar/sidebarGroups';
+import { SidebarGroupFlyout } from './SidebarGroupFlyout';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -122,7 +124,9 @@ const CustomAppLayout: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, session } = useAuth();
   const { showShiftEndedOverlay } = useShiftAutoLogout();
-  const [pages, setPages] = useState<{ id: string; name: string; icon_name: string; display_order?: number }[]>([]);
+  const [pages, setPages] = useState<
+    { id: string; name: string; icon_name: string; display_order?: number; config?: unknown }[]
+  >([]);
   const [customIcons, setCustomIcons] = useState<CustomIconRow[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -260,16 +264,14 @@ const CustomAppLayout: React.FC = () => {
 
       const token = await getEffectiveToken(session?.access_token ?? null);
 
-      const spoofToken =
-        typeof window !== 'undefined' ? window.localStorage.getItem(SPOOF_JWT_KEY) : null;
-      if (spoofToken && token) {
-        // When spoofing, use backend Pages API with spoof token so RLS sees the spoofed user
+      if (token) {
+        // Pages are saved through the backend, so read them back from it (Supabase REST is only the fallback).
         try {
           const pagesData = await fetchPagesForRole(tenantId, userRoleId, token);
           const sortedPages = (pagesData || []).sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0));
           setPages(sortedPages);
         } catch (err) {
-          console.error('Pages fetch error (spoof):', err);
+          console.error('Pages fetch error:', err);
           toast.error('Failed to load pages');
           setPages([]);
         }
@@ -278,7 +280,7 @@ const CustomAppLayout: React.FC = () => {
 
       const { data: pagesData, error } = await supabase
         .from('pages')
-        .select('id, name, display_order, icon_name')
+        .select('id, name, display_order, icon_name, config')
         .eq('tenant_id', tenantId)
         .eq('role', userRoleId)
         .eq('is_deleted', false)
@@ -357,13 +359,33 @@ const CustomAppLayout: React.FC = () => {
   const navItemPad = isUnmanndApp
     ? { collapsed: 'justify-center px-0 py-1.5', expanded: 'gap-2.5 px-2.5 py-1.5' }
     : { collapsed: 'justify-center px-0 py-2', expanded: 'gap-3 px-3 py-2' };
+  const sidebarNav = useMemo(() => buildSidebarNav(pages), [pages]);
+  const renderGroupIcon = (iconName: string, isActive: boolean) => (
+    <span className={isActive ? 'text-white' : 'text-gray-600'}>
+      <DynamicSidebarIcon iconName={iconName} customIcons={customIcons} />
+    </span>
+  );
 
   const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
     <>
-      {pages.map((page) => (
+      {sidebarNav.map((item) =>
+        item.kind === 'group' ? (
+          <SidebarGroupFlyout
+            key={`group-${item.name}`}
+            name={item.name}
+            sections={item.sections}
+            tenantSlug={tenantSlug}
+            collapsed={opts.collapsed}
+            inline
+            activeClass={activeNavClassMobile}
+            triggerPadClass={opts.collapsed ? navItemPad.collapsed : navItemPad.expanded}
+            renderIcon={renderGroupIcon}
+            onNavigate={opts.onNavigate}
+          />
+        ) : (
         <NavLink
-          key={page.id}
-          to={`/app/${tenantSlug}/pages/${page.id}`}
+          key={item.page.id}
+          to={`/app/${tenantSlug}/pages/${item.page.id}`}
           onClick={opts.onNavigate}
           className={({ isActive }) =>
             `flex items-center rounded-sm font-medium transition ${
@@ -384,14 +406,15 @@ const CustomAppLayout: React.FC = () => {
               <NavIcon
                 isMobile={isTabletOrLandscapeMobile}
                 isActive={isActive}
-                iconName={page.icon_name}
+                iconName={item.page.icon_name}
                 customIcons={customIcons}
               />
-              {!opts.collapsed && <span className="truncate">{page.name}</span>}
+              {!opts.collapsed && <span className="truncate">{item.page.name}</span>}
             </>
           )}
         </NavLink>
-      ))}
+        )
+      )}
     </>
   );
 
@@ -539,7 +562,24 @@ const CustomAppLayout: React.FC = () => {
               sidebarCollapsed ? 'px-2' : 'px-3'
             }`}
           >
-            {pages.map((page) => (
+            {sidebarNav.map((item) => {
+              if (item.kind === 'group') {
+                return (
+                  <SidebarGroupFlyout
+                    key={`group-${item.name}`}
+                    name={item.name}
+                    sections={item.sections}
+                    tenantSlug={tenantSlug}
+                    collapsed={sidebarCollapsed}
+                    inline={!sidebarCollapsed}
+                    activeClass={activeNavClass}
+                    triggerPadClass={sidebarCollapsed ? navItemPad.collapsed : navItemPad.expanded}
+                    renderIcon={renderGroupIcon}
+                  />
+                );
+              }
+              const { page } = item;
+              return (
               <NavLink
                 key={page.id}
                 to={`/app/${tenantSlug}/pages/${page.id}`}
@@ -563,7 +603,8 @@ const CustomAppLayout: React.FC = () => {
                   </>
                 )}
               </NavLink>
-            ))}
+              );
+            })}
           </nav>
 
           <div
