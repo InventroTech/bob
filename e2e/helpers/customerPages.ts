@@ -116,6 +116,39 @@ export async function mockCustomerFacingPages(page: Page) {
 
     await fulfillJson(route, PAGE_LIST);
   });
+
+  const pages = Object.values(CUSTOMER_PAGES).map((item) => ({
+    id: item.id,
+    name: item.name,
+    display_order: item.display_order,
+    icon_name: item.icon_name,
+    header_title: item.header_title,
+    config: item.config,
+  }));
+
+  await page.route(
+    (url) => url.port !== '8080' && !url.pathname.includes('/rest/v1/') && url.pathname.replace(/\/+$/, '').endsWith('/pages'),
+    async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+      await fulfillJson(route, pages);
+    },
+  );
+
+  await page.route(
+    (url) => url.port !== '8080' && !url.pathname.includes('/rest/v1/') && /\/pages\/[^/]+\/?$/.test(url.pathname),
+    async (route) => {
+      const id = new URL(route.request().url()).pathname.replace(/\/+$/, '').split('/').pop();
+      const found = pages.find((item) => item.id === id);
+      if (route.request().method() !== 'GET' || !found) {
+        await route.fallback();
+        return;
+      }
+      await fulfillJson(route, { ...found, role: null, tenant_id: QA_TENANT.id });
+    },
+  );
 }
 
 export async function mockNextLead(page: Page, lead: Record<string, unknown> | null = SAMPLE_LEAD) {
