@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { supabase, getSupabaseRestConfig } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { pageService } from '@/lib/api';
 
 export const SPOOF_JWT_KEY = 'pyro_spoof_jwt';
@@ -104,7 +104,7 @@ export async function getEffectiveToken(sessionToken?: string | null): Promise<s
   }
 
   if (sessionToken) return sessionToken;
-  const { data } = await supabase.auth.getSession();
+  const { data } = await authClient.getSession();
   return data.session?.access_token ?? null;
 }
 
@@ -123,39 +123,8 @@ export async function fetchPagesForRole(
   icon_name: string;
   header_title?: string;
 }[]> {
-  // First try the backend Pages API (preferred path).
-  try {
-    const pages = await pageService.getPagesForRole(tenantId, roleId);
-    return pages ?? [];
-  } catch (err) {
-    console.warn('pageService.getPagesForRole failed, falling back to Supabase REST:', err);
-  }
-
-  // Fallback: call Supabase REST directly with the provided token (spoof or real),
-  // preserving the original behavior so existing tenants still see their pages.
-  const { url, anonKey } = getSupabaseRestConfig();
-  const params = new URLSearchParams({
-    tenant_id: `eq.${tenantId}`,
-    role: `eq.${roleId}`,
-    is_deleted: 'eq.false',
-    select: 'id,name,display_order,icon_name,header_title',
-    order: 'display_order.asc',
-  });
-  const res = await fetch(`${url}/rest/v1/pages?${params}`, {
-    method: 'GET',
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Supabase pages fetch failed: ${res.status} ${text}`);
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  const pages = await pageService.getPagesForRole(tenantId, roleId);
+  return pages ?? [];
 }
 
 /**
@@ -166,43 +135,11 @@ export async function fetchPageConfig(
   tenantId: string,
   token: string
 ): Promise<{ name: string; config: any; header_title?: string } | null> {
-  // Preferred: backend Pages API via pageService.
-  try {
-    const page = await pageService.getPageById(pageId, tenantId, true);
-    if (page) {
-      return {
-        name: page.name ?? '',
-        config: page.config,
-        header_title: page.header_title,
-      };
-    }
-  } catch (err) {
-    console.warn('pageService.getPageById failed, falling back to Supabase REST:', err);
-  }
-
-  // Fallback: direct Supabase REST call with token.
-  const { url, anonKey } = getSupabaseRestConfig();
-  const params = new URLSearchParams({
-    id: `eq.${pageId}`,
-    tenant_id: `eq.${tenantId}`,
-    is_deleted: 'eq.false',
-    select: 'name,config,header_title',
-  });
-  const res = await fetch(`${url}/rest/v1/pages?${params}`, {
-    method: 'GET',
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Supabase page fetch failed: ${res.status} ${text}`);
-  }
-  const data = await res.json();
-  if (Array.isArray(data) && data.length > 0) return data[0];
-  if (data && typeof data === 'object' && 'name' in data) return data;
-  return null;
+  const page = await pageService.getPageById(pageId, tenantId, true);
+  if (!page) return null;
+  return {
+    name: page.name ?? '',
+    config: page.config,
+    header_title: page.header_title,
+  };
 }
