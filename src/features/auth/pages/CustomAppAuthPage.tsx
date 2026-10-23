@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -44,7 +44,7 @@ const CustomAppAuthPage: React.FC = () => {
     setMessage(null);
     setLoading(true);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const { error: signInError } = await authClient.signInWithPassword({ email, password });
       if (signInError) {
         setError(signInError.message);
         return;
@@ -52,7 +52,7 @@ const CustomAppAuthPage: React.FC = () => {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await authClient.getUser();
       if (user?.id && user?.email) {
         const linkError = await linkCustomAppUserIfNeeded(session, user.id, user.email);
         if (linkError) {
@@ -88,7 +88,7 @@ const CustomAppAuthPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await authClient.signUp({
         email,
         password,
         options: {
