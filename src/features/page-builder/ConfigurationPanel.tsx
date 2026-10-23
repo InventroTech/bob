@@ -232,8 +232,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
     lockLeadModal?: boolean;
     /** RM PRD Analytics: which filter-bar controls to show. */
     visibleFilters?: Partial<Record<string, boolean>>;
-    /** RM PRD Analytics: 'manager' (whole team) or 'rm' (signed-in RM only). */
-    viewMode?: 'manager' | 'rm';
+    /** RM PRD Analytics: 'manager' (whole team), 'asm' (signed-in manager's own team), or 'rm' (signed-in RM only). */
+    viewMode?: 'manager' | 'asm' | 'rm';
     /** RM PRD Analytics: Role.key values that count as "manager" for the Manager filter. */
     managerRoles?: string[];
   };

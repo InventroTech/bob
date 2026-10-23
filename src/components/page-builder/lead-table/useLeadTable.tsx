@@ -100,6 +100,7 @@ import {
   isRequestOnlyStatusCode,
   normalizeRequestStatus,
 } from '@/lib/inventory/requestStatus';
+import { describeBulkSaveError } from '@/lib/inventory/bulkEdit';
 import { useRequestStatusConfig } from '@/hooks/useRequestStatusConfig';
 
 /** Pill chips for All Requests priority / status / shipment (match design mock). */
@@ -2211,6 +2212,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
 
       let successCount = 0;
       let failCount = 0;
+      let firstError = '';
       const updatedById = new Map<string, any>();
 
       results.forEach((result, index) => {
@@ -2221,6 +2223,10 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
           successCount += 1;
         } else {
           failCount += 1;
+          if (!firstError && result.status === 'rejected') {
+            firstError = describeBulkSaveError(result.reason);
+            console.error('Bulk status update failed', result.reason);
+          }
         }
       });
 
@@ -2281,7 +2287,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
         if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
         toast({
           title: failCount > 0 ? 'Partially updated' : 'Updated',
-          description: `${parts.join(', ')}.`,
+          description: `${parts.join(', ')}.${firstError ? ` ${firstError}` : ''}`,
           variant: failCount > 0 ? 'destructive' : undefined,
         });
         if (failCount === 0) {
@@ -2291,7 +2297,7 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
       } else {
         toast({
           title: 'Update failed',
-          description: 'Could not update the selected requests.',
+          description: firstError || 'Could not update the selected requests.',
           variant: 'destructive',
         });
       }

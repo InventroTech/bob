@@ -28,6 +28,7 @@ import {
   resolveLeadRecordId,
   tasksSignature,
   getOrCreateLeadStartTime,
+  markLeadOpened,
   clearLeadStartTime,
 } from "./utils";
 import { useLeadTimer } from "./useLeadTimer";
@@ -220,7 +221,7 @@ export function useLeadCardCarousel(
         notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
         selectedTags: parseTags(initialLead.tags || []),
         nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
-        leadStartTime: getOrCreateLeadStartTime(leadId),
+        leadStartTime: markLeadOpened(leadId),
       });
       isInitialized.current = true;
 
@@ -468,6 +469,10 @@ export function useLeadCardCarousel(
     if (!forDial) return;
     setActionButtonsVisible(true);
     persistActionButtonsState(currentLead?.id, true);
+    // The call-start stamp now happens when the lead was opened (see
+    // markLeadOpened in utils.ts), not here — a JS clock on this tab resets
+    // if the OS reclaims the backgrounded tab mid-call, so the server-side
+    // RmCallSession is what record_lead_touch_event trusts for duration.
     window.open(`tel:${forDial}`);
   };
 
@@ -732,7 +737,7 @@ export function useLeadCardCarousel(
         notes: (leadData?.data?.notes as string) || leadData?.notes || "",
         selectedTags: parseTags(leadData?.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
-        leadStartTime: getOrCreateLeadStartTime(leadData.id),
+        leadStartTime: markLeadOpened(leadData.id),
       }));
 
       // Increment fetched leads count (only if daily limit is configured)
@@ -1066,7 +1071,7 @@ export function useLeadCardCarousel(
           // this branch is the "fetch current assigned lead on refresh" path —
           // reuse the persisted start time so a page reload doesn't restart
           // the clock on a lead the RM was already working before reloading
-          leadStartTime: getOrCreateLeadStartTime(currentLead.id),
+          leadStartTime: markLeadOpened(currentLead.id),
         }));
         isInitialized.current = true;
       } else {

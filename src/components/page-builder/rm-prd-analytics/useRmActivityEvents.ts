@@ -44,12 +44,19 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
 // "Custom" range picked but no dates chosen), which skips the fetch entirely
 // rather than falling back to an unbounded one. `rmUserId` further narrows
 // to one RM's own rows (e.g. the lead-card "Your Shift" panel) instead of
-// downloading every RM's events and filtering client-side. `refreshToken`
-// forces a refetch on demand even when bounds/rmUserId haven't changed —
-// `bounds` is date-granularity ("today"'s date string is the same all day),
-// so without this a caller that wants periodically-fresh data (rather than
-// a one-shot fetch at mount) has no way to trigger one.
-export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string, refreshToken?: number) {
+// downloading every RM's events and filtering client-side. `managerUserId`
+// narrows to one manager's own hierarchy (RM PRD's ASM "my team" view) —
+// pass at most one of `rmUserId`/`managerUserId`. `refreshToken` forces a
+// refetch on demand even when bounds/rmUserId haven't changed — `bounds` is
+// date-granularity ("today"'s date string is the same all day), so without
+// this a caller that wants periodically-fresh data (rather than a one-shot
+// fetch at mount) has no way to trigger one.
+export function useRmActivityEvents(
+  bounds: DateBounds | null,
+  rmUserId?: string,
+  refreshToken?: number,
+  managerUserId?: string
+) {
   const [events, setEvents] = useState<RmActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +78,7 @@ export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string
     setLoading(true);
     setError(null);
     rmActivityApi
-      .getEvents({ from, to, rmUserId })
+      .getEvents({ from, to, rmUserId, managerUserId })
       .then((rows) => {
         if (!cancelled) setEvents(rows.map(mapDto));
       })
@@ -85,7 +92,7 @@ export function useRmActivityEvents(bounds: DateBounds | null, rmUserId?: string
     return () => {
       cancelled = true;
     };
-  }, [hasWindow, from, to, rmUserId, refreshToken]);
+  }, [hasWindow, from, to, rmUserId, managerUserId, refreshToken]);
 
   return { events, loading, error };
 }
