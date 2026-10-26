@@ -32,6 +32,22 @@ const DOWNLOAD_PDF_BTN =
 const FORM_INPUT =
   'h-11 rounded-[6px] border-gray-200 bg-white shadow-sm focus-visible:ring-[#1B6FE8]';
 
+function formatSignInAt(value?: string | null) {
+  if (!value) return 'Never';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Never';
+  return format(new Date(parsed.getTime() + 5.5 * 60 * 60 * 1000), 'MMM d, yyyy h:mm a');
+}
+
+function InactiveMark({ active }: { active?: boolean }) {
+  if (active !== false) return null;
+  return (
+    <span className="inline-flex items-center rounded-full bg-[#FEF2F2] px-2 py-0.5 text-[11px] font-medium leading-none text-[#B91C1C]">
+      Inactive
+    </span>
+  );
+}
+
 function SupportDailyDualDisplay({
   selfTrial,
   other,
@@ -682,7 +698,10 @@ export function AddUserView(props: AddUserModel) {
       case 'name':
         return (
           <TableCell key={cellKey} className="text-body-medium">
-            {user.name}
+            <span className="inline-flex items-center gap-2">
+              {user.name}
+              <InactiveMark active={user.is_active} />
+            </span>
           </TableCell>
         );
       case 'email':
@@ -730,6 +749,8 @@ export function AddUserView(props: AddUserModel) {
             )}
           </TableCell>
         );
+      case 'last_sign_in_at':
+        return <TableCell key={cellKey}>{formatSignInAt(user.last_sign_in_at)}</TableCell>;
       case 'created_at':
         return (
           <TableCell key={cellKey}>
@@ -1449,7 +1470,10 @@ export function AddUserView(props: AddUserModel) {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <p className="text-xs text-gray-500">Name</p>
-                            <p className="font-semibold text-sm">{user.name}</p>
+                            <p className="font-semibold text-sm inline-flex items-center gap-2">
+                              {user.name}
+                              <InactiveMark active={user.is_active} />
+                            </p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Email</p>
@@ -1485,6 +1509,10 @@ export function AddUserView(props: AddUserModel) {
                           <div>
                             <p className="text-xs text-gray-500">Manager Email</p>
                             <p className="break-words text-sm">{user.managerEmail || "-"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Last sign in at</p>
+                            <p className="text-sm">{formatSignInAt(user.last_sign_in_at)}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Created At</p>
