@@ -100,6 +100,11 @@ export async function mockBackendApis(page: Page) {
       return;
     }
 
+    if (path.endsWith('/accounts/tenant-by-slug')) {
+      await fulfillJson(route, { id: qaMembership.tenant_id, slug: qaMembership.tenant_slug });
+      return;
+    }
+
     if (path.endsWith('/membership/me/role')) {
       await fulfillJson(route, qaMembership);
       return;
