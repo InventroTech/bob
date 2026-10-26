@@ -18,6 +18,11 @@ export interface LeadCardCarouselProps {
     whatsappTemplatesApiEndpoint?: string;
     statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
+    /** Lead table's "Lock lead modal" setting, passed through when this
+     * carousel is rendered inside a table's View Profile modal (isInModal) —
+     * see lead-table/types.ts for the full description. Only meaningful
+     * together with isInModal; the non-modal carousel ignores it. */
+    lockLeadModal?: boolean;
   };
   initialLead?: LeadData | null;
   onLeadUpdate?: (updatedLead: LeadData | null) => void;
@@ -37,6 +42,17 @@ export interface LeadCardCarouselProps {
    * whatever `updating` was at the caller's last unrelated re-render.
    */
   onUpdatingChange?: (updating: boolean) => void;
+  /**
+   * Fires instead of opening `initialLead` when a DIFFERENT lead already
+   * holds the cross-page "one lead open at a time" lock (see
+   * getActiveLeadLock in utils.ts) — the carousel itself already shows a
+   * toast naming the other page; this callback lets the host (e.g.
+   * LeadTableView's modal) close itself in response, since nothing was
+   * actually opened here for it to protect. Only relevant when `initialLead`
+   * is used (the table's View Profile flow); the standalone carousel's own
+   * queue-pull paths fall back to the pending-card state instead.
+   */
+  onLeadLockConflict?: (lockedPageTitle: string) => void;
 }
 
 export interface LeadTask {
