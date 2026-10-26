@@ -19,6 +19,7 @@ export type UserManagementColumn =
   | "email"
   | "department"
   | "role"
+  | "last_sign_in_at"
   | "created_at"
   | "actions";
 
@@ -57,6 +58,7 @@ const CORE_COLUMNS = new Set<UserManagementColumn>([
   "email",
   "department",
   "role",
+  "last_sign_in_at",
   "created_at",
   "actions",
 ]);
@@ -88,7 +90,7 @@ const LEGACY_CRM_COLUMN_TO_CUSTOM: Record<
 /** Core built-ins — name, email, department, role (+ created_at/actions on table). */
 export const FALLBACK_USER_MANAGEMENT_SCHEMA: UserManagementSchema = {
   formFields: ["name", "email", "department", "role"],
-  columns: ["name", "email", "department", "role", "created_at", "actions"],
+  columns: ["name", "email", "department", "role", "last_sign_in_at", "created_at", "actions"],
   customFields: [],
 };
 
@@ -164,8 +166,10 @@ export function normalizeSchema(value: unknown): UserManagementSchema {
     });
   }
 
-  const columns = rawCols.filter((c): c is UserManagementColumn =>
-    CORE_COLUMNS.has(c as UserManagementColumn)
+  const columns = withLastSignInColumn(
+    rawCols.filter((c): c is UserManagementColumn =>
+      CORE_COLUMNS.has(c as UserManagementColumn)
+    )
   );
 
   for (const key of rawCols) {
@@ -182,7 +186,7 @@ export function normalizeSchema(value: unknown): UserManagementSchema {
 
   return {
     formFields: formFields.length ? formFields : [...FALLBACK_USER_MANAGEMENT_SCHEMA.formFields],
-    columns: columns.length ? columns : [...FALLBACK_USER_MANAGEMENT_SCHEMA.columns],
+    columns: columns.length ? withLastSignInColumn(columns) : [...FALLBACK_USER_MANAGEMENT_SCHEMA.columns],
     customFields,
   };
 }
@@ -255,9 +259,21 @@ const COLUMN_LABELS: Record<UserManagementColumn, string> = {
   email: "Email",
   department: "Department",
   role: "Role",
+  last_sign_in_at: "Last sign in at",
   created_at: "Created at",
   actions: "",
 };
+
+/** Saved page configs predate this column. Keep it next to Created at. */
+function withLastSignInColumn(columns: UserManagementColumn[]): UserManagementColumn[] {
+  if (columns.includes("last_sign_in_at")) return columns;
+  const next = [...columns];
+  const createdAt = next.indexOf("created_at");
+  const actions = next.indexOf("actions");
+  const insertAt = createdAt >= 0 ? createdAt : actions >= 0 ? actions : next.length;
+  next.splice(insertAt, 0, "last_sign_in_at");
+  return next;
+}
 
 export function getUserManagementConfig(): UserManagementConfigFile {
   return config;

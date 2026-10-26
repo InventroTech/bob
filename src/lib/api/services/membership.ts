@@ -66,6 +66,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  is_active?: boolean;
   created_at: string;
   role_id: string;
   department?: string;
@@ -236,6 +237,7 @@ export const membershipService = {
           id: String(rawId),
           name: user.name || user.full_name || 'Unnamed User',
           email: user.email || 'No Email',
+          is_active: user.is_active !== false,
           role_id: user.role_id || user.role?.id || '',
           created_at: user.created_at || user.date_joined || new Date().toISOString(),
           department: user.department ?? user.department_name ?? undefined,
