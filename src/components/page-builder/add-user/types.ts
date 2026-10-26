@@ -10,6 +10,10 @@ export interface User {
   uid: string;
   name: string;
   email: string;
+  /** False after the inactive-email job, or when an admin turns the membership off. */
+  is_active?: boolean;
+  /** auth.users.last_sign_in_at, or authentication.User.last_login on Django auth. */
+  last_sign_in_at?: string | null;
   role_id: string;
   created_at: string;
   role?: Role;

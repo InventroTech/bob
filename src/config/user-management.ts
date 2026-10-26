@@ -87,18 +87,18 @@ const CRM_CUSTOM_FIELDS_FULL = [
 const userManagementConfig = {
   defaults: {
     formFields: ["name", "email", "department", "role"],
-    columns: ["name", "email", "department", "role", "created_at", "actions"],
+    columns: ["name", "email", "department", "role", "last_sign_in_at", "created_at", "actions"],
     customFields: CRM_CUSTOM_FIELDS_FULL,
   },
   tenants: {
     "bibhab-thepyro-ai": {
       formFields: ["name", "email", "department", "role"],
-      columns: ["name", "email", "department", "role", "created_at", "actions"],
+      columns: ["name", "email", "department", "role", "last_sign_in_at", "created_at", "actions"],
       customFields: CRM_CUSTOM_FIELDS_FULL,
     },
     "acme-crm": {
       formFields: ["name", "email", "department", "role"],
-      columns: ["name", "email", "department", "role", "created_at", "actions"],
+      columns: ["name", "email", "department", "role", "last_sign_in_at", "created_at", "actions"],
       customFields: [
         {
           key: "lead_group",
@@ -126,7 +126,7 @@ const userManagementConfig = {
     },
     "beta-crm": {
       formFields: ["name", "email", "department", "role"],
-      columns: ["name", "email", "department", "role", "created_at", "actions"],
+      columns: ["name", "email", "department", "role", "last_sign_in_at", "created_at", "actions"],
       customFields: [
         {
           key: "manager_email",
