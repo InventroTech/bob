@@ -388,6 +388,37 @@ export function isInventoryLikeTableConfig(
   return false;
 }
 
+/** Entity type a table loads: endpoint first, then forceQueryParams, then entityType. Lowercased; '' if unknown. */
+export function resolveTableEntityType(
+  config: Record<string, unknown> | undefined | null,
+  resolvedEndpoint?: string | null
+): string {
+  const endpoint = String(resolvedEndpoint || config?.apiEndpoint || '');
+  const fromEndpoint = endpoint.match(/[?&]entity_type=([^&#]+)/i)?.[1];
+  if (fromEndpoint) return decodeURIComponent(fromEndpoint).trim().toLowerCase();
+  const forced = String(
+    (config?.forceQueryParams as Record<string, string> | undefined)?.entity_type ?? ''
+  ).trim();
+  return (forced || String(config?.entityType ?? '')).trim().toLowerCase();
+}
+
+/**
+ * Whether a table's search should cover inventory request fields.
+ * Procurement widgets tag every config with inventoryTableKind, including lead lists
+ * (entity_type=lead), so that tag only counts when the table names no entity type;
+ * otherwise lead search would scan 20+ inventory-only JSON keys.
+ */
+export function usesInventorySearch(
+  config: Record<string, unknown> | undefined | null,
+  resolvedEndpoint?: string | null
+): boolean {
+  if (!config) return false;
+  const entityType = resolveTableEntityType(config, resolvedEndpoint);
+  if (entityType === 'inventory_request' || entityType === 'unmannd_request') return true;
+  if (!entityType && String(config.inventoryTableKind ?? '').trim()) return true;
+  return isInventoryLikeTableConfig(config);
+}
+
 export function inferInventoryTableKindFromPageName(pageName: string): InventoryTableKind | undefined {
   const n = pageName.trim().toLowerCase();
   if (!n) return undefined;

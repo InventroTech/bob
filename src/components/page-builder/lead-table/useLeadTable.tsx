@@ -82,7 +82,7 @@ import {
   applyPlaceholderTemplate,
   transformLeadData,
   formatBulkActionLabel,
-  isInventoryLikeTableConfig,
+  usesInventorySearch,
 } from './utils';
 import {
   applyInventoryCartStatusSideEffects,
@@ -541,11 +541,12 @@ export function useLeadTable({ config, pageId }: LeadTableProps) {
     return Array.from(new Set([...keys, ...INVENTORY_DEFAULT_SEARCH_FIELDS.split(',')])).join(',');
   }, [config?.columns]);
 
-  // Unmannd pages may set the entity type via forceQueryParams or only via columns.
-  const isInventorySearchTable =
-    isInventoryRequestTable ||
-    Boolean((config as { inventoryTableKind?: string } | undefined)?.inventoryTableKind) ||
-    isInventoryLikeTableConfig(config as Record<string, unknown> | undefined);
+  const isInventorySearchTable = useMemo(
+    () =>
+      isInventoryRequestTable ||
+      usesInventorySearch(config as Record<string, unknown> | undefined, effectiveApiEndpoint),
+    [isInventoryRequestTable, config, effectiveApiEndpoint]
+  );
 
   const effectiveSearchFields = useMemo(() => {
     const configured = String(config?.searchFields ?? '').trim();
