@@ -28,4 +28,7 @@ export interface RmActivityEvent {
   startedAt: string; // ISO timestamp
   endedAt: string | null; // null = still ongoing right now
   durationSeconds: number | null;
+  // which page/carousel instance (e.g. "All Leads", "Pending Leads") opened
+  // this touch's lead — null/empty for rows written before this was tracked
+  openedFrom: string | null;
 }

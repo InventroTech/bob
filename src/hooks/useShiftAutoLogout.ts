@@ -88,12 +88,14 @@ export function useShiftAutoLogout(): { showShiftEndedOverlay: boolean } {
 
       if (isLeadCallActive()) {
         detachCallEndListener();
-        callEndListener = (e: Event) => {
-          const detail = (e as CustomEvent<{ active: boolean }>).detail;
-          if (detail && detail.active === false) {
-            detachCallEndListener();
-            runEnforcement();
-          }
+        // CALL_ACTIVITY_CHANGED also fires for the sidebar's separate
+        // modal-lock signal now (see shiftCallActivityBus.ts), so re-check
+        // isLeadCallActive() directly on every firing rather than trusting
+        // the event itself to mean "the call ended".
+        callEndListener = () => {
+          if (isLeadCallActive()) return;
+          detachCallEndListener();
+          runEnforcement();
         };
         window.addEventListener(CALL_ACTIVITY_CHANGED, callEndListener);
         return;

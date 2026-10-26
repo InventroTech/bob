@@ -29,6 +29,9 @@ export interface RmActivityEventDataDto {
   started_at: string;
   ended_at: string | null;
   duration_seconds: number | null;
+  /** Page/carousel title the lead was opened from (e.g. "All Leads",
+   * "Pending Leads") — absent/empty for rows written before this was tracked. */
+  opened_from: string | null;
 }
 
 export interface RmActivityEventDto {

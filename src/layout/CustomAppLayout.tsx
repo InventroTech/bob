@@ -28,7 +28,7 @@ import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-not
 import { clearRegisteredAllLeadsPath, registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
 import { useShiftAutoLogout } from '@/hooks/useShiftAutoLogout';
 import { ShiftEndedOverlay } from '@/components/ShiftEndedOverlay';
-import { useLeadCallActive } from '@/lib/realtime/shiftCallActivityBus';
+import { useLeadNavLocked } from '@/lib/realtime/shiftCallActivityBus';
 import { buildSidebarNav } from '@/lib/sidebar/sidebarGroups';
 import { SidebarGroupFlyout } from './SidebarGroupFlyout';
 
@@ -126,16 +126,17 @@ const CustomAppLayout: React.FC = () => {
   const location = useLocation();
   const { user, logout, session } = useAuth();
   const { showShiftEndedOverlay } = useShiftAutoLogout();
-  // A lead open in the (non-modal) carousel — RM PRD itself — blocks
-  // navigating to any OTHER sidebar page until it's dispositioned, so the
-  // RM can't walk away mid-lead. Doesn't touch Sparky/Notifications/Logout.
-  const leadCallActive = useLeadCallActive();
+  // A lead open in the (non-modal) carousel on RM PRD, OR a table-opened
+  // lead whose "Lock lead modal" is enabled, blocks navigating to any OTHER
+  // sidebar page until it's dispositioned, so the RM can't walk away
+  // mid-lead. Doesn't touch Sparky/Notifications/Logout.
+  const leadNavLocked = useLeadNavLocked();
   const isCurrentPage = (pageId: string) => location.pathname === `/app/${tenantSlug}/pages/${pageId}`;
   const navBlockedToast = () =>
     toast.warning('Finish this lead first', {
       description: 'Log a disposition before navigating away from RM PRD.',
     });
-  const isPageBlocked = (pageId: string) => leadCallActive && !isCurrentPage(pageId);
+  const isPageBlocked = (pageId: string) => leadNavLocked && !isCurrentPage(pageId);
   const [pages, setPages] = useState<
     { id: string; name: string; icon_name: string; display_order?: number; config?: unknown }[]
   >([]);
