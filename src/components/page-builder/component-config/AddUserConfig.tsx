@@ -25,6 +25,7 @@ const COLUMN_OPTIONS: { key: UserManagementColumn; label: string }[] = [
   { key: "email", label: "Email" },
   { key: "department", label: "Department" },
   { key: "role", label: "Role" },
+  { key: "last_sign_in_at", label: "Last sign in at" },
   { key: "created_at", label: "Created at" },
   { key: "actions", label: "Actions" },
 ];

@@ -154,6 +154,8 @@ export function useAddUser({ config }: AddUserComponentProps) {
         uid: user.uid || user.id || `temp-${index}-${Math.random().toString(36).substring(2, 15)}`,
         name: user.name || user.full_name || 'Unnamed User',
         email: user.email || 'No Email',
+        is_active: user.is_active !== false,
+        last_sign_in_at: user.last_sign_in_at || null,
         role_id: user.role_id || user.role?.id || '',
         created_at: user.created_at || user.date_joined || new Date().toISOString(),
         role: user.role || (user.role_name ? { id: user.role_id, name: user.role_name } : undefined),
