@@ -28,7 +28,7 @@ import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-not
 import { clearRegisteredAllLeadsPath, registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
 import { useShiftAutoLogout } from '@/hooks/useShiftAutoLogout';
 import { ShiftEndedOverlay } from '@/components/ShiftEndedOverlay';
-import { useLeadCallActive } from '@/lib/realtime/shiftCallActivityBus';
+import { useLeadNavLocked } from '@/lib/realtime/shiftCallActivityBus';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -124,10 +124,11 @@ const CustomAppLayout: React.FC = () => {
   const location = useLocation();
   const { user, logout, session } = useAuth();
   const { showShiftEndedOverlay } = useShiftAutoLogout();
-  // A lead open in the (non-modal) carousel — RM PRD itself — blocks
-  // navigating to any OTHER sidebar page until it's dispositioned, so the
-  // RM can't walk away mid-lead. Doesn't touch Sparky/Notifications/Logout.
-  const leadCallActive = useLeadCallActive();
+  // A lead open in the (non-modal) carousel on RM PRD, OR a table-opened
+  // lead whose "Lock lead modal" is enabled, blocks navigating to any OTHER
+  // sidebar page until it's dispositioned, so the RM can't walk away
+  // mid-lead. Doesn't touch Sparky/Notifications/Logout.
+  const leadNavLocked = useLeadNavLocked();
   const isCurrentPage = (pageId: string) => location.pathname === `/app/${tenantSlug}/pages/${pageId}`;
   const navBlockedToast = () =>
     toast.warning('Finish this lead first', {
@@ -372,7 +373,7 @@ const CustomAppLayout: React.FC = () => {
   const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
     <>
       {pages.map((page) => {
-        const blocked = leadCallActive && !isCurrentPage(page.id);
+        const blocked = leadNavLocked && !isCurrentPage(page.id);
         return (
           <NavLink
             key={page.id}
@@ -564,7 +565,7 @@ const CustomAppLayout: React.FC = () => {
             }`}
           >
             {pages.map((page) => {
-              const blocked = leadCallActive && !isCurrentPage(page.id);
+              const blocked = leadNavLocked && !isCurrentPage(page.id);
               return (
                 <NavLink
                   key={page.id}

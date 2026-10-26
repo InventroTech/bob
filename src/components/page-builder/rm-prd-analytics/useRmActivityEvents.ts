@@ -36,6 +36,7 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
     startedAt: asUtcIso(data.started_at),
     endedAt: data.ended_at ? asUtcIso(data.ended_at) : null,
     durationSeconds: data.duration_seconds,
+    openedFrom: data.opened_from,
   };
 }
 

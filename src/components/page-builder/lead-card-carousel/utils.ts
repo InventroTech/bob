@@ -124,6 +124,30 @@ const LEAD_START_TIME_KEY = 'leadCardCarousel_leadStartTime';
 // comes back around.
 const LEAD_START_TIME_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
+interface StoredLeadStartTime {
+  leadId: string;
+  startedAt: string;
+  /** Which page/carousel instance opened this lead (config.title, or a
+   * fallback) — shown in the "already open elsewhere" block message so the
+   * RM knows where to go finish it. */
+  pageTitle: string;
+}
+
+const readStoredRecord = (): StoredLeadStartTime | null => {
+  try {
+    const stored = localStorage.getItem(LEAD_START_TIME_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<StoredLeadStartTime>;
+    if (!parsed.leadId || !parsed.startedAt) return null;
+    const restored = new Date(parsed.startedAt);
+    if (Number.isNaN(restored.getTime())) return null;
+    if (Date.now() - restored.getTime() > LEAD_START_TIME_MAX_AGE_MS) return null;
+    return { leadId: String(parsed.leadId), startedAt: parsed.startedAt, pageTitle: parsed.pageTitle || 'another page' };
+  } catch {
+    return null;
+  }
+};
+
 // localStorage, not sessionStorage: sessionStorage is tied to the tab's own
 // browsing-context lifetime, and Chrome can discard/reclaim a backgrounded
 // tab's memory while the RM is on other tabs doing other things — on
@@ -132,18 +156,23 @@ const LEAD_START_TIME_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 // time. localStorage survives that.
 const readStoredLeadStartTime = (leadId: string | number | undefined): Date | null => {
   if (!leadId) return null;
-  try {
-    const stored = localStorage.getItem(LEAD_START_TIME_KEY);
-    if (!stored) return null;
-    const { leadId: storedLeadId, startedAt } = JSON.parse(stored);
-    if (String(storedLeadId) !== String(leadId)) return null;
-    const restored = new Date(startedAt);
-    if (Number.isNaN(restored.getTime())) return null;
-    if (Date.now() - restored.getTime() > LEAD_START_TIME_MAX_AGE_MS) return null;
-    return restored;
-  } catch {
-    return null;
-  }
+  const record = readStoredRecord();
+  if (!record || record.leadId !== String(leadId)) return null;
+  return new Date(record.startedAt);
+};
+
+// Whichever lead currently holds the cross-page "one lead open at a time"
+// lock, or null if none / stale. The same LEAD_START_TIME_KEY entry doubles
+// as this lock — there's only ever one locally-tracked "open" lead per
+// browser, on purpose: an RM opening a lead on the All Leads table, then
+// navigating to Pending Leads and opening another without dispositioning
+// the first, used to leave both clocks running concurrently — summed
+// handling time (each lead's own open-to-disposition duration, added up)
+// then exceeded real elapsed/login time, since the two "open" periods
+// overlapped instead of running one after another.
+export const getActiveLeadLock = (): { leadId: string; pageTitle: string } | null => {
+  const record = readStoredRecord();
+  return record ? { leadId: record.leadId, pageTitle: record.pageTitle } : null;
 };
 
 // Reuses the persisted start time for this lead if one exists — survives a
@@ -154,7 +183,7 @@ const readStoredLeadStartTime = (leadId: string | number | undefined): Date | nu
 // disposition, feeds RM PRD's ACHT) into "how long has this tab been open"
 // instead of real time-on-lead. Falls back to "now" for a genuinely new
 // lead id, or for a stale entry older than LEAD_START_TIME_MAX_AGE_MS.
-export const getOrCreateLeadStartTime = (leadId: string | number | undefined): Date => {
+export const getOrCreateLeadStartTime = (leadId: string | number | undefined, pageTitle = 'another page'): Date => {
   if (!leadId) return new Date();
   const existing = readStoredLeadStartTime(leadId);
   if (existing) return existing;
@@ -163,7 +192,7 @@ export const getOrCreateLeadStartTime = (leadId: string | number | undefined): D
   try {
     localStorage.setItem(
       LEAD_START_TIME_KEY,
-      JSON.stringify({ leadId: String(leadId), startedAt: now.toISOString() })
+      JSON.stringify({ leadId: String(leadId), startedAt: now.toISOString(), pageTitle })
     );
   } catch (e) {
     console.warn('[LeadCardCarousel] Failed to persist lead start time:', e);
@@ -180,15 +209,17 @@ export const getOrCreateLeadStartTime = (leadId: string | number | undefined): D
 // duration_seconds — the same bug previously fixed for the old "Call
 // tapped" timer, now avoided here since the clock starts at open instead.
 // Call this (not getOrCreateLeadStartTime directly) at every place a lead
-// becomes "the current lead"; it still returns the same Date for
-// leadStartTime. Fire-and-forget: sendLeadEvent never throws, and a failure
-// here must never block the lead card from opening.
-export const markLeadOpened = (leadId: string | number | undefined): Date => {
+// becomes "the current lead" — but only AFTER confirming via
+// getActiveLeadLock() that no OTHER lead already holds the lock; it still
+// returns the same Date for leadStartTime. Fire-and-forget: sendLeadEvent
+// never throws, and a failure here must never block the lead card from
+// opening.
+export const markLeadOpened = (leadId: string | number | undefined, pageTitle = 'another page'): Date => {
   const alreadyStored = readStoredLeadStartTime(leadId) !== null;
-  const startTime = getOrCreateLeadStartTime(leadId);
+  const startTime = getOrCreateLeadStartTime(leadId, pageTitle);
 
   if (!alreadyStored && leadId) {
-    void crmLeadsApi.sendLeadEvent('lead.opened', Number(leadId), {});
+    void crmLeadsApi.sendLeadEvent('lead.opened', Number(leadId), { opened_from: pageTitle });
   }
 
   return startTime;
