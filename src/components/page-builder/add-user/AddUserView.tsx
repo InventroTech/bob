@@ -32,6 +32,8 @@ const DOWNLOAD_PDF_BTN =
 const FORM_INPUT =
   'h-11 rounded-[6px] border-gray-200 bg-white shadow-sm focus-visible:ring-[#1B6FE8]';
 
+const INACTIVE_AFTER_MS = 72 * 60 * 60 * 1000;
+
 function formatSignInAt(value?: string | null) {
   if (!value) return 'Never';
   const parsed = new Date(value);
@@ -39,13 +41,12 @@ function formatSignInAt(value?: string | null) {
   return format(new Date(parsed.getTime() + 5.5 * 60 * 60 * 1000), 'MMM d, yyyy h:mm a');
 }
 
-function InactiveMark({ active }: { active?: boolean }) {
-  if (active !== false) return null;
-  return (
-    <span className="inline-flex items-center rounded-full bg-[#FEF2F2] px-2 py-0.5 text-[11px] font-medium leading-none text-[#B91C1C]">
-      Inactive
-    </span>
-  );
+function isInactiveSignIn(user: User) {
+  const stamp = user.last_sign_in_at || user.created_at;
+  if (!stamp) return false;
+  const at = new Date(stamp).getTime();
+  if (Number.isNaN(at)) return false;
+  return Date.now() - at >= INACTIVE_AFTER_MS;
 }
 
 function SupportDailyDualDisplay({
@@ -223,6 +224,7 @@ export function AddUserView(props: AddUserModel) {
     (f) => f.showInForm && !isBoundCustomField(f.key)
   );
   const customTableFields = schema.customFields.filter((f) => f.showInTable);
+  const inactiveCount = filteredUsersWithSettings.filter(isInactiveSignIn).length;
   const showManagerForm = showCustomForm('manager_email');
   const showQueueTypeForm = showCustomForm('queue_type');
   const showLeadGroupForm = showCustomForm('lead_group');
@@ -698,10 +700,7 @@ export function AddUserView(props: AddUserModel) {
       case 'name':
         return (
           <TableCell key={cellKey} className="text-body-medium">
-            <span className="inline-flex items-center gap-2">
-              {user.name}
-              <InactiveMark active={user.is_active} />
-            </span>
+            {user.name}
           </TableCell>
         );
       case 'email':
@@ -1377,20 +1376,30 @@ export function AddUserView(props: AddUserModel) {
               isUnmannd && 'w-full flex-row flex-wrap items-center gap-3 sm:flex-nowrap'
             )}
           >
-            <h5
-              className={cn(
-                'text-2xl font-semibold shrink-0',
-                isUnmannd &&
-                  'text-[18px] font-bold leading-none tracking-tight text-black'
-              )}
-              style={
-                isUnmannd
-                  ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
-                  : undefined
-              }
-            >
-              Users
-            </h5>
+            <div className="flex shrink-0 items-baseline gap-3">
+              <h5
+                className={cn(
+                  'text-2xl font-semibold shrink-0',
+                  isUnmannd &&
+                    'text-[18px] font-bold leading-none tracking-tight text-black'
+                )}
+                style={
+                  isUnmannd
+                    ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
+                    : undefined
+                }
+              >
+                Users
+              </h5>
+              <span
+                className={cn(
+                  'text-sm font-medium text-[#B91C1C]',
+                  isUnmannd && 'text-[13px] font-semibold'
+                )}
+              >
+                {inactiveCount} inactive
+              </span>
+            </div>
             <div
               className={cn(
                 'flex w-full flex-col gap-3 sm:max-w-lg sm:flex-row sm:items-center',
@@ -1470,10 +1479,7 @@ export function AddUserView(props: AddUserModel) {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <p className="text-xs text-gray-500">Name</p>
-                            <p className="font-semibold text-sm inline-flex items-center gap-2">
-                              {user.name}
-                              <InactiveMark active={user.is_active} />
-                            </p>
+                            <p className="font-semibold text-sm">{user.name}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Email</p>
