@@ -72,14 +72,7 @@ const UsersPage = () => {
               {users.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2 text-sm text-gray-900">
-                      {user.name}
-                      {user.is_active === false && (
-                        <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium leading-none text-red-700">
-                          Inactive
-                        </span>
-                      )}
-                    </div>
+                    <div className="text-sm text-gray-900">{user.name}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{user.email}</div>
