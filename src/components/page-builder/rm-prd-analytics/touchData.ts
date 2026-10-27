@@ -52,10 +52,15 @@ export interface TouchRow {
   dispositionKey: DispositionKey;
   start: string;
   end: string;
-  /** raw start instant, epoch ms — sort key; `start` is a formatted clock
-   * string (HH:mm:ss) and isn't chronological across multiple days */
+  /** raw start/end instants, epoch ms — sort keys; `start`/`end` are
+   * formatted clock strings (HH:mm:ss) and aren't chronological across
+   * multiple days */
   startedAtMs: number;
-  durationSeconds: number;
+  endedAtMs: number;
+  /** null when the server couldn't find a trustworthy measured session for
+   * this touch (see record_lead_touch_event's docstring) — never a guessed
+   * number. durationLabel shows "Unknown" for these rather than "0s". */
+  durationSeconds: number | null;
   durationLabel: string;
   /** this row's own disposition-specific breach threshold — not the same
    * value for every row (see BREACH_THRESHOLDS) */
@@ -87,7 +92,7 @@ function toTouchRow(event: RmActivityEvent, stateNameById: Record<string, string
   if (event.eventType !== 'CALL_TOUCH' || event.endedAt === null) return null;
   if (!event.updatedStatus) return null;
 
-  const durationSeconds = event.durationSeconds ?? 0;
+  const durationSeconds = event.durationSeconds;
   const breachThresholdSeconds = BREACH_THRESHOLDS[event.updatedStatus];
   return {
     touchId: event.id,
@@ -106,8 +111,9 @@ function toTouchRow(event: RmActivityEvent, stateNameById: Record<string, string
     start: formatClock(event.startedAt),
     end: formatClock(event.endedAt),
     startedAtMs: new Date(event.startedAt).getTime(),
+    endedAtMs: new Date(event.endedAt).getTime(),
     durationSeconds,
-    durationLabel: formatDuration(durationSeconds),
+    durationLabel: durationSeconds !== null ? formatDuration(durationSeconds) : 'Unknown',
     breachThresholdSeconds,
     breachThresholdLabel: formatMinutesLabel(breachThresholdSeconds),
     isBreach: isBreachedCall(event),

@@ -102,6 +102,31 @@ describe('generateTouches', () => {
     expect(rows[0].prajaId).toBe('1793876');
   });
 
+  describe('null duration_seconds ("unknown", not measured)', () => {
+    it('shows "Unknown" instead of fabricating "0s"', () => {
+      const rows = generateTouches([callTouch({ durationSeconds: null })], 'all');
+      expect(rows[0].durationSeconds).toBeNull();
+      expect(rows[0].durationLabel).toBe('Unknown');
+    });
+
+    it('is never flagged as a breach', () => {
+      const rows = generateTouches(
+        [callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: null })],
+        'all'
+      );
+      expect(rows[0].isBreach).toBe(false);
+      expect(generateTouches([callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: null })], 'breach')).toHaveLength(0);
+    });
+
+    it('still sorts by the real end instant, not a duration derived from it', () => {
+      const rows = generateTouches(
+        [callTouch({ durationSeconds: null, startedAt: '2026-09-21T04:00:00Z', endedAt: '2026-09-21T04:05:00Z' })],
+        'all'
+      );
+      expect(rows[0].endedAtMs).toBe(new Date('2026-09-21T04:05:00Z').getTime());
+    });
+  });
+
   describe('state name resolution', () => {
     it('resolves the raw Circle ID to a display name when a lookup is given', () => {
       const rows = generateTouches([callTouch({ state: '72631' })], 'all', { '72631': 'Tamil Nadu' });

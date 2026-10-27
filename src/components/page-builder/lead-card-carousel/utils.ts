@@ -116,20 +116,22 @@ export const restoreActionButtonsState = (leadId: string | number | undefined): 
 
 const LEAD_START_TIME_KEY = 'leadCardCarousel_leadStartTime';
 
-// How long a persisted start time stays valid for its original lead id.
-// Generous enough that no single lead legitimately stays open this long,
-// but short enough that a device left on an undispositioned lead overnight
-// (or across days — see the "RM opens a lead and walks away" scenario)
-// doesn't resurrect a stale multi-day-old timer if that same lead id ever
-// comes back around.
+// How long a persisted start time stays valid for its original lead id —
+// purely about the on-screen "On This Lead" display timer surviving a page
+// refresh, nothing to do with preventing concurrent leads (that's now
+// handled server-side, see record_lead_opened in pyro-backend/.../
+// rm_activity.py — an RM can only ever have one open session there,
+// enforced at the source instead of blocked client-side). Generous enough
+// that no single lead legitimately stays open this long, short enough that
+// a device left on an undispositioned lead overnight doesn't resurrect a
+// stale multi-day-old timer if that same lead id ever comes back around.
 const LEAD_START_TIME_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 interface StoredLeadStartTime {
   leadId: string;
   startedAt: string;
   /** Which page/carousel instance opened this lead (config.title, or a
-   * fallback) — shown in the "already open elsewhere" block message so the
-   * RM knows where to go finish it. */
+   * fallback) — carried onto the touch report's "Opened From" column. */
   pageTitle: string;
 }
 
@@ -139,10 +141,14 @@ const readStoredRecord = (): StoredLeadStartTime | null => {
     if (!stored) return null;
     const parsed = JSON.parse(stored) as Partial<StoredLeadStartTime>;
     if (!parsed.leadId || !parsed.startedAt) return null;
-    const restored = new Date(parsed.startedAt);
-    if (Number.isNaN(restored.getTime())) return null;
-    if (Date.now() - restored.getTime() > LEAD_START_TIME_MAX_AGE_MS) return null;
-    return { leadId: String(parsed.leadId), startedAt: parsed.startedAt, pageTitle: parsed.pageTitle || 'another page' };
+    const startedAt = new Date(parsed.startedAt);
+    if (Number.isNaN(startedAt.getTime())) return null;
+    if (Date.now() - startedAt.getTime() > LEAD_START_TIME_MAX_AGE_MS) return null;
+    return {
+      leadId: String(parsed.leadId),
+      startedAt: parsed.startedAt,
+      pageTitle: parsed.pageTitle || 'another page',
+    };
   } catch {
     return null;
   }
@@ -161,28 +167,6 @@ const readStoredLeadStartTime = (leadId: string | number | undefined): Date | nu
   return new Date(record.startedAt);
 };
 
-// KILL SWITCH (2026-10-27): many RMs hit the "already open" block with no
-// lead actually open anywhere — it was stopping them from opening ANY lead
-// on All Leads. Flipped off as an emergency fix while a stable version is
-// worked out; every call site, the storage, and the lock logic itself are
-// all untouched below — flip this back to true to re-enable once fixed.
-const ONE_LEAD_AT_A_TIME_LOCK_ENABLED = false;
-
-// Whichever lead currently holds the cross-page "one lead open at a time"
-// lock, or null if none / stale. The same LEAD_START_TIME_KEY entry doubles
-// as this lock — there's only ever one locally-tracked "open" lead per
-// browser, on purpose: an RM opening a lead on the All Leads table, then
-// navigating to Pending Leads and opening another without dispositioning
-// the first, used to leave both clocks running concurrently — summed
-// handling time (each lead's own open-to-disposition duration, added up)
-// then exceeded real elapsed/login time, since the two "open" periods
-// overlapped instead of running one after another.
-export const getActiveLeadLock = (): { leadId: string; pageTitle: string } | null => {
-  if (!ONE_LEAD_AT_A_TIME_LOCK_ENABLED) return null;
-  const record = readStoredRecord();
-  return record ? { leadId: record.leadId, pageTitle: record.pageTitle } : null;
-};
-
 // Reuses the persisted start time for this lead if one exists — survives a
 // page refresh (the exact "fetch current assigned lead on refresh" flow in
 // useLeadCardCarousel), a same-lead realtime re-fetch, and the tab being
@@ -191,6 +175,9 @@ export const getActiveLeadLock = (): { leadId: string; pageTitle: string } | nul
 // disposition, feeds RM PRD's ACHT) into "how long has this tab been open"
 // instead of real time-on-lead. Falls back to "now" for a genuinely new
 // lead id, or for a stale entry older than LEAD_START_TIME_MAX_AGE_MS.
+// (This is the display timer only — the authoritative duration sent to the
+// backend comes from the server-side session in record_lead_opened, which
+// isn't affected if this client value ever drifts.)
 export const getOrCreateLeadStartTime = (leadId: string | number | undefined, pageTitle = 'another page'): Date => {
   if (!leadId) return new Date();
   const existing = readStoredLeadStartTime(leadId);
@@ -209,19 +196,15 @@ export const getOrCreateLeadStartTime = (leadId: string | number | undefined, pa
 };
 
 // Stamps the server-side "lead opened" moment the first time this lead id
-// is seen (or re-seen after its stored start time went stale) — mirrors
+// is seen (or re-seen after its local start time went stale) — mirrors
 // getOrCreateLeadStartTime's own storage guard so a page refresh, a
 // same-lead realtime re-fetch, a parent re-render, or a tab discard/restore
-// never re-fires it for a lead already open. Re-firing would reset
-// RmCallSession.started_at server-side and silently truncate the eventual
-// duration_seconds — the same bug previously fixed for the old "Call
-// tapped" timer, now avoided here since the clock starts at open instead.
-// Call this (not getOrCreateLeadStartTime directly) at every place a lead
-// becomes "the current lead" — but only AFTER confirming via
-// getActiveLeadLock() that no OTHER lead already holds the lock; it still
-// returns the same Date for leadStartTime. Fire-and-forget: sendLeadEvent
-// never throws, and a failure here must never block the lead card from
-// opening.
+// never re-fires it for a lead already open. Always succeeds immediately —
+// there's no cross-page lock to check anymore; if the RM already had a
+// DIFFERENT lead open, the backend (record_lead_opened) abandons that old
+// session the moment this event arrives, rather than this function ever
+// blocking the lead card from opening. Fire-and-forget: sendLeadEvent never
+// throws.
 export const markLeadOpened = (leadId: string | number | undefined, pageTitle = 'another page'): Date => {
   const alreadyStored = readStoredLeadStartTime(leadId) !== null;
   const startTime = getOrCreateLeadStartTime(leadId, pageTitle);
@@ -233,9 +216,13 @@ export const markLeadOpened = (leadId: string | number | undefined, pageTitle = 
   return startTime;
 };
 
-// Called once a lead has been dispositioned (duration_seconds already sent)
-// so a later, genuinely new visit to the same lead id (e.g. re-queued after
-// Call Back Later) starts its own fresh timer instead of inheriting this one.
+// Releases this lead's display-timer record — called both right after a
+// successful disposition (duration_seconds already sent) AND whenever the
+// RM stops holding this lead WITHOUT dispositioning it (modal closed,
+// navigated away — see useLeadCardCarousel.ts's unmount-cleanup effect), so
+// a later, genuinely new visit to the same lead id (re-queued after Call
+// Back Later, or just reopened after being abandoned) starts its own fresh
+// timer instead of inheriting this one.
 export const clearLeadStartTime = (leadId: string | number | undefined) => {
   try {
     const stored = localStorage.getItem(LEAD_START_TIME_KEY);

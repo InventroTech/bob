@@ -42,17 +42,6 @@ export interface LeadCardCarouselProps {
    * whatever `updating` was at the caller's last unrelated re-render.
    */
   onUpdatingChange?: (updating: boolean) => void;
-  /**
-   * Fires instead of opening `initialLead` when a DIFFERENT lead already
-   * holds the cross-page "one lead open at a time" lock (see
-   * getActiveLeadLock in utils.ts) — the carousel itself already shows a
-   * toast naming the other page; this callback lets the host (e.g.
-   * LeadTableView's modal) close itself in response, since nothing was
-   * actually opened here for it to protect. Only relevant when `initialLead`
-   * is used (the table's View Profile flow); the standalone carousel's own
-   * queue-pull paths fall back to the pending-card state instead.
-   */
-  onLeadLockConflict?: (lockedPageTitle: string) => void;
 }
 
 export interface LeadTask {
