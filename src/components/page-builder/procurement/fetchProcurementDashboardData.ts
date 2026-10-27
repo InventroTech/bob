@@ -1,6 +1,7 @@
 import { apiClient } from '@/lib/api/client';
 import type { CrmRecord } from '@/lib/api/services/crmRecords';
 import { parseRecordListTotal } from '@/components/page-builder/dispatch/fetchDispatchDashboardStats';
+import { normalizeRequestStatus } from '@/lib/inventory/requestStatus';
 
 export type ProcurementRequestRow = {
   id: string;
@@ -49,7 +50,9 @@ export type ProcurementDashboardData = {
 const CATEGORY_COLORS = ['#E8B923', '#7DD3FC', '#F472B6', '#2DD4BF', '#4ADE80', '#A78BFA', '#FB923C', '#94A3B8'];
 
 const PENDING_STATUSES = new Set(['NEW_REQUEST', 'ON_HOLD', 'REQ_TO_VERIFY']);
-const ORDERED_STATUSES = new Set(['VENDOR_IDENTIFIED', 'IN_CART', 'IN_SHIPPING']);
+/** Approved onwards (committed spend), incl. ordered / delivered / exception. */
+const ORDERED_STATUSES = new Set(['APPROVED', 'IN_CART', 'ORDERED', 'DELIVERED', 'EXCEPTION']);
+const POST_ORDER_STATUSES = new Set(['ORDERED', 'DELIVERED', 'EXCEPTION']);
 const REJECTED_STATUSES = new Set(['REJECTED']);
 
 function coerceRecords(payload: unknown): CrmRecord[] {
@@ -100,10 +103,7 @@ export function parseAmount(value: unknown): number {
 }
 
 function normalizeStatus(status: unknown): string {
-  return String(status ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, '_');
+  return normalizeRequestStatus(status);
 }
 
 function recordToRow(record: CrmRecord): ProcurementRequestRow {
@@ -199,9 +199,9 @@ function buildKpis(rows: ProcurementRequestRow[], now: Date): KpiMetric[] {
     metric('new', 'New Request', 'cyan', (r) => r.status === 'NEW_REQUEST'),
     metric('to_verify', 'To Verify', 'violet', (r) => r.status === 'REQ_TO_VERIFY'),
     metric('on_hold', 'On Hold', 'amber', (r) => r.status === 'ON_HOLD'),
-    metric('vendor_identified', 'Vendor Identified', 'green', (r) => r.status === 'VENDOR_IDENTIFIED'),
+    metric('vendor_identified', 'Approved', 'green', (r) => r.status === 'APPROVED'),
     metric('rejected', 'Rejected', 'red', (r) => REJECTED_STATUSES.has(r.status)),
-    metric('in_shipping', 'In Shipping', 'orange', (r) => r.status === 'IN_SHIPPING'),
+    metric('in_shipping', 'Ordered', 'orange', (r) => POST_ORDER_STATUSES.has(r.status)),
   ];
 }
 
@@ -306,7 +306,7 @@ function buildAging(rows: ProcurementRequestRow[], now: Date): AgingBucket[] {
   const pendingLike = rows.filter(
     (r) =>
       PENDING_STATUSES.has(r.status) ||
-      r.status === 'VENDOR_IDENTIFIED' ||
+      r.status === 'APPROVED' ||
       r.status === 'IN_CART'
   );
   const buckets: AgingBucket[] = [

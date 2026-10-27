@@ -1,3 +1,5 @@
+import { normalizeRequestStatus } from '@/lib/inventory/requestStatus';
+
 /** Canonical shipment statuses for inventory_request.data.shipment_status */
 export const SHIPMENT_STATUSES = [
   'NOT_SHIPPED',
@@ -372,9 +374,11 @@ export async function fetchLiveShipmentStatus(input: {
 
 /** Request statuses where the shipment tracking editor is shown. */
 export const SHIPMENT_TRACKING_VISIBLE_REQUEST_STATUSES = new Set([
-  'VENDOR_IDENTIFIED',
+  'APPROVED',
   'IN_CART',
-  'IN_SHIPPING',
+  'ORDERED',
+  'DELIVERED',
+  'EXCEPTION',
 ]);
 
 export type ShipmentTrackingFields = {
@@ -566,9 +570,7 @@ export function shouldShowShipmentTrackingSection(
   requestStatus: unknown,
   data?: Record<string, unknown> | null
 ): boolean {
-  const status = String(requestStatus ?? '')
-    .trim()
-    .toUpperCase();
+  const status = normalizeRequestStatus(requestStatus);
   if (SHIPMENT_TRACKING_VISIBLE_REQUEST_STATUSES.has(status)) return true;
   if (!data) return false;
   const hasTracking =

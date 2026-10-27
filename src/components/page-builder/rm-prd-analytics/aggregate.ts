@@ -10,7 +10,22 @@ const ACHT_THRESHOLDS = {
   notInterested: 1080, // 18m 00s
   trial: 1500, // 25m 00s
 };
-export const BREACH_SECONDS = ACHT_THRESHOLDS.trial;
+
+// A "breach" is disposition-specific — each disposition has its own SLA for
+// how long a call is allowed to take before it's flagged. Distinct from
+// ACHT_THRESHOLDS above (which only colors the average-handling-time cards).
+const BREACH_THRESHOLDS: Record<UpdatedStatus, number> = {
+  NOT_CONNECTED: 180, // 3m 00s
+  CALL_BACK: 600, // 10m 00s
+  NOT_INTERESTED: 900, // 15m 00s
+  TRIAL_ACTIVATED: 1500, // 25m 00s
+};
+export { BREACH_THRESHOLDS };
+
+// a call with no disposition can't be checked against a threshold, so it
+// can't be a breach either
+export const isBreachedCall = (call: { updatedStatus: UpdatedStatus | null; durationSeconds: number | null }): boolean =>
+  call.updatedStatus !== null && (call.durationSeconds ?? 0) >= BREACH_THRESHOLDS[call.updatedStatus];
 
 // a "full" reference shift, used only to project a pace/occupancy bar
 const STANDARD_SHIFT_MINUTES = 600; // 10 hours
@@ -345,10 +360,10 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
     notInterestedLabel: formatDuration(notInterestedTime),
     trialTime,
     trialLabel: formatDuration(trialTime),
-    // >= matches the touch report's own breach flag (and the PDF spec: "shown
-    // if duration_seconds >= 1500") — a call landing at exactly 25:00 must
-    // count as a breach in both places, not just one
-    breaches: closedCalls.filter((c) => (c.durationSeconds ?? 0) >= BREACH_SECONDS).length,
+    // each disposition has its own breach threshold (see BREACH_THRESHOLDS)
+    // — >= matches the touch report's own breach flag, so a call landing
+    // exactly on its threshold counts as a breach in both places, not just one
+    breaches: closedCalls.filter(isBreachedCall).length,
   };
 }
 

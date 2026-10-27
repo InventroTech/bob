@@ -1,10 +1,63 @@
 import React, { useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { BREACH_SECONDS, DISPOSITIONS, DRILL_TITLES, generateTouches, type DrillFilter, type TouchRow } from './touchData';
+import { DISPOSITIONS, DRILL_TITLES, generateTouches, type DrillFilter, type TouchRow } from './touchData';
 import type { RmActivityEvent } from './types';
+import { useTableSort, SortableHeader } from './tableSort';
+
+type TouchSortKey =
+  | 'touchId'
+  | 'prajaId'
+  | 'rmName'
+  | 'manager'
+  | 'state'
+  | 'party'
+  | 'group'
+  | 'openedFrom'
+  | 'disposition'
+  | 'reason'
+  | 'start'
+  | 'end'
+  | 'duration'
+  | 'flag';
+
+function touchSortValue(row: TouchRow, key: TouchSortKey): string | number {
+  switch (key) {
+    case 'touchId':
+      return row.touchId;
+    case 'prajaId':
+      return row.prajaId ?? '';
+    case 'rmName':
+      return row.rmName.toLowerCase();
+    case 'manager':
+      return row.manager.toLowerCase();
+    case 'state':
+      return row.state.toLowerCase();
+    case 'party':
+      return row.party.toLowerCase();
+    case 'group':
+      return row.group.toLowerCase();
+    case 'openedFrom':
+      return row.openedFrom.toLowerCase();
+    case 'disposition':
+      return DISPOSITIONS[row.dispositionKey].full;
+    case 'reason':
+      return row.reason.toLowerCase();
+    case 'start':
+      return row.startedAtMs;
+    // no raw "ended at" field on TouchRow — derive it from start + duration
+    // so "End" sorts chronologically instead of by its formatted clock string
+    case 'end':
+      return row.startedAtMs + row.durationSeconds * 1000;
+    case 'duration':
+      return row.durationSeconds;
+    case 'flag':
+      return row.isBreach ? 1 : 0;
+  }
+}
 
 const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | number }> = [
   { header: 'Touch ID', value: (r) => r.touchId },
@@ -14,12 +67,13 @@ const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | nu
   { header: 'State', value: (r) => r.state },
   { header: 'Party', value: (r) => r.party },
   { header: 'Group', value: (r) => r.group },
+  { header: 'Opened From', value: (r) => r.openedFrom },
   { header: 'Disposition', value: (r) => DISPOSITIONS[r.dispositionKey].full },
   { header: 'Reason', value: (r) => r.reason },
   { header: 'Start (IST)', value: (r) => r.start },
   { header: 'End (IST)', value: (r) => r.end },
   { header: 'Duration (s)', value: (r) => r.durationSeconds },
-  { header: 'Over 25m', value: (r) => (r.durationSeconds >= BREACH_SECONDS ? 'Y' : '') },
+  { header: 'Breach', value: (r) => (r.isBreach ? 'Y' : '') },
 ];
 
 // wraps a field in quotes only when it needs escaping, per RFC 4180
@@ -28,21 +82,45 @@ const csvCell = (value: string | number): string => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+const slugifyTitle = (title: string): string =>
+  title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'touch-report';
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function downloadTouchReportCsv(rows: TouchRow[], title: string) {
   const lines = [
     CSV_COLUMNS.map((col) => csvCell(col.header)).join(','),
     ...rows.map((row) => CSV_COLUMNS.map((col) => csvCell(col.value(row))).join(',')),
   ];
   const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  link.href = url;
-  link.download = `${slug || 'touch-report'}-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  triggerDownload(blob, `${slugifyTitle(title)}-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+// Real .xlsx (not a renamed CSV) — same CSV_COLUMNS header/value pairs, just
+// written through SheetJS instead of joined into a comma-separated string.
+// Only ever writes rows we already hold in memory (never parses a file), so
+// this doesn't exercise the known xlsx-package advisories, which are in its
+// read/parse path.
+function downloadTouchReportExcel(rows: TouchRow[], title: string) {
+  const header = CSV_COLUMNS.map((col) => col.header);
+  const data = rows.map((row) => CSV_COLUMNS.map((col) => col.value(row)));
+  const worksheet = XLSX.utils.aoa_to_sheet([header, ...data]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Touch Report');
+  const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  triggerDownload(blob, `${slugifyTitle(title)}-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 interface TouchReportSheetProps {
@@ -69,6 +147,7 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
     () => (filter ? generateTouches(events, filter, stateNameById) : []),
     [events, filter, stateNameById]
   );
+  const { sortedRows, sort, toggleSort } = useTableSort(rows, touchSortValue);
 
   return (
     <Sheet open={filter !== null} onOpenChange={(open) => !open && onClose()}>
@@ -85,24 +164,24 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
           <Table className="min-w-[1080px] text-sm">
             <TableHeader>
               <TableRow className="border-none bg-stone-900 hover:bg-stone-900">
-                <TableHead className="whitespace-nowrap text-white">Touch ID</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Praja ID</TableHead>
-                <TableHead className="whitespace-nowrap text-white">RM</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Manager</TableHead>
-                <TableHead className="whitespace-nowrap text-white">State</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Party</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Group</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Disposition</TableHead>
-                <TableHead className="text-white">Reason</TableHead>
-                <TableHead className="whitespace-nowrap text-right text-white">Start</TableHead>
-                <TableHead className="whitespace-nowrap text-right text-white">End</TableHead>
-                <TableHead className="whitespace-nowrap text-right text-white">Duration</TableHead>
-                <TableHead className="whitespace-nowrap text-white">Flag</TableHead>
+                <SortableHeader label="Touch ID" sortKey="touchId" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Praja ID" sortKey="prajaId" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="RM" sortKey="rmName" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Manager" sortKey="manager" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="State" sortKey="state" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Party" sortKey="party" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Group" sortKey="group" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Opened From" sortKey="openedFrom" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Disposition" sortKey="disposition" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Reason" sortKey="reason" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Start" sortKey="start" sort={sort} onSort={toggleSort} align="right" />
+                <SortableHeader label="End" sortKey="end" sort={sort} onSort={toggleSort} align="right" />
+                <SortableHeader label="Duration" sortKey="duration" sort={sort} onSort={toggleSort} align="right" />
+                <SortableHeader label="Flag" sortKey="flag" sort={sort} onSort={toggleSort} />
               </TableRow>
             </TableHeader>
             <TableBody className="bg-white">
-              {rows.map((row) => {
-                const over25 = row.durationSeconds >= BREACH_SECONDS;
+              {sortedRows.map((row) => {
                 return (
                   <TableRow key={row.touchId}>
                     <TableCell className="whitespace-nowrap font-mono">{row.touchId}</TableCell>
@@ -114,6 +193,7 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
                     <TableCell className="whitespace-nowrap">
                       <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-600">{row.group}</span>
                     </TableCell>
+                    <TableCell className="whitespace-nowrap text-stone-500">{row.openedFrom || '—'}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       <span
                         className={cn(
@@ -129,13 +209,13 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right font-mono">{row.start}</TableCell>
                     <TableCell className="whitespace-nowrap text-right font-mono">{row.end}</TableCell>
-                    <TableCell className={cn('whitespace-nowrap text-right font-mono', over25 && 'font-semibold text-red-600')}>
+                    <TableCell className={cn('whitespace-nowrap text-right font-mono', row.isBreach && 'font-semibold text-red-600')}>
                       {row.durationLabel}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {over25 && (
+                      {row.isBreach && (
                         <span className="whitespace-nowrap rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
-                          OVER 25m
+                          BREACH · {DISPOSITIONS[row.dispositionKey].label} &gt;{row.breachThresholdLabel}
                         </span>
                       )}
                     </TableCell>
@@ -148,14 +228,22 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
 
         <div className="flex items-center gap-3 border-t border-stone-200 px-6 py-4 text-sm text-stone-500">
           <span>{rows.length} rows · one row per touch</span>
-          <Button
-            variant="outline"
-            className="ml-auto"
-            disabled={rows.length === 0}
-            onClick={() => downloadTouchReportCsv(rows, filter ? DRILL_TITLES[filter] : 'touch-report')}
-          >
-            Download CSV
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={rows.length === 0}
+              onClick={() => downloadTouchReportCsv(sortedRows, filter ? DRILL_TITLES[filter] : 'touch-report')}
+            >
+              Download CSV
+            </Button>
+            <Button
+              variant="outline"
+              disabled={rows.length === 0}
+              onClick={() => downloadTouchReportExcel(sortedRows, filter ? DRILL_TITLES[filter] : 'touch-report')}
+            >
+              Download Excel
+            </Button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

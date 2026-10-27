@@ -5,7 +5,7 @@ import { INVENTORY_REQUEST_STATUSES } from '@/constants/inventory';
 
 /** Active (non-terminal) statuses shown in PM queue. */
 const PM_QUEUE_STATUSES = INVENTORY_REQUEST_STATUSES.filter(
-  (s) => s !== 'REJECTED'
+  (s) => s !== 'REJECTED' && s !== 'DELIVERED'
 ).join(',');
 
 const PmInventoryQueuePage: React.FC = () => {
@@ -34,7 +34,7 @@ const PmInventoryQueuePage: React.FC = () => {
               { key: 'created_at', label: 'Created', type: 'date' },
               {
                 key: 'mark_in_shipping',
-                label: 'Mark In Shipping',
+                label: 'Mark Ordered',
                 type: 'action',
                 actionApiEndpoint: '/crm-records/records/events/',
                 actionApiMethod: 'POST',

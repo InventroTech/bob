@@ -50,9 +50,6 @@ import {
 } from "@dnd-kit/core";
 import { DraggableSidebarItem } from "@/components/page-builder/DraggableSidebarItem";
 import { DEFAULT_PROCUREMENT_TABLE_CONFIG } from "@/components/page-builder/ProcurementTableComponent";
-import { DEFAULT_PENDING_APPROVAL_TABLE_CONFIG } from "@/components/page-builder/PendingApprovalTableComponent";
-import { DEFAULT_REJECTED_TABLE_CONFIG } from "@/components/page-builder/RejectedTableComponent";
-import { DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG } from "@/components/page-builder/VendorIdentifiedTableComponent";
 import { DEFAULT_PROCUREMENT_DASHBOARD_CONFIG } from "@/components/page-builder/ProcurementDashboardComponent";
 import { DroppableCanvasItem } from "@/components/page-builder/DroppableCanvasItem";
 import { useAuth } from "@/hooks/useAuth";
@@ -61,6 +58,7 @@ import { toast } from "sonner";
 import { useTenant } from '@/hooks/useTenant';
 import { apiClient, membershipService, pageService } from '@/lib/api';
 import { FilterConfig } from "@/component-config/DynamicFilterConfig";
+import { splitSidebarMeta, withSidebarMeta } from "@/lib/sidebar/sidebarGroups";
 
 import { componentMap, type CanvasComponentData, type ComponentConfig } from "../componentMap";
 import { ConfigurationPanel } from "../ConfigurationPanel";
@@ -76,6 +74,8 @@ const PageBuilder = () => {
   const [pageName, setPageName] = useState("Untitled Page");
   const [headerTitle, setHeaderTitle] = useState("");
   const [displayOrder, setDisplayOrder] = useState<number>(0);
+  const [sidebarGroup, setSidebarGroup] = useState("");
+  const [sidebarSection, setSidebarSection] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [pageIcon, setPageIcon] = useState<string>("Sparkles"); // Standard library default
   // --- NEW: Custom Icons State & Upload Logic ---
@@ -173,7 +173,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'myRequestTable', 'pendingApprovalTable', 'rejectedTable', 'vendorIdentifiedTable', 'procurementDashboard', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','zohoMail','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy','rmPrdAnalytics'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'procurementDashboard', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','zohoMail','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy','rmPrdAnalytics'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -204,7 +204,10 @@ useEffect(() => {
             setHeaderTitle(data.header_title || '');
             setDisplayOrder(data.display_order || 0);
             setPageIcon(data.icon_name || 'Sparkles');
-            setCanvasComponents(Array.isArray(data.config) ? data.config : []);
+            const { components, meta } = splitSidebarMeta<CanvasComponentData>(data.config);
+            setCanvasComponents(components);
+            setSidebarGroup(meta.group);
+            setSidebarSection(meta.section);
             
             // Fix for Role: ensure it matches the ID in your dropdown
             if (data.role) setSelectedRole(data.role);
@@ -344,21 +347,6 @@ useEffect(() => {
                   ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
                   columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
                 } as ComponentConfig)
-              : componentType === 'pendingApprovalTable'
-                ? ({
-                    ...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG,
-                    columns: [...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG.columns],
-                  } as ComponentConfig)
-              : componentType === 'rejectedTable'
-                ? ({
-                    ...DEFAULT_REJECTED_TABLE_CONFIG,
-                    columns: [...DEFAULT_REJECTED_TABLE_CONFIG.columns],
-                  } as ComponentConfig)
-              : componentType === 'vendorIdentifiedTable'
-                ? ({
-                    ...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG,
-                    columns: [...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG.columns],
-                  } as ComponentConfig)
               : componentType === 'procurementDashboard'
                 ? ({ ...DEFAULT_PROCUREMENT_DASHBOARD_CONFIG } as ComponentConfig)
               : componentType === 'procurementRequestForm'
@@ -391,21 +379,6 @@ useEffect(() => {
                 ...DEFAULT_PROCUREMENT_TABLE_CONFIG,
                 columns: [...DEFAULT_PROCUREMENT_TABLE_CONFIG.columns],
               } as ComponentConfig)
-            : componentType === 'pendingApprovalTable'
-              ? ({
-                  ...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG,
-                  columns: [...DEFAULT_PENDING_APPROVAL_TABLE_CONFIG.columns],
-                } as ComponentConfig)
-            : componentType === 'rejectedTable'
-              ? ({
-                  ...DEFAULT_REJECTED_TABLE_CONFIG,
-                  columns: [...DEFAULT_REJECTED_TABLE_CONFIG.columns],
-                } as ComponentConfig)
-            : componentType === 'vendorIdentifiedTable'
-              ? ({
-                  ...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG,
-                  columns: [...DEFAULT_VENDOR_IDENTIFIED_TABLE_CONFIG.columns],
-                } as ComponentConfig)
             : componentType === 'procurementDashboard'
               ? ({ ...DEFAULT_PROCUREMENT_DASHBOARD_CONFIG } as ComponentConfig)
             : componentType === 'procurementRequestForm'
@@ -469,7 +442,7 @@ useEffect(() => {
       // Ensure every field is present so the backend doesn't overwrite them with defaults
       const pageData: any = {
         name: pageName.trim(),
-        config: canvasComponents, 
+        config: withSidebarMeta(canvasComponents, { group: sidebarGroup, section: sidebarSection }),
         role: selectedRole || null,
         display_order: Number(displayOrder), // Force number type
         icon_name: pageIcon,
@@ -554,6 +527,29 @@ useEffect(() => {
                 className="w-16 h-9 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 placeholder="0"
               />
+              </div>
+              <div className="flex items-center gap-2 px-2 border-l border-border">
+                <Label htmlFor="sidebar-group" className="text-[10px] uppercase font-bold text-muted-foreground">Group</Label>
+                <Input
+                  id="sidebar-group"
+                  value={sidebarGroup}
+                  onChange={(e) => {
+                    setSidebarGroup(e.target.value);
+                    if (!e.target.value.trim()) setSidebarSection('');
+                  }}
+                  placeholder="Group name"
+                  title="Sidebar group this page opens under. Leave empty to show it as a normal link."
+                  className="w-32 h-9 text-sm"
+                />
+                <Label htmlFor="sidebar-section" className="text-[10px] uppercase font-bold text-muted-foreground">Section</Label>
+                <Input
+                  id="sidebar-section"
+                  value={sidebarSection}
+                  onChange={(e) => setSidebarSection(e.target.value)}
+                  placeholder="Section name"
+                  disabled={!sidebarGroup.trim()}
+                  className="w-28 h-9 text-sm"
+                />
               </div>
               {/* Visual Icon Picker */}
               <div className="flex items-center gap-2 px-2 border-l border-border">
@@ -809,26 +805,6 @@ useEffect(() => {
                         <DraggableSidebarItem
                           id="procurementTable"
                           label="Procurement Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
-                        />
-                        <DraggableSidebarItem
-                          id="myRequestTable"
-                          label="My Request Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
-                        />
-                        <DraggableSidebarItem
-                          id="pendingApprovalTable"
-                          label="Pending Approval Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
-                        />
-                        <DraggableSidebarItem
-                          id="rejectedTable"
-                          label="Rejected Table"
-                          icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
-                        />
-                        <DraggableSidebarItem
-                          id="vendorIdentifiedTable"
-                          label="Vendor Identified Table"
                           icon={<Table className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem

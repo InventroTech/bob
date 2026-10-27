@@ -7,9 +7,8 @@ import { InventoryFormEditModalView } from '@/components/page-builder/inventory-
 import { mergeUnmanndFormModalFields } from './fields';
 
 /**
- * Unmannd All Requests detail modal — dark header/footer chrome matching
- * the Unmannd request design. Reuses inventory form logic; inventory_request
- * keeps the classic InventoryFormEditModal.
+ * Unmannd All Requests detail modal — same layout as the inventory edit modal,
+ * with Unmannd blue (#1A44A1) instead of the form blue and black.
  */
 export const UnmanndRequestDetailModal: React.FC<InventoryFormEditModalProps> = (props) => {
   const model = useInventoryFormEditModal({

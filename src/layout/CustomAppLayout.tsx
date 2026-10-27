@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { Bell, Sparkles, Users, LogOut, Menu, Ticket, Settings, Layers, ChevronLeft } from 'lucide-react';
@@ -27,6 +27,9 @@ import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-not
 import { clearRegisteredAllLeadsPath, registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
 import { useShiftAutoLogout } from '@/hooks/useShiftAutoLogout';
 import { ShiftEndedOverlay } from '@/components/ShiftEndedOverlay';
+import { useLeadNavLocked } from '@/lib/realtime/shiftCallActivityBus';
+import { buildSidebarNav } from '@/lib/sidebar/sidebarGroups';
+import { SidebarGroupFlyout } from './SidebarGroupFlyout';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -119,9 +122,23 @@ function NavIcon({
 const CustomAppLayout: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout, session } = useAuth();
   const { showShiftEndedOverlay } = useShiftAutoLogout();
-  const [pages, setPages] = useState<{ id: string; name: string; icon_name: string; display_order?: number }[]>([]);
+  // A lead open in the (non-modal) carousel on RM PRD, OR a table-opened
+  // lead whose "Lock lead modal" is enabled, blocks navigating to any OTHER
+  // sidebar page until it's dispositioned, so the RM can't walk away
+  // mid-lead. Doesn't touch Sparky/Notifications/Logout.
+  const leadNavLocked = useLeadNavLocked();
+  const isCurrentPage = (pageId: string) => location.pathname === `/app/${tenantSlug}/pages/${pageId}`;
+  const navBlockedToast = () =>
+    toast.warning('Finish this lead first', {
+      description: 'Log a disposition before navigating away from RM PRD.',
+    });
+  const isPageBlocked = (pageId: string) => leadNavLocked && !isCurrentPage(pageId);
+  const [pages, setPages] = useState<
+    { id: string; name: string; icon_name: string; display_order?: number; config?: unknown }[]
+  >([]);
   const [customIcons, setCustomIcons] = useState<CustomIconRow[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -330,41 +347,79 @@ const CustomAppLayout: React.FC = () => {
   const navItemPad = isUnmanndApp
     ? { collapsed: 'justify-center px-0 py-1.5', expanded: 'gap-2.5 px-2.5 py-1.5' }
     : { collapsed: 'justify-center px-0 py-2', expanded: 'gap-3 px-3 py-2' };
+  const sidebarNav = useMemo(() => buildSidebarNav(pages), [pages]);
+  const renderGroupIcon = (iconName: string, isActive: boolean) => (
+    <span className={isActive ? 'text-white' : 'text-gray-600'}>
+      <DynamicSidebarIcon iconName={iconName} customIcons={customIcons} />
+    </span>
+  );
 
   const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
     <>
-      {pages.map((page) => (
-        <NavLink
-          key={page.id}
-          to={`/app/${tenantSlug}/pages/${page.id}`}
-          onClick={opts.onNavigate}
-          className={({ isActive }) =>
-            `flex items-center rounded-sm font-medium transition ${
-              opts.collapsed ? navItemPad.collapsed : navItemPad.expanded
-            } ${isMobileLandscape ? 'py-0 px-0.5 text-[8px] gap-1 h-4' : 'text-sm'} ${
-              isTabletOrLandscapeMobile
-                ? isActive
-                  ? activeNavClassMobile
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                : isActive
-                  ? activeNavClass
-                  : 'text-gray-700 hover:bg-gray-50'
-            }`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <NavIcon
-                isMobile={isTabletOrLandscapeMobile}
-                isActive={isActive}
-                iconName={page.icon_name}
-                customIcons={customIcons}
-              />
-              {!opts.collapsed && <span className="truncate">{page.name}</span>}
-            </>
-          )}
-        </NavLink>
-      ))}
+      {sidebarNav.map((item) => {
+        if (item.kind === 'group') {
+          return (
+            <SidebarGroupFlyout
+              key={`group-${item.name}`}
+              name={item.name}
+              sections={item.sections}
+              tenantSlug={tenantSlug}
+              collapsed={opts.collapsed}
+              inline
+              activeClass={activeNavClassMobile}
+              triggerPadClass={opts.collapsed ? navItemPad.collapsed : navItemPad.expanded}
+              renderIcon={renderGroupIcon}
+              onNavigate={opts.onNavigate}
+              isPageBlocked={isPageBlocked}
+              onBlockedNavigate={navBlockedToast}
+            />
+          );
+        }
+        const { page } = item;
+        const blocked = isPageBlocked(page.id);
+        return (
+          <NavLink
+            key={page.id}
+            to={`/app/${tenantSlug}/pages/${page.id}`}
+            onClick={(e) => {
+              if (blocked) {
+                e.preventDefault();
+                navBlockedToast();
+                return;
+              }
+              opts.onNavigate?.();
+            }}
+            aria-disabled={blocked}
+            className={({ isActive }) =>
+              `flex items-center rounded-sm font-medium transition ${
+                opts.collapsed ? navItemPad.collapsed : navItemPad.expanded
+              } ${isMobileLandscape ? 'py-0 px-0.5 text-[8px] gap-1 h-4' : 'text-sm'} ${
+                blocked ? 'opacity-40 cursor-not-allowed' : ''
+              } ${
+                isTabletOrLandscapeMobile
+                  ? isActive
+                    ? activeNavClassMobile
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : isActive
+                    ? activeNavClass
+                    : 'text-gray-700 hover:bg-gray-50'
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <NavIcon
+                  isMobile={isTabletOrLandscapeMobile}
+                  isActive={isActive}
+                  iconName={page.icon_name}
+                  customIcons={customIcons}
+                />
+                {!opts.collapsed && <span className="truncate">{page.name}</span>}
+              </>
+            )}
+          </NavLink>
+        );
+      })}
     </>
   );
 
@@ -512,31 +567,58 @@ const CustomAppLayout: React.FC = () => {
               sidebarCollapsed ? 'px-2' : 'px-3'
             }`}
           >
-            {pages.map((page) => (
-              <NavLink
-                key={page.id}
-                to={`/app/${tenantSlug}/pages/${page.id}`}
-                className={({ isActive }) =>
-                  `flex items-center rounded-xl ${
-                    sidebarCollapsed ? navItemPad.collapsed : navItemPad.expanded
-                  } text-sm font-medium transition ${
-                    isActive
-                      ? activeNavClass
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-white' : 'bg-transparent text-gray-600'}`}>
-                      {/* Call the helper with the icon_name from your database */}
-                      <DynamicSidebarIcon iconName={page.icon_name} customIcons={customIcons} />
-                    </div>
-                    {!sidebarCollapsed && <span>{page.name}</span>}
-                  </>
-                )}
-              </NavLink>
-            ))}
+            {sidebarNav.map((item) => {
+              if (item.kind === 'group') {
+                return (
+                  <SidebarGroupFlyout
+                    key={`group-${item.name}`}
+                    name={item.name}
+                    sections={item.sections}
+                    tenantSlug={tenantSlug}
+                    collapsed={sidebarCollapsed}
+                    inline={!sidebarCollapsed}
+                    activeClass={activeNavClass}
+                    triggerPadClass={sidebarCollapsed ? navItemPad.collapsed : navItemPad.expanded}
+                    renderIcon={renderGroupIcon}
+                    isPageBlocked={isPageBlocked}
+                    onBlockedNavigate={navBlockedToast}
+                  />
+                );
+              }
+              const { page } = item;
+              const blocked = isPageBlocked(page.id);
+              return (
+                <NavLink
+                  key={page.id}
+                  to={`/app/${tenantSlug}/pages/${page.id}`}
+                  onClick={(e) => {
+                    if (!blocked) return;
+                    e.preventDefault();
+                    navBlockedToast();
+                  }}
+                  aria-disabled={blocked}
+                  className={({ isActive }) =>
+                    `flex items-center rounded-xl ${
+                      sidebarCollapsed ? navItemPad.collapsed : navItemPad.expanded
+                    } text-sm font-medium transition ${blocked ? 'opacity-40 cursor-not-allowed' : ''} ${
+                      isActive
+                        ? activeNavClass
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? 'bg-transparent text-white' : 'bg-transparent text-gray-600'}`}>
+                        {/* Call the helper with the icon_name from your database */}
+                        <DynamicSidebarIcon iconName={page.icon_name} customIcons={customIcons} />
+                      </div>
+                      {!sidebarCollapsed && <span>{page.name}</span>}
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
           </nav>
 
           <div

@@ -198,7 +198,6 @@ export function TicketCarouselView(props: TicketCarouselModel) {
     whatsappLink,
     setWhatsappLink,
     abandonStaleTicket,
-    lastFetchedTicketIdRef,
     calculateResolutionTime,
     fetchTicketStats,
     resetTicketState,

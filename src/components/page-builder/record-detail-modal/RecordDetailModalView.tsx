@@ -30,6 +30,7 @@ import {
 import { convertGMTtoIST } from '@/lib/utils/timeUtils';
 import { cn } from '@/lib/utils';
 import { getInventoryStatusLabel, getInventoryStatusToneClass } from '@/lib/inventory/statusStyles';
+import { normalizeRequestStatus } from '@/lib/inventory/requestStatus';
 import {
   resolvePriorityFromRow,
   inventoryPriorityFieldCardClassName,
@@ -137,7 +138,7 @@ function renderDisplayValue(key: string, value: unknown): React.ReactNode {
     return (
       <span
         className={cn(
-          'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-sm font-semibold tracking-wide',
+          'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-sm font-semibold uppercase tracking-wide',
           getInventoryStatusToneClass(str),
         )}
         title={str}
@@ -185,6 +186,7 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
     setMyRoleName,
     displayRows,
     statusOptions,
+    statusEntityType,
     canEdit,
     isInventoryRequest,
     requesterId,
@@ -298,7 +300,8 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
                       {isEditable ? (
                         <div className="flex flex-wrap items-center gap-2">
                           {key === 'status' && statusOptions.length > 0 ? (() => {
-                            const currentStatus = String(displayValue ?? '').trim();
+                            const rawStatus = String(displayValue ?? '').trim();
+                            const currentStatus = statusEntityType ? normalizeRequestStatus(rawStatus) : rawStatus;
                             const options = !currentStatus || statusOptions.includes(currentStatus)
                               ? statusOptions
                               : [currentStatus, ...statusOptions];
@@ -312,7 +315,7 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
                                 <SelectTrigger
                                   className={cn(
                                     'w-full max-w-md min-w-0 h-9 text-sm rounded-md border font-medium',
-                                    getInventoryStatusToneClass(selectValue),
+                                    getInventoryStatusToneClass(selectValue, statusEntityType),
                                   )}
                                 >
                                   <SelectValue placeholder="Select status" />
@@ -322,9 +325,9 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
                                     <SelectItem
                                       key={opt}
                                       value={opt}
-                                      className={cn('font-medium', getInventoryStatusToneClass(opt))}
+                                      className={cn('font-medium', getInventoryStatusToneClass(opt, statusEntityType))}
                                     >
-                                      {getInventoryStatusLabel(opt)}
+                                      {getInventoryStatusLabel(opt, statusEntityType)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -501,7 +504,7 @@ export function RecordDetailModalView(props: RecordDetailModalModel) {
                       ) : key === 'status' && String(displayValue ?? '').trim() ? (
                         <span
                           className={cn(
-                            'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-sm font-semibold tracking-wide',
+                            'inline-flex max-w-full items-center rounded-full border px-3 py-1 text-sm font-semibold uppercase tracking-wide',
                             getInventoryStatusToneClass(displayValue),
                           )}
                           title={String(displayValue)}

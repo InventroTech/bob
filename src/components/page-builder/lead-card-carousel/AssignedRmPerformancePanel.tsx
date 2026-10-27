@@ -2,7 +2,13 @@ import React, { useMemo } from 'react';
 import { useRmActivityEvents } from '../rm-prd-analytics/useRmActivityEvents';
 import { useRmDailyTargets } from '../rm-prd-analytics/useRmDailyTargets';
 import { filterByDateRange, resolveDateRange } from '../rm-prd-analytics/dateRange';
-import { computePerformanceByRm, formatVsTarget, type RmPerformanceRow } from '../rm-prd-analytics/aggregate';
+import {
+  computeAdherenceByRm,
+  computeMyShiftSnapshot,
+  computePerformanceByRm,
+  type RmPerformanceRow,
+} from '../rm-prd-analytics/aggregate';
+import { RmShiftStats } from './RmShiftStats';
 
 interface AssignedRmPerformancePanelProps {
   rmUserId: string | null;
@@ -28,8 +34,9 @@ const ZERO_ROW = (rmUserId: string, target: number): RmPerformanceRow => ({
 // The performance of the RM this lead is assigned to, so far today — shown
 // when a lead is opened from the table view (not YourShiftPanel's "my own
 // shift", since whoever is browsing the table usually isn't the RM working
-// this lead). Reuses the exact same rm_activity_events aggregation as the
-// RM PRD analytics dashboard, scoped to this one RM.
+// this lead). Shares RmShiftStats with YourShiftPanel (same
+// rm_activity_events aggregation, same metrics) so a manager looking at an
+// RM's leads here sees the exact same numbers that RM sees for themselves.
 export const AssignedRmPerformancePanel: React.FC<AssignedRmPerformancePanelProps> = ({ rmUserId }) => {
   const todayBounds = useMemo(() => resolveDateRange('Today', '', ''), []);
   const { events, loading: eventsLoading } = useRmActivityEvents(
@@ -38,14 +45,18 @@ export const AssignedRmPerformancePanel: React.FC<AssignedRmPerformancePanelProp
   );
   const { targets, loading: targetsLoading } = useRmDailyTargets(rmUserId ? todayBounds : null);
 
-  const row = useMemo(() => {
+  const stats = useMemo(() => {
     if (!rmUserId) return null;
     const todaysEvents = filterByDateRange(events, todayBounds);
     const existing = computePerformanceByRm(todaysEvents, targets).find((r) => r.rmUserId === rmUserId);
     // no touches yet today — still show the target so a manager can see
     // what's expected, with everything else at 0
-    return existing ?? ZERO_ROW(rmUserId, targets[rmUserId] ?? 0);
+    const row = existing ?? ZERO_ROW(rmUserId, targets[rmUserId] ?? 0);
+    const snapshot = computeMyShiftSnapshot(todaysEvents, rmUserId);
+    const breaches = computeAdherenceByRm(todaysEvents)[0]?.breaches ?? 0;
+    return { row, snapshot, breaches };
   }, [events, targets, rmUserId, todayBounds]);
+  const row = stats?.row ?? null;
 
   // A lead can genuinely have no assigned_to right now — e.g. auto-released
   // back to the pool after sitting unworked — even though it was touched
@@ -60,7 +71,7 @@ export const AssignedRmPerformancePanel: React.FC<AssignedRmPerformancePanelProp
     );
   }
 
-  if (eventsLoading || targetsLoading || !row) return null;
+  if (eventsLoading || targetsLoading || !row || !stats) return null;
 
   return (
     <div>
@@ -69,24 +80,7 @@ export const AssignedRmPerformancePanel: React.FC<AssignedRmPerformancePanelProp
         {row.name ? `${row.name} – Today` : 'Assigned RM – Today'}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Stat
-          label="Target vs Achieved"
-          value={`${row.achieved}/${row.target || '—'}`}
-          sub={formatVsTarget(row.achieved, row.target)}
-        />
-        <Stat label="Leads Touched" value={String(row.uniqueLeads)} sub={`${row.touches} total touches`} />
-        <Stat label="Conversion Rate" value={`${row.trialRate}%`} sub="Trial / leads touched" />
-        <Stat label="Not Connected" value={`${row.notConnectedRate}%`} sub="of leads touched" />
-      </div>
+      <RmShiftStats snapshot={stats.snapshot} performance={row} breaches={stats.breaches} accent="sky" />
     </div>
   );
 };
-
-const Stat: React.FC<{ label: string; value: string; sub: string }> = ({ label, value, sub }) => (
-  <div className="rounded-xl border border-sky-200 bg-sky-50 p-2.5">
-    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-    <div className="font-mono text-base font-semibold text-sky-800">{value}</div>
-    <div className="mt-1 text-[10px] text-slate-400">{sub}</div>
-  </div>
-);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAdherenceByRm, computePerformanceByRm, computeTeamTotals, formatVsTarget } from './aggregate';
+import { BREACH_THRESHOLDS, computeAdherenceByRm, computePerformanceByRm, computeTeamTotals, formatVsTarget } from './aggregate';
 import type { RmActivityEvent } from './types';
 
 function callTouch(overrides: Partial<RmActivityEvent> = {}): RmActivityEvent {
@@ -108,15 +108,49 @@ describe('computeTeamTotals target', () => {
   });
 });
 
-describe('breach counting boundary (>= 1500s, matches the touch report flag)', () => {
-  it('counts a call at exactly 25:00 as a breach', () => {
-    const rows = computeAdherenceByRm([callTouch({ durationSeconds: 1500 })]);
+describe('breach counting is disposition-specific (each disposition has its own threshold)', () => {
+  it('counts a trial-activated call at exactly its 25:00 threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: BREACH_THRESHOLDS.TRIAL_ACTIVATED }),
+    ]);
     expect(rows[0].breaches).toBe(1);
   });
 
-  it('does not count a call one second under 25:00', () => {
-    const rows = computeAdherenceByRm([callTouch({ durationSeconds: 1499 })]);
+  it('does not count a trial-activated call one second under its threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: BREACH_THRESHOLDS.TRIAL_ACTIVATED - 1 }),
+    ]);
     expect(rows[0].breaches).toBe(0);
+  });
+
+  it('counts a not-connected call at its own 3-minute threshold, far under the trial threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: BREACH_THRESHOLDS.NOT_CONNECTED }),
+    ]);
+    expect(rows[0].breaches).toBe(1);
+  });
+
+  it('counts a call-back call at its own 10-minute threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'CALL_BACK', durationSeconds: BREACH_THRESHOLDS.CALL_BACK }),
+    ]);
+    expect(rows[0].breaches).toBe(1);
+  });
+
+  it('counts a not-interested call at its own 15-minute threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'NOT_INTERESTED', durationSeconds: BREACH_THRESHOLDS.NOT_INTERESTED }),
+    ]);
+    expect(rows[0].breaches).toBe(1);
+  });
+
+  it('sums breaches across dispositions within the same RM', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ id: 1, updatedStatus: 'NOT_CONNECTED', durationSeconds: BREACH_THRESHOLDS.NOT_CONNECTED }),
+      callTouch({ id: 2, updatedStatus: 'CALL_BACK', durationSeconds: BREACH_THRESHOLDS.CALL_BACK }),
+      callTouch({ id: 3, updatedStatus: 'NOT_INTERESTED', durationSeconds: 1 }), // under its own 15m threshold
+    ]);
+    expect(rows[0].breaches).toBe(2);
   });
 });
 

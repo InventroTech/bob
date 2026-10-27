@@ -38,7 +38,6 @@ const InventoryRequestsPage: React.FC = () => {
               { key: 'item_name_freeform', label: 'Item', type: 'text' },
               { key: 'quantity_required', label: 'Quantity', type: 'number' },
               { key: 'vendor_name', label: 'Vendor', type: 'text' },
-              { key: 'shipment_status', label: 'Shipment', type: 'chip' },
               { key: 'tracking_link', label: 'Track', type: 'link' },
               { key: 'tracking_number', label: 'Tracking no', type: 'text' },
               { key: 'eta', label: 'ETA', type: 'date' },

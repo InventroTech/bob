@@ -34,6 +34,7 @@ import {
   type ProcurementDashboardData,
   type ProcurementRequestRow,
   type SpendBreakdownMode,
+  ORDERED_STATUSES,
 } from './procurement/fetchProcurementDashboardData';
 import { downloadReportCsv, type ReportId } from './procurement/downloadReportCsv';
 
@@ -116,7 +117,7 @@ function matchesFilter(row: ProcurementRequestRow, filter: StatusFilter): boolea
     return row.status === 'NEW_REQUEST' || row.status === 'ON_HOLD' || row.status === 'REQ_TO_VERIFY';
   }
   if (filter === 'ordered') {
-    return row.status === 'VENDOR_IDENTIFIED' || row.status === 'IN_CART' || row.status === 'IN_SHIPPING';
+    return ORDERED_STATUSES.has(row.status);
   }
   return row.status === 'REJECTED';
 }
@@ -594,7 +595,7 @@ export const ProcurementDashboardComponent: React.FC<ProcurementDashboardProps> 
                     </td>
                     <td className="px-4 py-2.5">
                       <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getInventoryStatusToneClass(row.status)}`}
+                        className={`inline-flex rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${getInventoryStatusToneClass(row.status)}`}
                       >
                         {getInventoryStatusLabel(row.status)}
                       </span>

@@ -49,13 +49,14 @@ import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useSpoofUserId } from '@/lib/auth/spoof';
-import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
+import { useTableSort, SortableHeader } from './rm-prd-analytics/tableSort';
 
 // The filter-bar controls a manager can individually show/hide via config —
 // keyed the same as Filters below so FilterBar can look visibility up directly.
 export type RmPrdFilterKey = 'manager' | 'dateRange' | 'leadGroup' | 'state' | 'party';
 
-export type RmPrdViewMode = 'manager' | 'rm';
+export type RmPrdViewMode = 'manager' | 'asm' | 'rm';
 
 export interface RmPrdAnalyticsConfig {
   title?: string;
@@ -68,12 +69,17 @@ export interface RmPrdAnalyticsConfig {
   visibleFilters?: Partial<Record<RmPrdFilterKey, boolean>>;
   /**
    * 'manager' (default, missing = 'manager') is today's whole-team
-   * dashboard. 'rm' scopes everything to the signed-in RM's own data only
-   * — the fetch itself is narrowed server-side to their rm_user_id (not
-   * just a client-side filter over the team), the Manager filter and the
-   * "By RM" table are hidden (both are meaningless for a one-person view),
-   * and the numbers you see are already just yours. Meant for a page an RM
-   * themselves is given access to, not a manager's team view.
+   * dashboard — every RM in the tenant. 'asm' scopes everything to the
+   * signed-in manager's own hierarchy (direct + indirect reports) — the
+   * fetch is narrowed server-side to their manager_user_id, same as 'rm'
+   * but at the team level instead of one person, so the Manager filter and
+   * "By RM" table stay meaningful and visible. 'rm' scopes everything to
+   * the signed-in RM's own data only — the fetch itself is narrowed
+   * server-side to their rm_user_id (not just a client-side filter over
+   * the team), the Manager filter and the "By RM" table are hidden (both
+   * are meaningless for a one-person view), and the numbers you see are
+   * already just yours. Meant for a page an RM themselves is given access
+   * to, not a manager's team view.
    */
   viewMode?: RmPrdViewMode;
   /**
@@ -173,6 +179,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // same precedent as LeadProgressBar/useLeadCardCarousel
   const activeUserId = spoofUserId ?? session?.user?.id ?? null;
   const isRmView = config?.viewMode === 'rm';
+  const isAsmView = config?.viewMode === 'asm';
   const [tab, setTab] = useState<Tab>(loadStoredTab);
   const [filters, setFilters] = useState<Filters>(loadStoredFilters);
   const [drill, setDrill] = useState<DrillFilter | null>(null);
@@ -214,21 +221,23 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   }, [tab]);
 
   const dateBounds = useMemo(() => {
-    // RM view with no signed-in user resolved yet — bounds=null skips the
-    // fetch entirely (see useRmActivityEvents) rather than briefly fetching
-    // and showing the whole team's data before activeUserId loads in
-    if (isRmView && !activeUserId) return null;
+    // RM/ASM view with no signed-in user resolved yet — bounds=null skips
+    // the fetch entirely (see useRmActivityEvents) rather than briefly
+    // fetching and showing the whole tenant's data before activeUserId loads in
+    if ((isRmView || isAsmView) && !activeUserId) return null;
     return resolveDateRange(filters.dateRange, filters.customFrom, filters.customTo);
-  }, [filters.dateRange, filters.customFrom, filters.customTo, isRmView, activeUserId]);
+  }, [filters.dateRange, filters.customFrom, filters.customTo, isRmView, isAsmView, activeUserId]);
   // windows the fetch itself to this range (see useRmActivityEvents) — not
   // just a client-side filter over the whole tenant table anymore;
   // refreshTick keeps it from going stale between manual page reloads.
-  // In RM view the fetch itself is narrowed server-side to activeUserId —
-  // not a client-side filter over every RM's rows.
+  // In RM view the fetch itself is narrowed server-side to activeUserId; in
+  // ASM view it's narrowed server-side to activeUserId's own hierarchy —
+  // neither is a client-side filter over every RM's rows.
   const { events, loading, error } = useRmActivityEvents(
     dateBounds,
     isRmView ? activeUserId ?? undefined : undefined,
-    refreshTick
+    refreshTick,
+    isAsmView ? activeUserId ?? undefined : undefined
   );
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
@@ -383,6 +392,8 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
         ) : (
           <AdherenceView
             onDrill={openTeamDrill}
+            teamTotals={teamTotals}
+            showOutcomeCards={isRmView}
             shiftTimeAverages={shiftTimeAverages}
             achtOverall={achtOverall}
             adherenceByRm={filteredAdherenceByRm}
@@ -743,88 +754,6 @@ function useStableMinHeight(deps: React.DependencyList) {
   return { ref, minHeight };
 }
 
-// ---- "By RM" table column sorting (shared by the Performance and Adherence tables) ----
-
-type SortDir = 'asc' | 'desc';
-interface ColumnSort<K extends string> {
-  key: K;
-  dir: SortDir;
-}
-
-// `getValue` must be a stable (module-level, not inline-closure) function —
-// it's a useMemo dep, and an inline closure would be a new reference every
-// render, defeating the memo on every keystroke/re-render.
-function useTableSort<T, K extends string>(rows: T[], getValue: (row: T, key: K) => string | number) {
-  const [sort, setSort] = useState<ColumnSort<K> | null>(null);
-  const sortedRows = useMemo(() => {
-    if (!sort) return rows;
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    return [...rows].sort((a, b) => {
-      const av = getValue(a, sort.key);
-      const bv = getValue(b, sort.key);
-      if (typeof av === 'string' || typeof bv === 'string') {
-        return String(av).localeCompare(String(bv)) * dir;
-      }
-      return ((av as number) - (bv as number)) * dir;
-    });
-  }, [rows, sort, getValue]);
-  const toggleSort = (key: K) => {
-    setSort((prev) => (!prev || prev.key !== key ? { key, dir: 'asc' } : { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }));
-  };
-  return { sortedRows, sort, toggleSort };
-}
-
-// Clickable column header: click to sort ascending, click again to flip to
-// descending, click a different column to switch to it (ascending). Shows a
-// muted up/down icon on every sortable column (discoverability — "this is
-// clickable") and a solid arrow on whichever column is actually active.
-function SortableHeader<K extends string>({
-  label,
-  sortKey,
-  sort,
-  onSort,
-  align = 'left',
-}: {
-  label: string;
-  sortKey: K;
-  sort: ColumnSort<K> | null;
-  onSort: (key: K) => void;
-  align?: 'left' | 'right';
-}) {
-  const isActive = sort?.key === sortKey;
-  return (
-    <TableHead
-      role="columnheader"
-      aria-sort={isActive ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-      tabIndex={0}
-      onClick={() => onSort(sortKey)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onSort(sortKey);
-        }
-      }}
-      className={cn(
-        'whitespace-nowrap text-white cursor-pointer select-none outline-none transition-colors hover:bg-white/10 focus-visible:bg-white/10',
-        align === 'right' && 'text-right'
-      )}
-    >
-      <span className={cn('inline-flex items-center gap-1', align === 'right' && 'flex-row-reverse')}>
-        {label}
-        {isActive ? (
-          sort!.dir === 'asc' ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : (
-            <ArrowDown className="h-3 w-3" />
-          )
-        ) : (
-          <ChevronsUpDown className="h-3 w-3 text-stone-500" />
-        )}
-      </span>
-    </TableHead>
-  );
-}
-
 type PerfSortKey =
   | 'name'
   | 'uniqueLeads'
@@ -923,6 +852,14 @@ const PerformanceTable: React.FC<{
 
 const AdherenceView: React.FC<{
   onDrill: (filter: DrillFilter) => void;
+  teamTotals: ReturnType<typeof computeTeamTotals>;
+  /** RM (signed-in RM's own data only) view only — Attempts per Lead /
+   * Achieved vs Target already live on the Performance tab; repeating them
+   * here just saves an RM a tab switch while reviewing their own adherence.
+   * Off elsewhere (whole-team Manager view, ASM "my team" view) so this tab
+   * doesn't duplicate the Performance tab for views where that switch is
+   * cheap/meaningless. */
+  showOutcomeCards: boolean;
   shiftTimeAverages: ReturnType<typeof computeShiftTimeAverages>;
   achtOverall: ReturnType<typeof computeAchtOverall>;
   adherenceByRm: RmAdherenceRow[];
@@ -934,6 +871,8 @@ const AdherenceView: React.FC<{
   stateNameById: Record<string, string>;
 }> = ({
   onDrill,
+  teamTotals,
+  showOutcomeCards,
   shiftTimeAverages,
   achtOverall,
   adherenceByRm,
@@ -942,8 +881,37 @@ const AdherenceView: React.FC<{
   onSelectRm,
   showByRmTable,
   stateNameById,
-}) => (
+}) => {
+  const achievedPct = teamTotals.target ? (teamTotals.achieved / teamTotals.target) * 100 : 0;
+
+  return (
   <div className="space-y-6">
+    {showOutcomeCards && (
+      <section>
+        <SectionLabel>Outcome · Team Total</SectionLabel>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <StatCard
+            label="Attempts per Lead"
+            value={teamTotals.attemptsPerLead}
+            sub="Touches ÷ unique"
+            onClick={() => onDrill('all')}
+          />
+          <CardShell className="border-amber-300 bg-amber-50/60" onClick={() => onDrill('trial')}>
+            <SectionLabel>Achieved vs Target</SectionLabel>
+            <div className="font-mono text-3xl font-semibold">
+              <span className="text-amber-700">{teamTotals.achieved}</span>
+              <span className="text-stone-400"> / {teamTotals.target}</span>
+            </div>
+            <Track fraction={achievedPct / 100} className="bg-amber-600" />
+            <div className="mt-1 flex justify-between text-xs text-stone-400">
+              <span>{achievedPct.toFixed(1)}%</span>
+              <span>Goal 100%</span>
+            </div>
+          </CardShell>
+        </div>
+      </section>
+    )}
+
     <section>
       <SectionLabel>Shift Time · Average per RM</SectionLabel>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -968,7 +936,7 @@ const AdherenceView: React.FC<{
         />
         <StatCard label="Occupancy" value={`${shiftTimeAverages.occupancy.value}%`} sub={shiftTimeAverages.occupancy.sub} />
         <StatCard
-          label="Breaches >25m"
+          label="Breaches"
           value={shiftTimeAverages.breaches.value}
           sub={`${shiftTimeAverages.breaches.sub}   Review`}
           highlight="red"
@@ -1028,7 +996,8 @@ const AdherenceView: React.FC<{
       </section>
     )}
   </div>
-);
+  );
+};
 
 type AdherenceSortKey =
   | 'name'
@@ -1279,7 +1248,7 @@ const RmDetailModal: React.FC<{
                 />
                 <StatCard label="Occupancy" value={`${shiftTimeAverages.occupancy.value}%`} sub={shiftTimeAverages.occupancy.sub} />
                 <StatCard
-                  label="Breaches >25m"
+                  label="Breaches"
                   value={shiftTimeAverages.breaches.value}
                   highlight="red"
                   onClick={() => onDrill('breach')}
