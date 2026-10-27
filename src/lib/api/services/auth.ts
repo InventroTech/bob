@@ -84,6 +84,7 @@ export const authService = {
       const message =
         (data as { error?: string }).error ||
         (data as { message?: string }).message ||
+        (data as { detail?: string }).detail ||
         `Request failed (${response.status})`;
       return { ok: false, error: message };
     } catch (e: unknown) {
@@ -125,6 +126,7 @@ export const authService = {
       const message =
         (data as { error?: string }).error ||
         (data as { message?: string }).message ||
+        (data as { detail?: string }).detail ||
         `Request failed (${response.status})`;
       return { ok: false, error: message };
     } catch (e: unknown) {

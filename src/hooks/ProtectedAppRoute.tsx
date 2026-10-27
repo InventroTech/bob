@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Outlet, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { usesDjangoAuth } from '@/lib/auth/provider';
+import { authClient } from '@/lib/auth/authClient';
 import { toast } from 'sonner';
 import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
 import { authService, membershipService } from '@/lib/api';
@@ -31,8 +33,8 @@ const UnauthorizedPage: React.FC<{
       try {
         const tenant = await authService.getTenantBySlug(tenantSlug);
 
-        if (tenant) {
-          // Get the public role via membership API (Django authz at /membership/roles)
+        // Django auth signs the Supabase session out locally, so this table read has no session.
+        if (tenant && !usesDjangoAuth) {
           const publicRole = await membershipService.getPublicRole();
 
           // Fetch public and unassigned pages (exclude soft-deleted)
@@ -218,7 +220,7 @@ const ProtectedAppRoute: React.FC = () => {
 
           // Strategy 1: Force session refresh
           try {
-            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            const { data: refreshData, error: refreshError } = await authClient.refreshSession();
             if (!refreshError && refreshData?.session?.access_token) {
               const refreshedTenantId = getTenantIdFromJWT(refreshData.session.access_token);
               const refreshedRoleId = getRoleIdFromJWT(refreshData.session.access_token);

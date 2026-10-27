@@ -87,7 +87,7 @@ const CustomAppDashboard: React.FC = () => {
     };
 
     fetchFirstPage();
-  }, [user, session?.access_token, tenantSlug, navigate,location.search]);
+  }, [user, session?.access_token, tenantSlug, navigate, location.search]);
 
   // Add a timeout to prevent infinite loading
   useEffect(() => {
