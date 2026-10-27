@@ -32,6 +32,23 @@ const DOWNLOAD_PDF_BTN =
 const FORM_INPUT =
   'h-11 rounded-[6px] border-gray-200 bg-white shadow-sm focus-visible:ring-[#1B6FE8]';
 
+const INACTIVE_AFTER_MS = 72 * 60 * 60 * 1000;
+
+function formatSignInAt(value?: string | null) {
+  if (!value) return 'Never';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Never';
+  return format(new Date(parsed.getTime() + 5.5 * 60 * 60 * 1000), 'MMM d, yyyy h:mm a');
+}
+
+function isInactiveSignIn(user: User) {
+  const stamp = user.last_sign_in_at || user.created_at;
+  if (!stamp) return false;
+  const at = new Date(stamp).getTime();
+  if (Number.isNaN(at)) return false;
+  return Date.now() - at >= INACTIVE_AFTER_MS;
+}
+
 function SupportDailyDualDisplay({
   selfTrial,
   other,
@@ -207,6 +224,7 @@ export function AddUserView(props: AddUserModel) {
     (f) => f.showInForm && !isBoundCustomField(f.key)
   );
   const customTableFields = schema.customFields.filter((f) => f.showInTable);
+  const inactiveCount = filteredUsersWithSettings.filter(isInactiveSignIn).length;
   const showManagerForm = showCustomForm('manager_email');
   const showQueueTypeForm = showCustomForm('queue_type');
   const showLeadGroupForm = showCustomForm('lead_group');
@@ -730,6 +748,8 @@ export function AddUserView(props: AddUserModel) {
             )}
           </TableCell>
         );
+      case 'last_sign_in_at':
+        return <TableCell key={cellKey}>{formatSignInAt(user.last_sign_in_at)}</TableCell>;
       case 'created_at':
         return (
           <TableCell key={cellKey}>
@@ -1356,20 +1376,30 @@ export function AddUserView(props: AddUserModel) {
               isUnmannd && 'w-full flex-row flex-wrap items-center gap-3 sm:flex-nowrap'
             )}
           >
-            <h5
-              className={cn(
-                'text-2xl font-semibold shrink-0',
-                isUnmannd &&
-                  'text-[18px] font-bold leading-none tracking-tight text-black'
-              )}
-              style={
-                isUnmannd
-                  ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
-                  : undefined
-              }
-            >
-              Users
-            </h5>
+            <div className="flex shrink-0 items-baseline gap-3">
+              <h5
+                className={cn(
+                  'text-2xl font-semibold shrink-0',
+                  isUnmannd &&
+                    'text-[18px] font-bold leading-none tracking-tight text-black'
+                )}
+                style={
+                  isUnmannd
+                    ? { fontFamily: "Helvetica, 'Helvetica Neue', Arial, sans-serif" }
+                    : undefined
+                }
+              >
+                Users
+              </h5>
+              <span
+                className={cn(
+                  'text-sm font-medium text-[#B91C1C]',
+                  isUnmannd && 'text-[13px] font-semibold'
+                )}
+              >
+                {inactiveCount} inactive
+              </span>
+            </div>
             <div
               className={cn(
                 'flex w-full flex-col gap-3 sm:max-w-lg sm:flex-row sm:items-center',
@@ -1485,6 +1515,10 @@ export function AddUserView(props: AddUserModel) {
                           <div>
                             <p className="text-xs text-gray-500">Manager Email</p>
                             <p className="break-words text-sm">{user.managerEmail || "-"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Last sign in at</p>
+                            <p className="text-sm">{formatSignInAt(user.last_sign_in_at)}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Created At</p>

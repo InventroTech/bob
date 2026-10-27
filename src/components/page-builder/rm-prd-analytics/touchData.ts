@@ -46,6 +46,9 @@ export interface TouchRow {
   group: string;
   /** the RM's picked reason — only ever set on Not Interested rows */
   reason: string;
+  /** which page/carousel instance (e.g. "All Leads", "Pending Leads")
+   * opened this lead — empty for rows written before this was tracked */
+  openedFrom: string;
   dispositionKey: DispositionKey;
   start: string;
   end: string;
@@ -98,6 +101,7 @@ function toTouchRow(event: RmActivityEvent, stateNameById: Record<string, string
     party: event.party ?? '',
     group: event.leadGroup ?? '',
     reason: event.reason ?? '',
+    openedFrom: event.openedFrom ?? '',
     dispositionKey: DISPOSITION_TO_KEY[event.updatedStatus],
     start: formatClock(event.startedAt),
     end: formatClock(event.endedAt),

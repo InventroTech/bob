@@ -49,7 +49,8 @@ import type { DrillFilter } from './rm-prd-analytics/touchData';
 import type { RmActivityEvent } from './rm-prd-analytics/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useSpoofUserId } from '@/lib/auth/spoof';
-import { RefreshCw, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
+import { useTableSort, SortableHeader } from './rm-prd-analytics/tableSort';
 
 // The filter-bar controls a manager can individually show/hide via config —
 // keyed the same as Filters below so FilterBar can look visibility up directly.
@@ -751,88 +752,6 @@ function useStableMinHeight(deps: React.DependencyList) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return { ref, minHeight };
-}
-
-// ---- "By RM" table column sorting (shared by the Performance and Adherence tables) ----
-
-type SortDir = 'asc' | 'desc';
-interface ColumnSort<K extends string> {
-  key: K;
-  dir: SortDir;
-}
-
-// `getValue` must be a stable (module-level, not inline-closure) function —
-// it's a useMemo dep, and an inline closure would be a new reference every
-// render, defeating the memo on every keystroke/re-render.
-function useTableSort<T, K extends string>(rows: T[], getValue: (row: T, key: K) => string | number) {
-  const [sort, setSort] = useState<ColumnSort<K> | null>(null);
-  const sortedRows = useMemo(() => {
-    if (!sort) return rows;
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    return [...rows].sort((a, b) => {
-      const av = getValue(a, sort.key);
-      const bv = getValue(b, sort.key);
-      if (typeof av === 'string' || typeof bv === 'string') {
-        return String(av).localeCompare(String(bv)) * dir;
-      }
-      return ((av as number) - (bv as number)) * dir;
-    });
-  }, [rows, sort, getValue]);
-  const toggleSort = (key: K) => {
-    setSort((prev) => (!prev || prev.key !== key ? { key, dir: 'asc' } : { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }));
-  };
-  return { sortedRows, sort, toggleSort };
-}
-
-// Clickable column header: click to sort ascending, click again to flip to
-// descending, click a different column to switch to it (ascending). Shows a
-// muted up/down icon on every sortable column (discoverability — "this is
-// clickable") and a solid arrow on whichever column is actually active.
-function SortableHeader<K extends string>({
-  label,
-  sortKey,
-  sort,
-  onSort,
-  align = 'left',
-}: {
-  label: string;
-  sortKey: K;
-  sort: ColumnSort<K> | null;
-  onSort: (key: K) => void;
-  align?: 'left' | 'right';
-}) {
-  const isActive = sort?.key === sortKey;
-  return (
-    <TableHead
-      role="columnheader"
-      aria-sort={isActive ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-      tabIndex={0}
-      onClick={() => onSort(sortKey)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onSort(sortKey);
-        }
-      }}
-      className={cn(
-        'whitespace-nowrap text-white cursor-pointer select-none outline-none transition-colors hover:bg-white/10 focus-visible:bg-white/10',
-        align === 'right' && 'text-right'
-      )}
-    >
-      <span className={cn('inline-flex items-center gap-1', align === 'right' && 'flex-row-reverse')}>
-        {label}
-        {isActive ? (
-          sort!.dir === 'asc' ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : (
-            <ArrowDown className="h-3 w-3" />
-          )
-        ) : (
-          <ChevronsUpDown className="h-3 w-3 text-stone-500" />
-        )}
-      </span>
-    </TableHead>
-  );
 }
 
 type PerfSortKey =

@@ -27,7 +27,9 @@ import { LeadCalledBackNotificationsMenu } from '@/features/lead-called-back-not
 import { clearRegisteredAllLeadsPath, registerAllLeadsPath } from '@/lib/realtime/openLeadBus';
 import { useShiftAutoLogout } from '@/hooks/useShiftAutoLogout';
 import { ShiftEndedOverlay } from '@/components/ShiftEndedOverlay';
-import { useLeadCallActive } from '@/lib/realtime/shiftCallActivityBus';
+import { useLeadNavLocked } from '@/lib/realtime/shiftCallActivityBus';
+import { buildSidebarNav } from '@/lib/sidebar/sidebarGroups';
+import { SidebarGroupFlyout } from './SidebarGroupFlyout';
 
 type CustomIconRow = { name: string; svg_content: string };
 
@@ -123,16 +125,20 @@ const CustomAppLayout: React.FC = () => {
   const location = useLocation();
   const { user, logout, session } = useAuth();
   const { showShiftEndedOverlay } = useShiftAutoLogout();
-  // A lead open in the (non-modal) carousel — RM PRD itself — blocks
-  // navigating to any OTHER sidebar page until it's dispositioned, so the
-  // RM can't walk away mid-lead. Doesn't touch Sparky/Notifications/Logout.
-  const leadCallActive = useLeadCallActive();
+  // A lead open in the (non-modal) carousel on RM PRD, OR a table-opened
+  // lead whose "Lock lead modal" is enabled, blocks navigating to any OTHER
+  // sidebar page until it's dispositioned, so the RM can't walk away
+  // mid-lead. Doesn't touch Sparky/Notifications/Logout.
+  const leadNavLocked = useLeadNavLocked();
   const isCurrentPage = (pageId: string) => location.pathname === `/app/${tenantSlug}/pages/${pageId}`;
   const navBlockedToast = () =>
     toast.warning('Finish this lead first', {
       description: 'Log a disposition before navigating away from RM PRD.',
     });
-  const [pages, setPages] = useState<{ id: string; name: string; icon_name: string; display_order?: number }[]>([]);
+  const isPageBlocked = (pageId: string) => leadNavLocked && !isCurrentPage(pageId);
+  const [pages, setPages] = useState<
+    { id: string; name: string; icon_name: string; display_order?: number; config?: unknown }[]
+  >([]);
   const [customIcons, setCustomIcons] = useState<CustomIconRow[]>([]);
   const [userRoleId, setUserRoleId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -341,11 +347,36 @@ const CustomAppLayout: React.FC = () => {
   const navItemPad = isUnmanndApp
     ? { collapsed: 'justify-center px-0 py-1.5', expanded: 'gap-2.5 px-2.5 py-1.5' }
     : { collapsed: 'justify-center px-0 py-2', expanded: 'gap-3 px-3 py-2' };
+  const sidebarNav = useMemo(() => buildSidebarNav(pages), [pages]);
+  const renderGroupIcon = (iconName: string, isActive: boolean) => (
+    <span className={isActive ? 'text-white' : 'text-gray-600'}>
+      <DynamicSidebarIcon iconName={iconName} customIcons={customIcons} />
+    </span>
+  );
 
   const renderNavLinks = (opts: { collapsed: boolean; onNavigate?: () => void }) => (
     <>
-      {pages.map((page) => {
-        const blocked = leadCallActive && !isCurrentPage(page.id);
+      {sidebarNav.map((item) => {
+        if (item.kind === 'group') {
+          return (
+            <SidebarGroupFlyout
+              key={`group-${item.name}`}
+              name={item.name}
+              sections={item.sections}
+              tenantSlug={tenantSlug}
+              collapsed={opts.collapsed}
+              inline
+              activeClass={activeNavClassMobile}
+              triggerPadClass={opts.collapsed ? navItemPad.collapsed : navItemPad.expanded}
+              renderIcon={renderGroupIcon}
+              onNavigate={opts.onNavigate}
+              isPageBlocked={isPageBlocked}
+              onBlockedNavigate={navBlockedToast}
+            />
+          );
+        }
+        const { page } = item;
+        const blocked = isPageBlocked(page.id);
         return (
           <NavLink
             key={page.id}
@@ -536,8 +567,26 @@ const CustomAppLayout: React.FC = () => {
               sidebarCollapsed ? 'px-2' : 'px-3'
             }`}
           >
-            {pages.map((page) => {
-              const blocked = leadCallActive && !isCurrentPage(page.id);
+            {sidebarNav.map((item) => {
+              if (item.kind === 'group') {
+                return (
+                  <SidebarGroupFlyout
+                    key={`group-${item.name}`}
+                    name={item.name}
+                    sections={item.sections}
+                    tenantSlug={tenantSlug}
+                    collapsed={sidebarCollapsed}
+                    inline={!sidebarCollapsed}
+                    activeClass={activeNavClass}
+                    triggerPadClass={sidebarCollapsed ? navItemPad.collapsed : navItemPad.expanded}
+                    renderIcon={renderGroupIcon}
+                    isPageBlocked={isPageBlocked}
+                    onBlockedNavigate={navBlockedToast}
+                  />
+                );
+              }
+              const { page } = item;
+              const blocked = isPageBlocked(page.id);
               return (
                 <NavLink
                   key={page.id}
