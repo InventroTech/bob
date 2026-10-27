@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { forceLogoutIfDeletedSelf } from '@/lib/auth/deletedUserSession';
+import { refreshAccessToken } from '@/lib/auth/authSessionService';
+import { fetchMembershipUsers } from './fetchMembershipUsers';
 import { toast } from 'sonner';
 import { useTenant } from '@/hooks/useTenant';
 import { membershipService } from '@/lib/api';
@@ -115,28 +117,28 @@ export function useAddUser({ config }: AddUserComponentProps) {
         return;
       }
 
-      // Use renderer URL for users
-      const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/membership/users`;
-      
-      console.log('Fetching users from:', apiUrl);
-
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
+      const result = await fetchMembershipUsers({
+        baseUrl: import.meta.env.VITE_RENDER_API_URL,
+        token,
+        refreshToken: refreshAccessToken,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error response:', errorData);
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      if (result.kind === 'denied') {
+        // Expected (signed out / removed from tenant): warn, not error, so Sentry stays quiet.
+        console.warn(`[AddUser] Cannot list users (${result.status}): ${result.reason ?? 'no detail'}`);
+        toast.error(
+          result.status === 401
+            ? 'Your session has expired. Please log in again.'
+            : "You don't have access to view users in this organization."
+        );
+        setUsers([]);
+        return;
+      }
+      if (result.kind === 'error') {
+        throw new Error(result.reason || `Couldn't load users (status ${result.status})`);
       }
 
-      const responseData = await response.json();
-      console.log('Users response:', responseData);
+      const responseData = result.data as any;
       
       // Handle different response formats
       let usersData = [];
@@ -170,7 +172,7 @@ export function useAddUser({ config }: AddUserComponentProps) {
         toast.info('No users found. The list is empty.');
       }
     } catch (error: any) {
-      console.error('Error fetching users:', error);
+      console.error(`Error fetching users: ${error?.message ?? String(error)}`);
       toast.error(`Failed to fetch users: ${error.message}`);
       setUsers([]);
     } finally {
