@@ -161,6 +161,13 @@ const readStoredLeadStartTime = (leadId: string | number | undefined): Date | nu
   return new Date(record.startedAt);
 };
 
+// KILL SWITCH (2026-10-27): many RMs hit the "already open" block with no
+// lead actually open anywhere — it was stopping them from opening ANY lead
+// on All Leads. Flipped off as an emergency fix while a stable version is
+// worked out; every call site, the storage, and the lock logic itself are
+// all untouched below — flip this back to true to re-enable once fixed.
+const ONE_LEAD_AT_A_TIME_LOCK_ENABLED = false;
+
 // Whichever lead currently holds the cross-page "one lead open at a time"
 // lock, or null if none / stale. The same LEAD_START_TIME_KEY entry doubles
 // as this lock — there's only ever one locally-tracked "open" lead per
@@ -171,6 +178,7 @@ const readStoredLeadStartTime = (leadId: string | number | undefined): Date | nu
 // then exceeded real elapsed/login time, since the two "open" periods
 // overlapped instead of running one after another.
 export const getActiveLeadLock = (): { leadId: string; pageTitle: string } | null => {
+  if (!ONE_LEAD_AT_A_TIME_LOCK_ENABLED) return null;
   const record = readStoredRecord();
   return record ? { leadId: record.leadId, pageTitle: record.pageTitle } : null;
 };
