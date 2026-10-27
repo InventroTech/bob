@@ -1,1 +1,1 @@
-export { supabase, getSupabaseRestConfig } from './client';
+export { supabase } from './client';

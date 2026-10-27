@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/hooks/useTenant';
 import { FilterConfig } from '@/component-config/DynamicFilterConfig';
 import { toast } from 'sonner';
+import { pageService } from '@/lib/api/services/pageService';
 
 export interface ComponentConfig {
   id: string;
@@ -33,7 +33,7 @@ export interface UseFilterConfigReturn {
   validateFilterConfig: (filters: FilterConfig[]) => { isValid: boolean; errors: string[] };
 }
 
-// Manages reading/writing filter (and component) configuration to Supabase `pages` table
+// Reads and writes page config through the application API (AWS).
 export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
   const { user } = useAuth();
   const { tenantId } = useTenant();
@@ -54,18 +54,11 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('pages')
-        .select('config')
-        .eq('id', targetPageId)
-        .eq('tenant_id', tenantId)
-        .single();
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      const pageConfig: PageConfig = data?.config || { components: [] };
+      const page = await pageService.getPageById(targetPageId, tenantId);
+      const stored = page?.config;
+      const pageConfig: PageConfig = Array.isArray(stored)
+        ? { components: stored }
+        : (stored as PageConfig) || { components: [] };
       setComponentConfigs(pageConfig.components || []);
       return pageConfig;
     } catch (err: any) {
@@ -90,18 +83,11 @@ export const useFilterConfig = (pageId?: string): UseFilterConfigReturn => {
     setError(null);
 
     try {
-      const { error: updateError } = await supabase
-        .from('pages')
-        .update({
-          config: config as any,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', targetPageId)
-        .eq('tenant_id', tenantId);
-
-      if (updateError) {
-        throw updateError;
-      }
+      const existing = await pageService.getPageById(targetPageId, tenantId);
+      const nextConfig = Array.isArray(existing?.config)
+        ? config.components ?? existing.config
+        : config;
+      await pageService.updatePage(targetPageId, { config: nextConfig });
 
       setComponentConfigs(config.components || []);
       toast.success('Page configuration saved successfully');

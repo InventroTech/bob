@@ -28,7 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { setupDatabase } from "@/lib/supabase/setup";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/lib/supabase";
+import { authClient } from "@/lib/auth/authClient";
 import { membershipService } from "@/lib/api/services/membership";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
@@ -171,20 +171,15 @@ const ProfileSettings = () => {
 
     setPasswordSaving(true);
     try {
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
+      const { error: updateError } = await authClient.changePassword({
         email,
-        password: currentPassword,
-      });
-      if (verifyError) {
-        toast.error("Current password is incorrect.");
-        return;
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
+        currentPassword,
+        newPassword,
       });
       if (updateError) {
-        toast.error(updateError.message);
+        toast.error(
+          updateError.code === "invalid_credentials" ? "Current password is incorrect." : updateError.message
+        );
         return;
       }
 
@@ -218,7 +213,7 @@ const ProfileSettings = () => {
         dataPayload.department = department.trim() || undefined;
       }
 
-      const { error } = await supabase.auth.updateUser({
+      const { error } = await authClient.updateUser({
         data: dataPayload,
       });
       if (error) {
