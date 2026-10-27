@@ -30,7 +30,6 @@ import {
   getOrCreateLeadStartTime,
   markLeadOpened,
   clearLeadStartTime,
-  getActiveLeadLock,
 } from "./utils";
 import { useLeadTimer } from "./useLeadTimer";
 import { setLeadCallActive, setLeadModalLocked } from "@/lib/realtime/shiftCallActivityBus";
@@ -47,7 +46,6 @@ export function useLeadCardCarousel(
     onCallBackModalChange,
     onActionComplete,
     onUpdatingChange,
-    onLeadLockConflict,
   }: LeadCardCarouselProps,
   ref: React.ForwardedRef<LeadCardCarouselHandle>,
 ) {
@@ -64,14 +62,6 @@ export function useLeadCardCarousel(
     // exactly why "another page"/junk strings were showing up there.
     const sidebarPageName = useInventoryTablePageName();
     const pageTitle = sidebarPageName || config?.title || 'another page';
-
-    const leadLockConflictToast = (lockedPageTitle: string) => {
-      toast({
-        title: 'Lead already open',
-        description: `A lead is already open in "${lockedPageTitle}". Finish (disposition) it there before opening another — otherwise handling time ends up double-counted.`,
-        variant: 'destructive',
-      });
-    };
 
     const [currentLead, setCurrentLead] = useState<LeadData | null>(initialLead || null);
     const [loading, setLoading] = useState(false);
@@ -225,18 +215,6 @@ export function useLeadCardCarousel(
 
     const isNewLead = lastFetchedLeadIdRef.current !== leadId;
     if (isNewLead) {
-      // A different lead already holds the cross-page lock (see
-      // getActiveLeadLock in utils.ts) — don't open this one too. Mark it
-      // "seen" via the ref anyway so a parent re-render with the same
-      // initialLead doesn't re-toast on every render.
-      const lock = getActiveLeadLock();
-      if (lock && lock.leadId !== String(leadId)) {
-        lastFetchedLeadIdRef.current = leadId;
-        leadLockConflictToast(lock.pageTitle);
-        onLeadLockConflict?.(lock.pageTitle);
-        return;
-      }
-
       setCurrentLead(initialLead);
       setShowPendingCard(false);
       if (isInModal) {
@@ -296,7 +274,7 @@ export function useLeadCardCarousel(
         data: { ...prevData, ...((initialLead.data as object) || {}), tasks: incomingTasks },
       } as typeof prev;
     });
-  }, [initialLead, isInModal, fetchFreshLeadForCard, pageTitle, onLeadLockConflict]);
+  }, [initialLead, isInModal, fetchFreshLeadForCard, pageTitle]);
 
   // Call onLeadUpdate when currentLead changes (if callback provided)
   // Only call when currentLead.id actually changes to prevent infinite loops
@@ -340,7 +318,23 @@ export function useLeadCardCarousel(
     return () => setLeadModalLocked(false);
   }, [isInModal, config?.lockLeadModal]);
 
-
+  // Releases the on-screen "On This Lead" timer record (clearLeadStartTime
+  // in utils.ts) the moment the RM stops holding THIS lead without
+  // dispositioning it — closing "View Profile", navigating away, this
+  // carousel unmounting — so a later, genuinely new visit to the same lead
+  // starts its own fresh timer instead of showing stale elapsed time from a
+  // visit hours ago. Purely a display nicety now: the real duration sent to
+  // the backend comes from the server-side session in rm_call_sessions
+  // (record_lead_opened), which independently abandons any previous lead's
+  // session the moment a new one opens — see that function's docstring for
+  // why that, not a client-side lock, is what actually prevents two leads'
+  // durations from ever overlapping.
+  const trackedLeadId = currentLead ? resolveLeadRecordId(currentLead) ?? currentLead.id ?? null : null;
+  useEffect(() => {
+    return () => {
+      if (trackedLeadId != null) clearLeadStartTime(trackedLeadId);
+    };
+  }, [trackedLeadId]);
 
   // Reset fetched leads count when day changes
   const resetFetchedLeadsCount = () => {
@@ -749,19 +743,6 @@ export function useLeadCardCarousel(
 
   // Fetching the next lead from API
   const fetchFirstLead = async () => {
-    // Checked before calling the API at all — getNextLead atomically
-    // assigns the lead server-side as a side effect of fetching it, so
-    // bailing out here (instead of after) avoids pulling a lead out of the
-    // shared pool just to immediately refuse to show it.
-    const lock = getActiveLeadLock();
-    if (lock) {
-      leadLockConflictToast(lock.pageTitle);
-      setShowPendingCard(true);
-      setCurrentLead(null);
-      setHasCheckedForLeads(true);
-      return;
-    }
-
     try {
       setLoading(true);
 
@@ -972,8 +953,12 @@ export function useLeadCardCarousel(
         console.log('[handleActionButton] Event sent successfully, updating state. initialLead:', !!initialLead);
         // this lead's viewing session is over — a later, genuinely new visit
         // to the same lead id (e.g. re-queued after Call Back Later) must not
-        // inherit this start time
-        clearLeadStartTime(currentLead.id);
+        // inherit this start time. Resolved the same way the lock was
+        // written (resolveLeadRecordId, prefers record_id over id) — using
+        // the raw currentLead.id here could silently mismatch and no-op for
+        // any lead shape where those two differ, leaving the lock stuck
+        // even after a successful disposition.
+        clearLeadStartTime(resolveLeadRecordId(currentLead) ?? currentLead.id);
         if (action === "Trial Activated") {
           window.dispatchEvent(new CustomEvent('trial-activated', { 
             detail: { leadId: currentLead.id } 
@@ -1114,19 +1099,6 @@ export function useLeadCardCarousel(
       const currentLead = await fetchCurrentLead();
 
       if (currentLead) {
-        // A DIFFERENT lead already holds the cross-page lock — this is a
-        // plain re-display of whatever's already assigned (fetchCurrentLead
-        // doesn't assign anything new), but showing it here too would still
-        // mean two interactive lead cards running concurrently.
-        const lock = getActiveLeadLock();
-        if (lock && lock.leadId !== String(currentLead.id)) {
-          leadLockConflictToast(lock.pageTitle);
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          setHasCheckedForLeads(true);
-          return;
-        }
-
         // Display the current lead immediately
         setCurrentLead(currentLead);
         setShowPendingCard(false);
@@ -1167,18 +1139,6 @@ export function useLeadCardCarousel(
       const currentLead = await fetchCurrentLead();
 
       if (currentLead) {
-        // A DIFFERENT lead already holds the cross-page lock — don't show
-        // this one too (see getActiveLeadLock in utils.ts).
-        const lock = getActiveLeadLock();
-        if (lock && lock.leadId !== String(currentLead.id)) {
-          leadLockConflictToast(lock.pageTitle);
-          setShowPendingCard(true);
-          setCurrentLead(null);
-          setHasCheckedForLeads(true);
-          setLoading(false);
-          return;
-        }
-
         // Display the current assigned lead (already assigned, no need to send event)
         setCurrentLead(currentLead);
         setShowPendingCard(false);
