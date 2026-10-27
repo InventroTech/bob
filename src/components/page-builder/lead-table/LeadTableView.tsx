@@ -1212,18 +1212,6 @@ export function LeadTableView(props: LeadTableModel) {
                       setActionButtonsVisible(false);
                       setIsLeadActionSubmitting(false);
                     }}
-                    onLeadLockConflict={() => {
-                      // A different lead already holds the cross-page lock —
-                      // the carousel already toasted why. Close directly
-                      // rather than via onOpenChange: that handler refuses
-                      // to close when lockLeadModal is on, but there's no
-                      // opened lead here for that guard to protect.
-                      setIsLeadModalOpen(false);
-                      setSelectedLead(null);
-                      setActionButtonsVisible(false);
-                      setIsLeadActionSubmitting(false);
-                      leadCardRef.current = null;
-                    }}
                   />
                 </div>
                 {/* Action bar at bottom of modal — 4 equal columns so Call Back Later stays on-screen */}

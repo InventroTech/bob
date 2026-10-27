@@ -48,12 +48,12 @@ function touchSortValue(row: TouchRow, key: TouchSortKey): string | number {
       return row.reason.toLowerCase();
     case 'start':
       return row.startedAtMs;
-    // no raw "ended at" field on TouchRow — derive it from start + duration
-    // so "End" sorts chronologically instead of by its formatted clock string
     case 'end':
-      return row.startedAtMs + row.durationSeconds * 1000;
+      return row.endedAtMs;
+    // null (unknown duration) sorts to the low end regardless of direction,
+    // rather than crashing the comparator or silently sorting as "0s"
     case 'duration':
-      return row.durationSeconds;
+      return row.durationSeconds ?? -1;
     case 'flag':
       return row.isBreach ? 1 : 0;
   }
@@ -72,7 +72,7 @@ const CSV_COLUMNS: Array<{ header: string; value: (row: TouchRow) => string | nu
   { header: 'Reason', value: (r) => r.reason },
   { header: 'Start (IST)', value: (r) => r.start },
   { header: 'End (IST)', value: (r) => r.end },
-  { header: 'Duration (s)', value: (r) => r.durationSeconds },
+  { header: 'Duration (s)', value: (r) => r.durationSeconds ?? 'Unknown' },
   { header: 'Breach', value: (r) => (r.isBreach ? 'Y' : '') },
 ];
 
