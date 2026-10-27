@@ -1,6 +1,6 @@
 /** Presentational JSX for AddUserComponent — columns/fields from tenant config. */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -224,7 +224,12 @@ export function AddUserView(props: AddUserModel) {
     (f) => f.showInForm && !isBoundCustomField(f.key)
   );
   const customTableFields = schema.customFields.filter((f) => f.showInTable);
+  const [activityFilter, setActivityFilter] = useState<'active' | 'inactive'>('active');
   const inactiveCount = filteredUsersWithSettings.filter(isInactiveSignIn).length;
+  const activeCount = filteredUsersWithSettings.length - inactiveCount;
+  const visibleUsers = filteredUsersWithSettings.filter((user) =>
+    activityFilter === 'inactive' ? isInactiveSignIn(user) : !isInactiveSignIn(user)
+  );
   const showManagerForm = showCustomForm('manager_email');
   const showQueueTypeForm = showCustomForm('queue_type');
   const showLeadGroupForm = showCustomForm('lead_group');
@@ -1391,14 +1396,41 @@ export function AddUserView(props: AddUserModel) {
               >
                 Users
               </h5>
-              <span
+              <div
                 className={cn(
-                  'text-sm font-medium text-[#B91C1C]',
-                  isUnmannd && 'text-[13px] font-semibold'
+                  'inline-flex h-9 items-center rounded-md border border-black p-0.5',
+                  isUnmannd && 'h-9 rounded-[6px] border-[#D5DEE8]'
                 )}
+                role="group"
+                aria-label="Show active or inactive users"
               >
-                {inactiveCount} inactive
-              </span>
+                {([
+                  ['active', `Active ${activeCount}`],
+                  ['inactive', `Inactive ${inactiveCount}`],
+                ] as const).map(([value, label]) => {
+                  const selected = activityFilter === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setActivityFilter(value)}
+                      className={cn(
+                        'h-full rounded px-3 text-sm font-medium leading-none',
+                        selected
+                          ? isUnmannd
+                            ? 'bg-[#0E3777] text-white'
+                            : 'bg-black text-white'
+                          : isUnmannd
+                            ? 'text-[#333C4E] hover:bg-[#EDF2FA]'
+                            : 'text-black hover:bg-gray-100'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div
               className={cn(
@@ -1459,12 +1491,16 @@ export function AddUserView(props: AddUserModel) {
             </div>
           ) : filteredUsersWithSettings.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">No users found</div>
+          ) : visibleUsers.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              No {activityFilter} users
+            </div>
           ) : (
 
             <>
               {/* ========================= MOBILE UI ========================= */}
               <div className="md:hidden space-y-4">
-                {filteredUsersWithSettings.map((user, index) => {
+                {visibleUsers.map((user, index) => {
                   const rowIsCse =
                     editingRowKey === getRowKey(user) && editingRow
                       ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
@@ -1631,7 +1667,7 @@ export function AddUserView(props: AddUserModel) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsersWithSettings.map((user, index) => {
+                    {visibleUsers.map((user, index) => {
                       const isEditing = editingRowKey === getRowKey(user) && !!editingRow;
                       return (
                         <TableRow key={`${user.uid}-${index}`}>
