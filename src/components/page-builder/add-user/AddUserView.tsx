@@ -224,12 +224,12 @@ export function AddUserView(props: AddUserModel) {
     (f) => f.showInForm && !isBoundCustomField(f.key)
   );
   const customTableFields = schema.customFields.filter((f) => f.showInTable);
-  const [activityFilter, setActivityFilter] = useState<'active' | 'inactive'>('active');
+  const [activityFilter, setActivityFilter] = useState<'all' | 'inactive'>('all');
   const inactiveCount = filteredUsersWithSettings.filter(isInactiveSignIn).length;
-  const activeCount = filteredUsersWithSettings.length - inactiveCount;
-  const visibleUsers = filteredUsersWithSettings.filter((user) =>
-    activityFilter === 'inactive' ? isInactiveSignIn(user) : !isInactiveSignIn(user)
-  );
+  const visibleUsers =
+    activityFilter === 'inactive'
+      ? filteredUsersWithSettings.filter(isInactiveSignIn)
+      : filteredUsersWithSettings;
   const showManagerForm = showCustomForm('manager_email');
   const showQueueTypeForm = showCustomForm('queue_type');
   const showLeadGroupForm = showCustomForm('lead_group');
@@ -1402,10 +1402,10 @@ export function AddUserView(props: AddUserModel) {
                   isUnmannd && 'h-9 rounded-[6px] border-[#D5DEE8]'
                 )}
                 role="group"
-                aria-label="Show active or inactive users"
+                aria-label="Show all users or inactive users"
               >
                 {([
-                  ['active', `Active ${activeCount}`],
+                  ['all', `All ${filteredUsersWithSettings.length}`],
                   ['inactive', `Inactive ${inactiveCount}`],
                 ] as const).map(([value, label]) => {
                   const selected = activityFilter === value;
@@ -1493,7 +1493,7 @@ export function AddUserView(props: AddUserModel) {
             <div className="text-center text-muted-foreground py-8">No users found</div>
           ) : visibleUsers.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
-              No {activityFilter} users
+              No inactive users
             </div>
           ) : (
 
