@@ -65,6 +65,65 @@ interface RmActivityEventsPage {
   page_meta: { next_page_link: string | null };
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PAGE_SIZE = 2000;
+// date/RM-windowed queries are small; this is just a backstop against a
+// next_page_link that never resolves to null (backend bug or bad state)
+const MAX_PAGES_PER_WINDOW = 200;
+const PARALLEL_DAY_WINDOWS = 3;
+
+const parseIsoDay = (value: string): number | null => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  return Number.isNaN(ms) ? null : ms;
+};
+
+/**
+ * Splits an inclusive `from`/`to` range (YYYY-MM-DD) into single days, oldest first.
+ * The backend filters `from <= started_at < to + 1 day`, so per-day windows return
+ * exactly the same rows as one big window. Returns null when the range can't be
+ * split (missing/invalid dates, or `to` before `from`); callers then send it as-is.
+ */
+export function splitIntoDayWindows(from?: string, to?: string): string[] | null {
+  if (!from || !to) return null;
+  const start = parseIsoDay(from);
+  const end = parseIsoDay(to);
+  if (start === null || end === null || end < start) return null;
+  const days: string[] = [];
+  for (let ms = start; ms <= end; ms += DAY_MS) {
+    days.push(new Date(ms).toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+async function fetchEventWindow(params: {
+  from?: string;
+  to?: string;
+  rmUserId?: string;
+  managerUserId?: string;
+}): Promise<RmActivityEventDto[]> {
+  const rows: RmActivityEventDto[] = [];
+  for (let page = 1; page <= MAX_PAGES_PER_WINDOW; page++) {
+    const response = await apiClient.get<RmActivityEventsPage>('/analytics/rm-activity-events/', {
+      params: {
+        from: params.from,
+        to: params.to,
+        rm_user_id: params.rmUserId,
+        manager_user_id: params.managerUserId,
+        page,
+        page_size: PAGE_SIZE,
+        include_count: false,
+      },
+    });
+    const pageRows = response.data.data;
+    rows.push(...pageRows);
+    // an empty page means there's nothing left, regardless of what
+    // next_page_link claims — don't trust it alone to end the loop
+    if (pageRows.length === 0 || !response.data.page_meta.next_page_link) break;
+  }
+  return rows;
+}
+
 export const rmActivityApi = {
   /**
    * `from`/`to` are "YYYY-MM-DD" — omit both to get the backend's default
@@ -72,8 +131,11 @@ export const rmActivityApi = {
    * RM's own rows (e.g. the lead-card "Your Shift" panel), omit for every
    * RM. `managerUserId` narrows to one manager's own hierarchy — direct +
    * indirect reports (RM PRD's ASM "my team" view) — omit for the whole
-   * tenant. Pages through the response until exhausted; a date/RM-windowed
-   * query is almost always a single page.
+   * tenant. Pages through the response until exhausted.
+   *
+   * Multi-day ranges are fetched one day at a time: the backend pages with
+   * OFFSET, so one 30-day tenant-wide window reached OFFSET ~400k and each
+   * deep page took seconds (and the page cap silently dropped rows past it).
    */
   async getEvents(params?: {
     from?: string;
@@ -81,31 +143,21 @@ export const rmActivityApi = {
     rmUserId?: string;
     managerUserId?: string;
   }): Promise<RmActivityEventDto[]> {
-    const rows: RmActivityEventDto[] = [];
-    let page = 1;
-    // date/RM-windowed queries are small; this is just a backstop against a
-    // next_page_link that never resolves to null (backend bug or bad state)
-    const MAX_PAGES = 200;
-    for (let i = 0; i < MAX_PAGES; i++) {
-      const response = await apiClient.get<RmActivityEventsPage>('/analytics/rm-activity-events/', {
-        params: {
-          from: params?.from,
-          to: params?.to,
-          rm_user_id: params?.rmUserId,
-          manager_user_id: params?.managerUserId,
-          page,
-          page_size: 2000,
-          include_count: false,
-        },
-      });
-      const pageRows = response.data.data;
-      rows.push(...pageRows);
-      // an empty page means there's nothing left, regardless of what
-      // next_page_link claims — don't trust it alone to end the loop
-      if (pageRows.length === 0 || !response.data.page_meta.next_page_link) break;
-      page += 1;
+    const days = splitIntoDayWindows(params?.from, params?.to);
+    if (!days || days.length === 1) {
+      return fetchEventWindow(params ?? {});
     }
-    return rows;
+
+    const perDay: RmActivityEventDto[][] = new Array(days.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < days.length) {
+        const index = next++;
+        perDay[index] = await fetchEventWindow({ ...params, from: days[index], to: days[index] });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PARALLEL_DAY_WINDOWS, days.length) }, worker));
+    return perDay.flat();
   },
 
   /** Real filter-bar values — managers from TenantMembership, groups from
