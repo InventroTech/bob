@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { authClient } from '@/lib/auth/authClient';
 import { pageService } from '@/lib/api';
-import { sidebarMetaOnly, stripSidebarMeta } from '@/lib/sidebar/sidebarGroups';
+import { stripSidebarMeta } from '@/lib/sidebar/sidebarGroups';
 
 export const SPOOF_JWT_KEY = 'pyro_spoof_jwt';
 export const SPOOF_LABEL_KEY = 'pyro_spoof_user_label';
