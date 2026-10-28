@@ -47,8 +47,10 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
 // to one RM's own rows (e.g. the lead-card "Your Shift" panel) instead of
 // downloading every RM's events and filtering client-side. `managerUserId`
 // narrows to one manager's own hierarchy (RM PRD's ASM "my team" view) —
-// pass at most one of `rmUserId`/`managerUserId`. `refreshToken` forces a
-// refetch on demand even when bounds/rmUserId haven't changed — `bounds` is
+// pass at most one of `rmUserId`/`managerUserId`. `rmUserIds` narrows to a
+// known set of RMs (e.g. the lead-card leaderboard's "my manager's team" —
+// a sibling group, not just one RM). `refreshToken` forces a refetch on
+// demand even when bounds/rmUserId haven't changed — `bounds` is
 // date-granularity ("today"'s date string is the same all day), so without
 // this a caller that wants periodically-fresh data (rather than a one-shot
 // fetch at mount) has no way to trigger one.
@@ -56,7 +58,8 @@ export function useRmActivityEvents(
   bounds: DateBounds | null,
   rmUserId?: string,
   refreshToken?: number,
-  managerUserId?: string
+  managerUserId?: string,
+  rmUserIds?: string[]
 ) {
   const [events, setEvents] = useState<RmActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +68,10 @@ export function useRmActivityEvents(
   const from = bounds ? toUtcDateParam(bounds.from) : undefined;
   const to = bounds ? toUtcDateParam(bounds.to) : undefined;
   const hasWindow = bounds !== null;
+  // array identity changes every render even for the same contents — join
+  // to a primitive so the effect only refetches when the actual id set
+  // changes (same trick as useRmFilterOptions' managerRoleKeysKey)
+  const rmUserIdsKey = (rmUserIds ?? []).join(',');
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +86,13 @@ export function useRmActivityEvents(
     setLoading(true);
     setError(null);
     rmActivityApi
-      .getEvents({ from, to, rmUserId, managerUserId })
+      .getEvents({
+        from,
+        to,
+        rmUserId,
+        managerUserId,
+        rmUserIds: rmUserIdsKey ? rmUserIdsKey.split(',') : undefined,
+      })
       .then((rows) => {
         if (!cancelled) setEvents(rows.map(mapDto));
       })
@@ -93,7 +106,7 @@ export function useRmActivityEvents(
     return () => {
       cancelled = true;
     };
-  }, [hasWindow, from, to, rmUserId, managerUserId, refreshToken]);
+  }, [hasWindow, from, to, rmUserId, managerUserId, rmUserIdsKey, refreshToken]);
 
   return { events, loading, error };
 }
