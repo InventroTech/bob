@@ -1,6 +1,7 @@
-/** Pure helpers for the lead card carousel module. */
+/** Helpers for the lead card carousel module. */
 
 import type { LeadData } from './types';
+import { crmLeadsApi } from '@/lib/api/services/crmLeads';
 
 /** Format CRM recall timestamp for the pending-dashboard cards */
 export function formatRecallAtLabel(iso: string | null): string {
@@ -115,32 +116,78 @@ export const restoreActionButtonsState = (leadId: string | number | undefined): 
 
 const LEAD_START_TIME_KEY = 'leadCardCarousel_leadStartTime';
 
+// How long a persisted start time stays valid for its original lead id —
+// purely about the on-screen "On This Lead" display timer surviving a page
+// refresh, nothing to do with preventing concurrent leads (that's now
+// handled server-side, see record_lead_opened in pyro-backend/.../
+// rm_activity.py — an RM can only ever have one open session there,
+// enforced at the source instead of blocked client-side). Generous enough
+// that no single lead legitimately stays open this long, short enough that
+// a device left on an undispositioned lead overnight doesn't resurrect a
+// stale multi-day-old timer if that same lead id ever comes back around.
+const LEAD_START_TIME_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+interface StoredLeadStartTime {
+  leadId: string;
+  startedAt: string;
+  /** Which page/carousel instance opened this lead (config.title, or a
+   * fallback) — carried onto the touch report's "Opened From" column. */
+  pageTitle: string;
+}
+
+const readStoredRecord = (): StoredLeadStartTime | null => {
+  try {
+    const stored = localStorage.getItem(LEAD_START_TIME_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<StoredLeadStartTime>;
+    if (!parsed.leadId || !parsed.startedAt) return null;
+    const startedAt = new Date(parsed.startedAt);
+    if (Number.isNaN(startedAt.getTime())) return null;
+    if (Date.now() - startedAt.getTime() > LEAD_START_TIME_MAX_AGE_MS) return null;
+    return {
+      leadId: String(parsed.leadId),
+      startedAt: parsed.startedAt,
+      pageTitle: parsed.pageTitle || 'another page',
+    };
+  } catch {
+    return null;
+  }
+};
+
+// localStorage, not sessionStorage: sessionStorage is tied to the tab's own
+// browsing-context lifetime, and Chrome can discard/reclaim a backgrounded
+// tab's memory while the RM is on other tabs doing other things — on
+// restore, sessionStorage comes back empty, silently resetting the on-screen
+// "On This Lead" timer to 0 even though the lead has been open the whole
+// time. localStorage survives that.
+const readStoredLeadStartTime = (leadId: string | number | undefined): Date | null => {
+  if (!leadId) return null;
+  const record = readStoredRecord();
+  if (!record || record.leadId !== String(leadId)) return null;
+  return new Date(record.startedAt);
+};
+
 // Reuses the persisted start time for this lead if one exists — survives a
 // page refresh (the exact "fetch current assigned lead on refresh" flow in
-// useLeadCardCarousel) and a same-lead realtime re-fetch, both of which used
+// useLeadCardCarousel), a same-lead realtime re-fetch, and the tab being
+// backgrounded/discarded while the RM is on other tabs, all of which used
 // to stamp a fresh `new Date()` and silently turn duration_seconds (sent on
 // disposition, feeds RM PRD's ACHT) into "how long has this tab been open"
-// instead of real time-on-lead. Falls back to "now" only for a genuinely new
-// lead id.
-export const getOrCreateLeadStartTime = (leadId: string | number | undefined): Date => {
+// instead of real time-on-lead. Falls back to "now" for a genuinely new
+// lead id, or for a stale entry older than LEAD_START_TIME_MAX_AGE_MS.
+// (This is the display timer only — the authoritative duration sent to the
+// backend comes from the server-side session in record_lead_opened, which
+// isn't affected if this client value ever drifts.)
+export const getOrCreateLeadStartTime = (leadId: string | number | undefined, pageTitle = 'another page'): Date => {
   if (!leadId) return new Date();
-  try {
-    const stored = sessionStorage.getItem(LEAD_START_TIME_KEY);
-    if (stored) {
-      const { leadId: storedLeadId, startedAt } = JSON.parse(stored);
-      if (String(storedLeadId) === String(leadId)) {
-        const restored = new Date(startedAt);
-        if (!Number.isNaN(restored.getTime())) return restored;
-      }
-    }
-  } catch {
-    // fall through to a fresh start time
-  }
+  const existing = readStoredLeadStartTime(leadId);
+  if (existing) return existing;
+
   const now = new Date();
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       LEAD_START_TIME_KEY,
-      JSON.stringify({ leadId: String(leadId), startedAt: now.toISOString() })
+      JSON.stringify({ leadId: String(leadId), startedAt: now.toISOString(), pageTitle })
     );
   } catch (e) {
     console.warn('[LeadCardCarousel] Failed to persist lead start time:', e);
@@ -148,16 +195,41 @@ export const getOrCreateLeadStartTime = (leadId: string | number | undefined): D
   return now;
 };
 
-// Called once a lead has been dispositioned (duration_seconds already sent)
-// so a later, genuinely new visit to the same lead id (e.g. re-queued after
-// Call Back Later) starts its own fresh timer instead of inheriting this one.
+// Stamps the server-side "lead opened" moment the first time this lead id
+// is seen (or re-seen after its local start time went stale) — mirrors
+// getOrCreateLeadStartTime's own storage guard so a page refresh, a
+// same-lead realtime re-fetch, a parent re-render, or a tab discard/restore
+// never re-fires it for a lead already open. Always succeeds immediately —
+// there's no cross-page lock to check anymore; if the RM already had a
+// DIFFERENT lead open, the backend (record_lead_opened) abandons that old
+// session the moment this event arrives, rather than this function ever
+// blocking the lead card from opening. Fire-and-forget: sendLeadEvent never
+// throws.
+export const markLeadOpened = (leadId: string | number | undefined, pageTitle = 'another page'): Date => {
+  const alreadyStored = readStoredLeadStartTime(leadId) !== null;
+  const startTime = getOrCreateLeadStartTime(leadId, pageTitle);
+
+  if (!alreadyStored && leadId) {
+    void crmLeadsApi.sendLeadEvent('lead.opened', Number(leadId), { opened_from: pageTitle });
+  }
+
+  return startTime;
+};
+
+// Releases this lead's display-timer record — called both right after a
+// successful disposition (duration_seconds already sent) AND whenever the
+// RM stops holding this lead WITHOUT dispositioning it (modal closed,
+// navigated away — see useLeadCardCarousel.ts's unmount-cleanup effect), so
+// a later, genuinely new visit to the same lead id (re-queued after Call
+// Back Later, or just reopened after being abandoned) starts its own fresh
+// timer instead of inheriting this one.
 export const clearLeadStartTime = (leadId: string | number | undefined) => {
   try {
-    const stored = sessionStorage.getItem(LEAD_START_TIME_KEY);
+    const stored = localStorage.getItem(LEAD_START_TIME_KEY);
     if (!stored) return;
     const { leadId: storedLeadId } = JSON.parse(stored);
     if (String(storedLeadId) === String(leadId)) {
-      sessionStorage.removeItem(LEAD_START_TIME_KEY);
+      localStorage.removeItem(LEAD_START_TIME_KEY);
     }
   } catch {
     // best-effort cleanup — a leftover entry just gets overwritten next visit

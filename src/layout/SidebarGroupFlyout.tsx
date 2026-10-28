@@ -14,6 +14,9 @@ interface SidebarGroupFlyoutProps<P extends SidebarPage> {
   triggerPadClass: string;
   renderIcon: (iconName: string, isActive: boolean) => React.ReactNode;
   onNavigate?: () => void;
+  /** Pages that must not be opened right now (e.g. an active lead call); clicks call onBlockedNavigate instead. */
+  isPageBlocked?: (pageId: string) => boolean;
+  onBlockedNavigate?: () => void;
 }
 
 export function SidebarGroupFlyout<P extends SidebarPage>({
@@ -26,6 +29,8 @@ export function SidebarGroupFlyout<P extends SidebarPage>({
   triggerPadClass,
   renderIcon,
   onNavigate,
+  isPageBlocked,
+  onBlockedNavigate,
 }: SidebarGroupFlyoutProps<P>) {
   const pagePath = (id: string) => `/app/${tenantSlug}/pages/${id}`;
   const { pathname } = useLocation();
@@ -76,27 +81,38 @@ export function SidebarGroupFlyout<P extends SidebarPage>({
               {section.name}
             </p>
           )}
-          {section.pages.map((page) => (
-            <NavLink
-              key={page.id}
-              to={pagePath(page.id)}
-              onClick={handleNavigate}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition ${
-                  isActive ? activeClass : 'text-gray-700 hover:bg-gray-50'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                    {renderIcon(page.icon_name, isActive)}
-                  </span>
-                  <span className="truncate">{page.name}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
+          {section.pages.map((page) => {
+            const blocked = Boolean(isPageBlocked?.(page.id));
+            return (
+              <NavLink
+                key={page.id}
+                to={pagePath(page.id)}
+                onClick={(e) => {
+                  if (blocked) {
+                    e.preventDefault();
+                    onBlockedNavigate?.();
+                    return;
+                  }
+                  handleNavigate();
+                }}
+                aria-disabled={blocked}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition ${
+                    blocked ? 'opacity-40 cursor-not-allowed' : ''
+                  } ${isActive ? activeClass : 'text-gray-700 hover:bg-gray-50'}`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                      {renderIcon(page.icon_name, isActive)}
+                    </span>
+                    <span className="truncate">{page.name}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </div>
       ))}
     </div>

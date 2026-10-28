@@ -18,6 +18,11 @@ export interface LeadCardCarouselProps {
     whatsappTemplatesApiEndpoint?: string;
     statusDataApiEndpoint?: string;
     apiPrefix?: 'supabase' | 'renderer';
+    /** Lead table's "Lock lead modal" setting, passed through when this
+     * carousel is rendered inside a table's View Profile modal (isInModal) —
+     * see lead-table/types.ts for the full description. Only meaningful
+     * together with isInModal; the non-modal carousel ignores it. */
+    lockLeadModal?: boolean;
   };
   initialLead?: LeadData | null;
   onLeadUpdate?: (updatedLead: LeadData | null) => void;

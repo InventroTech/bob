@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BREACH_SECONDS, generateTouches } from './touchData';
+import { BREACH_THRESHOLDS, generateTouches } from './touchData';
 import type { RmActivityEvent } from './types';
 
 function callTouch(overrides: Partial<RmActivityEvent> = {}): RmActivityEvent {
@@ -41,14 +41,49 @@ describe('generateTouches', () => {
     expect(rows.map((r) => r.touchId)).toEqual([2, 1]);
   });
 
-  describe('breach filter boundary (matches OVER 25m flag: >= 1500s)', () => {
-    it('includes a call at exactly 1500s', () => {
-      const rows = generateTouches([callTouch({ durationSeconds: BREACH_SECONDS })], 'breach');
+  describe('breach filter is disposition-specific', () => {
+    it('includes a trial-activated call at exactly its 25m threshold', () => {
+      const rows = generateTouches(
+        [callTouch({ updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: BREACH_THRESHOLDS.TRIAL_ACTIVATED })],
+        'breach'
+      );
       expect(rows).toHaveLength(1);
     });
 
-    it('excludes a call one second under 1500s', () => {
-      const rows = generateTouches([callTouch({ durationSeconds: BREACH_SECONDS - 1 })], 'breach');
+    it('excludes a trial-activated call one second under its 25m threshold', () => {
+      const rows = generateTouches(
+        [callTouch({ updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: BREACH_THRESHOLDS.TRIAL_ACTIVATED - 1 })],
+        'breach'
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it('flags a not-connected call at its own, shorter 3m threshold — well under the trial threshold', () => {
+      const rows = generateTouches(
+        [callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: BREACH_THRESHOLDS.NOT_CONNECTED })],
+        'breach'
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it('flags a call-back call at its own 10m threshold', () => {
+      const rows = generateTouches(
+        [callTouch({ updatedStatus: 'CALL_BACK', durationSeconds: BREACH_THRESHOLDS.CALL_BACK })],
+        'breach'
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it('flags a not-interested call at its own 15m threshold', () => {
+      const rows = generateTouches(
+        [callTouch({ updatedStatus: 'NOT_INTERESTED', durationSeconds: BREACH_THRESHOLDS.NOT_INTERESTED })],
+        'breach'
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it('does not flag a not-connected call under 3m just because it is under the trial threshold', () => {
+      const rows = generateTouches([callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: 179 })], 'breach');
       expect(rows).toHaveLength(0);
     });
   });
@@ -65,6 +100,31 @@ describe('generateTouches', () => {
   it('shows the human-facing praja_id, not the internal lead record id', () => {
     const rows = generateTouches([callTouch({ leadRecordId: 999, prajaId: '1793876' })], 'all');
     expect(rows[0].prajaId).toBe('1793876');
+  });
+
+  describe('null duration_seconds ("unknown", not measured)', () => {
+    it('shows "Unknown" instead of fabricating "0s"', () => {
+      const rows = generateTouches([callTouch({ durationSeconds: null })], 'all');
+      expect(rows[0].durationSeconds).toBeNull();
+      expect(rows[0].durationLabel).toBe('Unknown');
+    });
+
+    it('is never flagged as a breach', () => {
+      const rows = generateTouches(
+        [callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: null })],
+        'all'
+      );
+      expect(rows[0].isBreach).toBe(false);
+      expect(generateTouches([callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: null })], 'breach')).toHaveLength(0);
+    });
+
+    it('still sorts by the real end instant, not a duration derived from it', () => {
+      const rows = generateTouches(
+        [callTouch({ durationSeconds: null, startedAt: '2026-09-21T04:00:00Z', endedAt: '2026-09-21T04:05:00Z' })],
+        'all'
+      );
+      expect(rows[0].endedAtMs).toBe(new Date('2026-09-21T04:05:00Z').getTime());
+    });
   });
 
   describe('state name resolution', () => {

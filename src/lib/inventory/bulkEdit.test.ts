@@ -3,6 +3,7 @@ import {
   BULK_SKIP_VALUE,
   buildBulkPreviewRows,
   countBulkChanges,
+  describeBulkSaveError,
   groupBulkRowIdsByValue,
 } from './bulkEdit';
 import { getRequestStatusLabel, getRequestStatusValues } from './requestStatus';
@@ -175,5 +176,36 @@ describe('bulk edit preview rows — display fields', () => {
   it('shows the current status label', () => {
     const [preview] = build([row(1, FIRST)], '');
     expect(preview.currentLabel).toBe(getRequestStatusLabel(FIRST));
+  });
+});
+
+describe('describeBulkSaveError', () => {
+  it('shows a nested field error from the API', () => {
+    const error = {
+      response: { status: 400, data: { data: { status: 'Unknown status "FOO". Allowed: NEW_REQUEST.' } } },
+    };
+    expect(describeBulkSaveError(error)).toBe('400: Unknown status "FOO". Allowed: NEW_REQUEST.');
+  });
+
+  it('shows the detail message', () => {
+    const error = { response: { status: 403, data: { detail: 'You do not have permission.' } } };
+    expect(describeBulkSaveError(error)).toBe('403: You do not have permission.');
+  });
+
+  it('reads status and data from the app ApiError classes', () => {
+    const error = Object.assign(new Error('Validation failed'), {
+      status: 400,
+      data: { data: { status: 'Unknown status "ON_HOLD".' } },
+    });
+    expect(describeBulkSaveError(error)).toBe('400: Unknown status "ON_HOLD".');
+  });
+
+  it('falls back to the status code when the body is empty', () => {
+    expect(describeBulkSaveError({ response: { status: 500, data: '' } })).toBe('Server returned 500.');
+  });
+
+  it('uses the message for network errors', () => {
+    expect(describeBulkSaveError(new Error('Network Error'))).toBe('Network Error');
+    expect(describeBulkSaveError(null)).toBe('Network error.');
   });
 });

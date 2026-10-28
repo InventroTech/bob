@@ -763,6 +763,25 @@ export const TableConfig: React.FC<TableConfigProps> = ({
             </p>
           </div>
 
+          {isInventoryProfile && (
+            <div className="space-y-2">
+              <Label>Bulk Edit</Label>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-bulk-edit"
+                  checked={localConfig.showBulkEdit === true}
+                  onCheckedChange={(checked) => handleInputChange('showBulkEdit', checked)}
+                />
+                <Label htmlFor="show-bulk-edit" className="text-sm font-normal cursor-pointer">
+                  Show &quot;Bulk Edit&quot; and &quot;Bulk Edit History&quot;
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500">
+                On by default for the Procurement Table, off for other tables.
+              </p>
+            </div>
+          )}
+
           {(localConfig.detailMode === 'record_form_modal' ||
             localConfig.detailMode === 'inventory_payment_modal' ||
             localConfig.detailMode === 'inventory_request') && (

@@ -66,6 +66,46 @@ export function buildBulkPreviewRows({
   });
 }
 
+function firstMessage(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const msg = firstMessage(item);
+      if (msg) return msg;
+    }
+    return '';
+  }
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value as Record<string, unknown>)) {
+      const msg = firstMessage(item);
+      if (msg) return msg;
+    }
+  }
+  return '';
+}
+
+/**
+ * Readable reason for a failed row save. Handles both raw axios errors (`response`) and the
+ * app's ApiError classes (`status` / `data`).
+ */
+export function describeBulkSaveError(error: unknown): string {
+  const err = error as {
+    response?: { status?: number; data?: unknown };
+    status?: number;
+    data?: unknown;
+    message?: string;
+  } | null;
+  const status = err?.response?.status ?? err?.status;
+  const body = err?.response?.data ?? err?.data;
+  const detail =
+    body && typeof body === 'object' && 'detail' in (body as Record<string, unknown>)
+      ? firstMessage((body as Record<string, unknown>).detail)
+      : firstMessage(body);
+  if (status && detail) return `${status}: ${detail}`;
+  if (status) return `Server returned ${status}.`;
+  return err?.message || 'Network error.';
+}
+
 /** Rows that will actually be saved. */
 export function countBulkChanges(rows: BulkPreviewRow[]): number {
   return rows.filter((r) => !r.skipped && !r.unchanged).length;

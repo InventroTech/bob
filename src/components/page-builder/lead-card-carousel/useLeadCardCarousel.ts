@@ -28,10 +28,12 @@ import {
   resolveLeadRecordId,
   tasksSignature,
   getOrCreateLeadStartTime,
+  markLeadOpened,
   clearLeadStartTime,
 } from "./utils";
 import { useLeadTimer } from "./useLeadTimer";
-import { setLeadCallActive } from "@/lib/realtime/shiftCallActivityBus";
+import { setLeadCallActive, setLeadModalLocked } from "@/lib/realtime/shiftCallActivityBus";
+import { useInventoryTablePageName } from "../lead-table/InventoryTablePageContext";
 
 export function useLeadCardCarousel(
   {
@@ -52,6 +54,14 @@ export function useLeadCardCarousel(
     const { user: authUser, session } = useAuth();
     const spoofUserId = useSpoofUserId();
     const activeUserId = spoofUserId ?? authUser?.id ?? null;
+    // Identifies this carousel instance in the "already open elsewhere"
+    // message and in the touch report's "Opened From" column — the real
+    // sidebar page name (same one LeadTableView already uses), NOT
+    // config.title: that's a per-block field in the page-builder editor
+    // that's frequently left blank or filled with a placeholder, which is
+    // exactly why "another page"/junk strings were showing up there.
+    const sidebarPageName = useInventoryTablePageName();
+    const pageTitle = sidebarPageName || config?.title || 'another page';
 
     const [currentLead, setCurrentLead] = useState<LeadData | null>(initialLead || null);
     const [loading, setLoading] = useState(false);
@@ -220,7 +230,7 @@ export function useLeadCardCarousel(
         notes: initialLead.notes || initialLead.data?.notes || initialLead.latest_remarks || "",
         selectedTags: parseTags(initialLead.tags || []),
         nextFollowUp: initialLead.next_follow_up || initialLead.data?.next_follow_up || initialLead.data?.next_call_at || "",
-        leadStartTime: getOrCreateLeadStartTime(leadId),
+        leadStartTime: markLeadOpened(leadId, pageTitle),
       });
       isInitialized.current = true;
 
@@ -264,7 +274,7 @@ export function useLeadCardCarousel(
         data: { ...prevData, ...((initialLead.data as object) || {}), tasks: incomingTasks },
       } as typeof prev;
     });
-  }, [initialLead, isInModal, fetchFreshLeadForCard]);
+  }, [initialLead, isInModal, fetchFreshLeadForCard, pageTitle]);
 
   // Call onLeadUpdate when currentLead changes (if callback provided)
   // Only call when currentLead.id actually changes to prevent infinite loops
@@ -292,7 +302,39 @@ export function useLeadCardCarousel(
     return () => setLeadCallActive(false);
   }, [isInModal]);
 
+  // Table-opened lead ("View Profile") whose modal has "Lock lead modal"
+  // enabled: only a disposition button can close it, so — like the
+  // carousel's own currentLead above — the RM shouldn't be able to navigate
+  // away via the sidebar either. Deliberately setLeadModalLocked, not
+  // setLeadCallActive: this must NOT exempt the RM from shift auto-logout,
+  // only block sidebar navigation (see shiftCallActivityBus.ts).
+  useEffect(() => {
+    if (!isInModal || !config?.lockLeadModal) return;
+    setLeadModalLocked(currentLead != null);
+  }, [isInModal, config?.lockLeadModal, currentLead]);
 
+  useEffect(() => {
+    if (!isInModal || !config?.lockLeadModal) return;
+    return () => setLeadModalLocked(false);
+  }, [isInModal, config?.lockLeadModal]);
+
+  // Releases the on-screen "On This Lead" timer record (clearLeadStartTime
+  // in utils.ts) the moment the RM stops holding THIS lead without
+  // dispositioning it — closing "View Profile", navigating away, this
+  // carousel unmounting — so a later, genuinely new visit to the same lead
+  // starts its own fresh timer instead of showing stale elapsed time from a
+  // visit hours ago. Purely a display nicety now: the real duration sent to
+  // the backend comes from the server-side session in rm_call_sessions
+  // (record_lead_opened), which independently abandons any previous lead's
+  // session the moment a new one opens — see that function's docstring for
+  // why that, not a client-side lock, is what actually prevents two leads'
+  // durations from ever overlapping.
+  const trackedLeadId = currentLead ? resolveLeadRecordId(currentLead) ?? currentLead.id ?? null : null;
+  useEffect(() => {
+    return () => {
+      if (trackedLeadId != null) clearLeadStartTime(trackedLeadId);
+    };
+  }, [trackedLeadId]);
 
   // Reset fetched leads count when day changes
   const resetFetchedLeadsCount = () => {
@@ -468,6 +510,10 @@ export function useLeadCardCarousel(
     if (!forDial) return;
     setActionButtonsVisible(true);
     persistActionButtonsState(currentLead?.id, true);
+    // The call-start stamp now happens when the lead was opened (see
+    // markLeadOpened in utils.ts), not here — a JS clock on this tab resets
+    // if the OS reclaims the backgrounded tab mid-call, so the server-side
+    // RmCallSession is what record_lead_touch_event trusts for duration.
     window.open(`tel:${forDial}`);
   };
 
@@ -732,7 +778,7 @@ export function useLeadCardCarousel(
         notes: (leadData?.data?.notes as string) || leadData?.notes || "",
         selectedTags: parseTags(leadData?.tags || []),
         nextFollowUp: leadData.next_follow_up || "",
-        leadStartTime: getOrCreateLeadStartTime(leadData.id),
+        leadStartTime: markLeadOpened(leadData.id, pageTitle),
       }));
 
       // Increment fetched leads count (only if daily limit is configured)
@@ -907,8 +953,12 @@ export function useLeadCardCarousel(
         console.log('[handleActionButton] Event sent successfully, updating state. initialLead:', !!initialLead);
         // this lead's viewing session is over — a later, genuinely new visit
         // to the same lead id (e.g. re-queued after Call Back Later) must not
-        // inherit this start time
-        clearLeadStartTime(currentLead.id);
+        // inherit this start time. Resolved the same way the lock was
+        // written (resolveLeadRecordId, prefers record_id over id) — using
+        // the raw currentLead.id here could silently mismatch and no-op for
+        // any lead shape where those two differ, leaving the lock stuck
+        // even after a successful disposition.
+        clearLeadStartTime(resolveLeadRecordId(currentLead) ?? currentLead.id);
         if (action === "Trial Activated") {
           window.dispatchEvent(new CustomEvent('trial-activated', { 
             detail: { leadId: currentLead.id } 
@@ -1047,7 +1097,7 @@ export function useLeadCardCarousel(
       
       // Fetch current assigned lead from API on refresh
       const currentLead = await fetchCurrentLead();
-      
+
       if (currentLead) {
         // Display the current lead immediately
         setCurrentLead(currentLead);
@@ -1066,7 +1116,7 @@ export function useLeadCardCarousel(
           // this branch is the "fetch current assigned lead on refresh" path —
           // reuse the persisted start time so a page reload doesn't restart
           // the clock on a lead the RM was already working before reloading
-          leadStartTime: getOrCreateLeadStartTime(currentLead.id),
+          leadStartTime: markLeadOpened(currentLead.id, pageTitle),
         }));
         isInitialized.current = true;
       } else {
@@ -1076,7 +1126,7 @@ export function useLeadCardCarousel(
         setHasCheckedForLeads(true);
       }
     };
-    
+
     initializeComponent();
   }, [initialLeadId]);
 
@@ -1087,7 +1137,7 @@ export function useLeadCardCarousel(
       
       // First try to get current assigned lead
       const currentLead = await fetchCurrentLead();
-      
+
       if (currentLead) {
         // Display the current assigned lead (already assigned, no need to send event)
         setCurrentLead(currentLead);

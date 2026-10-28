@@ -3,12 +3,12 @@
 // the ones the clicked card is about and format them for display.
 
 import type { UpdatedStatus, RmActivityEvent } from './types';
-import { BREACH_SECONDS } from './aggregate';
+import { BREACH_THRESHOLDS, isBreachedCall } from './aggregate';
 
 export type DispositionKey = 'notConnected' | 'callBack' | 'notInterested' | 'trial';
 export type DrillFilter = DispositionKey | 'breach' | 'all';
 
-export { BREACH_SECONDS };
+export { BREACH_THRESHOLDS };
 
 const DISPOSITION_TO_KEY: Record<UpdatedStatus, DispositionKey> = {
   NOT_CONNECTED: 'notConnected',
@@ -26,12 +26,15 @@ export const DISPOSITIONS: Record<DispositionKey, { label: string; full: string 
 
 export const DRILL_TITLES: Record<DrillFilter, string> = {
   all: 'Touch report',
-  breach: 'Calls over 25 minutes',
+  breach: 'SLA breaches',
   notConnected: 'Not connected · touch report',
   callBack: 'Call back · touch report',
   notInterested: 'Not interested · touch report',
   trial: 'Trial subscribed · touch report',
 };
+
+// short "Xm" label for a disposition's breach threshold — e.g. 180s -> "3m"
+const formatMinutesLabel = (seconds: number) => `${Math.round(seconds / 60)}m`;
 
 export interface TouchRow {
   touchId: number;
@@ -43,14 +46,27 @@ export interface TouchRow {
   group: string;
   /** the RM's picked reason — only ever set on Not Interested rows */
   reason: string;
+  /** which page/carousel instance (e.g. "All Leads", "Pending Leads")
+   * opened this lead — empty for rows written before this was tracked */
+  openedFrom: string;
   dispositionKey: DispositionKey;
   start: string;
   end: string;
-  /** raw start instant, epoch ms — sort key; `start` is a formatted clock
-   * string (HH:mm:ss) and isn't chronological across multiple days */
+  /** raw start/end instants, epoch ms — sort keys; `start`/`end` are
+   * formatted clock strings (HH:mm:ss) and aren't chronological across
+   * multiple days */
   startedAtMs: number;
-  durationSeconds: number;
+  endedAtMs: number;
+  /** null when the server couldn't find a trustworthy measured session for
+   * this touch (see record_lead_touch_event's docstring) — never a guessed
+   * number. durationLabel shows "Unknown" for these rather than "0s". */
+  durationSeconds: number | null;
   durationLabel: string;
+  /** this row's own disposition-specific breach threshold — not the same
+   * value for every row (see BREACH_THRESHOLDS) */
+  breachThresholdSeconds: number;
+  breachThresholdLabel: string;
+  isBreach: boolean;
 }
 
 // The backend stores timestamps in UTC; this business runs in IST, so we
@@ -76,7 +92,8 @@ function toTouchRow(event: RmActivityEvent, stateNameById: Record<string, string
   if (event.eventType !== 'CALL_TOUCH' || event.endedAt === null) return null;
   if (!event.updatedStatus) return null;
 
-  const durationSeconds = event.durationSeconds ?? 0;
+  const durationSeconds = event.durationSeconds;
+  const breachThresholdSeconds = BREACH_THRESHOLDS[event.updatedStatus];
   return {
     touchId: event.id,
     prajaId: event.prajaId,
@@ -89,12 +106,17 @@ function toTouchRow(event: RmActivityEvent, stateNameById: Record<string, string
     party: event.party ?? '',
     group: event.leadGroup ?? '',
     reason: event.reason ?? '',
+    openedFrom: event.openedFrom ?? '',
     dispositionKey: DISPOSITION_TO_KEY[event.updatedStatus],
     start: formatClock(event.startedAt),
     end: formatClock(event.endedAt),
     startedAtMs: new Date(event.startedAt).getTime(),
+    endedAtMs: new Date(event.endedAt).getTime(),
     durationSeconds,
-    durationLabel: formatDuration(durationSeconds),
+    durationLabel: durationSeconds !== null ? formatDuration(durationSeconds) : 'Unknown',
+    breachThresholdSeconds,
+    breachThresholdLabel: formatMinutesLabel(breachThresholdSeconds),
+    isBreach: isBreachedCall(event),
   };
 }
 
@@ -109,7 +131,7 @@ export function generateTouches(
 
   const filtered =
     filter === 'breach'
-      ? rows.filter((row) => row.durationSeconds >= BREACH_SECONDS)
+      ? rows.filter((row) => row.isBreach)
       : filter === 'all'
         ? rows
         : rows.filter((row) => row.dispositionKey === filter);

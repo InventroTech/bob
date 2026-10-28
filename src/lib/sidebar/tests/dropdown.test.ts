@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SidebarGroupFlyout } from '@/layout/SidebarGroupFlyout';
@@ -168,5 +168,37 @@ describe('SidebarGroupFlyout (dropdown)', () => {
     expect(screen.queryByText('my-requests')).toBeNull();
     expect(heading().getAttribute('aria-expanded')).toBe('false');
     expect(heading().className).toContain(ACTIVE);
+  });
+
+  it('a blocked page does not navigate and calls onBlockedNavigate instead (active lead call)', () => {
+    const onBlockedNavigate = vi.fn();
+    const onNavigate = vi.fn();
+    renderGroup(
+      { isPageBlocked: (id) => id !== 'new-request', onBlockedNavigate, onNavigate },
+      GROUP_PAGE
+    );
+    const blockedLink = screen.getByText('my-requests').closest('a')!;
+    expect(blockedLink.getAttribute('aria-disabled')).toBe('true');
+
+    fireEvent.click(blockedLink);
+    expect(onBlockedNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(screen.getByText('new-request').closest('a')?.className).toContain(ACTIVE);
+    expect(blockedLink.className).not.toContain(ACTIVE);
+  });
+
+  it('the current page stays clickable while other pages are blocked', () => {
+    const onBlockedNavigate = vi.fn();
+    const onNavigate = vi.fn();
+    renderGroup(
+      { isPageBlocked: (id) => id !== 'new-request', onBlockedNavigate, onNavigate },
+      GROUP_PAGE
+    );
+    const currentLink = screen.getByText('new-request').closest('a')!;
+    expect(currentLink.getAttribute('aria-disabled')).toBe('false');
+
+    fireEvent.click(currentLink);
+    expect(onBlockedNavigate).not.toHaveBeenCalled();
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 });

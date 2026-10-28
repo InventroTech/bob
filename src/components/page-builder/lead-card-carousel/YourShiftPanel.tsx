@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { cn } from '@/lib/utils';
 import { useRmActivityEvents } from '../rm-prd-analytics/useRmActivityEvents';
+import { useRmDailyTargets } from '../rm-prd-analytics/useRmDailyTargets';
 import { filterByDateRange, resolveDateRange } from '../rm-prd-analytics/dateRange';
-import { computeMyShiftSnapshot } from '../rm-prd-analytics/aggregate';
+import { computeAdherenceByRm, computeMyShiftSnapshot, computePerformanceByRm } from '../rm-prd-analytics/aggregate';
 import { formatElapsed } from './useLeadTimer';
+import { RmShiftStats } from './RmShiftStats';
 
 // how often the panel re-pulls today's events — without this it freezes at
 // whatever it looked like when the lead card first opened
@@ -20,10 +21,12 @@ interface YourShiftPanelProps {
   elapsedSecondsOnLead: number;
 }
 
-// The RM's own shift so far today — handling time, break time, and average
-// handling time per disposition. Sits above the lead card; reuses the exact
-// same rm_activity_events aggregation as the RM PRD analytics dashboard,
-// just scoped down to this one RM.
+// The RM's own shift so far today — target vs achieved, attempts per lead,
+// breaches, handling/break time, and average handling time per disposition.
+// Sits above the lead card; shares RmShiftStats with AssignedRmPerformancePanel
+// (same rm_activity_events aggregation, same metrics) so an RM's own view of
+// their shift always matches what a manager sees when they open one of this
+// RM's leads from the table — just scoped down to this one RM.
 export const YourShiftPanel: React.FC<YourShiftPanelProps> = ({ activeUserId, elapsedSecondsOnLead }) => {
   // Bumped every REFRESH_INTERVAL_MS so both todayBounds' `to` (the
   // client-side trim boundary below) and the fetch itself move forward —
@@ -45,14 +48,27 @@ export const YourShiftPanel: React.FC<YourShiftPanelProps> = ({ activeUserId, el
     activeUserId ?? undefined,
     refreshTick
   );
+  // targets are keyed by rm_user_id tenant-wide, but events is already
+  // narrowed server-side to activeUserId, so computePerformanceByRm below
+  // only ever produces (at most) this one RM's own row
+  const { targets } = useRmDailyTargets(activeUserId ? todayBounds : null, refreshTick);
 
-  const snapshot = useMemo(() => {
+  const stats = useMemo(() => {
     if (!activeUserId) return null;
     const todaysEvents = filterByDateRange(events, todayBounds);
-    return computeMyShiftSnapshot(todaysEvents, activeUserId);
-  }, [events, activeUserId, todayBounds]);
+    const snapshot = computeMyShiftSnapshot(todaysEvents, activeUserId);
+    const performance = computePerformanceByRm(todaysEvents, targets)[0] ?? {
+      achieved: 0,
+      target: targets[activeUserId] ?? 0,
+      attemptsPerLead: 0,
+      uniqueLeads: 0,
+      touches: 0,
+    };
+    const breaches = computeAdherenceByRm(todaysEvents)[0]?.breaches ?? 0;
+    return { snapshot, performance, breaches };
+  }, [events, activeUserId, todayBounds, targets]);
 
-  if (loading || !snapshot) return null;
+  if (loading || !stats) return null;
 
   return (
     <div>
@@ -69,43 +85,7 @@ export const YourShiftPanel: React.FC<YourShiftPanelProps> = ({ activeUserId, el
         <span className="font-mono text-lg font-semibold text-slate-900">{formatElapsed(elapsedSecondsOnLead)}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <ShiftStat label="Handling" value={snapshot.handling.value} sub={`Pace ${snapshot.handling.pace}`} tone="amber" fraction={snapshot.handling.paceFraction} />
-        <ShiftStat label="Break" value={snapshot.breakTime.value} sub={`Off lead ${snapshot.breakTime.offLeadPct}%`} tone="slate" />
-        <ShiftStat label="Not Connected" value={snapshot.notConnected.value} sub={`${snapshot.notConnected.touches} · ${snapshot.notConnected.threshold}`} tone="emerald" fraction={snapshot.notConnected.fraction} />
-        <ShiftStat label="Call Back" value={snapshot.callBack.value} sub={`${snapshot.callBack.touches} · ${snapshot.callBack.threshold}`} tone="amber" fraction={snapshot.callBack.fraction} />
-        <ShiftStat label="Not Interested" value={snapshot.notInterested.value} sub={`${snapshot.notInterested.touches} · ${snapshot.notInterested.threshold}`} tone="red" fraction={snapshot.notInterested.fraction} />
-        <ShiftStat label="Trial Subscribed" value={snapshot.trial.value} sub={`${snapshot.trial.touches} · ${snapshot.trial.threshold}`} tone="emerald" fraction={snapshot.trial.fraction} />
-      </div>
-    </div>
-  );
-};
-
-const TONE_CLASSES = {
-  amber: { box: 'border-amber-200 bg-amber-50', text: 'text-amber-800', bar: 'bg-amber-500' },
-  emerald: { box: 'border-emerald-200 bg-emerald-50', text: 'text-emerald-800', bar: 'bg-emerald-500' },
-  red: { box: 'border-red-200 bg-red-50', text: 'text-red-700', bar: 'bg-red-500' },
-  slate: { box: 'border-slate-200 bg-slate-50', text: 'text-slate-800', bar: 'bg-slate-500' },
-} as const;
-
-const ShiftStat: React.FC<{
-  label: string;
-  value: string;
-  sub: string;
-  tone: keyof typeof TONE_CLASSES;
-  fraction?: number;
-}> = ({ label, value, sub, tone, fraction }) => {
-  const colors = TONE_CLASSES[tone];
-  return (
-    <div className={cn('rounded-xl border p-2.5', colors.box)}>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={cn('font-mono text-base font-semibold', colors.text)}>{value}</div>
-      {fraction !== undefined && (
-        <div className="mt-1 h-1 w-full rounded-full bg-white/70">
-          <div className={cn('h-1 rounded-full', colors.bar)} style={{ width: `${Math.min(Math.max(fraction, 0), 1) * 100}%` }} />
-        </div>
-      )}
-      <div className="mt-1 text-[10px] text-slate-400">{sub}</div>
+      <RmShiftStats snapshot={stats.snapshot} performance={stats.performance} breaches={stats.breaches} accent="emerald" />
     </div>
   );
 };

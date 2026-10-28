@@ -36,6 +36,7 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
     startedAt: asUtcIso(data.started_at),
     endedAt: data.ended_at ? asUtcIso(data.ended_at) : null,
     durationSeconds: data.duration_seconds,
+    openedFrom: data.opened_from,
   };
 }
 
@@ -44,15 +45,20 @@ function mapDto(dto: RmActivityEventDto): RmActivityEvent {
 // "Custom" range picked but no dates chosen), which skips the fetch entirely
 // rather than falling back to an unbounded one. `rmUserId` further narrows
 // to one RM's own rows (e.g. the lead-card "Your Shift" panel) instead of
-// downloading every RM's events and filtering client-side. `refreshToken`
-// forces a refetch on demand even when bounds/rmUserId haven't changed —
-// `bounds` is date-granularity ("today"'s date string is the same all day),
-// so without this a caller that wants periodically-fresh data (rather than
-// a one-shot fetch at mount) has no way to trigger one.
+// downloading every RM's events and filtering client-side. `managerUserId`
+// narrows to one manager's own hierarchy (RM PRD's ASM "my team" view) —
+// pass at most one of `rmUserId`/`managerUserId`. `rmUserIds` narrows to a
+// known set of RMs (e.g. the lead-card leaderboard's "my manager's team" —
+// a sibling group, not just one RM). `refreshToken` forces a refetch on
+// demand even when bounds/rmUserId haven't changed — `bounds` is
+// date-granularity ("today"'s date string is the same all day), so without
+// this a caller that wants periodically-fresh data (rather than a one-shot
+// fetch at mount) has no way to trigger one.
 export function useRmActivityEvents(
   bounds: DateBounds | null,
   rmUserId?: string,
   refreshToken?: number,
+  managerUserId?: string,
   rmUserIds?: string[]
 ) {
   const [events, setEvents] = useState<RmActivityEvent[]>([]);
@@ -80,7 +86,13 @@ export function useRmActivityEvents(
     setLoading(true);
     setError(null);
     rmActivityApi
-      .getEvents({ from, to, rmUserId, rmUserIds: rmUserIdsKey ? rmUserIdsKey.split(',') : undefined })
+      .getEvents({
+        from,
+        to,
+        rmUserId,
+        managerUserId,
+        rmUserIds: rmUserIdsKey ? rmUserIdsKey.split(',') : undefined,
+      })
       .then((rows) => {
         if (!cancelled) setEvents(rows.map(mapDto));
       })
@@ -94,7 +106,7 @@ export function useRmActivityEvents(
     return () => {
       cancelled = true;
     };
-  }, [hasWindow, from, to, rmUserId, rmUserIdsKey, refreshToken]);
+  }, [hasWindow, from, to, rmUserId, managerUserId, rmUserIdsKey, refreshToken]);
 
   return { events, loading, error };
 }

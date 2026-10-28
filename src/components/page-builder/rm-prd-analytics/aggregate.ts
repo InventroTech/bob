@@ -10,7 +10,26 @@ const ACHT_THRESHOLDS = {
   notInterested: 1080, // 18m 00s
   trial: 1500, // 25m 00s
 };
-export const BREACH_SECONDS = ACHT_THRESHOLDS.trial;
+
+// A "breach" is disposition-specific — each disposition has its own SLA for
+// how long a call is allowed to take before it's flagged. Distinct from
+// ACHT_THRESHOLDS above (which only colors the average-handling-time cards).
+const BREACH_THRESHOLDS: Record<UpdatedStatus, number> = {
+  NOT_CONNECTED: 180, // 3m 00s
+  CALL_BACK: 600, // 10m 00s
+  NOT_INTERESTED: 900, // 15m 00s
+  TRIAL_ACTIVATED: 1500, // 25m 00s
+};
+export { BREACH_THRESHOLDS };
+
+// a call with no disposition can't be checked against a threshold, so it
+// can't be a breach either. Same for a call with no MEASURED duration
+// (duration_seconds: null — the server couldn't find a trustworthy session
+// for it, see record_lead_touch_event's docstring) — reporting "not a
+// breach" would be lying about something we simply don't know, not a real
+// finding, so it's excluded rather than defaulted to "fine".
+export const isBreachedCall = (call: { updatedStatus: UpdatedStatus | null; durationSeconds: number | null }): boolean =>
+  call.updatedStatus !== null && call.durationSeconds !== null && call.durationSeconds >= BREACH_THRESHOLDS[call.updatedStatus];
 
 // a "full" reference shift, used only to project a pace/occupancy bar
 const STANDARD_SHIFT_MINUTES = 600; // 10 hours
@@ -47,6 +66,55 @@ function formatHours(minutes: number): string {
 
 function average(values: number[]): number {
   return values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+}
+
+// Strips out calls with no measured duration (duration_seconds: null)
+// before an average is computed — counting them as 0 would silently pull
+// every average down toward zero, including the denominator (a call we
+// have no data for would count as "a confirmed 0-second call" otherwise,
+// which is not what it means). A sum is unaffected either way (adding
+// nothing is adding nothing), so this is only needed ahead of average().
+function measuredDurations(calls: { durationSeconds: number | null }[]): number[] {
+  return calls.map((c) => c.durationSeconds).filter((d): d is number => d !== null);
+}
+
+// An RM can legitimately have two leads' sessions open at once (two tabs —
+// see record_lead_opened in pyro-backend, which keeps every lead's session
+// independent rather than evicting one when another opens). Each one's own
+// duration is real, but a naive SUM of all of them double-counts whatever
+// time they actually overlapped — that's the "handling time > login time"
+// bug. This merges overlapping [started, ended] windows into islands first
+// (classic interval-merge: sort by start, extend the current island
+// whenever the next one starts before it ends, otherwise close it and
+// start a new one) and sums the islands instead — real wall-clock time at
+// least one lead was open, which can never exceed the actual shift length,
+// regardless of how many leads overlapped or by how much.
+function mergedIntervalMinutes(calls: { startedAt: string; endedAt: string | null }[]): number {
+  const intervals = calls
+    .map((c) => ({ start: new Date(c.startedAt).getTime(), end: c.endedAt ? new Date(c.endedAt).getTime() : NaN }))
+    .filter((i) => Number.isFinite(i.start) && Number.isFinite(i.end))
+    .sort((a, b) => a.start - b.start);
+
+  let totalMs = 0;
+  let islandStart: number | null = null;
+  let islandEnd = 0;
+
+  for (const { start, end } of intervals) {
+    if (islandStart === null) {
+      islandStart = start;
+      islandEnd = end;
+    } else if (start <= islandEnd) {
+      // overlaps (or is back-to-back with) the current island — extend it
+      islandEnd = Math.max(islandEnd, end);
+    } else {
+      totalMs += islandEnd - islandStart;
+      islandStart = start;
+      islandEnd = end;
+    }
+  }
+  if (islandStart !== null) totalMs += islandEnd - islandStart;
+
+  return totalMs / 60000;
 }
 
 // groups events by RM, keeping each RM's own events in the order they happened
@@ -429,8 +497,7 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
   const calls = rmEvents.filter(isCallTouch);
   const closedCalls = calls.filter(isClosedCallTouch);
 
-  const handlingSeconds = closedCalls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0);
-  const handlingMinutes = handlingSeconds / 60;
+  const handlingMinutes = mergedIntervalMinutes(closedCalls);
   const occupancy = timing.loginMinutes ? Math.round((handlingMinutes / timing.loginMinutes) * 100) : 0;
   // break = whatever part of the logged-in span wasn't spent handling calls.
   // BREAK_START/BREAK_END events aren't written by any real flow yet, so
@@ -439,7 +506,7 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
   const breakMinutes = Math.max(0, timing.loginMinutes - handlingMinutes);
 
   const secondsFor = (updatedStatus: UpdatedStatus) =>
-    closedCalls.filter((c) => c.updatedStatus === updatedStatus).map((c) => c.durationSeconds ?? 0);
+    measuredDurations(closedCalls.filter((c) => c.updatedStatus === updatedStatus));
   const notConnectedTime = Math.round(average(secondsFor('NOT_CONNECTED')));
   const callBackTime = Math.round(average(secondsFor('CALL_BACK')));
   const notInterestedTime = Math.round(average(secondsFor('NOT_INTERESTED')));
@@ -461,8 +528,8 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
     breakMinutes,
     occupancy,
     touches: closedCalls.length, // matches the Performance tab: "touches" means finished calls, "open" is separate
-    acht: formatDuration(average(closedCalls.map((c) => c.durationSeconds ?? 0))),
-    achtSeconds: average(closedCalls.map((c) => c.durationSeconds ?? 0)),
+    acht: formatDuration(average(measuredDurations(closedCalls))),
+    achtSeconds: average(measuredDurations(closedCalls)),
     notConnectedTime,
     notConnectedLabel: formatDuration(notConnectedTime),
     callBackTime,
@@ -471,10 +538,10 @@ function buildAdherenceRow(rmUserId: string, rmEvents: RmActivityEvent[]): RmAdh
     notInterestedLabel: formatDuration(notInterestedTime),
     trialTime,
     trialLabel: formatDuration(trialTime),
-    // >= matches the touch report's own breach flag (and the PDF spec: "shown
-    // if duration_seconds >= 1500") — a call landing at exactly 25:00 must
-    // count as a breach in both places, not just one
-    breaches: closedCalls.filter((c) => (c.durationSeconds ?? 0) >= BREACH_SECONDS).length,
+    // each disposition has its own breach threshold (see BREACH_THRESHOLDS)
+    // — >= matches the touch report's own breach flag, so a call landing
+    // exactly on its threshold counts as a breach in both places, not just one
+    breaches: closedCalls.filter(isBreachedCall).length,
   };
 }
 
@@ -525,7 +592,7 @@ function hoursLabelToMinutes(label: string): number {
 export function computeAchtOverall(events: RmActivityEvent[]) {
   const closedCalls = events.filter(isClosedCallTouch);
   const secondsFor = (updatedStatus: UpdatedStatus) =>
-    closedCalls.filter((c) => c.updatedStatus === updatedStatus).map((c) => c.durationSeconds ?? 0);
+    measuredDurations(closedCalls.filter((c) => c.updatedStatus === updatedStatus));
 
   const build = (updatedStatus: UpdatedStatus, thresholdSeconds: number, thresholdLabel: string) => {
     const seconds = secondsFor(updatedStatus);
@@ -539,7 +606,7 @@ export function computeAchtOverall(events: RmActivityEvent[]) {
   };
 
   return {
-    value: formatDuration(average(closedCalls.map((c) => c.durationSeconds ?? 0))),
+    value: formatDuration(average(measuredDurations(closedCalls))),
     touches: closedCalls.length,
     notConnected: build('NOT_CONNECTED', ACHT_THRESHOLDS.notConnected, '≤1m 30s'),
     callBack: build('CALL_BACK', ACHT_THRESHOLDS.callBack, '≤15m 00s'),
@@ -576,7 +643,7 @@ export function computeMyShiftSnapshot(events: RmActivityEvent[], rmUserId: stri
   const timing = computeShiftTiming(rmEvents);
   const closedCalls = rmEvents.filter(isClosedCallTouch);
 
-  const handlingMinutes = closedCalls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0) / 60;
+  const handlingMinutes = mergedIntervalMinutes(closedCalls);
   const occupancyFraction = timing.loginMinutes ? handlingMinutes / timing.loginMinutes : 0;
   // same residual as buildAdherenceRow — BREAK_START/BREAK_END aren't
   // written yet, so login-minus-handling is the only real break signal
@@ -587,7 +654,7 @@ export function computeMyShiftSnapshot(events: RmActivityEvent[], rmUserId: stri
     thresholdSeconds: number,
     thresholdLabel: string
   ): MyShiftDispositionStat => {
-    const seconds = closedCalls.filter((c) => c.updatedStatus === updatedStatus).map((c) => c.durationSeconds ?? 0);
+    const seconds = measuredDurations(closedCalls.filter((c) => c.updatedStatus === updatedStatus));
     const avgSeconds = average(seconds);
     return {
       value: formatDuration(avgSeconds),

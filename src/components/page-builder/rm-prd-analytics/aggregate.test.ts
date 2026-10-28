@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BREACH_THRESHOLDS,
+  computeAchtOverall,
   computeAdherenceByRm,
   computeLeaderboardByManager,
   computeLeaderboardByRm,
+  computeMyShiftSnapshot,
   computePerformanceByRm,
   computeTeamTotals,
   formatVsTarget,
+  isBreachedCall,
 } from './aggregate';
 import type { RmActivityEvent } from './types';
 
@@ -207,15 +211,103 @@ describe('computeLeaderboardByManager', () => {
   });
 });
 
-describe('breach counting boundary (>= 1500s, matches the touch report flag)', () => {
-  it('counts a call at exactly 25:00 as a breach', () => {
-    const rows = computeAdherenceByRm([callTouch({ durationSeconds: 1500 })]);
+describe('breach counting is disposition-specific (each disposition has its own threshold)', () => {
+  it('counts a trial-activated call at exactly its 25:00 threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: BREACH_THRESHOLDS.TRIAL_ACTIVATED }),
+    ]);
     expect(rows[0].breaches).toBe(1);
   });
 
-  it('does not count a call one second under 25:00', () => {
-    const rows = computeAdherenceByRm([callTouch({ durationSeconds: 1499 })]);
+  it('does not count a trial-activated call one second under its threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: BREACH_THRESHOLDS.TRIAL_ACTIVATED - 1 }),
+    ]);
     expect(rows[0].breaches).toBe(0);
+  });
+
+  it('counts a not-connected call at its own 3-minute threshold, far under the trial threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: BREACH_THRESHOLDS.NOT_CONNECTED }),
+    ]);
+    expect(rows[0].breaches).toBe(1);
+  });
+
+  it('counts a call-back call at its own 10-minute threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'CALL_BACK', durationSeconds: BREACH_THRESHOLDS.CALL_BACK }),
+    ]);
+    expect(rows[0].breaches).toBe(1);
+  });
+
+  it('counts a not-interested call at its own 15-minute threshold', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'NOT_INTERESTED', durationSeconds: BREACH_THRESHOLDS.NOT_INTERESTED }),
+    ]);
+    expect(rows[0].breaches).toBe(1);
+  });
+
+  it('sums breaches across dispositions within the same RM', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ id: 1, updatedStatus: 'NOT_CONNECTED', durationSeconds: BREACH_THRESHOLDS.NOT_CONNECTED }),
+      callTouch({ id: 2, updatedStatus: 'CALL_BACK', durationSeconds: BREACH_THRESHOLDS.CALL_BACK }),
+      callTouch({ id: 3, updatedStatus: 'NOT_INTERESTED', durationSeconds: 1 }), // under its own 15m threshold
+    ]);
+    expect(rows[0].breaches).toBe(2);
+  });
+});
+
+// Regression coverage for the gaming vector closed alongside the "one lead
+// at a time" redesign: duration_seconds comes out null (not a guessed
+// number) from the backend whenever there's no trustworthy measured
+// session for a touch — e.g. an RM evicted their own session by opening a
+// different lead elsewhere, then self-reported a duration when they
+// eventually dispositioned the abandoned one. These null rows must never
+// get silently counted as "0 seconds" — that would both hide a possible
+// breach (0s never breaches) and drag every average down by counting an
+// unmeasured call as a confirmed fast one.
+describe('null duration_seconds ("unknown", not measured) is excluded, not treated as 0', () => {
+  it('isBreachedCall never flags a null-duration call as a breach', () => {
+    expect(
+      isBreachedCall({ updatedStatus: 'NOT_CONNECTED', durationSeconds: null })
+    ).toBe(false);
+  });
+
+  it('a null-duration call does not count toward breaches', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ updatedStatus: 'NOT_CONNECTED', durationSeconds: null }),
+    ]);
+    expect(rows[0].breaches).toBe(0);
+  });
+
+  it('ACHT averages only the measured calls, not diluted by an unmeasured one', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ id: 1, updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: 100 }),
+      callTouch({ id: 2, updatedStatus: 'TRIAL_ACTIVATED', durationSeconds: null }),
+    ]);
+    // if the null call were counted as 0s, this would read 50s instead of 100s
+    expect(rows[0].achtSeconds).toBe(100);
+  });
+
+  it('computeAchtOverall averages only the measured calls per disposition', () => {
+    const result = computeAchtOverall([
+      callTouch({ id: 1, updatedStatus: 'CALL_BACK', durationSeconds: 200 }),
+      callTouch({ id: 2, updatedStatus: 'CALL_BACK', durationSeconds: null }),
+    ]);
+    expect(result.callBack.value).toBe('3m 20s');
+    expect(result.callBack.touches).toBe(1); // the measured count, not 2
+  });
+
+  it('computeMyShiftSnapshot averages only the measured calls per disposition', () => {
+    const snapshot = computeMyShiftSnapshot(
+      [
+        callTouch({ id: 1, rmUserId: 'rm-1', updatedStatus: 'NOT_INTERESTED', durationSeconds: 90 }),
+        callTouch({ id: 2, rmUserId: 'rm-1', updatedStatus: 'NOT_INTERESTED', durationSeconds: null }),
+      ],
+      'rm-1'
+    );
+    expect(snapshot.notInterested.value).toBe('1m 30s');
+    expect(snapshot.notInterested.touches).toBe(1);
   });
 });
 
@@ -250,15 +342,69 @@ describe('break time = login − handling (BREAK_START/BREAK_END aren\'t written
     expect(rows[0].breakTime).toBe('1h 40m'); // 120m − 20m
   });
 
-  it('never goes negative even if handling somehow exceeds the login envelope', () => {
+  it('never goes negative — two fully overlapping leads merge into one real 10m window, not 20m', () => {
+    // an RM can legitimately have two leads' sessions open at once (two
+    // tabs — see record_lead_opened, which keeps every lead's session
+    // independent rather than evicting one). Handling time merges
+    // overlapping windows before summing, so this correctly reads as 10m
+    // of real wall-clock handling, not 20m — which is what used to
+    // silently exceed the login envelope and required clamping.
     const events = [
       callTouch({ id: 1, startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
-      // reported as overlapping the first call (bad data) — durations sum
-      // to more than the actual wall-clock envelope
       callTouch({ id: 2, startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
     ];
     const rows = computeAdherenceByRm(events);
+    expect(rows[0].handlingHours).toBe('10m');
     expect(rows[0].breakTime).toBe('0m');
+  });
+});
+
+describe('Handling Time merges overlapping [started_at, ended_at] windows instead of summing them', () => {
+  it('two leads open at the exact same time count once, not twice', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ id: 1, startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
+      callTouch({ id: 2, startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
+    ]);
+    expect(rows[0].handlingMinutes).toBe(10);
+  });
+
+  it('partially overlapping leads merge into the union of their windows', () => {
+    // [04:00–04:10] and [04:05–04:20] merge into [04:00–04:20] = 20m, not
+    // the naive 10m + 15m = 25m a flat sum would give
+    const rows = computeAdherenceByRm([
+      callTouch({ id: 1, startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
+      callTouch({ id: 2, startedAt: '2026-09-20T04:05:00Z', endedAt: '2026-09-20T04:20:00Z', durationSeconds: 900 }),
+    ]);
+    expect(rows[0].handlingMinutes).toBe(20);
+  });
+
+  it('a short lead fully nested inside a longer one adds nothing extra', () => {
+    // a 3rd, briefer lead entirely inside lead 1's span — three real
+    // dispositions, but the union is still just lead 1's own 10 minutes
+    const rows = computeAdherenceByRm([
+      callTouch({ id: 1, startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
+      callTouch({ id: 2, startedAt: '2026-09-20T04:02:00Z', endedAt: '2026-09-20T04:03:00Z', durationSeconds: 60 }),
+    ]);
+    expect(rows[0].handlingMinutes).toBe(10);
+  });
+
+  it('non-overlapping leads still sum normally — merging never loses real, separate handling time', () => {
+    const rows = computeAdherenceByRm([
+      callTouch({ id: 1, startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:05:00Z', durationSeconds: 300 }),
+      callTouch({ id: 2, startedAt: '2026-09-20T05:00:00Z', endedAt: '2026-09-20T05:10:00Z', durationSeconds: 600 }),
+    ]);
+    expect(rows[0].handlingMinutes).toBe(15);
+  });
+
+  it('computeMyShiftSnapshot merges overlapping windows the same way as the Adherence tab', () => {
+    const snapshot = computeMyShiftSnapshot(
+      [
+        callTouch({ id: 1, rmUserId: 'rm-1', startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
+        callTouch({ id: 2, rmUserId: 'rm-1', startedAt: '2026-09-20T04:00:00Z', endedAt: '2026-09-20T04:10:00Z', durationSeconds: 600 }),
+      ],
+      'rm-1'
+    );
+    expect(snapshot.handling.value).toBe('10m');
   });
 
   it('an open break on a past day does not set live status (only today counts)', () => {
