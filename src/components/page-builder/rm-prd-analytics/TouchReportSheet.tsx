@@ -54,8 +54,10 @@ function touchSortValue(row: TouchRow, key: TouchSortKey): string | number {
     // rather than crashing the comparator or silently sorting as "0s"
     case 'duration':
       return row.durationSeconds ?? -1;
+    // sorts by the same text the badge actually shows (the disposition
+    // label) — a non-breached row has no badge at all, so it sorts as ''
     case 'flag':
-      return row.isBreach ? 1 : 0;
+      return row.isBreach ? DISPOSITIONS[row.dispositionKey].label.toLowerCase() : '';
   }
 }
 
@@ -215,7 +217,7 @@ export const TouchReportSheet: React.FC<TouchReportSheetProps> = ({
                     <TableCell className="whitespace-nowrap">
                       {row.isBreach && (
                         <span className="whitespace-nowrap rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
-                          BREACH · {DISPOSITIONS[row.dispositionKey].label} &gt;{row.breachThresholdLabel}
+                          {DISPOSITIONS[row.dispositionKey].label} &gt;{row.breachThresholdLabel}
                         </span>
                       )}
                     </TableCell>

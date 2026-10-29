@@ -33,8 +33,13 @@ export const DRILL_TITLES: Record<DrillFilter, string> = {
   trial: 'Trial subscribed · touch report',
 };
 
-// short "Xm" label for a disposition's breach threshold — e.g. 180s -> "3m"
-const formatMinutesLabel = (seconds: number) => `${Math.round(seconds / 60)}m`;
+// short "Xm" label for a disposition's breach threshold — e.g. 180s -> "3m",
+// 210s -> "3.5m" (one decimal only when the threshold isn't a whole minute,
+// rather than rounding it away to "4m")
+const formatMinutesLabel = (seconds: number) => {
+  const minutes = seconds / 60;
+  return `${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)}m`;
+};
 
 export interface TouchRow {
   touchId: number;

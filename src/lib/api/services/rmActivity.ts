@@ -60,6 +60,16 @@ export interface RmFilterOptionsDto {
 // (no override, no standing DAILY_TARGET) are simply absent from this map.
 export type RmDailyTargetsDto = Record<string, number>;
 
+// A lead open *right now* — an RmCallSession not yet consumed by a
+// disposition (see RmActiveSessionsView on the backend). rm_activity_events
+// never carries an in-progress row, so this is the only source for "is this
+// RM currently on a lead".
+export interface RmActiveSessionDto {
+  rm_user_id: string;
+  lead_record_id: number | null;
+  started_at: string;
+}
+
 interface RmActivityEventsPage {
   data: RmActivityEventDto[];
   page_meta: { next_page_link: string | null };
@@ -129,6 +139,18 @@ export const rmActivityApi = {
   async getDailyTargets(params?: { from?: string; to?: string }): Promise<RmDailyTargetsDto> {
     const response = await apiClient.get<RmDailyTargetsDto>('/analytics/rm-daily-targets/', {
       params: { from: params?.from, to: params?.to },
+    });
+    return response.data;
+  },
+
+  /**
+   * Which RMs have a lead open right now. No date range — this is a live,
+   * present-moment fact, not a historical window. `rmUserId`/`managerUserId`
+   * scope it the same way getEvents does; omit both for the whole tenant.
+   */
+  async getActiveSessions(params?: { rmUserId?: string; managerUserId?: string }): Promise<RmActiveSessionDto[]> {
+    const response = await apiClient.get<RmActiveSessionDto[]>('/analytics/rm-active-sessions/', {
+      params: { rm_user_id: params?.rmUserId, manager_user_id: params?.managerUserId },
     });
     return response.data;
   },
