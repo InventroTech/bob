@@ -224,12 +224,12 @@ export function AddUserView(props: AddUserModel) {
     (f) => f.showInForm && !isBoundCustomField(f.key)
   );
   const customTableFields = schema.customFields.filter((f) => f.showInTable);
-  const [activityFilter, setActivityFilter] = useState<'all' | 'inactive'>('all');
+  const [activityFilter, setActivityFilter] = useState<'active' | 'inactive'>('active');
   const inactiveCount = filteredUsersWithSettings.filter(isInactiveSignIn).length;
-  const visibleUsers =
-    activityFilter === 'inactive'
-      ? filteredUsersWithSettings.filter(isInactiveSignIn)
-      : filteredUsersWithSettings;
+  const activeCount = filteredUsersWithSettings.length - inactiveCount;
+  const visibleUsers = filteredUsersWithSettings.filter((user) =>
+    activityFilter === 'inactive' ? isInactiveSignIn(user) : !isInactiveSignIn(user)
+  );
   const showManagerForm = showCustomForm('manager_email');
   const showQueueTypeForm = showCustomForm('queue_type');
   const showLeadGroupForm = showCustomForm('lead_group');
@@ -297,7 +297,7 @@ export function AddUserView(props: AddUserModel) {
         )}
       </div>
       {showEditManagerDropdown && (
-        <div className="absolute z-50 mt-1 w-64 max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 w-full min-w-[12rem] max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
           {users
             .filter((u) => {
               if (u.email === user.email) return false;
@@ -1402,10 +1402,10 @@ export function AddUserView(props: AddUserModel) {
                   isUnmannd && 'h-9 rounded-[6px] border-[#D5DEE8]'
                 )}
                 role="group"
-                aria-label="Show all users or inactive users"
+                aria-label="Show active or inactive users"
               >
                 {([
-                  ['all', `All ${filteredUsersWithSettings.length}`],
+                  ['active', `Active ${activeCount}`],
                   ['inactive', `Inactive ${inactiveCount}`],
                 ] as const).map(([value, label]) => {
                   const selected = activityFilter === value;
@@ -1493,7 +1493,7 @@ export function AddUserView(props: AddUserModel) {
             <div className="text-center text-muted-foreground py-8">No users found</div>
           ) : visibleUsers.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
-              No inactive users
+              No {activityFilter} users
             </div>
           ) : (
 
@@ -1501,10 +1501,13 @@ export function AddUserView(props: AddUserModel) {
               {/* ========================= MOBILE UI ========================= */}
               <div className="md:hidden space-y-4">
                 {visibleUsers.map((user, index) => {
+                  const isEditing = editingRowKey === getRowKey(user) && !!editingRow;
                   const rowIsCse =
-                    editingRowKey === getRowKey(user) && editingRow
+                    isEditing && editingRow
                       ? isCseRole(roles.find((r) => r.id === editingRow.roleId))
                       : isCseRole(user.role);
+                  const mobileSelectClass =
+                    'mt-0.5 h-11 w-full rounded-md border border-gray-200 bg-white px-2 text-sm';
 
                   return (
                     <Card
@@ -1523,23 +1526,133 @@ export function AddUserView(props: AddUserModel) {
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Role</p>
-                            <p className="text-sm">{user.role?.name || "No Role"}</p>
+                            {isEditing && editingRow ? (
+                              <select
+                                className={mobileSelectClass}
+                                value={editingRow.roleId}
+                                onChange={(e) =>
+                                  setEditingRow((prev) =>
+                                    prev ? { ...prev, roleId: e.target.value } : prev
+                                  )
+                                }
+                              >
+                                {roles.map((role) => (
+                                  <option key={role.id} value={role.id}>
+                                    {role.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-sm">{user.role?.name || "No Role"}</p>
+                            )}
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Lead Group</p>
-                            <p className="text-sm">{user.leadGroup || "-"}</p>
+                            {isEditing && editingRow ? (
+                              <select
+                                className={mobileSelectClass}
+                                value={editingRow.leadGroup}
+                                onChange={(e) =>
+                                  setEditingRow((prev) =>
+                                    prev ? { ...prev, leadGroup: e.target.value } : prev
+                                  )
+                                }
+                              >
+                                <option value="">Select Group</option>
+                                {availableLeadGroups.map((group) => (
+                                  <option key={group.name} value={group.name}>
+                                    {group.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-sm">{user.leadGroup || "-"}</p>
+                            )}
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500">Target</p>
-                            <p className="text-sm">
-                              {rowIsCse
-                                ? formatResolveRateGoal(user.supportResolveRateGoal)
-                                : user.dailyTarget || "-"}
+                            <p className="text-xs text-gray-500">
+                              {rowIsCse ? 'Resolve %' : 'Target'}
                             </p>
+                            {isEditing && editingRow ? (
+                              rowIsCse ? (
+                                <Input
+                                  className="mt-0.5 h-11"
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="1"
+                                  value={editingRow.supportResolveRateGoal}
+                                  onChange={(e) =>
+                                    setEditingRow((prev) =>
+                                      prev
+                                        ? { ...prev, supportResolveRateGoal: e.target.value }
+                                        : prev
+                                    )
+                                  }
+                                  placeholder="Resolve %"
+                                />
+                              ) : (
+                                <Input
+                                  className="mt-0.5 h-11"
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={editingRow.dailyTarget}
+                                  onChange={(e) =>
+                                    setEditingRow((prev) =>
+                                      prev ? { ...prev, dailyTarget: e.target.value } : prev
+                                    )
+                                  }
+                                  placeholder="Daily target"
+                                />
+                              )
+                            ) : (
+                              <p className="text-sm">
+                                {rowIsCse
+                                  ? formatResolveRateGoal(user.supportResolveRateGoal)
+                                  : user.dailyTarget || "-"}
+                              </p>
+                            )}
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Daily Limit</p>
-                            {rowIsCse ? (
+                            {isEditing && editingRow ? (
+                              rowIsCse ? (
+                                <SupportDailyDualInputs
+                                  inputClassName="h-11"
+                                  selfTrial={editingRow.supportDailyLimitSelfTrial}
+                                  other={editingRow.supportDailyLimitOther}
+                                  onSelfTrialChange={(value) =>
+                                    setEditingRow((prev) =>
+                                      prev
+                                        ? { ...prev, supportDailyLimitSelfTrial: value }
+                                        : prev
+                                    )
+                                  }
+                                  onOtherChange={(value) =>
+                                    setEditingRow((prev) =>
+                                      prev
+                                        ? { ...prev, supportDailyLimitOther: value }
+                                        : prev
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <Input
+                                  className="mt-0.5 h-11"
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={editingRow.dailyLimit}
+                                  onChange={(e) =>
+                                    setEditingRow((prev) =>
+                                      prev ? { ...prev, dailyLimit: e.target.value } : prev
+                                    )
+                                  }
+                                  placeholder="Daily limit"
+                                />
+                              )
+                            ) : rowIsCse ? (
                               <SupportDailyDualDisplay
                                 selfTrial={user.supportDailyLimitSelfTrial}
                                 other={user.supportDailyLimitOther}
@@ -1548,9 +1661,13 @@ export function AddUserView(props: AddUserModel) {
                               <p className="text-sm">{user.dailyLimit || "-"}</p>
                             )}
                           </div>
-                          <div>
+                          <div className={isEditing ? 'col-span-2' : undefined}>
                             <p className="text-xs text-gray-500">Manager Email</p>
-                            <p className="break-words text-sm">{user.managerEmail || "-"}</p>
+                            {isEditing && editingRow ? (
+                              renderManagerEditCell(user)
+                            ) : (
+                              <p className="break-words text-sm">{user.managerEmail || "-"}</p>
+                            )}
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Last sign in at</p>
