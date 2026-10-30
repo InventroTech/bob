@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, type ComponentType } f
 import { useParams, useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import { pickOpenRequestPage, withCurrentSearch } from '@/features/tenant-app/openRequestPage';
 import { supabase } from '@/lib/supabase';
+import { usesDjangoAuth } from '@/lib/auth/provider';
 import { toast } from 'sonner';
 import { componentMap as staticComponentMap } from '@/features/page-builder/componentMap';
 import {
@@ -96,7 +97,8 @@ const CustomAppPage: React.FC = () => {
           pickOpenRequestPage(navPages, { search: location.search, excludeId: pageId })?.id ??
           null;
       }
-      if (!firstId) {
+      // Django auth signs the Supabase session out locally, so this table read has no session.
+      if (!firstId && !usesDjangoAuth) {
         const { data } = await supabase
           .from('pages')
           .select('id, name')
@@ -162,47 +164,15 @@ const CustomAppPage: React.FC = () => {
       setPage(null);
     }
 
-    const spoofToken =
-      typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
-
     const fetchPage = async () => {
       try {
-        if (spoofToken && tenantId) {
-          const pageData = await fetchPageConfig(pageId, tenantId, spoofToken);
-          if (!isMounted) return;
-          fetchingRef.current = null;
-          if (pageData) {
-            setPage(pageData);
-            setPageCache(cacheKey, { data: pageData, timestamp: now });
-            setLoading(false);
-          } else {
-            pageCache.delete(cacheKey);
-            await redirectToFirstSidebarPageRef.current();
-          }
-          return;
-        }
-
-        const { data, error: fetchError } = await supabase
-          .from('pages')
-          .select('name, config, header_title')
-          .eq('id', pageId)
-          .eq('tenant_id', tenantId)
-          .eq('is_deleted', false)
-          .maybeSingle();
-
+        const token = await getEffectiveToken(session?.access_token ?? null);
+        const pageData = token
+          ? await fetchPageConfig(pageId, tenantId, token)
+          : null;
         if (!isMounted) return;
         fetchingRef.current = null;
-
-        if (fetchError) {
-          setError(fetchError.message);
-          toast.error('Failed to load page');
-          setLoading(false);
-        } else if (data) {
-          const pageData = {
-            name: data.name,
-            config: data.config,
-            header_title: data.header_title,
-          };
+        if (pageData) {
           setPage(pageData);
           setPageCache(cacheKey, { data: pageData, timestamp: now });
           setLoading(false);

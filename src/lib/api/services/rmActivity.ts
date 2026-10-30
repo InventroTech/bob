@@ -79,17 +79,21 @@ export const rmActivityApi = {
   /**
    * `from`/`to` are "YYYY-MM-DD" — omit both to get the backend's default
    * (today only), never the whole tenant table. `rmUserId` narrows to one
-   * RM's own rows (e.g. the lead-card "Your Shift" panel), omit for every
-   * RM. `managerUserId` narrows to one manager's own hierarchy — direct +
-   * indirect reports (RM PRD's ASM "my team" view) — omit for the whole
-   * tenant. Pages through the response until exhausted; a date/RM-windowed
-   * query is almost always a single page.
+   * RM's own rows (e.g. the lead-card "Your Shift" panel). `managerUserId`
+   * narrows to one manager's own hierarchy — direct + indirect reports (RM
+   * PRD's ASM "my team" view). `rmUserIds` narrows to a known set of RMs
+   * (e.g. the lead-card leaderboard's "my manager's team" — a sibling
+   * group, not just one RM) — the backend does this filtering, not a
+   * client-side slice of everyone's rows. Omit all three for every RM.
+   * Pages through the response until exhausted; a date/RM-windowed query is
+   * almost always a single page.
    */
   async getEvents(params?: {
     from?: string;
     to?: string;
     rmUserId?: string;
     managerUserId?: string;
+    rmUserIds?: string[];
   }): Promise<RmActivityEventDto[]> {
     const rows: RmActivityEventDto[] = [];
     let page = 1;
@@ -103,6 +107,7 @@ export const rmActivityApi = {
           to: params?.to,
           rm_user_id: params?.rmUserId,
           manager_user_id: params?.managerUserId,
+          rm_user_ids: params?.rmUserIds?.length ? params.rmUserIds.join(',') : undefined,
           page,
           page_size: 2000,
           include_count: false,
@@ -134,11 +139,21 @@ export const rmActivityApi = {
 
   /**
    * Per-RM trial targets, keyed by rm_user_id, already summed across
-   * `from`/`to` (YYYY-MM-DD, defaults to today).
+   * `from`/`to` (YYYY-MM-DD, defaults to today). `rmUserIds` scopes the
+   * response to a known set of RMs instead of every active member in the
+   * tenant — same precedent as getEvents' `rmUserIds`.
    */
-  async getDailyTargets(params?: { from?: string; to?: string }): Promise<RmDailyTargetsDto> {
+  async getDailyTargets(params?: {
+    from?: string;
+    to?: string;
+    rmUserIds?: string[];
+  }): Promise<RmDailyTargetsDto> {
     const response = await apiClient.get<RmDailyTargetsDto>('/analytics/rm-daily-targets/', {
-      params: { from: params?.from, to: params?.to },
+      params: {
+        from: params?.from,
+        to: params?.to,
+        rm_user_ids: params?.rmUserIds?.length ? params.rmUserIds.join(',') : undefined,
+      },
     });
     return response.data;
   },
