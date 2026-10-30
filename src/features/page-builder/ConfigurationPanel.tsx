@@ -38,6 +38,7 @@ import { DispatchCardListConfigPanel } from "@/components/page-builder/component
 import { DispatchDashboardConfigPanel } from "@/components/page-builder/component-config/DispatchDashboardConfig";
 import { ProcurementDashboardConfigPanel } from "@/components/page-builder/component-config/ProcurementDashboardConfig";
 import { AddUserConfig } from "@/components/page-builder/component-config/AddUserConfig";
+import { MakeFreshConfig } from "@/components/page-builder/component-config/MakeFreshConfig";
 import { ZohoMailConfig } from "@/components/page-builder/component-config/ZohoMailConfig";
 import type { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import type { CanvasComponentData, ComponentConfig } from "./componentMap";
@@ -81,6 +82,7 @@ const COMPONENT_TYPE_LABELS: Record<string, string> = {
   cseProgressBar: 'CSE Progress Bar',
   leadAssignment: 'Lead Groups',
   callAttemptMatrix: 'Call Attempt Matrix',
+  makeFresh: 'Make Fresh',
   temporaryLogout: 'Temporary Logout',
   form: 'Form',
   table: 'Table',
@@ -823,6 +825,14 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
         return (
           <CallAttemptMatrixConfig
             localConfig={localConfig as any}
+            handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'makeFresh':
+        return (
+          <MakeFreshConfig
+            localConfig={localConfig}
             handleInputChange={handleInputChange}
           />
         );
