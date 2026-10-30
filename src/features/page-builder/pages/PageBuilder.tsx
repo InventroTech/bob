@@ -29,6 +29,7 @@ import {
   Truck,
   LayoutDashboard,
   Mail,
+  RotateCcw,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -173,7 +174,7 @@ const PageBuilder = () => {
   // Make the main canvas a droppable area that accepts these component types from the sidebar
   const { setNodeRef: setCanvasRef, isOver } = useDroppable({
     id: 'canvas-drop-area',
-    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'procurementDashboard', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','zohoMail','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy','rmPrdAnalytics'] }
+    data: { accepts: ['container', 'split', 'form', 'table', 'text', 'button', 'image', 'dataCard', 'leadTable', 'inventoryTable', 'procurementTable', 'procurementDashboard', 'inventoryRequestForm', 'procurementRequestForm', 'dispatchCardList', 'dispatchDashboard', 'collapseCard','leadCarousel','oeLeadsTable','progressBar','leadProgressBar','cseProgressBar','ticketTable','ticketCarousel','ticketBarGraph','barGraph','lineChart','stackedBarChart','temporaryLogout','addUser','leadAssignment','callAttemptMatrix','makeFresh','openModalButton','jobManager','jobsPage','applicantTable','fileUpload','dynamicScoring','whatsappTemplate','zohoMail','teamDashboard','analyticsBoard','operationsPrograms','userHierarchy','rmPrdAnalytics'] }
   });
 
   // At the top of the PageBuilder component, after your state declarations
@@ -356,6 +357,7 @@ useEffect(() => {
 
         // Add the new component to the canvas state
         setCanvasComponents((prev) => [...prev, newComponent]);
+        revealAddedComponent(newComponent.id);
       } else {
         // Unknown component type: ignore drop
       }
@@ -398,14 +400,26 @@ useEffect(() => {
           newList.splice(targetIndex, 0, newComponent);
           return newList;
         });
+        revealAddedComponent(newComponent.id);
       } else {
         // Fallback: Add to end
         setCanvasComponents(prev => [...prev, newComponent]);
+        revealAddedComponent(newComponent.id);
       }
     }
     else {
       // Drop outside valid targets: no state change
     }
+  };
+
+  const revealAddedComponent = (id: string) => {
+    toast.message("Added to the canvas. Click Save to show it on the page.");
+    window.setTimeout(() => {
+      document.querySelector(`[data-droppable-id="${id}"]`)?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    }, 50);
   };
 
   // Function to get the overlay component when dragging
@@ -762,6 +776,11 @@ useEffect(() => {
                           id="callAttemptMatrix"
                           label="Call Attempt Matrix"
                           icon={<Settings className="h-8 w-8 mb-1 text-foreground" />}
+                        />
+                        <DraggableSidebarItem
+                          id="makeFresh"
+                          label="Make Fresh"
+                          icon={<RotateCcw className="h-8 w-8 mb-1 text-foreground" />}
                         />
                         <DraggableSidebarItem
                           id="temporaryLogout"
