@@ -15,8 +15,8 @@ const ACHT_THRESHOLDS = {
 // how long a call is allowed to take before it's flagged. Distinct from
 // ACHT_THRESHOLDS above (which only colors the average-handling-time cards).
 const BREACH_THRESHOLDS: Record<UpdatedStatus, number> = {
-  NOT_CONNECTED: 180, // 3m 00s
-  CALL_BACK: 600, // 10m 00s
+  NOT_CONNECTED: 210, // 3m 30s
+  CALL_BACK: 1080, // 18m 00s
   NOT_INTERESTED: 900, // 15m 00s
   TRIAL_ACTIVATED: 1500, // 25m 00s
 };

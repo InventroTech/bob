@@ -40,6 +40,7 @@ import {
   type RmPerformanceRow,
 } from './rm-prd-analytics/aggregate';
 import { useRmActivityEvents } from './rm-prd-analytics/useRmActivityEvents';
+import { useRmActiveSessions } from './rm-prd-analytics/useRmActiveSessions';
 import { useRmDailyTargets } from './rm-prd-analytics/useRmDailyTargets';
 import {
   stateNameLookup,
@@ -288,6 +289,15 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
   // targets are already summed server-side across dateBounds (day-by-day
   // overrides where a manager set one, else the RM's standing DAILY_TARGET)
   const { targets: dailyTargets } = useRmDailyTargets(dateBounds, refreshTick);
+  // "on lead right now" — a live, present-moment fact that rm_activity_events
+  // can't answer on its own (see useRmActiveSessions), so it's a separate
+  // fetch on the same refreshTick cadence as everything else above, not a
+  // standing poll.
+  const activeRmUserIds = useRmActiveSessions(
+    isRmView ? activeUserId ?? undefined : undefined,
+    isAsmView ? activeUserId ?? undefined : undefined,
+    refreshTick
+  );
   // leadGroup/state/party only apply to CALL_TOUCH rows (LOGIN/LOGOUT/
   // BREAK_* rows don't carry a lead's group/state/party) — filtering the
   // whole event stream by them would silently drop real break/login rows
@@ -581,6 +591,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             onSelectRm={setSelectedRmUserId}
             showByRmTable={!isRmView}
             stateNameById={stateNameById}
+            activeRmUserIds={activeRmUserIds}
           />
         )}
         {tab === 'adherence' && (
@@ -596,6 +607,7 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
             onSelectRm={setSelectedRmUserId}
             showByRmTable={!isRmView}
             stateNameById={stateNameById}
+            activeRmUserIds={activeRmUserIds}
           />
         )}
         {tab === 'leaderboard' && !isRmView && (
@@ -785,6 +797,17 @@ const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-stone-400">{children}</p>
 );
 
+// Live "on a lead right now" indicator for the By RM tables — a pulsing dot
+// next to the RM's name, same up-to-the-minute signal as Adherence's status
+// pill (see ShiftTiming/computeShiftTiming in aggregate.ts), just compact
+// enough to sit inline with the name in every By RM table, not only Adherence.
+const OnLeadDot: React.FC = () => (
+  <span className="relative inline-flex h-2 w-2 shrink-0" title="Currently on a lead">
+    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+  </span>
+);
+
 // "By RM" section heading + a search box that filters that table's rows by RM name
 const RmTableHeader: React.FC<{
   label: string;
@@ -875,6 +898,7 @@ const PerformanceView: React.FC<{
   /** false in RM view — a one-row "By RM" table of just yourself is redundant with the cards above */
   showByRmTable: boolean;
   stateNameById: Record<string, string>;
+  activeRmUserIds: Set<string>;
 }> = ({
   onDrill,
   teamTotals,
@@ -884,6 +908,7 @@ const PerformanceView: React.FC<{
   onSelectRm,
   showByRmTable,
   stateNameById,
+  activeRmUserIds,
 }) => {
   const achievedPct = teamTotals.target ? (teamTotals.achieved / teamTotals.target) * 100 : 0;
 
@@ -967,7 +992,12 @@ const PerformanceView: React.FC<{
       {showByRmTable && (
         <section>
           <RmTableHeader label="By RM" search={rmSearch} onSearchChange={onRmSearchChange} />
-          <PerformanceTable rows={performanceByRm} onSelectRm={onSelectRm} stateNameById={stateNameById} />
+          <PerformanceTable
+            rows={performanceByRm}
+            onSelectRm={onSelectRm}
+            stateNameById={stateNameById}
+            activeRmUserIds={activeRmUserIds}
+          />
         </section>
       )}
     </div>
@@ -1024,7 +1054,8 @@ const PerformanceTable: React.FC<{
   rows: RmPerformanceRow[];
   onSelectRm: (rmUserId: string) => void;
   stateNameById: Record<string, string>;
-}> = ({ rows, onSelectRm, stateNameById }) => {
+  activeRmUserIds: Set<string>;
+}> = ({ rows, onSelectRm, stateNameById, activeRmUserIds }) => {
   const { ref, minHeight } = useStableMinHeight([rows.length]);
   const { sortedRows, sort, toggleSort } = useTableSort(rows, performanceSortValue);
   return (
@@ -1053,7 +1084,10 @@ const PerformanceTable: React.FC<{
             onClick={() => onSelectRm(row.rmUserId)}
           >
             <TableCell className="whitespace-nowrap">
-              <div className="font-semibold text-stone-900">{row.name}</div>
+              <div className="flex items-center gap-1.5 font-semibold text-stone-900">
+                {row.name}
+                {activeRmUserIds.has(row.rmUserId) && <OnLeadDot />}
+              </div>
               <div className="text-xs text-stone-400">
                 {row.manager} · {row.team} · {stateNameById[row.state] || row.state}
               </div>
@@ -1109,6 +1143,7 @@ const AdherenceView: React.FC<{
   /** false in RM view — a one-row "By RM" table of just yourself is redundant with the cards above */
   showByRmTable: boolean;
   stateNameById: Record<string, string>;
+  activeRmUserIds: Set<string>;
 }> = ({
   onDrill,
   teamTotals,
@@ -1121,6 +1156,7 @@ const AdherenceView: React.FC<{
   onSelectRm,
   showByRmTable,
   stateNameById,
+  activeRmUserIds,
 }) => {
   const achievedPct = teamTotals.target ? (teamTotals.achieved / teamTotals.target) * 100 : 0;
 
@@ -1232,7 +1268,12 @@ const AdherenceView: React.FC<{
     {showByRmTable && (
       <section>
         <RmTableHeader label="By RM" search={rmSearch} onSearchChange={onRmSearchChange} />
-        <AdherenceTable rows={adherenceByRm} onSelectRm={onSelectRm} stateNameById={stateNameById} />
+        <AdherenceTable
+          rows={adherenceByRm}
+          onSelectRm={onSelectRm}
+          stateNameById={stateNameById}
+          activeRmUserIds={activeRmUserIds}
+        />
       </section>
     )}
   </div>
@@ -1269,7 +1310,8 @@ const AdherenceTable: React.FC<{
   rows: RmAdherenceRow[];
   onSelectRm: (rmUserId: string) => void;
   stateNameById: Record<string, string>;
-}> = ({ rows, onSelectRm, stateNameById }) => {
+  activeRmUserIds: Set<string>;
+}> = ({ rows, onSelectRm, stateNameById, activeRmUserIds }) => {
   const { ref, minHeight } = useStableMinHeight([rows.length]);
   const { sortedRows, sort, toggleSort } = useTableSort(rows, adherenceSortValue);
   return (
@@ -1300,7 +1342,10 @@ const AdherenceTable: React.FC<{
             onClick={() => onSelectRm(row.rmUserId)}
           >
             <TableCell className="whitespace-nowrap">
-              <div className="font-semibold text-stone-900">{row.name}</div>
+              <div className="flex items-center gap-1.5 font-semibold text-stone-900">
+                {row.name}
+                {activeRmUserIds.has(row.rmUserId) && <OnLeadDot />}
+              </div>
               <div className="text-xs text-stone-400">
                 {row.manager} · {row.team} · {stateNameById[row.state] || row.state}
               </div>
