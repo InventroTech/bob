@@ -22,6 +22,7 @@ import {
   RmPrdAnalyticsComponent,
   ZohoMailComponent,
 } from "@/components/page-builder";
+import { MakeFreshComponent } from "@/components/page-builder/make-fresh/MakeFreshComponent";
 import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
 import { LeadTableComponent } from "@/components/page-builder/lead-table";
 import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
@@ -183,6 +184,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   addUser: AddUserComponent,
   leadAssignment: LeadAssignmentComponent,
   callAttemptMatrix: CallAttemptMatrixComponent,
+  makeFresh: MakeFreshComponent,
   openModalButton: OpenModalButton,
   jobManager: JobManagerComponent,
   jobsPage: JobsPageComponent,
