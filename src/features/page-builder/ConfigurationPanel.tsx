@@ -39,6 +39,7 @@ import { DispatchDashboardConfigPanel } from "@/components/page-builder/componen
 import { ProcurementDashboardConfigPanel } from "@/components/page-builder/component-config/ProcurementDashboardConfig";
 import { AddUserConfig } from "@/components/page-builder/component-config/AddUserConfig";
 import { MakeFreshConfig } from "@/components/page-builder/component-config/MakeFreshConfig";
+import { MakeClosedConfig } from "@/components/page-builder/component-config/MakeClosedConfig";
 import { ZohoMailConfig } from "@/components/page-builder/component-config/ZohoMailConfig";
 import type { FilterConfig } from "@/component-config/DynamicFilterConfig";
 import type { CanvasComponentData, ComponentConfig } from "./componentMap";
@@ -83,6 +84,7 @@ const COMPONENT_TYPE_LABELS: Record<string, string> = {
   leadAssignment: 'Lead Groups',
   callAttemptMatrix: 'Call Attempt Matrix',
   makeFresh: 'Make Fresh',
+  makeClosed: 'Close Leads',
   temporaryLogout: 'Temporary Logout',
   form: 'Form',
   table: 'Table',
@@ -838,6 +840,14 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ selected
       case 'makeFresh':
         return (
           <MakeFreshConfig
+            localConfig={localConfig}
+            handleInputChange={handleInputChange}
+          />
+        );
+
+      case 'makeClosed':
+        return (
+          <MakeClosedConfig
             localConfig={localConfig}
             handleInputChange={handleInputChange}
           />
