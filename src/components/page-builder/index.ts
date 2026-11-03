@@ -10,6 +10,8 @@ export { default as LeadAssignmentComponent } from './LeadAssignmentComponent';
 export { default as CallAttemptMatrixComponent } from './CallAttemptMatrixComponent';
 export { MakeFreshComponent } from './make-fresh/MakeFreshComponent';
 export { MakeFreshConfig } from './component-config/MakeFreshConfig';
+export { MakeClosedComponent } from './make-closed/MakeClosedComponent';
+export { MakeClosedConfig } from './component-config/MakeClosedConfig';
 export { TicketCarouselConfig } from './component-config/TicketCarouselConfig';
 export { TicketTableConfig } from './component-config/TicketTableConfig';
 export { LeadTableComponent } from './lead-table';
