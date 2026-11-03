@@ -460,7 +460,7 @@ describe("submitting", () => {
   });
 
   it("shows chunk progress for long lists", async () => {
-    const pending: Array<(value: unknown) => void> = [];
+    const pending: Array<() => void> = [];
     post.mockImplementation((_url: string, body: { praja_ids: string[] }) =>
       new Promise((r) => pending.push(() => r(okResponse(body.praja_ids))))
     );
