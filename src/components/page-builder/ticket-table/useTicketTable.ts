@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { REALTIME_LIST_DEBOUNCE_MS, useRecordUpdated } from '@/hooks/useRecordUpdated';
 import type { RecordUpdatedPayload } from '@/lib/realtime/types';
@@ -87,6 +88,31 @@ const [filterOptions, setFilterOptions] = useState<{
   poster_statuses: []
 });
 const { session, user } = useAuth();
+const { customRole, membershipLoaded } = useTenant();
+// CSE users only see tickets after applying at least one filter (search alone doesn't count).
+const requireFiltersToShow = customRole?.toUpperCase() === 'CSE';
+const hasSelectedFilters =
+  resolutionStatusFilter.length > 0 ||
+  assignedToFilter !== 'all' ||
+  posterStatusFilter.length > 0 ||
+  stateFilter.length > 0 ||
+  callAttemptsFilter.length > 0 ||
+  !!dateRangeFilter.startDate ||
+  !!dateRangeFilter.endDate;
+
+const clearTicketList = () => {
+  baseDataRef.current = [];
+  setData([]);
+  setFilteredData([]);
+  setPagination({
+    totalCount: 0,
+    numberOfPages: 0,
+    currentPage: 1,
+    pageSize: 50,
+    nextPageLink: null,
+    previousPageLink: null,
+  });
+};
 
 // Memoize table columns to prevent unnecessary re-renders
 const tableColumns: Column[] = useMemo(() => 
@@ -260,6 +286,14 @@ const applyFilters = async (
 ) => {
   const silent = options?.silent === true;
   if (silent && listFetchInFlightRef.current) {
+    return;
+  }
+  if (requireFiltersToShow && !hasSelectedFilters) {
+    if (!silent) {
+      clearTicketList();
+      setFiltersApplied(false);
+      toast.info('Select at least one filter to see tickets');
+    }
     return;
   }
 
@@ -492,9 +526,14 @@ const resetFilters = () => {
     clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = null;
   }
+  latestSearchValueRef.current = '';
+  setFiltersApplied(false);
+  if (requireFiltersToShow) {
+    clearTicketList();
+    return;
+  }
   baseDataRef.current = data;
   setFilteredData(data); // Show all tickets again
-  setFiltersApplied(false);
 };
 
 const latestSearchValueRef = useRef<string>('');
@@ -529,6 +568,11 @@ const debouncedSearch = useCallback((value: string) => {
       callAttemptsFilter.length > 0 ||
       dateRangeFilter.startDate ||
       dateRangeFilter.endDate;
+
+    if (requireFiltersToShow && !hasFilters) {
+      setSearchLoading(false);
+      return;
+    }
     
     // If search was cleared, reset to original data
     if (!term) {
@@ -711,7 +755,7 @@ const debouncedSearch = useCallback((value: string) => {
       }
     }
   }, 500); // Increased debounce to 500ms to reduce API calls
-}, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, dateRangeFilter, session?.access_token, config?.searchFields]);
+}, [data, matchRowBySearchTerm, tableColumns, filtersApplied, resolutionStatusFilter, assignedToFilter, posterStatusFilter, stateFilter, callAttemptsFilter, dateRangeFilter, session?.access_token, config?.searchFields, requireFiltersToShow]);
 
 // Handle search input change from PrajaTable
 const handleSearchChange = useCallback((value: string) => {
@@ -1097,6 +1141,18 @@ const handleTicketUpdate = (updatedTicket: any) => {
 };
 
 useEffect(() => {
+  // Wait for the role, or a CSE would briefly see the unfiltered list.
+  if (!membershipLoaded) return;
+  if (requireFiltersToShow) {
+    setLoading(false);
+    if (filtersApplied) {
+      void applyFilters(undefined, { silent: true, keepPage: true });
+    } else {
+      clearTicketList();
+    }
+    return;
+  }
+
   // Abort controller for initial fetch
   const abortController = new AbortController();
 
@@ -1239,7 +1295,7 @@ useEffect(() => {
   return () => {
     abortController.abort();
   };
-}, [session?.access_token, config?.apiEndpoint, apiPrefix]);
+}, [session?.access_token, config?.apiEndpoint, apiPrefix, membershipLoaded, requireFiltersToShow]);
 
 // Fetch filter options and assignees when component mounts
 useEffect(() => {
@@ -1298,6 +1354,7 @@ useEffect(() => {
     dateRangeFilter,
     setDateRangeFilter,
     filtersApplied,
+    requireFiltersToShow,
     filteredData,
     data,
     pagination,
