@@ -45,6 +45,7 @@ export function TicketTableView(props: TicketTableModel) {
     dateRangeFilter,
     setDateRangeFilter,
     filtersApplied,
+    requireFiltersToShow,
     filteredData,
     data,
     pagination,
@@ -74,6 +75,11 @@ export function TicketTableView(props: TicketTableModel) {
     usePageDisplayTitle().trim() ||
     (config?.title || '').trim() ||
     'Support Tickets';
+
+  const emptyMessage =
+    requireFiltersToShow && !filtersApplied
+      ? 'Apply at least one filter to see tickets.'
+      : 'No data found';
 
 if (loading) {
   return (
@@ -557,7 +563,7 @@ return (
         <div className="md:hidden space-y-4">
           {filteredData.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No data found
+              {emptyMessage}
             </div>
           ) : (
             filteredData.map((row: any, index: number) => (
@@ -637,7 +643,7 @@ return (
                     colSpan={tableColumns.length}
                     className="text-center py-8 text-gray-500"
                   >
-                    No data found
+                    {emptyMessage}
                   </td>
                 </tr>
               ) : (
