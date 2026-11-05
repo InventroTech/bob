@@ -176,7 +176,7 @@ const AddUserPage = () => {
       }
 
       const baseUrl = import.meta.env.VITE_RENDER_API_URL;
-      const apiUrl = `${baseUrl}/accounts/delete-user/`;
+      const apiUrl = `${baseUrl}/accounts/delete-user-with-log/`;
 
       const response = await fetch(apiUrl, {
         method: 'DELETE',
