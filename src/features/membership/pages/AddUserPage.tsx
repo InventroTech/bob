@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { forceLogoutIfDeletedSelf } from '@/lib/auth/deletedUserSession';
-import { getTenantIdFromJWT } from '@/lib/auth/jwt';
+import { resolveTenantAndRole } from '@/lib/auth/resolveTenantRole';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -22,6 +22,7 @@ import {
 
 const AddUserPage = () => {
   const { session } = useAuth();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -49,19 +50,18 @@ const AddUserPage = () => {
     const extractTenantId = async () => {
       if (!session?.access_token) return;
 
-      const tenantId = getTenantIdFromJWT(session.access_token);
-
-      if (!tenantId) {
-        console.error("Error extracting tenant ID from JWT");
+      const resolved = await resolveTenantAndRole(session.access_token, tenantSlug);
+      if (!resolved) {
+        console.error('Could not resolve tenant ID from JWT or membership');
         toast.error('Failed to extract tenant ID. Please contact support.');
         return;
       }
 
-      setCompanyId(tenantId);
+      setCompanyId(resolved.tenantId);
     };
 
     extractTenantId();
-  }, [session]);
+  }, [session, tenantSlug]);
 
   useEffect(() => {
     if (!rolesError) return;

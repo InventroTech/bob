@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { authClient } from './authClient';
 import { clearAccessToken, getAccessToken, setAccessToken } from './accessTokenProvider';
 
 /** Why the next SIGNED_OUT happened — used so useAuth does not mislabel intentional logout. */
@@ -50,7 +50,7 @@ const isRetryableRefreshError = (error: { name?: string; message?: string } | nu
 export const initializeAccessTokenFromSession = async (): Promise<void> => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await authClient.getSession();
   if (session?.access_token) {
     refreshSuppressed = false;
   }
@@ -58,7 +58,7 @@ export const initializeAccessTokenFromSession = async (): Promise<void> => {
 };
 
 /**
- * Refresh the Supabase access token.
+ * Refresh the access token.
  * Concurrent callers share one in-flight refresh (avoids refresh-token rotation races).
  * Transient network failures keep the existing token and return it when still present.
  * After sign-out, no-ops and drops any in-flight result so a late refresh cannot restore the session.
@@ -81,7 +81,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
       const {
         data: { session },
         error,
-      } = await supabase.auth.refreshSession();
+      } = await authClient.refreshSession();
 
       // Sign-out won the race — do not restore a token
       if (refreshSuppressed) {
@@ -117,5 +117,5 @@ export const signOutAndClearSession = async (
   markExpectingSignedOut(opts.reason ?? 'intentional');
   clearAccessToken();
   // Global scope: user-initiated logout must revoke the server session (other tabs included).
-  await supabase.auth.signOut();
+  await authClient.signOut();
 };

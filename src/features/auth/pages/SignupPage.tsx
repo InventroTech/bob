@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,7 +25,7 @@ const SignupPage = () => {
     setLoading(true);
     try {
       const slug = slugify(tenantSlug.trim()) || DEFAULT_TENANT_SLUG;
-      const response = await supabase.auth.signUp({
+      const response = await authClient.signUp({
         email,
         password,
         options: {

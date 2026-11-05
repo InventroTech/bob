@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '../../types/supabase'
+import { usesDjangoAuth } from '../auth/provider'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -13,13 +14,8 @@ if (!supabaseAnonKey) {
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    detectSessionInUrl: true,
+    // In django mode `?code=` on the callback page is our OAuth login code, not a Supabase PKCE code.
+    detectSessionInUrl: !usesDjangoAuth,
     flowType: 'pkce',
   },
-});
-
-/** Used when spoofing to call Supabase REST with the spoof token so RLS sees the spoofed user */
-export const getSupabaseRestConfig = () => ({
-  url: supabaseUrl,
-  anonKey: supabaseAnonKey,
 });

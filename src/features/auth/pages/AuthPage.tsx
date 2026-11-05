@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,7 +32,7 @@ const AuthPage = () => {
     setLoading(true);
 
     try {
-      const response = await supabase.auth.signInWithPassword({
+      const response = await authClient.signInWithPassword({
         email,
         password,
       });

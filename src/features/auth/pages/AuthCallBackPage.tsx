@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth/authClient';
 import { toast } from 'sonner';
 import { authService } from '@/lib/api/services/auth';
 import { getRoleIdFromJWT } from '@/lib/auth/jwt';
@@ -22,7 +22,7 @@ function redirectToLogin(
 async function resolveOAuthSession(): Promise<{ session: Session | null; user: User | null; errorMessage?: string }> {
   let {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await authClient.getSession();
 
   if (session?.user?.id && session.user.email) {
     return { session, user: session.user };
@@ -30,11 +30,11 @@ async function resolveOAuthSession(): Promise<{ session: Session | null; user: U
 
   const code = new URLSearchParams(window.location.search).get('code');
   if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await authClient.exchangeCodeForSession(code);
     if (error) {
       ({
         data: { session },
-      } = await supabase.auth.getSession());
+      } = await authClient.getSession());
       if (session?.user?.id && session.user.email) {
         return { session, user: session.user };
       }
@@ -49,13 +49,13 @@ async function resolveOAuthSession(): Promise<{ session: Session | null; user: U
     await new Promise((resolve) => setTimeout(resolve, 300));
     ({
       data: { session },
-    } = await supabase.auth.getSession());
+    } = await authClient.getSession());
     if (session?.user?.id && session.user.email) {
       return { session, user: session.user };
     }
   }
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const { data: { user }, error: userError } = await authClient.getUser();
   if (user?.id && user.email) {
     return { session, user };
   }
@@ -63,7 +63,7 @@ async function resolveOAuthSession(): Promise<{ session: Session | null; user: U
   return {
     session: null,
     user: null,
-    errorMessage: userError?.message || 'No Supabase session was created after OAuth redirect.',
+    errorMessage: userError?.message || 'No session was created after OAuth redirect.',
   };
 }
 
@@ -138,11 +138,11 @@ const AuthCallbackPage = () => {
           console.log('[AuthCallBackPage] User UID linked successfully, refreshing session...');
 
           try {
-            const { error: refreshError } = await supabase.auth.refreshSession();
+            const { error: refreshError } = await authClient.refreshSession();
             if (refreshError) {
               console.warn('[AuthCallBackPage] Session refresh failed after linking:', refreshError);
             } else {
-              const { data: { session: refreshedSession } } = await supabase.auth.getSession();
+              const { data: { session: refreshedSession } } = await authClient.getSession();
               if (refreshedSession?.access_token) {
                 const hasRoleId = getRoleIdFromJWT(refreshedSession.access_token);
                 console.log(

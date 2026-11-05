@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { pickOpenRequestPage, withCurrentSearch } from '@/features/tenant-app/openRequestPage';
-import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { getTenantIdFromJWT, getRoleIdFromJWT } from '@/lib/auth/jwt';
+import { resolveTenantAndRole } from '@/lib/auth/resolveTenantRole';
 import { getEffectiveToken, isSpoofing, getSpoofUserLabel, fetchPagesForRole } from '@/lib/auth/spoof';
 
 const CustomAppDashboard: React.FC = () => {
@@ -50,39 +49,22 @@ const CustomAppDashboard: React.FC = () => {
           return;
         }
 
-        // Extract tenant_id and role_id from JWT token (spoof or real)
-        const tenantId = getTenantIdFromJWT(token);
-        const roleId = getRoleIdFromJWT(token);
-
-        if (!tenantId || !roleId) {
-          console.log('Could not extract tenant_id or role_id from JWT');
+        const resolved = await resolveTenantAndRole(token, tenantSlug);
+        if (!resolved) {
+          console.warn('Could not resolve tenant_id or role_id from JWT or membership');
           toast.error('Failed to load user data');
           setLoading(false);
           return;
         }
 
+        const { tenantId, roleId } = resolved;
         setUserRoleId(roleId);
         dataFetchedRef.current = true;
 
         console.log('Tenant ID:', tenantId, 'Role ID:', roleId);
 
-        const spoofToken = typeof window !== 'undefined' ? window.localStorage.getItem('pyro_spoof_jwt') : null;
-        let pages: { id: string; name: string }[] | null = null;
-
-        if (spoofToken) {
-          const navPages = await fetchPagesForRole(tenantId, roleId, spoofToken);
-          pages = navPages.map((p) => ({ id: p.id, name: p.name }));
-        } else {
-          const { data: pagesData, error: pagesError } = await supabase
-            .from('pages')
-            .select('id, name')
-            .eq('tenant_id', tenantId)
-            .eq('role', roleId)
-            .eq('is_deleted', false)
-            .order('display_order', { ascending: true });
-          if (pagesError) throw pagesError;
-          pages = pagesData;
-        }
+        const navPages = await fetchPagesForRole(tenantId, roleId, token);
+        const pages = navPages.map((p) => ({ id: p.id, name: p.name }));
 
         console.log('Pages query result:', { pages });
 
@@ -105,7 +87,7 @@ const CustomAppDashboard: React.FC = () => {
     };
 
     fetchFirstPage();
-  }, [user, tenantSlug, navigate, location.search]);
+  }, [user, session?.access_token, tenantSlug, navigate, location.search]);
 
   // Add a timeout to prevent infinite loading
   useEffect(() => {
