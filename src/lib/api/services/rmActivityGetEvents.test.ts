@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../client', () => ({ apiClient: { get } }));
 
-import { rmActivityApi, type RmActivityEventDto } from './rmActivity';
+import { clearRmActivityCache, rmActivityApi, type RmActivityEventDto } from './rmActivity';
 
 type Params = { from?: string; to?: string; page: number; page_size: number };
 
@@ -28,6 +28,11 @@ const requestedParams = () => get.mock.calls.map(([, config]) => config.params a
 describe('rmActivityApi.getEvents', () => {
   beforeEach(() => {
     get.mockReset();
+    // several tests below reuse the exact same {from, to, ...} params with
+    // different mocked responses — without this, getEvents' request cache
+    // (see rmActivity.ts) would serve an earlier test's cached result
+    // instead of actually hitting the newly-mocked apiClient
+    clearRmActivityCache();
   });
 
   it('fetches a multi-day range one day at a time', async () => {
@@ -117,5 +122,39 @@ describe('rmActivityApi.getEvents', () => {
     await rmActivityApi.getEvents({ from: '2026-10-28', to: '2026-10-28' });
 
     expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  describe('one bad day does not take down the whole range', () => {
+    it('returns the other days\' rows when exactly one day errors', async () => {
+      get.mockImplementation(async (_url: string, { params }: { params: Params }) => {
+        if (params.from === '2026-10-02') throw new Error('timeout of 30000ms exceeded');
+        const byDay: Record<string, RmActivityEventDto[]> = {
+          '2026-10-01': [event(1, '2026-10-01')],
+          '2026-10-03': [event(3, '2026-10-03')],
+        };
+        return { data: { data: byDay[params.from as string] ?? [], page_meta: { next_page_link: null } } };
+      });
+
+      const rows = await rmActivityApi.getEvents({ from: '2026-10-01', to: '2026-10-03' });
+
+      expect(rows.map((r) => r.id).sort()).toEqual([1, 3]);
+    });
+
+    it('only rejects when every single day in the range fails', async () => {
+      get.mockRejectedValue(new Error('network down'));
+
+      await expect(rmActivityApi.getEvents({ from: '2026-10-01', to: '2026-10-03' })).rejects.toThrow(
+        'Failed to load events for all 3 day(s)'
+      );
+    });
+
+    it('a day that fails on every retry attempt is simply absent, not a crash', async () => {
+      get.mockImplementation(async (_url: string, { params }: { params: Params }) => {
+        if (params.from === '2026-10-01') throw new Error('500');
+        return { data: { data: [], page_meta: { next_page_link: null } } };
+      });
+
+      await expect(rmActivityApi.getEvents({ from: '2026-10-01', to: '2026-10-02' })).resolves.toEqual([]);
+    });
   });
 });
