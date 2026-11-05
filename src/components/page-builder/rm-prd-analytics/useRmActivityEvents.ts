@@ -76,14 +76,24 @@ export function useRmActivityEvents(
       return;
     }
 
+    // A real AbortController, not just the `cancelled` flag below — a fast
+    // filter change used to leave the OLD date range's day-window requests
+    // running in the background (only their eventual state update was
+    // discarded), burning the fetch's 3-slot concurrency pool and backend
+    // capacity on a result nobody would ever see. Aborting actually stops
+    // them, so a newer request gets the full concurrency budget instead of
+    // sharing it with abandoned work.
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     rmActivityApi
-      .getEvents({ from, to, rmUserId, managerUserId })
+      .getEventsAbortable({ from, to, rmUserId, managerUserId }, controller.signal)
       .then((rows) => {
         if (!cancelled) setEvents(rows.map(mapDto));
       })
       .catch((err) => {
+        // cancelled means a newer request superseded this one (abort, not
+        // a real failure) — nothing to show the user either way
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load RM activity data');
       })
       .finally(() => {
@@ -92,6 +102,7 @@ export function useRmActivityEvents(
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [hasWindow, from, to, rmUserId, managerUserId, refreshToken]);
 
