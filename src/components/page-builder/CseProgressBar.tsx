@@ -81,9 +81,8 @@ function ProgressTrack({
       {taken > 0 && (
         <>
           <p className="text-body-sm text-muted-foreground">
-            {isAchieved
-              ? 'Resolve-rate goal met — keep going.'
-              : `${resolved} of ${taken} resolved today`}
+            {resolved} of {taken} resolved today
+            {isAchieved && ' · Goal met — keep going.'}
           </p>
           <div className="relative overflow-visible py-1.5">
             <div className="relative h-2.5 rounded-full bg-gray-200">
