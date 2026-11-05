@@ -23,6 +23,7 @@ import {
   ZohoMailComponent,
 } from "@/components/page-builder";
 import { MakeFreshComponent } from "@/components/page-builder/make-fresh/MakeFreshComponent";
+import { MakeClosedComponent } from "@/components/page-builder/make-closed/MakeClosedComponent";
 import { DataCardComponent } from "@/components/page-builder/DataCardComponent";
 import { LeadTableComponent } from "@/components/page-builder/lead-table";
 import { CollapseCard } from "@/components/page-builder/ColapsableCardComponent";
@@ -185,6 +186,7 @@ export const componentMap: Record<string, React.FC<any>> = {
   leadAssignment: LeadAssignmentComponent,
   callAttemptMatrix: CallAttemptMatrixComponent,
   makeFresh: MakeFreshComponent,
+  makeClosed: MakeClosedComponent,
   openModalButton: OpenModalButton,
   jobManager: JobManagerComponent,
   jobsPage: JobsPageComponent,
