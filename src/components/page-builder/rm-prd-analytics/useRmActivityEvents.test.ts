@@ -4,10 +4,10 @@ import { useRmActivityEvents } from './useRmActivityEvents';
 import { rmActivityApi } from '@/lib/api/services/rmActivity';
 
 vi.mock('@/lib/api/services/rmActivity', () => ({
-  rmActivityApi: { getEvents: vi.fn() },
+  rmActivityApi: { getEvents: vi.fn(), getEventsAbortable: vi.fn() },
 }));
 
-const getEvents = vi.mocked(rmActivityApi.getEvents);
+const getEvents = vi.mocked(rmActivityApi.getEventsAbortable);
 
 describe('useRmActivityEvents refreshToken', () => {
   beforeEach(() => {
@@ -44,5 +44,28 @@ describe('useRmActivityEvents refreshToken', () => {
 
     rerender({ token: 1 });
     await waitFor(() => expect(getEvents).toHaveBeenCalledTimes(2));
+  });
+
+  it('aborts the previous request instead of leaving it running when filters change fast', async () => {
+    const signals: AbortSignal[] = [];
+    getEvents.mockImplementation((_params, signal) => {
+      signals.push(signal);
+      return new Promise(() => {}); // never resolves — only the abort matters here
+    });
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const { rerender } = renderHook(
+      ({ from }: { from: number }) => useRmActivityEvents({ from, to: from + DAY_MS }, 'rm-1'),
+      { initialProps: { from: 0 } }
+    );
+    await waitFor(() => expect(getEvents).toHaveBeenCalledTimes(1));
+    expect(signals[0].aborted).toBe(false);
+
+    // a fast filter change (different day) must abort the stale request's
+    // signal, not just let it keep running in the background unused
+    rerender({ from: 10 * DAY_MS });
+    await waitFor(() => expect(getEvents).toHaveBeenCalledTimes(2));
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
   });
 });
