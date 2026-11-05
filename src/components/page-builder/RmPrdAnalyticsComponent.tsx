@@ -385,30 +385,10 @@ export const RmPrdAnalyticsComponent: React.FC<RmPrdAnalyticsComponentProps> = (
     () => (selectedRmUserId ? visibleEvents.filter((e) => e.rmUserId === selectedRmUserId) : []),
     [visibleEvents, selectedRmUserId]
   );
-  // On Performance/Leaderboard, the "By RM" table's Outcome/Achieved numbers
-  // come from the summary endpoint, not visibleEvents (see performanceByRm
-  // above) — so the modal must read the same summary row for this RM, or its
-  // Outcome/Disposition Mix cards silently disagree with the row the user
-  // just clicked. Only Adherence still has no summary fetch, so it keeps
-  // deriving teamTotals from this RM's raw events.
-  const selectedRmSummaryRow = useMemo(
-    () => performanceSummaryByRm.find((row) => row.rmUserId === selectedRmUserId),
-    [performanceSummaryByRm, selectedRmUserId]
+  const selectedRmTeamTotals = useMemo(
+    () => computeTeamTotals(selectedRmEvents, dailyTargets),
+    [selectedRmEvents, dailyTargets]
   );
-  const selectedRmTeamTotals = useMemo(() => {
-    if ((tab === 'performance' || tab === 'leaderboard') && selectedRmSummaryRow) {
-      return computeTeamTotalsFromSummary(
-        {
-          touches: selectedRmSummaryRow.touches,
-          uniqueLeads: selectedRmSummaryRow.uniqueLeads,
-          dispositionCounts: selectedRmSummaryRow.dispositionCounts,
-        },
-        [selectedRmSummaryRow.rmUserId],
-        dailyTargets
-      );
-    }
-    return computeTeamTotals(selectedRmEvents, dailyTargets);
-  }, [tab, selectedRmSummaryRow, selectedRmEvents, dailyTargets]);
   const selectedRmShiftTimeAverages = useMemo(
     () => computeShiftTimeAverages(selectedRmEvents, filters.dateRange),
     [selectedRmEvents, filters.dateRange]
